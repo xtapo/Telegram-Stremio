@@ -171,6 +171,16 @@ app.include_router(stream_router)
 app.include_router(stremio_router)
 app.include_router(webdav_router)
 
+#----- Music Player & Telegram Storage router
+try:
+    import os
+    if os.path.exists("Music"):
+        app.mount("/Music", StaticFiles(directory="Music"), name="music_static")
+    from Backend.fastapi.routes.music_routes import router as music_router
+    app.include_router(music_router)
+except Exception:
+    pass
+
 
 #----- Public routes (no authentication)
 @app.get("/login", response_class=HTMLResponse)

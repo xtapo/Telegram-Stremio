@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Shania Twain - Little Miss Twain | XTAPO MUSIC</title>
+    <meta name="description" content="Giao diện nghe nhạc XTAPO MUSIC - Trải nghiệm đĩa than Vinyl tương tác, chất lượng âm thanh Hi-Res, tương thích mọi thiết bị.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400;1,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="kmusic-body">
+    <!-- Ambient Dynamic Background Blur -->
+    <div class="dynamic-backdrop" id="dynamicBackdrop">
+        <div class="backdrop-glow glow-1"></div>
+        <div class="backdrop-glow glow-2"></div>
+        <div class="backdrop-overlay"></div>
+    </div>
+
+    <!-- App Wrapper -->
+    <div class="app-container">
+        <!-- Top Navigation Bar -->
+        <header class="top-nav" id="topNav">
+            <div class="nav-left">
+                <a href="#" class="brand-logo" title="XTAPO MUSIC">
+                    <span class="brand-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 2a10 10 0 0 1 10 10"></path>
+                        </svg>
+                    </span>
+                    <span class="brand-text">XTAPO <span class="brand-highlight">MUSIC</span></span>
+                </a>
+            </div>
+
+            <nav class="nav-center">
+                <ul class="nav-links">
+                    <li><a href="#" class="nav-link active">MUSICS</a></li>
+                    <li><a href="#" class="nav-link">HI-RES</a></li>
+                    <li><a href="#" class="nav-link">ALBUMS</a></li>
+                    <li><a href="#" class="nav-link">ARTISTS</a></li>
+                    <li><a href="#" class="nav-link">GENRES</a></li>
+                </ul>
+            </nav>
+
+            <div class="nav-right">
+                <button class="nav-btn icon-btn" id="searchBtn" title="Tìm kiếm (Ctrl+K)">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </button>
+                <button class="nav-btn icon-btn" id="albumPickerBtn" title="Chọn Album">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                    </svg>
+                    <span class="btn-badge" id="albumCountBadge">4 Albums</span>
+                </button>
+                <button class="nav-btn action-badge-btn" id="openTgModalBtn" title="Lưu trữ & Quét nhạc Telegram">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.15 3.35-1.35 3.72-1.35.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                    </svg>
+                    <span id="tgStorageLabel">Telegram Cloud</span>
+                </button>
+                <button class="nav-btn action-badge-btn" id="metaInfoBtn" title="Thông tin chi tiết & Tải về">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+                    </svg>
+                    <span>Hi-Res Lossless</span>
+                </button>
+                <!-- Hamburger Menu for Mobile / Tablet -->
+                <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle Menu">
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Hero Player Section -->
+        <main class="kmusic-hero">
+            <div class="hero-inner">
+                <!-- Left Column: Album Info & Tracklist -->
+                <section class="kmusic-info-col">
+                    <div class="album-badge-row">
+                        <span class="badge-tag accent-tag">HI-RES AUDIO</span>
+                        <span class="badge-tag">24-BIT / 96kHz</span>
+                        <span class="badge-tag" id="albumYearTag">2026</span>
+                    </div>
+
+                    <h1 class="kmusic-album-title" id="albumTitle">LITTLE MISS TWAIN</h1>
+                    <div class="kmusic-artist-name" id="artistName">SHANIA TWAIN</div>
+                    
+                    <div class="album-metadata-snippet">
+                        <span id="trackCountLabel">15 Songs</span> • 
+                        <span id="totalDurationLabel">49 Minutes</span> • 
+                        <span class="label-company" id="albumCompany">℗ Republic Records / UMG</span>
+                    </div>
+
+                    <!-- Audio Visualizer Realtime Waveform -->
+                    <div class="visualizer-container">
+                        <canvas id="visualizerCanvas" width="400" height="36"></canvas>
+                    </div>
+
+                    <!-- Scrollable Tracklist -->
+                    <div class="tracklist-container">
+                        <div class="tracklist-header">
+                            <span>TRACKLIST</span>
+                            <span class="tracklist-hint">Click bài hát để nghe</span>
+                        </div>
+                        <ul class="tracklist" id="tracklist">
+                            <!-- Track items injected by app.js -->
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- Right Column: Vinyl Disc & Album Cover Jacket -->
+                <section class="kmusic-cover-col">
+                    <div class="vinyl-stage" id="vinylStage">
+                        <!-- Vinyl Record Disc -->
+                        <div class="vinyl-disc" id="vinylDisc">
+                            <div class="vinyl-grooves"></div>
+                            <div class="vinyl-reflection"></div>
+                            <div class="vinyl-center-label" id="vinylCenterLabel">
+                                <img src="https://img.kollersi.com/202608/ga-1200x1200bb.webp" id="vinylCenterImg" alt="Center Label">
+                                <div class="vinyl-spindle-hole"></div>
+                            </div>
+                        </div>
+
+                        <!-- Album Cover Sleeve / Jacket -->
+                        <div class="album-sleeve" id="albumSleeve">
+                            <img src="https://img.kollersi.com/202608/ga-1200x1200bb.webp" id="albumCoverImg" alt="Album Cover" class="cover-image">
+                            <div class="sleeve-sheen"></div>
+                            <div class="sleeve-spine"></div>
+                            
+                            <!-- Floating Quality Badge on Sleeve -->
+                            <div class="sleeve-badge">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                                </svg>
+                                <span>MASTER AUDIO</span>
+                            </div>
+
+                            <!-- Mobile Quick Play Touch Overlay -->
+                            <button class="mobile-sleeve-play-btn" id="mobileSleevePlayBtn" aria-label="Play/Pause">
+                                <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" class="icon-play">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                                <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" class="icon-pause" style="display:none;">
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Bottom Floating Player Bar -->
+            <section class="kmusic-player-bar" id="playerBar">
+                <div class="player-bar-inner">
+                    <!-- Left: Now Playing Info -->
+                    <div class="player-current-info">
+                        <div class="now-playing-tag">
+                            <span class="pulse-dot"></span>
+                            <span>NOW PLAYING</span>
+                        </div>
+                        <div class="now-playing-title" id="nowPlayingTitle">1. Any Man Of Mine (Little Miss Twain Edition)</div>
+                        <div class="now-playing-artist" id="nowPlayingArtist">Shania Twain</div>
+                    </div>
+
+                    <!-- Center: Timeline Progress & Main Controls -->
+                    <div class="player-core-controls">
+                        <!-- Progress Slider -->
+                        <div class="progress-wrapper">
+                            <span class="time-label" id="timeCurrent">0:00</span>
+                            <div class="progress-bar-track" id="progressTrack">
+                                <div class="progress-bar-buffered" id="progressBuffered"></div>
+                                <div class="progress-bar-fill" id="progressFill"></div>
+                                <div class="progress-bar-thumb" id="progressThumb"></div>
+                            </div>
+                            <span class="time-label" id="timeTotal">3:16</span>
+                        </div>
+
+                        <!-- Buttons Group -->
+                        <div class="control-buttons">
+                            <button class="ctrl-btn sub-btn" id="shuffleBtn" title="Xáo trộn bài hát">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="16 3 21 3 21 8"></polyline>
+                                    <line x1="4" y1="20" x2="21" y2="3"></line>
+                                    <polyline points="21 16 21 21 16 21"></polyline>
+                                    <line x1="15" y1="15" x2="21" y2="21"></line>
+                                    <line x1="4" y1="4" x2="9" y2="9"></line>
+                                </svg>
+                            </button>
+
+                            <button class="ctrl-btn step-btn" id="prevBtn" title="Bài trước (Mũi tên trái)">
+                                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                                    <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                                </svg>
+                            </button>
+
+                            <button class="ctrl-btn main-play-btn" id="playBtn" title="Phát / Dừng (Space)">
+                                <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" id="playIcon">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                                <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" id="pauseIcon" style="display:none;">
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                                </svg>
+                            </button>
+
+                            <button class="ctrl-btn step-btn" id="nextBtn" title="Bài tiếp (Mũi tên phải)">
+                                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                                    <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                                </svg>
+                            </button>
+
+                            <button class="ctrl-btn sub-btn" id="repeatBtn" title="Lặp lại (Tắt / Tất cả / Một bài)">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="17 1 21 5 17 9"></polyline>
+                                    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                                    <polyline points="7 23 3 19 7 15"></polyline>
+                                    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                                </svg>
+                                <span class="repeat-indicator" id="repeatIndicator"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Volume & Options -->
+                    <div class="player-right-options">
+                        <div class="volume-container">
+                            <button class="volume-btn" id="volumeMuteBtn" title="Bật/Tắt âm">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" id="volHighIcon">
+                                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                                </svg>
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" id="volMuteIcon" style="display:none;">
+                                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                                </svg>
+                            </button>
+                            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.01" value="0.85" title="Âm lượng">
+                        </div>
+
+                        <button class="meta-drawer-btn" id="openDrawerBtn" title="Bản thu & File Hi-Res">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                            </svg>
+                            <span>Chi tiết File</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Album Picker Modal -->
+    <div class="modal-overlay" id="albumModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Chọn Album Nghe Nhạc</h3>
+                <button class="modal-close" id="closeAlbumModal">&times;</button>
+            </div>
+            <div class="album-grid" id="albumGrid">
+                <!-- Albums populated by js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Modal (Ctrl+K) -->
+    <div class="modal-overlay" id="searchModal">
+        <div class="search-card">
+            <div class="search-input-wrap">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Tìm kiếm bài hát, nghệ sĩ, album..." autocomplete="off">
+                <button class="search-esc" id="closeSearchModal">ESC</button>
+            </div>
+            <div class="search-results" id="searchResults">
+                <div class="search-empty">Nhập từ khoá để tìm bài hát nhanh...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telegram Channel Scanner Modal -->
+    <div class="modal-overlay" id="tgModal">
+        <div class="tg-modal-card">
+            <div class="tg-modal-header">
+                <div class="tg-title-wrap">
+                    <span class="tg-logo-badge">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.15 3.35-1.35 3.72-1.35.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                        </svg>
+                    </span>
+                    <div>
+                        <h3>Lưu Trữ & Đồng Bộ Nhạc Telegram</h3>
+                        <p>Quét kênh Telegram chứa các bài hát Audio để phát nhạc Hi-Res trực tiếp</p>
+                    </div>
+                </div>
+                <button class="modal-close" id="closeTgModal">&times;</button>
+            </div>
+
+            <div class="tg-modal-body">
+                <div class="tg-field-group">
+                    <label for="tgChatInput">ID hoặc Username Kênh Telegram:</label>
+                    <input type="text" id="tgChatInput" class="tg-text-input" placeholder="Ví dụ: -100123456789 hoặc @ten_kenh_nhac" autocomplete="off">
+                    <span class="tg-field-hint">💡 Bot / Userbot của bạn cần có trong kênh này để đọc file âm thanh.</span>
+                </div>
+
+                <div class="tg-field-group">
+                    <label for="tgLimitInput">Số tin nhắn quét gần nhất:</label>
+                    <input type="number" id="tgLimitInput" class="tg-text-input" value="100" min="10" max="500">
+                </div>
+
+                <div class="tg-status-indicator" id="tgStatusIndicator" style="display:none;">
+                    <div class="tg-spinner"></div>
+                    <span id="tgStatusMessage">Đang kết nối Telegram bot...</span>
+                </div>
+
+                <div class="tg-modal-footer">
+                    <button class="tg-demo-btn" id="tgLoadDemoBtn">Dùng Nhạc Mẫu (Demo)</button>
+                    <button class="tg-scan-submit-btn" id="tgScanSubmitBtn">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0020 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 004 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                        </svg>
+                        <span>Bắt Đầu Quét Kênh</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide-over Right Drawer (Kollersi Metadata & File Download Drawer) -->
+    <aside class="slide-drawer" id="metaDrawer">
+        <div class="drawer-backdrop" id="drawerBackdrop"></div>
+        <div class="drawer-panel">
+            <div class="drawer-header">
+                <button class="drawer-back-btn" id="closeDrawerBtn" title="Đóng">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                <div class="drawer-header-title">
+                    <span class="drawer-sub">HI-RES AUDIO ARCHIVE</span>
+                    <h4 id="drawerAlbumTitle">Shania Twain - Little Miss Twain</h4>
+                </div>
+            </div>
+
+            <div class="drawer-content">
+                <!-- Album Spec Card -->
+                <div class="meta-spec-box">
+                    <div class="spec-item">
+                        <span class="spec-label">Format</span>
+                        <span class="spec-val highlight-val" id="drawerSpecFormat">FLAC 24-Bit / 96kHz</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Total Size</span>
+                        <span class="spec-val" id="drawerSpecSize">1.18 GB</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Release Date</span>
+                        <span class="spec-val" id="drawerSpecDate">24 July 2026</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Publisher</span>
+                        <span class="spec-val" id="drawerSpecPublisher">Republic Records (UMG)</span>
+                    </div>
+                </div>
+
+                <!-- Download / Audio Files List -->
+                <div class="drawer-file-section">
+                    <div class="drawer-file-header">
+                        <span>DANH SÁCH FILE HI-RES LOSSLESS</span>
+                        <button class="drawer-copy-all-btn" id="copyAllLinksBtn">Copy All</button>
+                    </div>
+                    <div class="drawer-file-list" id="drawerFileList">
+                        <!-- Injected by app.js -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Mobile Slide-out Navigation Drawer -->
+    <aside class="mobile-menu-drawer" id="mobileMenuDrawer">
+        <div class="mobile-menu-backdrop" id="mobileMenuBackdrop"></div>
+        <div class="mobile-menu-panel">
+            <div class="mobile-menu-header">
+                <span class="brand-text">XTAPO <span class="brand-highlight">MUSIC</span></span>
+                <button class="mobile-menu-close" id="closeMobileMenu">&times;</button>
+            </div>
+            <ul class="mobile-nav-list">
+                <li><a href="#" class="mobile-nav-item active">🎵 MUSICS (US-UK)</a></li>
+                <li><a href="#" class="mobile-nav-item">⚡ HI-RES LOSSLESS</a></li>
+                <li><a href="#" class="mobile-nav-item">💿 VINYL EXPERIENCES</a></li>
+                <li><a href="#" class="mobile-nav-item">🎨 GRAPHICS</a></li>
+                <li><a href="#" class="mobile-nav-item">🎬 FILMS & TUTS</a></li>
+            </ul>
+            <div class="mobile-menu-footer">
+                <button class="mobile-action-btn" id="mobileSelectAlbumBtn">
+                    <span>💿 Chọn Album Khác</span>
+                </button>
+                <div class="mobile-copyright">© 2026 XTAPO MUSIC. All rights reserved.</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Toast Notification -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Hidden HTML5 Audio Element -->
+    <audio id="mainAudio" preload="auto"></audio>
+
+    <script src="app.js"></script>
+</body>
+</html>
