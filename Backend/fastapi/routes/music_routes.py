@@ -1707,6 +1707,30 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
                                 for k, v in update_fields.items():
                                     tr[k] = v
                                 updated = True
+                                
+                                new_album_name = update_fields.get("album")
+                                if new_album_name and new_album_name != a.get("title"):
+                                    a["tracks"].remove(tr)
+                                    dest_album = next((al for al in albums if al.get("title") == new_album_name), None)
+                                    if not dest_album:
+                                        import secrets
+                                        import random
+                                        color_preset = random.choice(GLOW_PRESETS)
+                                        dest_album = {
+                                            "id": f"album_{secrets.token_hex(4)}",
+                                            "title": new_album_name,
+                                            "artist": update_fields.get("artist", "").upper(),
+                                            "year": "2026",
+                                            "format": tr.get("format", ""),
+                                            "qualityTier": tr.get("qualityTier", "standard"),
+                                            "publisher": f"{update_fields.get('artist', '') or 'Telegram'}",
+                                            "coverUrl": update_fields.get("coverUrl") or tr.get("coverUrl", ""),
+                                            "glowColors": color_preset,
+                                            "tracks": []
+                                        }
+                                        albums.append(dest_album)
+                                    dest_album["tracks"].append(tr)
+                                
                                 break
                         if updated:
                             break
@@ -1714,6 +1738,7 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
                         success_count += 1
         
         if success_count > 0:
+            albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
             await _db_save_library(albums)
             
         return JSONResponse(content={"status": "success", "count": success_count, "message": f"Đã nhận diện thành công {success_count}/{len(tracks)} bài hát qua Shazam."})
