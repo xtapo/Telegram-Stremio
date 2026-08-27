@@ -259,12 +259,13 @@ class XTAPOMusicApp {
         this.setupAudioEvents();
         this.setupControlEvents();
         this.setupModalEvents();
+        this.setupMediaSession();
         this.setupVisualizer();
         this.loadAlbum(0, 0, false);
         this.renderAlbumGrid();
         this.setupKeyboardShortcuts();
         
-        // Tá»± Ä‘á»™ng kiá»ƒm tra thÆ° viá»‡n Telegram tá»« Backend
+        // Tự động kiểm tra thư viện Telegram từ Backend
         await this.fetchTelegramAlbums();
     }
 
@@ -499,17 +500,24 @@ class XTAPOMusicApp {
         this.timeCurrent.textContent = "0:00";
         this.updateProgress(0);
 
-        // Cập nhật MediaSession cho màn hình khóa và thanh thông báo
+        // Cập nhật MediaSession cho màn hình khóa iPhone (iOS), Android và Desktop
         if ('mediaSession' in navigator) {
             try {
+                const fullCoverUrl = new URL(trackCover, window.location.href).href;
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: track.name || 'Unknown Track',
                     artist: artistName,
                     album: album.title || 'XTAPO Music',
                     artwork: [
-                        { src: trackCover, sizes: '512x512', type: 'image/jpeg' }
+                        { src: fullCoverUrl, sizes: '96x96', type: 'image/jpeg' },
+                        { src: fullCoverUrl, sizes: '128x128', type: 'image/jpeg' },
+                        { src: fullCoverUrl, sizes: '192x192', type: 'image/jpeg' },
+                        { src: fullCoverUrl, sizes: '256x256', type: 'image/jpeg' },
+                        { src: fullCoverUrl, sizes: '384x384', type: 'image/jpeg' },
+                        { src: fullCoverUrl, sizes: '512x512', type: 'image/jpeg' }
                     ]
                 });
+                navigator.mediaSession.playbackState = autoPlay ? 'playing' : 'paused';
             } catch (e) {}
         }
 
@@ -564,10 +572,45 @@ class XTAPOMusicApp {
         }
     }
 
+    // --- MediaSession Setup (iOS Lock Screen, Android, Desktop) ---
+    setupMediaSession() {
+        if (!('mediaSession' in navigator)) return;
+
+        const actionHandlers = [
+            ['play', () => this.play()],
+            ['pause', () => this.pause()],
+            ['previoustrack', () => this.prevTrack()],
+            ['nexttrack', () => this.nextTrack()],
+            ['seekto', (details) => {
+                if (details.seekTime !== undefined && this.audio.duration) {
+                    this.audio.currentTime = Math.min(Math.max(0, details.seekTime), this.audio.duration);
+                }
+            }],
+            ['seekbackward', (details) => {
+                const offset = details.seekOffset || 10;
+                this.audio.currentTime = Math.max(0, this.audio.currentTime - offset);
+            }],
+            ['seekforward', (details) => {
+                const offset = details.seekOffset || 10;
+                this.audio.currentTime = Math.min(this.audio.duration || 0, this.audio.currentTime + offset);
+            }],
+            ['stop', () => this.pause()]
+        ];
+
+        actionHandlers.forEach(([action, handler]) => {
+            try {
+                navigator.mediaSession.setActionHandler(action, handler);
+            } catch (e) {}
+        });
+    }
+
     // --- Audio Engine & Synth Fallback ---
     play() {
         this.isPlaying = true;
         this.updatePlayStateVisuals(true);
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'playing';
+        }
 
         const playPromise = this.audio.play();
         if (playPromise !== undefined) {
@@ -586,6 +629,9 @@ class XTAPOMusicApp {
         this.audio.pause();
         this.stopAudioSynth();
         this.updatePlayStateVisuals(false);
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'paused';
+        }
     }
 
     togglePlay() {
@@ -721,16 +767,35 @@ class XTAPOMusicApp {
     setupAudioEvents() {
         this.audio.addEventListener('timeupdate', () => {
             if (this.synthesizerActive) return;
-            if (this.audio.duration) {
+            if (this.audio.duration && !isNaN(this.audio.duration)) {
                 const percent = (this.audio.currentTime / this.audio.duration) * 100;
                 this.updateProgress(percent);
                 this.timeCurrent.textContent = this.formatTime(this.audio.currentTime);
+
+                if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+                    try {
+                        navigator.mediaSession.setPositionState({
+                            duration: this.audio.duration,
+                            playbackRate: this.audio.playbackRate || 1,
+                            position: Math.min(this.audio.currentTime, this.audio.duration)
+                        });
+                    } catch (e) {}
+                }
             }
         });
 
         this.audio.addEventListener('loadedmetadata', () => {
             if (this.audio.duration) {
                 this.timeTotal.textContent = this.formatTime(this.audio.duration);
+                if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+                    try {
+                        navigator.mediaSession.setPositionState({
+                            duration: this.audio.duration,
+                            playbackRate: this.audio.playbackRate || 1,
+                            position: this.audio.currentTime || 0
+                        });
+                    } catch (e) {}
+                }
             }
         });
 
