@@ -718,6 +718,7 @@ class MusicScanManager:
             all_scanned_tracks = []
             audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
             from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title
+            from Backend.helper.metadata.audio_fingerprint import recognize_audio_from_telegram
 
             for idx, raw_ch in enumerate(channels, 1):
                 if self._cancel_requested:
@@ -946,12 +947,22 @@ class MusicScanManager:
                         final_album = default_album or raw_album or p_alb or ctx_album or chat_title or "Telegram Music Collection"
                         final_title = p_tit or raw_title or os.path.splitext(f_name)[0] or f"Track {msg.id}"
 
+                        # 3.5 Audio Fingerprinting for unknown tracks
+                        fingerprint_cover = None
+                        if final_artist == "Unknown Artist" or final_title.lower().startswith("track") or final_title.lower().startswith("audio") or "track" in f_name.lower():
+                            fg_res = await recognize_audio_from_telegram(client, msg)
+                            if fg_res:
+                                final_title = fg_res.get("title") or final_title
+                                final_artist = fg_res.get("artist") or final_artist
+                                final_album = fg_res.get("album") or final_album
+                                fingerprint_cover = fg_res.get("cover_url")
+
                         audio_fmt, q_tier, calc_br = detect_audio_quality(
                             file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
                             duration_sec=duration_sec, caption_text=caption_text
                         )
                         has_cover = bool(getattr(media, "thumbs", None))
-                        fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
+                        fallback_cover = fingerprint_cover or (f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop")
 
                         scraped_meta = None
                         if auto_scrape:
