@@ -4,19 +4,22 @@ from Backend.logger import LOGGER
 
 _SHAZAM = Shazam()
 
-async def recognize_audio_from_telegram(client, message) -> dict:
+async def recognize_audio_from_telegram(client, message, is_manual: bool = False) -> dict:
     """
-    Tải trước 2MB đầu tiên của bài hát và nhận diện qua Shazam.
+    Tải trước đoạn đầu của bài hát và nhận diện qua Shazam.
     Trả về dict: {"title": ..., "artist": ..., "album": ..., "cover_url": ...} hoặc None.
     """
     try:
         media = getattr(message, "audio", None) or getattr(message, "document", None)
         file_name = getattr(media, 'file_name', 'Unknown')
-        LOGGER.info(f"[SHAZAM] Đang tải 2MB để nhận diện file: {file_name}")
+        
+        limit_mb = 10 if is_manual else 2
+        LOGGER.info(f"[SHAZAM] Đang tải {limit_mb}MB để nhận diện file: {file_name}")
         
         file_bytes = io.BytesIO()
         downloaded = 0
-        limit = 1024 * 1024 * 2 # 2MB
+        limit = 1024 * 1024 * limit_mb
+
         
         async for chunk in client.stream_media(message, limit=0):
             file_bytes.write(chunk)

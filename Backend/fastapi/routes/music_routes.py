@@ -1661,7 +1661,7 @@ async def search_music_covers(query: str = Query(..., min_length=1), _: bool = D
     return JSONResponse(content={"status": "success", "count": len(covers), "covers": covers})
 
 
-@router.post("/tracks/shazam")
+@router.post("/api/music/tracks/shazam")
 async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)):
     try:
         data = await request.json()
@@ -1670,12 +1670,12 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
             return JSONResponse(status_code=400, content={"status": "error", "message": "No tracks provided"})
         
         from Backend.helper.metadata.audio_fingerprint import recognize_audio_from_telegram
-        from Backend.helper.database import Database
         
         client = _get_active_client()
         success_count = 0
-        db = Database.current()
-        music_coll = db.get_collection("music_tracks")
+        albums = await _db_load_library()
+        if not albums:
+            return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
 
         for t in tracks:
             chat_id = t.get("chatId")
@@ -1691,21 +1691,31 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
             if not msg:
                 continue
                 
-            fg_res = await recognize_audio_from_telegram(client, msg)
+            fg_res = await recognize_audio_from_telegram(client, msg, is_manual=True)
             if fg_res:
                 update_fields = {}
-                if fg_res.get("title"): update_fields["title"] = fg_res["title"]
+                if fg_res.get("title"): update_fields["name"] = fg_res["title"]
                 if fg_res.get("artist"): update_fields["artist"] = fg_res["artist"]
                 if fg_res.get("album"): update_fields["album"] = fg_res["album"]
-                if fg_res.get("cover_url"): update_fields["cover_url"] = fg_res["cover_url"]
+                if fg_res.get("cover_url"): update_fields["coverUrl"] = fg_res["cover_url"]
                 
                 if update_fields:
-                    await music_coll.update_one(
-                        {"chat_id": str(chat_id), "msg_id": str(msg_id)},
-                        {"$set": update_fields}
-                    )
-                    success_count += 1
+                    updated = False
+                    for a in albums:
+                        for tr in a.get("tracks", []):
+                            if int(tr.get("chatId", 0)) == chat_id_int and int(tr.get("msgId", 0)) == msg_id_int:
+                                for k, v in update_fields.items():
+                                    tr[k] = v
+                                updated = True
+                                break
+                        if updated:
+                            break
+                    if updated:
+                        success_count += 1
         
+        if success_count > 0:
+            await _db_save_library(albums)
+            
         return JSONResponse(content={"status": "success", "count": success_count, "message": f"Đã nhận diện thành công {success_count}/{len(tracks)} bài hát qua Shazam."})
     except Exception as e:
         LOGGER.error(f"[SHAZAM API] Lỗi: {e}")
