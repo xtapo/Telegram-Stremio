@@ -880,18 +880,15 @@ class MusicScanManager:
                             continue
 
                 media_group_context = {}
-                nearby_text_context = {}
                 for msg in messages_to_process:
                     mgid = getattr(msg, "media_group_id", None)
                     cap = getattr(msg, "caption", "") or ""
                     txt = getattr(msg, "text", "") or ""
                     combined = (cap + "\n" + txt).strip()
-                    if combined:
+                    if combined and mgid:
                         c_art, c_alb = extract_context_from_text(combined)
                         if c_art or c_alb:
-                            if mgid:
-                                media_group_context[mgid] = (c_art, c_alb, combined)
-                            nearby_text_context[msg.id] = (c_art, c_alb)
+                            media_group_context[mgid] = (c_art, c_alb, combined)
 
                 for m_idx, msg in enumerate(messages_to_process):
                     if self._cancel_requested:
@@ -911,14 +908,11 @@ class MusicScanManager:
                         mgid = getattr(msg, "media_group_id", None)
                         if mgid and mgid in media_group_context:
                             ctx_artist, ctx_album, _ = media_group_context[mgid]
-                        if not ctx_artist and not ctx_album:
-                            for offset in range(-5, 6):
-                                chk_i = m_idx + offset
-                                if 0 <= chk_i < len(messages_to_process):
-                                    chk_m = messages_to_process[chk_i]
-                                    if chk_m.id in nearby_text_context:
-                                        ctx_artist, ctx_album = nearby_text_context[chk_m.id]
-                                        break
+                        else:
+                            # Chỉ lấy ngữ cảnh từ chính caption/text của tin nhắn này
+                            msg_cap = (getattr(msg, "caption", "") or getattr(msg, "text", "") or "").strip()
+                            if msg_cap:
+                                ctx_artist, ctx_album = extract_context_from_text(msg_cap)
 
                         eff_artist = default_artist or ctx_artist
                         eff_album = default_album or ctx_album
