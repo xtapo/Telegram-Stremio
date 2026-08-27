@@ -260,7 +260,23 @@ async def scan_telegram_channel(payload: dict):
             audio_format = f"{ext} Hi-Res" if ext in ["FLAC", "WAV", "ALAC", "DSF"] else f"{ext} Master"
 
             has_cover = bool(getattr(media, "thumbs", None))
-            cover_url = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
+            fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
+
+            # Tự động quét siêu dữ liệu (Metadata Scraper) từ Apple Music / Deezer API (tương tự TMDB cho phim)
+            from Backend.helper.metadata.music_scraper import fetch_music_metadata
+            scraped_meta = await fetch_music_metadata(raw_title=title, raw_artist=artist, file_name=file_name)
+            
+            if scraped_meta:
+                title = scraped_meta.get("title") or title
+                artist = scraped_meta.get("artist") or artist
+                album = scraped_meta.get("album") or album
+                cover_url = scraped_meta.get("cover_url") or fallback_cover
+                album_year = scraped_meta.get("year", "2026")
+                album_publisher = scraped_meta.get("publisher", f"Telegram: {chat_title}")
+            else:
+                cover_url = fallback_cover
+                album_year = "2026"
+                album_publisher = f"Telegram: {chat_title}"
 
             found_tracks.append({
                 "msg_id": msg.id,
@@ -275,6 +291,8 @@ async def scan_telegram_channel(payload: dict):
                 "format": audio_format,
                 "file_name": file_name,
                 "cover_url": cover_url,
+                "year": album_year,
+                "publisher": album_publisher,
                 "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
             })
         except Exception as parse_err:
@@ -288,7 +306,7 @@ async def scan_telegram_channel(payload: dict):
             "albums": []
         })
 
-    # Bước 4: Nhóm các bài hát theo Album
+    # Bước 4: Nhóm các bài hát theo Album chuẩn chỉnh
     albums_dict = {}
     for track in found_tracks:
         album_name = track["album"]
@@ -298,10 +316,10 @@ async def scan_telegram_channel(payload: dict):
                 "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', album_name.lower())[:30]}",
                 "title": album_name.upper(),
                 "artist": track["artist"].upper(),
-                "year": time.strftime("%Y"),
+                "year": track.get("year") or time.strftime("%Y"),
                 "format": track["format"],
                 "totalSize": "0 MB",
-                "publisher": f"Telegram: {chat_title}",
+                "publisher": track.get("publisher") or f"Telegram: {chat_title}",
                 "coverUrl": track["cover_url"],
                 "glowColors": color_preset,
                 "tracks": []
