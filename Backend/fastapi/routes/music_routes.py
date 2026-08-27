@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.responses import Response as PlainResponse
 from fastapi.responses import StreamingResponse
 
+from Backend import db
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
@@ -352,15 +353,124 @@ async def get_music_static_file(filename: str):
     return HTMLResponse("File not found", status_code=404)
 
 
-# ── 2. Lấy danh sách Albums & Tracks từ Telegram Cache / Database ─────────────
-@router.get("/api/music/albums")
-async def get_music_albums():
+CHANNELS_FILE = os.path.join(MUSIC_DIR, "music_channels.json")
+
+
+# ── MongoDB & JSON Dual-Storage Helpers ──────────────────────────────────────
+def _load_channels_file() -> list:
+    if os.path.exists(CHANNELS_FILE):
+        try:
+            with open(CHANNELS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Error reading channels file: {e}")
+    return []
+
+
+def _save_channels_file(channels: list):
+    try:
+        os.makedirs(MUSIC_DIR, exist_ok=True)
+        with open(CHANNELS_FILE, "w", encoding="utf-8") as f:
+            json.dump(channels, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        LOGGER.error(f"[MUSIC] Error saving channels file: {e}")
+
+
+async def _db_load_channels() -> list:
+    try:
+        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+            cursor = db.dbs["tracking"]["music_channels"].find()
+            docs = [d async for d in cursor]
+            if docs:
+                channels = [{"id": str(d.get("id") or d.get("_id")), "name": d.get("name", ""), "username": d.get("username", "")} for d in docs]
+                _save_channels_file(channels)
+                return channels
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Could not read channels from MongoDB: {e}")
+    return _load_channels_file()
+
+
+async def _db_save_channels(channels: list):
+    _save_channels_file(channels)
+    try:
+        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+            coll = db.dbs["tracking"]["music_channels"]
+            curr_ids = [str(c.get("id")) for c in channels]
+            if curr_ids:
+                await coll.delete_many({"_id": {"$nin": curr_ids}})
+                for c in channels:
+                    ch_id = str(c.get("id"))
+                    await coll.update_one(
+                        {"_id": ch_id},
+                        {"$set": {"_id": ch_id, "id": ch_id, "name": c.get("name", ""), "username": c.get("username", "")}},
+                        upsert=True
+                    )
+            else:
+                await coll.delete_many({})
+            LOGGER.info(f"[MUSIC DB] Đã đồng bộ {len(channels)} kênh lên MongoDB.")
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Could not save channels to MongoDB: {e}")
+
+
+async def _db_load_library() -> list:
+    try:
+        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+            doc = await db.dbs["tracking"]["music_library"].find_one({"_id": "telegram_music_library"})
+            if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
+                try:
+                    os.makedirs(MUSIC_DIR, exist_ok=True)
+                    with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(doc["albums"], f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+                return doc["albums"]
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
+
     if os.path.exists(LIBRARY_CACHE_FILE):
         try:
             with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
-            # Tự động chuẩn hoá format & loại bỏ bài trùng lặp trong thư viện cũ (nếu có)
+                if isinstance(data, list):
+                    return data
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Failed to load library cache file: {e}")
+    return []
+
+
+async def _db_save_library(albums: list):
+    try:
+        os.makedirs(MUSIC_DIR, exist_ok=True)
+        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(albums, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        LOGGER.error(f"[MUSIC] Failed to write library cache file: {e}")
+
+    try:
+        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+            await db.dbs["tracking"]["music_library"].update_one(
+                {"_id": "telegram_music_library"},
+                {"$set": {
+                    "_id": "telegram_music_library",
+                    "albums": albums,
+                    "count": sum(len(a.get("tracks", [])) for a in albums),
+                    "updated_at": time.time()
+                }},
+                upsert=True
+            )
+            LOGGER.info(f"[MUSIC DB] Đã lưu và đồng bộ {len(albums)} albums lên MongoDB.")
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Could not sync library to MongoDB: {e}")
+
+
+# ── 2. Lấy danh sách Albums & Tracks từ MongoDB / Telegram Cache ───────────────
+@router.get("/api/music/albums")
+async def get_music_albums():
+    data = await _db_load_library()
+    if data:
+        try:
             changed = False
             for alb in data:
                 tracks = alb.get("tracks", [])
@@ -375,7 +485,6 @@ async def get_music_albums():
                             t["bitrate"] = br
                             changed = True
 
-                    # Tự động lọc trùng trong album
                     deduped_tracks, removed = deduplicate_tracks(tracks)
                     if removed > 0:
                         for idx, t in enumerate(deduped_tracks, 1):
@@ -384,342 +493,539 @@ async def get_music_albums():
                         changed = True
 
                 track_formats = [t.get("format", "") for t in alb.get("tracks", [])]
-                # Cập nhật format tốt nhất cho album
                 if track_formats and (not alb.get("format") or alb.get("format") in ["FLAC Hi-Res", "MP3 Master", "Hi-Res"]):
                     hires_fmt = next((f for f in track_formats if "Hi-Res" in f or "24-Bit" in f or "DSD" in f), track_formats[0])
                     alb["format"] = hires_fmt
                     changed = True
 
             if changed:
-                try:
-                    with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
-                except Exception:
-                    pass
+                await _db_save_library(data)
 
-            return JSONResponse(content={"status": "success", "source": "telegram", "albums": data})
+            return JSONResponse(content={"status": "success", "source": "database", "albums": data})
         except Exception as e:
-            LOGGER.error(f"[MUSIC] Failed to load library cache: {e}")
+            LOGGER.error(f"[MUSIC] Failed to process library data: {e}")
 
     return JSONResponse(content={"status": "empty", "source": "none", "albums": []})
 
 
-# ── 3. Quét Kênh Telegram để tự động cập nhật thư viện nhạc ───────────────────
-@router.post("/api/music/scan")
-async def scan_telegram_channel(payload: dict):
-    """
-    Body payload:
-    {
-        "chat_id": "-100123456789" hoặc "@channel_username",
-        "limit": 100
-    }
-    """
-    raw_chat_id = payload.get("chat_id")
-    if not raw_chat_id:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": "Vui lòng cung cấp Chat ID hoặc Username kênh Telegram."}
-        )
+# ── 3. Quản lý Danh Sách Kênh Nhạc (Channel Management) ───────────────────────
+@router.get("/api/music/channels")
+async def get_music_channels(_: bool = Depends(require_auth)):
+    saved = await _db_load_channels()
+    client = _get_active_client()
+    result = []
 
-    limit = min(max(int(payload.get("limit", 100)), 5), 500)
-    default_artist = payload.get("default_artist", "").strip()
-    default_album = payload.get("default_album", "").strip()
-    auto_scrape = payload.get("auto_scrape", True)
+    # Gợi ý kênh từ SettingsManager auth_channels nếu chưa lưu kênh nào
+    if not saved:
+        try:
+            from Backend.helper.settings_manager import SettingsManager
+            auth_ch = SettingsManager.current().auth_channels or []
+            for ch in auth_ch:
+                saved.append({"id": str(ch), "name": str(ch), "username": ""})
+        except Exception:
+            pass
+
+    for item in saved:
+        ch_id = item.get("id") or item.get("chat_id")
+        ch_name = item.get("name") or str(ch_id)
+        ch_user = item.get("username") or ""
+
+        if client:
+            try:
+                target = int(ch_id) if str(ch_id).lstrip("-").isdigit() else ch_id
+                chat = await client.get_chat(target)
+                ch_name = getattr(chat, "title", None) or getattr(chat, "first_name", None) or ch_name
+                ch_user = getattr(chat, "username", "") or ch_user
+            except Exception:
+                pass
+
+        result.append({
+            "id": str(ch_id),
+            "name": ch_name,
+            "username": ch_user
+        })
+    return {"status": "success", "channels": result}
+
+
+@router.post("/api/music/channels")
+async def add_music_channel(payload: dict, _: bool = Depends(require_auth)):
+    raw_id = payload.get("chat_id") or payload.get("id")
+    if not raw_id:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp Chat ID hoặc Username kênh.")
 
     client = _get_active_client()
-    if not client:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "error", "message": "Telegram Bot / Client chưa sẵn sàng hoặc chưa khởi động xong."}
+    clean_id = str(raw_id).strip()
+    target = int(clean_id) if clean_id.lstrip("-").isdigit() else clean_id
+
+    ch_name = str(clean_id)
+    ch_user = ""
+    resolved_id = clean_id
+
+    if client:
+        try:
+            chat = await client.get_chat(target)
+            ch_name = getattr(chat, "title", None) or getattr(chat, "first_name", None) or ch_name
+            ch_user = getattr(chat, "username", "") or ""
+            resolved_id = str(chat.id)
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC] Cannot verify channel {target}: {e}")
+            if not isinstance(target, int):
+                raise HTTPException(status_code=400, detail=f"Không thể kết nối đến kênh '{target}': {e}")
+
+    saved = await _db_load_channels()
+    for item in saved:
+        if str(item.get("id")) == str(resolved_id):
+            return {"status": "success", "message": "Kênh đã tồn tại trong danh sách.", "channel": item}
+
+    new_ch = {"id": str(resolved_id), "name": ch_name, "username": ch_user}
+    saved.append(new_ch)
+    await _db_save_channels(saved)
+    return {"status": "success", "message": f"Đã thêm kênh '{ch_name}' thành công!", "channel": new_ch}
+
+
+@router.delete("/api/music/channels/{chat_id}")
+async def delete_music_channel(chat_id: str, _: bool = Depends(require_auth)):
+    saved = await _db_load_channels()
+    new_list = [c for c in saved if str(c.get("id")) != str(chat_id)]
+    await _db_save_channels(new_list)
+    return {"status": "success", "message": "Đã xóa kênh khỏi danh sách quản lý."}
+
+
+# ── 4. Bộ Quét Kênh Bất Đồng Bộ (Background Music Scanner) ────────────────────
+class MusicScanManager:
+    def __init__(self):
+        self._task: Optional[asyncio.Task] = None
+        self._cancel_requested: bool = False
+        self._status: str = "idle"  # idle | running | completed | cancelled | error
+        self._current_channel_id: str = ""
+        self._current_channel_title: str = ""
+        self._channel_index: int = 0
+        self._total_channels: int = 0
+        self._processed_messages: int = 0
+        self._target_messages: int = 0
+        self._found_tracks_count: int = 0
+        self._duplicates_removed: int = 0
+        self._current_track: str = ""
+        self._error_message: str = ""
+        self._start_time: float = 0.0
+        self._end_time: float = 0.0
+        self._logs: list = []
+
+    def get_status(self) -> dict:
+        elapsed = 0
+        if self._start_time > 0:
+            end = self._end_time if self._end_time > 0 else time.time()
+            elapsed = int(end - self._start_time)
+        return {
+            "status": self._status,
+            "current_channel_id": str(self._current_channel_id),
+            "current_channel_title": self._current_channel_title,
+            "channel_index": self._channel_index,
+            "total_channels": self._total_channels,
+            "processed_messages": self._processed_messages,
+            "target_messages": self._target_messages,
+            "found_tracks_count": self._found_tracks_count,
+            "duplicates_removed": self._duplicates_removed,
+            "current_track": self._current_track,
+            "error_message": self._error_message,
+            "elapsed_seconds": elapsed,
+            "logs": self._logs[-8:],
+        }
+
+    def _log(self, msg: str):
+        LOGGER.info(f"[MUSIC SCAN] {msg}")
+        self._logs.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+        if len(self._logs) > 50:
+            self._logs.pop(0)
+
+    async def start(
+        self,
+        channels: list,
+        limit: int = 100,
+        mode: str = "append",
+        auto_scrape: bool = True,
+        default_artist: str = "",
+        default_album: str = "",
+    ) -> dict:
+        if self._status == "running":
+            return {"ok": False, "message": "Tiến trình quét nhạc đang chạy."}
+
+        client = _get_active_client()
+        if not client:
+            return {"ok": False, "message": "Telegram Bot / Client chưa kết nối."}
+
+        self._cancel_requested = False
+        self._status = "running"
+        self._processed_messages = 0
+        self._target_messages = len(channels) * limit
+        self._found_tracks_count = 0
+        self._duplicates_removed = 0
+        self._current_track = ""
+        self._error_message = ""
+        self._start_time = time.time()
+        self._end_time = 0.0
+        self._logs = []
+        self._channel_index = 0
+        self._total_channels = len(channels)
+
+        self._task = asyncio.create_task(
+            self._run_scan_loop(
+                channels=channels,
+                limit=limit,
+                mode=mode,
+                auto_scrape=auto_scrape,
+                default_artist=default_artist,
+                default_album=default_album,
+            )
         )
+        return {"ok": True, "message": f"Bắt đầu quét {len(channels)} kênh Telegram."}
 
-    # Parse chat_id
-    chat_target = raw_chat_id
-    if isinstance(raw_chat_id, str):
-        clean_id = raw_chat_id.strip()
-        if clean_id.startswith("-100") or clean_id.lstrip("-").isdigit():
-            try:
-                chat_target = int(clean_id)
-            except ValueError:
-                chat_target = clean_id
-        else:
-            chat_target = clean_id
+    async def cancel(self) -> dict:
+        if self._status != "running":
+            return {"ok": False, "message": "Không có tiến trình quét nào đang chạy."}
+        self._cancel_requested = True
+        self._status = "cancelled"
+        self._end_time = time.time()
+        self._log("Người dùng đã hủy tiến trình quét.")
+        if self._task and not self._task.done():
+            self._task.cancel()
+        return {"ok": True, "message": "Đã gửi yêu cầu hủy quét."}
 
-    LOGGER.info(f"[MUSIC] Bắt đầu quét kênh Telegram: {chat_target} (tối đa {limit} tin nhắn)...")
-
-    found_tracks = []
-    resolved_chat_id = None
-    chat_title = str(chat_target)
-
-    # Bước 1: Lấy thông tin kênh
-    try:
-        chat_info = await client.get_chat(chat_target)
-        chat_title = getattr(chat_info, "title", None) or getattr(chat_info, "username", None) or str(chat_target)
-        resolved_chat_id = chat_info.id
-    except Exception as e:
-        err_msg = str(e)
-        LOGGER.warning(f"[MUSIC] get_chat failed for {chat_target}: {err_msg}")
-        # Nếu là ID số nguyên âm, thử dùng trực tiếp
-        if isinstance(chat_target, int):
-            resolved_chat_id = chat_target
-        else:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "message": f"Không thể tìm thấy kênh Telegram '{chat_target}'. Lỗi: {err_msg}. Vui lòng kiểm tra lại ID/Username hoặc đảm bảo Bot đã tham gia kênh."
-                }
-            )
-
-    audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
-
-    # Bước 2: Thu thập tin nhắn (hỗ trợ cả get_chat_history và batch message fetch)
-    messages_to_process = []
-    try:
-        # Cách 1: Thử get_chat_history
-        async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
-            if msg:
-                messages_to_process.append(msg)
-    except Exception as hist_err:
-        LOGGER.warning(f"[MUSIC] get_chat_history failed ({hist_err}), thử dò batch messages...")
-        # Cách 2: Fallback dò ID tin nhắn
+    async def _run_scan_loop(
+        self,
+        channels: list,
+        limit: int,
+        mode: str,
+        auto_scrape: bool,
+        default_artist: str,
+        default_album: str,
+    ):
         try:
-            # Dò 1 tin nhắn cuối để lấy max_id
-            probe_batch = await client.get_messages(resolved_chat_id, list(range(1, 20)))
-            valid_ids = [m.id for m in probe_batch if m]
-            start_id = max(valid_ids) if valid_ids else 100
-            scan_range = list(range(max(1, start_id - limit), start_id + 1))
-            
-            # Lấy theo batch 50 tin nhắn
-            for i in range(0, len(scan_range), 50):
-                sub_ids = scan_range[i:i+50]
-                batch_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                for m in batch_msgs:
-                    if m:
-                        messages_to_process.append(m)
-        except Exception as batch_err:
-            LOGGER.error(f"[MUSIC] Cả 2 phương thức quét đều lỗi: {batch_err}")
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "message": f"Không thể đọc tin nhắn từ kênh: {hist_err}. Hãy đảm bảo Bot được cấp quyền 'Read Messages' / 'Add Admins' trong kênh!"
-                }
-            )
+            client = _get_active_client()
+            all_scanned_tracks = []
+            audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
+            from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title
 
-    # Bước 2.5: Xây dựng bản đồ ngữ cảnh (Context Map) từ tin nhắn lân cận & Media Groups
-    from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title
-    
-    media_group_context = {}
-    nearby_text_context = {}
+            for idx, raw_ch in enumerate(channels, 1):
+                if self._cancel_requested:
+                    break
+                self._channel_index = idx
+                clean_target = raw_ch
+                if isinstance(raw_ch, str):
+                    clean_s = raw_ch.strip()
+                    if clean_s.startswith("-100") or clean_s.lstrip("-").isdigit():
+                        try:
+                            clean_target = int(clean_s)
+                        except ValueError:
+                            clean_target = clean_s
+                    else:
+                        clean_target = clean_s
 
-    for msg in messages_to_process:
-        mgid = getattr(msg, "media_group_id", None)
-        cap = getattr(msg, "caption", "") or ""
-        txt = getattr(msg, "text", "") or ""
-        combined_text = (cap + "\n" + txt).strip()
+                chat_title = str(clean_target)
+                resolved_chat_id = clean_target if isinstance(clean_target, int) else None
+                try:
+                    chat_info = await client.get_chat(clean_target)
+                    chat_title = getattr(chat_info, "title", None) or getattr(chat_info, "username", None) or str(clean_target)
+                    resolved_chat_id = chat_info.id
+                except Exception as e:
+                    self._log(f"Không thể get_chat '{clean_target}': {e}")
+                    if not isinstance(clean_target, int):
+                        continue
 
-        if combined_text:
-            ctx_art, ctx_alb = extract_context_from_text(combined_text)
-            if ctx_art or ctx_alb:
-                if mgid:
-                    media_group_context[mgid] = (ctx_art, ctx_alb, combined_text)
-                nearby_text_context[msg.id] = (ctx_art, ctx_alb)
+                self._current_channel_id = str(resolved_chat_id or clean_target)
+                self._current_channel_title = chat_title
+                self._log(f"Đang quét kênh [{idx}/{len(channels)}]: {chat_title} ({self._current_channel_id})")
 
-    # Bước 3: Bóc tách file âm thanh kèm nhận diện ngữ cảnh tin nhắn lân cận
-    for idx, msg in enumerate(messages_to_process):
-        try:
-            media = getattr(msg, "audio", None) or getattr(msg, "document", None)
-            if not media:
-                continue
-
-            file_name = getattr(media, "file_name", "") or ""
-            mime_type = getattr(media, "mime_type", "") or ""
-            
-            is_audio = bool(getattr(msg, "audio", None)) or mime_type.startswith("audio/") or file_name.lower().endswith(audio_extensions)
-            if not is_audio:
-                continue
-
-            # Tìm kiếm ngữ cảnh từ media_group hoặc tin nhắn tựa đề lân cận
-            ctx_artist, ctx_album = "", ""
-            mgid = getattr(msg, "media_group_id", None)
-            if mgid and mgid in media_group_context:
-                ctx_artist, ctx_album, _ = media_group_context[mgid]
-
-            if not ctx_artist and not ctx_album:
-                for offset in range(-5, 6):
-                    check_idx = idx + offset
-                    if 0 <= check_idx < len(messages_to_process):
-                        chk_msg = messages_to_process[check_idx]
-                        if chk_msg.id in nearby_text_context:
-                            ctx_artist, ctx_album = nearby_text_context[chk_msg.id]
+                messages_to_process = []
+                try:
+                    async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
+                        if self._cancel_requested:
                             break
+                        if msg:
+                            messages_to_process.append(msg)
+                except Exception as hist_err:
+                    self._log(f"get_chat_history failed ({hist_err}), thử dò batch...")
+                    try:
+                        probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
+                        v_ids = [m.id for m in probe if m]
+                        max_id = max(v_ids) if v_ids else 100
+                        scan_range = list(range(max(1, max_id - limit), max_id + 1))
+                        for i in range(0, len(scan_range), 50):
+                            if self._cancel_requested:
+                                break
+                            sub_ids = scan_range[i:i+50]
+                            b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                            for m in b_msgs:
+                                if m:
+                                    messages_to_process.append(m)
+                    except Exception as b_err:
+                        self._log(f"Lỗi đọc tin nhắn {chat_title}: {b_err}")
+                        continue
 
-            effective_artist = default_artist or ctx_artist
-            effective_album = default_album or ctx_album
+                media_group_context = {}
+                nearby_text_context = {}
+                for msg in messages_to_process:
+                    mgid = getattr(msg, "media_group_id", None)
+                    cap = getattr(msg, "caption", "") or ""
+                    txt = getattr(msg, "text", "") or ""
+                    combined = (cap + "\n" + txt).strip()
+                    if combined:
+                        c_art, c_alb = extract_context_from_text(combined)
+                        if c_art or c_alb:
+                            if mgid:
+                                media_group_context[mgid] = (c_art, c_alb, combined)
+                            nearby_text_context[msg.id] = (c_art, c_alb)
 
-            caption_text = getattr(msg, "caption", "") or ""
-            raw_title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
-            raw_artist = getattr(msg.audio, "performer", None) if getattr(msg, "audio", None) else None
-            raw_album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
+                for m_idx, msg in enumerate(messages_to_process):
+                    if self._cancel_requested:
+                        break
+                    self._processed_messages += 1
+                    try:
+                        media = getattr(msg, "audio", None) or getattr(msg, "document", None)
+                        if not media:
+                            continue
+                        f_name = getattr(media, "file_name", "") or ""
+                        m_type = getattr(media, "mime_type", "") or ""
+                        is_audio = bool(getattr(msg, "audio", None)) or m_type.startswith("audio/") or f_name.lower().endswith(audio_extensions)
+                        if not is_audio:
+                            continue
 
-            duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
-            file_size_bytes = getattr(media, "file_size", 0) or 0
+                        ctx_artist, ctx_album = "", ""
+                        mgid = getattr(msg, "media_group_id", None)
+                        if mgid and mgid in media_group_context:
+                            ctx_artist, ctx_album, _ = media_group_context[mgid]
+                        if not ctx_artist and not ctx_album:
+                            for offset in range(-5, 6):
+                                chk_i = m_idx + offset
+                                if 0 <= chk_i < len(messages_to_process):
+                                    chk_m = messages_to_process[chk_i]
+                                    if chk_m.id in nearby_text_context:
+                                        ctx_artist, ctx_album = nearby_text_context[chk_m.id]
+                                        break
 
-            # Phân tích chính xác định dạng, chất lượng âm thanh (Lossless, Hi-Res 24-bit, MP3 320k, DSD...)
-            audio_format, quality_tier, calculated_bitrate = detect_audio_quality(
-                file_name=file_name,
-                mime_type=mime_type,
-                file_size_bytes=file_size_bytes,
-                duration_sec=duration_sec,
-                caption_text=caption_text
-            )
+                        eff_artist = default_artist or ctx_artist
+                        eff_album = default_album or ctx_album
+                        caption_text = getattr(msg, "caption", "") or ""
+                        raw_title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
+                        raw_artist = getattr(msg.audio, "performer", None) if getattr(msg, "audio", None) else None
+                        raw_album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
+                        duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
+                        file_size_bytes = getattr(media, "file_size", 0) or 0
 
-            has_cover = bool(getattr(media, "thumbs", None))
-            fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
+                        audio_fmt, q_tier, calc_br = detect_audio_quality(
+                            file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
+                            duration_sec=duration_sec, caption_text=caption_text
+                        )
+                        has_cover = bool(getattr(media, "thumbs", None))
+                        fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
 
-            # Tự động quét siêu dữ liệu chuẩn xác (Apple Music / Deezer API với Context & Strict Validation)
-            scraped_meta = None
-            if auto_scrape:
-                scraped_meta = await fetch_music_metadata(
-                    raw_title=raw_title or "",
-                    raw_artist=raw_artist or effective_artist or "",
-                    raw_album=raw_album or effective_album or "",
-                    file_name=file_name or "",
-                    caption=caption_text or "",
-                    default_artist=effective_artist or "",
-                    default_album=effective_album or ""
-                )
-            
-            if scraped_meta:
-                title = scraped_meta.get("title") or raw_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
-                artist = scraped_meta.get("artist") or effective_artist or raw_artist or "Unknown Artist"
-                album = scraped_meta.get("album") or effective_album or raw_album or chat_title or "Telegram Music Collection"
-                cover_url = scraped_meta.get("cover_url") or fallback_cover
-                album_year = scraped_meta.get("year", "2026")
-                album_publisher = scraped_meta.get("publisher", f"Telegram: {chat_title}")
-            else:
-                p_artist, p_title, p_album = parse_artist_and_title(raw_title, raw_artist, raw_album, file_name, caption_text)
-                title = p_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
-                artist = effective_artist or p_artist or raw_artist or "Unknown Artist"
-                album = effective_album or p_album or raw_album or chat_title or "Telegram Music Collection"
-                cover_url = fallback_cover
-                album_year = "2026"
-                album_publisher = f"Telegram: {chat_title}"
+                        scraped_meta = None
+                        if auto_scrape:
+                            scraped_meta = await fetch_music_metadata(
+                                raw_title=raw_title or "",
+                                raw_artist=raw_artist or eff_artist or "",
+                                raw_album=raw_album or eff_album or "",
+                                file_name=f_name or "",
+                                caption=caption_text or "",
+                                default_artist=eff_artist or "",
+                                default_album=eff_album or ""
+                            )
 
-            found_tracks.append({
-                "msg_id": msg.id,
-                "chat_id": resolved_chat_id,
-                "title": title.strip(),
-                "artist": artist.strip(),
-                "album": album.strip(),
-                "duration": _format_duration(duration_sec),
-                "duration_sec": duration_sec,
-                "size": _format_size(file_size_bytes),
-                "size_bytes": file_size_bytes,
-                "format": audio_format,
-                "qualityTier": quality_tier,
-                "bitrate": calculated_bitrate,
-                "file_name": file_name,
-                "cover_url": cover_url,
-                "year": album_year,
-                "publisher": album_publisher,
-                "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
-            })
-        except Exception as parse_err:
-            LOGGER.warning(f"[MUSIC] Bỏ qua tin nhắn lỗi {getattr(msg, 'id', 'unknown')}: {parse_err}")
-            continue
+                        if scraped_meta:
+                            t_title = scraped_meta.get("title") or raw_title or os.path.splitext(f_name)[0] or f"Track {msg.id}"
+                            t_artist = scraped_meta.get("artist") or eff_artist or raw_artist or "Unknown Artist"
+                            t_album = scraped_meta.get("album") or eff_album or raw_album or chat_title or "Telegram Music Collection"
+                            t_cover = scraped_meta.get("cover_url") or fallback_cover
+                            t_year = scraped_meta.get("year", time.strftime("%Y"))
+                            t_pub = scraped_meta.get("publisher", f"Telegram: {chat_title}")
+                        else:
+                            p_art, p_tit, p_alb = parse_artist_and_title(raw_title, raw_artist, raw_album, f_name, caption_text)
+                            t_title = p_tit or os.path.splitext(f_name)[0] or f"Track {msg.id}"
+                            t_artist = eff_artist or p_art or raw_artist or "Unknown Artist"
+                            t_album = eff_album or p_alb or raw_album or chat_title or "Telegram Music Collection"
+                            t_cover = fallback_cover
+                            t_year = time.strftime("%Y")
+                            t_pub = f"Telegram: {chat_title}"
 
-    if not found_tracks:
-        return JSONResponse(content={
-            "status": "warning",
-            "message": f"Đã quét qua {len(messages_to_process)} tin nhắn nhưng không tìm thấy file nhạc (.mp3, .flac, audio) nào.",
-            "albums": []
-        })
+                        self._current_track = f"{t_title} - {t_artist}"
+                        all_scanned_tracks.append({
+                            "msg_id": msg.id,
+                            "chat_id": resolved_chat_id,
+                            "title": t_title.strip(),
+                            "artist": t_artist.strip(),
+                            "album": t_album.strip(),
+                            "duration": _format_duration(duration_sec),
+                            "duration_sec": duration_sec,
+                            "size": _format_size(file_size_bytes),
+                            "size_bytes": file_size_bytes,
+                            "format": audio_fmt,
+                            "qualityTier": q_tier,
+                            "bitrate": calc_br,
+                            "file_name": f_name,
+                            "cover_url": t_cover,
+                            "year": t_year,
+                            "publisher": t_pub,
+                            "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
+                        })
+                        self._found_tracks_count = len(all_scanned_tracks)
+                    except Exception:
+                        continue
 
-    raw_track_count = len(found_tracks)
-    # Tự động lọc trùng thông minh: Ưu tiên giữ file chất lượng âm thanh cao nhất
-    found_tracks, removed_dup_count = deduplicate_tracks(found_tracks)
+            if self._cancel_requested:
+                self._status = "cancelled"
+                self._end_time = time.time()
+                return
 
-    # Bước 4: Nhóm các bài hát theo Album chuẩn chỉnh
-    albums_dict = {}
-    for track in found_tracks:
-        album_name = track["album"]
-        if album_name not in albums_dict:
-            color_preset = GLOW_PRESETS[len(albums_dict) % len(GLOW_PRESETS)]
-            albums_dict[album_name] = {
-                "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', album_name.lower())[:30]}",
-                "title": album_name.upper(),
-                "artist": track["artist"].upper(),
-                "year": track.get("year") or time.strftime("%Y"),
-                "format": track["format"],
-                "qualityTier": track["qualityTier"],
-                "totalSize": "0 MB",
-                "publisher": track.get("publisher") or f"Telegram: {chat_title}",
-                "coverUrl": track["cover_url"],
-                "glowColors": color_preset,
-                "tracks": []
-            }
-        
-        album_obj = albums_dict[album_name]
-        track_index = len(album_obj["tracks"]) + 1
-        album_obj["tracks"].append({
-            "id": track_index,
-            "name": track["title"],
-            "artist": track["artist"],
-            "duration": track["duration"],
-            "size": track["size"],
-            "format": track["format"],
-            "qualityTier": track["qualityTier"],
-            "bitrate": track["bitrate"],
-            "previewUrl": track["stream_url"],
-            "chatId": track["chat_id"],
-            "msgId": track["msg_id"],
-            "coverUrl": track["cover_url"]
-        })
+            self._log(f"Quét hoàn tất! Tìm thấy tổng cộng {len(all_scanned_tracks)} bài hát.")
 
-    # Tính tổng dung lượng & cập nhật format tốt nhất cho từng album
-    album_list = list(albums_dict.values())
-    for alb in album_list:
-        alb_tracks = [t for t in found_tracks if t["album"].upper() == alb["title"]]
-        total_b = sum(t.get("size_bytes", 0) for t in alb_tracks)
-        alb["totalSize"] = _format_size(total_b)
-        
-        # Chọn format tối ưu cho Album
-        hires_track = next((t for t in alb_tracks if t.get("qualityTier") == "hi-res"), None)
-        if hires_track:
-            alb["format"] = hires_track["format"]
-            alb["qualityTier"] = "hi-res"
-        elif alb_tracks:
-            alb["format"] = alb_tracks[0]["format"]
-            alb["qualityTier"] = alb_tracks[0].get("qualityTier", "lossless")
+            existing_tracks = []
+            if mode == "append":
+                try:
+                    old_albums = await _db_load_library()
+                    for a in old_albums:
+                        for t in a.get("tracks", []):
+                            existing_tracks.append({
+                                "msg_id": int(t.get("msgId", 0)),
+                                "chat_id": int(t.get("chatId", 0)),
+                                "title": t.get("name", ""),
+                                "artist": t.get("artist", a.get("artist", "")),
+                                "album": a.get("title", ""),
+                                "duration": t.get("duration", "--:--"),
+                                "duration_sec": _parse_duration_str(t.get("duration", "")),
+                                "size": t.get("size", "0 B"),
+                                "size_bytes": _parse_size_str(t.get("size", "")),
+                                "format": t.get("format", a.get("format", "FLAC")),
+                                "qualityTier": t.get("qualityTier", a.get("qualityTier", "lossless")),
+                                "bitrate": t.get("bitrate", "Lossless"),
+                                "file_name": "",
+                                "cover_url": t.get("coverUrl", a.get("coverUrl", "")),
+                                "year": a.get("year", "2026"),
+                                "publisher": a.get("publisher", ""),
+                                "stream_url": t.get("previewUrl", "")
+                            })
+                except Exception as e:
+                    self._log(f"Không thể đọc thư viện cũ: {e}")
 
-        # Lấy ảnh bài hát đầu tiên làm ảnh đại diện nếu có
-        for t in alb["tracks"]:
-            if "/api/music/cover/" in t.get("coverUrl", ""):
-                alb["coverUrl"] = t["coverUrl"]
-                break
+            combined_pool = existing_tracks + all_scanned_tracks
+            combined_pool, dup_removed = deduplicate_tracks(combined_pool)
+            self._duplicates_removed = dup_removed
 
-    # Lưu cache ra file
-    try:
-        os.makedirs(MUSIC_DIR, exist_ok=True)
-        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(album_list, f, ensure_ascii=False, indent=2)
-        LOGGER.info(f"[MUSIC] Đã lưu {len(album_list)} albums ({len(found_tracks)} bài hát) vào cache (Lọc {removed_dup_count} bài trùng).")
-    except Exception as e:
-        LOGGER.error(f"[MUSIC] Lỗi ghi cache thư viện: {e}")
+            # Group into Albums
+            albums_dict = {}
+            for tr in combined_pool:
+                alb_name = tr["album"]
+                if alb_name not in albums_dict:
+                    color_preset = GLOW_PRESETS[len(albums_dict) % len(GLOW_PRESETS)]
+                    albums_dict[alb_name] = {
+                        "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', alb_name.lower())[:30]}",
+                        "title": alb_name.upper(),
+                        "artist": tr["artist"].upper(),
+                        "year": tr.get("year") or time.strftime("%Y"),
+                        "format": tr["format"],
+                        "qualityTier": tr["qualityTier"],
+                        "totalSize": "0 MB",
+                        "publisher": tr.get("publisher") or "Telegram Cloud",
+                        "coverUrl": tr["cover_url"],
+                        "glowColors": color_preset,
+                        "tracks": []
+                    }
+                alb_obj = albums_dict[alb_name]
+                alb_obj["tracks"].append({
+                    "id": len(alb_obj["tracks"]) + 1,
+                    "name": tr["title"],
+                    "artist": tr["artist"],
+                    "duration": tr["duration"],
+                    "size": tr["size"],
+                    "format": tr["format"],
+                    "qualityTier": tr["qualityTier"],
+                    "bitrate": tr["bitrate"],
+                    "previewUrl": tr["stream_url"],
+                    "chatId": tr["chat_id"],
+                    "msgId": tr["msg_id"],
+                    "coverUrl": tr["cover_url"]
+                })
 
-    message_text = f"Đã quét thành công {len(found_tracks)} bài hát, gom thành {len(album_list)} Album!"
-    if removed_dup_count > 0:
-        message_text += f" (Tự động loại bỏ {removed_dup_count} bài trùng lặp, ưu tiên chất lượng cao nhất)"
+            final_albums = list(albums_dict.values())
+            for alb in final_albums:
+                alb_tracks = [t for t in combined_pool if t["album"].upper() == alb["title"]]
+                total_b = sum(t.get("size_bytes", 0) for t in alb_tracks)
+                alb["totalSize"] = _format_size(total_b)
+                hires_t = next((t for t in alb_tracks if t.get("qualityTier") == "hi-res"), None)
+                if hires_t:
+                    alb["format"] = hires_t["format"]
+                    alb["qualityTier"] = "hi-res"
+                elif alb_tracks:
+                    alb["format"] = alb_tracks[0]["format"]
+                    alb["qualityTier"] = alb_tracks[0].get("qualityTier", "lossless")
+                for t in alb["tracks"]:
+                    if "/api/music/cover/" in t.get("coverUrl", ""):
+                        alb["coverUrl"] = t["coverUrl"]
+                        break
 
-    return JSONResponse(content={
-        "status": "success",
-        "message": message_text,
-        "count": len(found_tracks),
-        "removed_duplicates": removed_dup_count,
-        "albums": album_list
-    })
+            # Lưu vào MongoDB và file JSON
+            await _db_save_library(final_albums)
+
+            self._status = "completed"
+            self._end_time = time.time()
+            self._log(f"Đã lưu thành công {len(final_albums)} albums ({len(combined_pool)} bài hát) vào thư viện.")
+        except asyncio.CancelledError:
+            self._status = "cancelled"
+            self._end_time = time.time()
+            self._log("Tiến trình quét đã bị hủy.")
+        except Exception as exc:
+            self._status = "error"
+            self._error_message = str(exc)
+            self._end_time = time.time()
+            self._log(f"Lỗi trong quá trình quét: {exc}")
+            LOGGER.error(f"[MUSIC SCAN ERROR] {exc}", exc_info=True)
+
+
+music_scan_manager = MusicScanManager()
+
+
+# ── Async Music Scanner APIs ──────────────────────────────────────────────────
+@router.post("/api/music/scan/start")
+async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
+    channels = payload.get("channels") or []
+    if not channels and payload.get("chat_id"):
+        channels = [payload.get("chat_id")]
+    if not channels:
+        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất 1 kênh để quét.")
+
+    limit = min(max(int(payload.get("limit", 100)), 5), 1000)
+    mode = str(payload.get("mode", "append")).lower()
+    auto_scrape = bool(payload.get("auto_scrape", True))
+    default_artist = str(payload.get("default_artist", "")).strip()
+    default_album = str(payload.get("default_album", "")).strip()
+
+    result = await music_scan_manager.start(
+        channels=channels,
+        limit=limit,
+        mode=mode,
+        auto_scrape=auto_scrape,
+        default_artist=default_artist,
+        default_album=default_album,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=409, detail=result.get("message"))
+    return {"status": "success", **result}
+
+
+@router.get("/api/music/scan/status")
+async def get_music_scan_status_api():
+    return {"status": "success", "data": music_scan_manager.get_status()}
+
+
+@router.post("/api/music/scan/cancel")
+async def cancel_music_scan_api(_: bool = Depends(require_auth)):
+    result = await music_scan_manager.cancel()
+    return {"status": "success" if result.get("ok") else "error", **result}
+
+
+# Endpoint tương thích cũ
+@router.post("/api/music/scan")
+async def scan_telegram_channel(payload: dict, _: bool = Depends(require_auth)):
+    return await start_music_scan_api(payload)
 
 
 # ── 4. Stream trực tiếp Audio từ Telegram với HTTP Range 206 ──────────────────
@@ -816,17 +1122,15 @@ async def get_music_cover(chat_id: int, msg_id: int):
         raise HTTPException(status_code=404, detail="Cover not found")
 
 
-# ── 6. Xóa Album / Xóa Bài Hát khỏi Thư Viện Cache ───────────────────────────
+# ── 6. Xóa Album / Xóa Bài Hát khỏi Thư Viện Cache & MongoDB ─────────────────
 @router.delete("/api/music/album/{album_id}")
 async def delete_music_album(album_id: str, _: bool = Depends(require_auth)):
-    if not os.path.exists(LIBRARY_CACHE_FILE):
+    albums = await _db_load_library()
+    if not albums:
         return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
     try:
-        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-            albums = json.load(f)
         new_albums = [a for a in albums if a.get("id") != album_id]
-        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(new_albums, f, ensure_ascii=False, indent=2)
+        await _db_save_library(new_albums)
         return JSONResponse(content={"status": "success", "message": "Đã xóa album khỏi thư viện"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -834,17 +1138,14 @@ async def delete_music_album(album_id: str, _: bool = Depends(require_auth)):
 
 @router.delete("/api/music/track/{chat_id}/{msg_id}")
 async def delete_music_track(chat_id: int, msg_id: int, _: bool = Depends(require_auth)):
-    if not os.path.exists(LIBRARY_CACHE_FILE):
+    albums = await _db_load_library()
+    if not albums:
         return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
     try:
-        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-            albums = json.load(f)
         for a in albums:
             a["tracks"] = [t for t in a.get("tracks", []) if not (int(t.get("chatId", 0)) == int(chat_id) and int(t.get("msgId", 0)) == int(msg_id))]
-        # Loại bỏ album nếu không còn bài hát nào
         albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(albums, f, ensure_ascii=False, indent=2)
+        await _db_save_library(albums)
         return JSONResponse(content={"status": "success", "message": "Đã xóa bài hát khỏi danh sách"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -853,7 +1154,8 @@ async def delete_music_track(chat_id: int, msg_id: int, _: bool = Depends(requir
 # ── 7. Chỉnh Sửa Thông Tin Bài Hát / Album (Edit Metadata) ───────────────────
 @router.post("/api/music/track/edit")
 async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
-    if not os.path.exists(LIBRARY_CACHE_FILE):
+    albums = await _db_load_library()
+    if not albums:
         return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
 
     chat_id = int(payload.get("chat_id", 0))
@@ -867,9 +1169,6 @@ async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
         return JSONResponse(status_code=400, content={"status": "error", "message": "Thiếu thông tin bài hát"})
 
     try:
-        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-            albums = json.load(f)
-
         target_track = None
         for a in albums:
             for t in a.get("tracks", []):
@@ -885,7 +1184,6 @@ async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
         if not target_track:
             return JSONResponse(status_code=404, content={"status": "error", "message": "Không tìm thấy bài hát"})
 
-        # Chuyển bài hát sang Album mới nếu có đổi tên album
         if new_album:
             for a in albums:
                 a["tracks"] = [t for t in a.get("tracks", []) if not (int(t.get("chatId", 0)) == chat_id and int(t.get("msgId", 0)) == msg_id)]
@@ -910,9 +1208,7 @@ async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
             dest_album["tracks"].append(target_track)
 
         albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-
-        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(albums, f, ensure_ascii=False, indent=2)
+        await _db_save_library(albums)
 
         return JSONResponse(content={"status": "success", "message": "Đã cập nhật thông tin bài hát", "albums": albums})
     except Exception as e:
@@ -921,7 +1217,8 @@ async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
 
 @router.post("/api/music/album/edit")
 async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
-    if not os.path.exists(LIBRARY_CACHE_FILE):
+    albums = await _db_load_library()
+    if not albums:
         return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
 
     album_id = payload.get("album_id", "").strip()
@@ -934,9 +1231,6 @@ async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
         return JSONResponse(status_code=400, content={"status": "error", "message": "Thiếu thông tin album"})
 
     try:
-        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-            albums = json.load(f)
-
         target_album = next((a for a in albums if a.get("id") == album_id), None)
         if not target_album:
             return JSONResponse(status_code=404, content={"status": "error", "message": "Không tìm thấy album"})
@@ -949,9 +1243,7 @@ async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
         if new_cover: target_album["coverUrl"] = new_cover
         if new_year: target_album["year"] = new_year
 
-        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(albums, f, ensure_ascii=False, indent=2)
-
+        await _db_save_library(albums)
         return JSONResponse(content={"status": "success", "message": "Đã cập nhật thông tin album", "albums": albums})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -960,11 +1252,8 @@ async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
 # ── 7b. Sửa Hàng Loạt Nhiều Bài Hát Cùng Lúc (Bulk Edit Tracks) ─────────────
 @router.post("/api/music/tracks/bulk-edit")
 async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth)):
-    """
-    Sửa ca sĩ, album, ảnh bìa cho nhiều bài hát cùng lúc.
-    Payload: { tracks: [{chatId, msgId}], artist, album, cover_url }
-    """
-    if not os.path.exists(LIBRARY_CACHE_FILE):
+    albums = await _db_load_library()
+    if not albums:
         return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
 
     track_ids = payload.get("tracks", [])
@@ -978,15 +1267,11 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
     if not new_artist and not new_album and not new_cover and not new_year:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Chưa nhập thông tin cần sửa"})
 
-    # Tạo set lookup nhanh
     id_set = set()
     for tid in track_ids:
         id_set.add((int(tid.get("chatId", 0)), int(tid.get("msgId", 0))))
 
     try:
-        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-            albums = json.load(f)
-
         matched_tracks = []
         for a in albums:
             for t in a.get("tracks", []):
@@ -996,14 +1281,11 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
                     if new_cover: t["coverUrl"] = new_cover
                     matched_tracks.append(t)
 
-        # Nếu đổi album: chuyển các bài hát sang Album mới
         if new_album and matched_tracks:
-            # Xóa tracks cũ khỏi tất cả album
             for a in albums:
                 a["tracks"] = [t for t in a.get("tracks", [])
                                if (int(t.get("chatId", 0)), int(t.get("msgId", 0))) not in id_set]
 
-            # Tìm hoặc tạo album đích
             dest_album = next((a for a in albums if a.get("title", "").upper() == new_album.upper()), None)
             if not dest_album:
                 color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
@@ -1027,7 +1309,6 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
 
             dest_album["tracks"].extend(matched_tracks)
         else:
-            # Nếu không đổi tên album mà cập nhật năm/bìa cho album hiện tại của các bài hát
             if new_year or new_cover or new_artist:
                 for a in albums:
                     if any((int(t.get("chatId", 0)), int(t.get("msgId", 0))) in id_set for t in a.get("tracks", [])):
@@ -1035,11 +1316,8 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
                         if new_cover: a["coverUrl"] = new_cover
                         if new_artist: a["artist"] = new_artist.upper()
 
-        # Xóa album rỗng
         albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-
-        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(albums, f, ensure_ascii=False, indent=2)
+        await _db_save_library(albums)
 
         return JSONResponse(content={
             "status": "success",

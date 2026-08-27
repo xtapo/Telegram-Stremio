@@ -175,54 +175,102 @@
     </div>
 </div>
 
-<!-- Modal 1: Quét Kênh Telegram -->
-<div id="scan-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
-    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
-        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
+<!-- Modal 1: Quản Lý & Quét Kênh Nhạc Telegram (Channel Manager & Scanner) -->
+<div id="scan-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 sm:p-7 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[92vh] flex flex-col">
+        
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4 shrink-0">
             <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                <div class="w-10 h-10 rounded-2xl bg-primary/20 text-primary flex items-center justify-center text-lg border border-primary/30">
                     <i class="fa-solid fa-satellite-dish"></i>
                 </div>
                 <div>
-                    <h3 class="text-lg font-extrabold text-text">Quét Kênh Telegram</h3>
-                    <p class="text-xs text-text-secondary">Tự động nhận diện file nhạc & CD Album</p>
+                    <h3 class="text-lg font-extrabold text-text">Quản Lý & Quét Kênh Nhạc</h3>
+                    <p class="text-xs text-text-secondary">Cấu hình các kênh Telegram & Quét đồng bộ vào thư viện</p>
                 </div>
             </div>
-            <button onclick="closeScanModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+            <button onclick="closeScanModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <div class="space-y-3.5">
+        <!-- VIEW 1: Channels Config & Scan Setup -->
+        <div id="scan-view-setup" class="flex-1 overflow-y-auto pr-1 space-y-4">
+            
+            <!-- Channel Selection Box -->
             <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">ID Hoặc Username Kênh:</label>
-                <input type="text" id="scan-chat-id" placeholder="Ví dụ: -1001987654321 hoặc @my_music_channel"
-                       class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border focus:ring-2 focus:ring-primary text-sm">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-xs font-bold uppercase text-text-secondary tracking-wider flex items-center gap-1.5">
+                        <i class="fa-brands fa-telegram text-sky-400"></i> Chọn Kênh Để Quét:
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="selectAllChannels(true)" class="text-[11px] font-bold text-primary hover:underline">Chọn hết</button>
+                        <span class="text-text-secondary text-[10px]">•</span>
+                        <button type="button" onclick="selectAllChannels(false)" class="text-[11px] font-semibold text-text-secondary hover:underline">Bỏ chọn</button>
+                    </div>
+                </div>
+
+                <!-- Channels List Container -->
+                <div id="channels-chips-list" class="space-y-2 max-h-48 overflow-y-auto p-1 bg-black/20 rounded-2xl border border-hairline">
+                    <div class="py-6 text-center text-xs text-text-secondary">
+                        <i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Đang tải danh sách kênh...
+                    </div>
+                </div>
+
+                <!-- Quick Add Channel Form -->
+                <div class="mt-2.5 flex items-center gap-2">
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-plus absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs"></i>
+                        <input type="text" id="new-channel-input" placeholder="Nhập ID kênh (ví dụ: -1001234567890) hoặc @channel_name"
+                               class="w-full pl-8 pr-3 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary focus:border-primary">
+                    </div>
+                    <button type="button" onclick="addNewChannel()" id="btn-add-channel"
+                            class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold border border-hairline transition flex items-center gap-1.5 shrink-0">
+                        <i class="fa-solid fa-circle-plus text-primary"></i> Thêm Kênh
+                    </button>
+                </div>
             </div>
 
+            <!-- Scan Options Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-hairline">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Số Tin Nhắn Quét / Kênh:</label>
+                    <select id="scan-limit-select" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary">
+                        <option value="50">50 tin nhắn gần nhất</option>
+                        <option value="100" selected>100 tin nhắn</option>
+                        <option value="250">250 tin nhắn</option>
+                        <option value="500">500 tin nhắn</option>
+                        <option value="1000">1000 tin nhắn (Quét sâu)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Chế Độ Quét:</label>
+                    <select id="scan-mode-select" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary">
+                        <option value="append" selected>Bổ sung bài mới (Giữ bài cũ)</option>
+                        <option value="fresh">Quét mới toàn bộ (Làm mới thư viện)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Metadata Fallback (Optional) -->
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ Mặc Định (Tuỳ chọn):</label>
                     <input type="text" id="scan-default-artist" placeholder="Ví dụ: Lệ Quyên"
-                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" title="Áp dụng nếu file không ghi tên ca sĩ">
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs" title="Áp dụng nếu file không ghi tên ca sĩ">
                 </div>
                 <div>
                     <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album (Tuỳ chọn):</label>
                     <input type="text" id="scan-default-album" placeholder="Ví dụ: Khúc Tình Xưa"
-                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm">
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs">
                 </div>
             </div>
 
-            <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Số Tin Nhắn Quét:</label>
-                <input type="number" id="scan-limit" value="100" min="10" max="500"
-                       class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm">
-            </div>
-
-            <div class="flex items-center gap-2 pt-1">
+            <div class="flex items-center gap-2">
                 <input type="checkbox" id="scan-auto-scrape" checked class="w-4 h-4 rounded accent-primary cursor-pointer">
                 <label for="scan-auto-scrape" class="text-xs text-text cursor-pointer select-none">
-                    Tìm kiếm bìa & thông tin trên Apple Music (Chỉ áp dụng khi khớp ca sĩ)
+                    Tự động tìm kiếm ảnh bìa HD & siêu dữ liệu từ <strong>Apple Music & Deezer</strong>
                 </label>
             </div>
 
@@ -230,16 +278,88 @@
                 <i class="fa-solid fa-wand-magic-sparkles text-cyan-400 shrink-0"></i>
                 <span>Tự động lọc trùng thông minh: Giữ lại bản có <strong>chất lượng âm thanh cao nhất</strong> (Hi-Res > Lossless > MP3).</span>
             </div>
+        </div>
 
-            <div id="scan-progress-indicator" class="hidden p-3 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3">
-                <div class="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent shrink-0"></div>
-                <span class="text-xs text-primary font-semibold" id="scan-status-text">Đang kết nối bot và quét bài hát...</span>
+        <!-- VIEW 2: Real-time Live Progress & Scanner View -->
+        <div id="scan-view-progress" class="hidden flex-1 flex flex-col justify-between space-y-4 py-2">
+            
+            <div class="space-y-4">
+                <!-- Status Banner -->
+                <div class="flex items-center justify-between p-3 rounded-2xl bg-surface border border-hairline">
+                    <div class="flex items-center gap-3">
+                        <div id="scan-spinner-icon" class="w-8 h-8 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                            <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+                        </div>
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-text-secondary tracking-wider block">Trạng Thái</span>
+                            <span id="scan-live-status-badge" class="text-xs font-black text-primary">Đang quét dữ liệu...</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] uppercase font-bold text-text-secondary tracking-wider block">Thời Gian</span>
+                        <span id="scan-live-elapsed" class="text-xs font-bold text-text">0s</span>
+                    </div>
+                </div>
+
+                <!-- Animated Progress Bar -->
+                <div>
+                    <div class="flex items-center justify-between text-xs font-bold mb-1.5">
+                        <span id="scan-progress-channel-label" class="text-text truncate max-w-xs">Đang quét kênh...</span>
+                        <span id="scan-progress-percent" class="text-primary font-black">0%</span>
+                    </div>
+                    <div class="w-full h-3 rounded-full bg-surface border border-hairline overflow-hidden p-0.5">
+                        <div id="scan-progress-fill" class="h-full rounded-full bg-gradient-to-r from-primary to-amber-500 transition-all duration-300" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <!-- Live Metrics Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Kênh</span>
+                        <span id="scan-stat-channel-idx" class="text-sm font-black text-text">0 / 0</span>
+                    </div>
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Tin Nhắn</span>
+                        <span id="scan-stat-msgs" class="text-sm font-black text-blue-400">0</span>
+                    </div>
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Bài Hát Tìm Thấy</span>
+                        <span id="scan-stat-found" class="text-sm font-black text-emerald-400">0</span>
+                    </div>
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Lọc Trùng</span>
+                        <span id="scan-stat-dups" class="text-sm font-black text-amber-400">0</span>
+                    </div>
+                </div>
+
+                <!-- Current Track & Activity Log Box -->
+                <div class="space-y-1.5">
+                    <div class="text-[11px] text-text-secondary truncate">
+                        <span class="font-bold text-text">Đang xử lý:</span> <span id="scan-current-track-name" class="text-primary italic">Chưa có...</span>
+                    </div>
+                    <div id="scan-live-logs" class="p-2.5 bg-black/40 rounded-xl font-mono text-[10px] text-text-secondary space-y-1 max-h-24 overflow-y-auto border border-hairline">
+                        <div>[Bắt đầu] Đang khởi động trình quét...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Action Buttons -->
+            <div class="flex items-center justify-between pt-3 border-t border-hairline">
+                <button type="button" onclick="cancelMusicScan()" id="btn-cancel-scan"
+                        class="px-4 py-2 rounded-xl bg-red-500/15 hover:bg-red-500 text-red-400 hover:text-white text-xs font-bold transition flex items-center gap-1.5 border border-red-500/30">
+                    <i class="fa-solid fa-stop"></i> Hủy Quét
+                </button>
+                <button type="button" onclick="finishAndCloseScanModal()" id="btn-finish-scan" disabled
+                        class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/25 hover:brightness-110 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> Hoàn Tất & Xem Thư Viện
+                </button>
             </div>
         </div>
 
-        <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
-            <button onclick="closeScanModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
-            <button id="start-scan-btn" onclick="submitScanTelegram()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-2">
+        <!-- Setup Footer Action Buttons -->
+        <div id="scan-setup-footer" class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-hairline shrink-0">
+            <button onclick="closeScanModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Đóng</button>
+            <button id="start-scan-btn" onclick="startMusicScan()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-2">
                 <i class="fa-solid fa-play"></i> Bắt Đầu Quét
             </button>
         </div>
@@ -1097,47 +1217,186 @@ async function submitBulkEdit() {
     }
 }
 
-// Modal Scanner
-function openScanModal() {
+// ── Quản Lý Kênh Nhạc & Background Scanner ──────────────────────────────────
+let configuredChannels = [];
+let scanPollInterval = null;
+
+async function openScanModal() {
     const modal = document.getElementById('scan-modal');
     modal.classList.remove('opacity-0', 'pointer-events-none');
     modal.querySelector('.transform').classList.remove('scale-95');
+
+    // Kiểm tra xem có tiến trình quét nào đang chạy ngầm không
+    try {
+        const res = await fetch('/api/music/scan/status');
+        const data = await res.json();
+        if (data.status === 'success' && data.data && data.data.status === 'running') {
+            showScanProgressView();
+            startPollingScanStatus();
+            return;
+        }
+    } catch (e) {}
+
+    showScanSetupView();
+    loadChannelsList();
 }
 
 function closeScanModal() {
     const modal = document.getElementById('scan-modal');
     modal.classList.add('opacity-0', 'pointer-events-none');
     modal.querySelector('.transform').classList.add('scale-95');
+    if (scanPollInterval) {
+        clearInterval(scanPollInterval);
+        scanPollInterval = null;
+    }
 }
 
-async function submitScanTelegram() {
-    const chatId = document.getElementById('scan-chat-id').value.trim();
-    const limit = document.getElementById('scan-limit').value || 100;
-    const defaultArtist = document.getElementById('scan-default-artist').value.trim();
-    const defaultAlbum = document.getElementById('scan-default-album').value.trim();
-    const autoScrape = document.getElementById('scan-auto-scrape').checked;
+function showScanSetupView() {
+    document.getElementById('scan-view-setup').classList.remove('hidden');
+    document.getElementById('scan-setup-footer').classList.remove('hidden');
+    document.getElementById('scan-view-progress').classList.add('hidden');
+}
 
-    if (!chatId) {
+function showScanProgressView() {
+    document.getElementById('scan-view-setup').classList.add('hidden');
+    document.getElementById('scan-setup-footer').classList.add('hidden');
+    document.getElementById('scan-view-progress').classList.remove('hidden');
+}
+
+async function loadChannelsList() {
+    const container = document.getElementById('channels-chips-list');
+    container.innerHTML = `<div class="py-5 text-center text-xs text-text-secondary"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Đang tải danh sách kênh...</div>`;
+
+    try {
+        const res = await fetch('/api/music/channels');
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success' && data.channels && data.channels.length > 0) {
+            configuredChannels = data.channels;
+            renderChannelsList();
+        } else {
+            configuredChannels = [];
+            container.innerHTML = `
+                <div class="py-5 px-4 text-center">
+                    <p class="text-xs text-text-secondary mb-1">Chưa có kênh nhạc nào được lưu.</p>
+                    <p class="text-[11px] text-primary">Nhập Chat ID (ví dụ: -1001234567890) hoặc Username (@channel) vào ô bên dưới để thêm.</p>
+                </div>
+            `;
+        }
+    } catch (e) {
+        container.innerHTML = `<div class="py-4 text-center text-xs text-red-400">Lỗi tải danh sách kênh: ${e.message}</div>`;
+    }
+}
+
+function renderChannelsList() {
+    const container = document.getElementById('channels-chips-list');
+    container.innerHTML = '';
+
+    configuredChannels.forEach((ch, idx) => {
+        const chip = document.createElement('div');
+        chip.className = 'flex items-center justify-between p-2.5 rounded-xl bg-surface/70 border border-hairline hover:border-primary/50 transition';
+        
+        chip.innerHTML = `
+            <label class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none">
+                <input type="checkbox" value="${ch.id}" checked class="channel-scan-checkbox w-4 h-4 accent-primary cursor-pointer rounded shrink-0">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-bold text-text truncate">${ch.name || ch.id}</span>
+                        ${ch.username ? `<span class="text-[10px] text-sky-400 font-semibold truncate">@${ch.username}</span>` : ''}
+                    </div>
+                    <span class="text-[10px] text-text-secondary font-mono">${ch.id}</span>
+                </div>
+            </label>
+            <button type="button" onclick="deleteChannel('${ch.id}')" class="w-7 h-7 rounded-lg hover:bg-red-500/20 text-text-secondary hover:text-red-400 transition flex items-center justify-center shrink-0 ml-2" title="Xóa kênh">
+                <i class="fa-solid fa-trash-can text-[11px]"></i>
+            </button>
+        `;
+        container.appendChild(chip);
+    });
+}
+
+function selectAllChannels(checked) {
+    document.querySelectorAll('.channel-scan-checkbox').forEach(cb => cb.checked = checked);
+}
+
+async function addNewChannel() {
+    const input = document.getElementById('new-channel-input');
+    const rawId = input.value.trim();
+    if (!rawId) {
         alertToast('Vui lòng nhập Chat ID hoặc Username kênh!');
         return;
     }
 
-    const indicator = document.getElementById('scan-progress-indicator');
-    const statusText = document.getElementById('scan-status-text');
-    const btn = document.getElementById('start-scan-btn');
-
-    indicator.classList.remove('hidden');
-    statusText.textContent = 'Đang kết nối Telegram & quét bài hát...';
+    const btn = document.getElementById('btn-add-channel');
     btn.disabled = true;
-    btn.classList.add('opacity-50');
+    btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Đang thêm...`;
 
     try {
-        const res = await fetch('/api/music/scan', {
+        const res = await fetch('/api/music/channels', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                chat_id: chatId, 
-                limit: parseInt(limit, 10),
+            body: JSON.stringify({ chat_id: rawId })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+            input.value = '';
+            alertToast(data.message || 'Đã thêm kênh thành công!');
+            loadChannelsList();
+        } else {
+            alertToast(data.detail || data.message || 'Không thể thêm kênh này.');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-circle-plus text-primary"></i> Thêm Kênh`;
+    }
+}
+
+async function deleteChannel(chatId) {
+    if (!confirm('Bạn có chắc muốn xóa kênh này khỏi danh sách quản lý?')) return;
+
+    try {
+        const res = await fetch(`/api/music/channels/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast('Đã xóa kênh khỏi danh sách.');
+            loadChannelsList();
+        } else {
+            alertToast(data.detail || data.message || 'Lỗi khi xóa kênh.');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
+    }
+}
+
+async function startMusicScan() {
+    const checkedBoxes = Array.from(document.querySelectorAll('.channel-scan-checkbox:checked'));
+    const selectedChannels = checkedBoxes.map(cb => cb.value);
+
+    if (selectedChannels.length === 0) {
+        alertToast('Vui lòng chọn ít nhất 1 kênh để quét!');
+        return;
+    }
+
+    const limit = parseInt(document.getElementById('scan-limit-select').value || '100', 10);
+    const mode = document.getElementById('scan-mode-select').value || 'append';
+    const defaultArtist = document.getElementById('scan-default-artist').value.trim();
+    const defaultAlbum = document.getElementById('scan-default-album').value.trim();
+    const autoScrape = document.getElementById('scan-auto-scrape').checked;
+
+    const startBtn = document.getElementById('start-scan-btn');
+    startBtn.disabled = true;
+
+    try {
+        const res = await fetch('/api/music/scan/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                channels: selectedChannels,
+                limit,
+                mode,
                 default_artist: defaultArtist,
                 default_album: defaultAlbum,
                 auto_scrape: autoScrape
@@ -1145,20 +1404,122 @@ async function submitScanTelegram() {
         });
 
         const data = await res.json();
-
         if (res.ok && data.status === 'success') {
-            closeScanModal();
-            alertToast(data.message || `Đã quét thành công ${data.count} bài hát!`);
-            loadMusicData();
+            showScanProgressView();
+            startPollingScanStatus();
         } else {
-            statusText.textContent = `❌ ${data.message || 'Không thể quét kênh này.'}`;
+            alertToast(data.detail || data.message || 'Không thể bắt đầu quét.');
+            startBtn.disabled = false;
         }
     } catch (e) {
-        statusText.textContent = `❌ Lỗi kết nối: ${e.message}`;
-    } finally {
-        btn.disabled = false;
-        btn.classList.remove('opacity-50');
+        alertToast('Lỗi kết nối: ' + e.message);
+        startBtn.disabled = false;
     }
+}
+
+function startPollingScanStatus() {
+    if (scanPollInterval) clearInterval(scanPollInterval);
+    pollScanStatus();
+    scanPollInterval = setInterval(pollScanStatus, 1000);
+}
+
+async function pollScanStatus() {
+    try {
+        const res = await fetch('/api/music/scan/status');
+        const json = await res.json();
+        if (!res.ok || json.status !== 'success' || !json.data) return;
+
+        const data = json.data;
+        const status = data.status; // idle, running, completed, cancelled, error
+
+        // Update UI metrics
+        document.getElementById('scan-stat-channel-idx').textContent = `${data.channel_index || 0} / ${data.total_channels || 0}`;
+        document.getElementById('scan-stat-msgs').textContent = data.processed_messages || 0;
+        document.getElementById('scan-stat-found').textContent = data.found_tracks_count || 0;
+        document.getElementById('scan-stat-dups').textContent = data.duplicates_removed || 0;
+        document.getElementById('scan-live-elapsed').textContent = `${data.elapsed_seconds || 0}s`;
+
+        document.getElementById('scan-current-track-name').textContent = data.current_track || 'Đang duyệt tin nhắn...';
+        document.getElementById('scan-progress-channel-label').textContent = data.current_channel_title ? `Kênh: ${data.current_channel_title}` : 'Đang quét...';
+
+        // Calculate percentage
+        let percent = 0;
+        if (data.target_messages > 0) {
+            percent = Math.min(100, Math.round((data.processed_messages / data.target_messages) * 100));
+        }
+        if (status === 'completed') percent = 100;
+
+        document.getElementById('scan-progress-percent').textContent = `${percent}%`;
+        document.getElementById('scan-progress-fill').style.width = `${percent}%`;
+
+        // Logs
+        const logsEl = document.getElementById('scan-live-logs');
+        if (data.logs && data.logs.length > 0) {
+            logsEl.innerHTML = data.logs.map(l => `<div>${l}</div>`).join('');
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+
+        // Status Badge & Controls
+        const badge = document.getElementById('scan-live-status-badge');
+        const spinner = document.getElementById('scan-spinner-icon');
+        const cancelBtn = document.getElementById('btn-cancel-scan');
+        const finishBtn = document.getElementById('btn-finish-scan');
+
+        if (status === 'running') {
+            badge.textContent = 'Đang quét dữ liệu...';
+            badge.className = 'text-xs font-black text-primary';
+            spinner.innerHTML = '<i class="fa-solid fa-satellite-dish animate-pulse"></i>';
+            cancelBtn.disabled = false;
+            finishBtn.disabled = true;
+        } else if (status === 'completed') {
+            badge.textContent = '✅ Đã hoàn tất quét!';
+            badge.className = 'text-xs font-black text-emerald-400';
+            spinner.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+            cancelBtn.disabled = true;
+            finishBtn.disabled = false;
+            if (scanPollInterval) {
+                clearInterval(scanPollInterval);
+                scanPollInterval = null;
+            }
+        } else if (status === 'cancelled') {
+            badge.textContent = '⚠️ Tiến trình đã bị hủy';
+            badge.className = 'text-xs font-black text-amber-400';
+            spinner.innerHTML = '<i class="fa-solid fa-ban text-amber-400"></i>';
+            cancelBtn.disabled = true;
+            finishBtn.disabled = false;
+            if (scanPollInterval) {
+                clearInterval(scanPollInterval);
+                scanPollInterval = null;
+            }
+        } else if (status === 'error') {
+            badge.textContent = `❌ Lỗi: ${data.error_message || 'Không xác định'}`;
+            badge.className = 'text-xs font-black text-red-400';
+            spinner.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-red-400"></i>';
+            cancelBtn.disabled = true;
+            finishBtn.disabled = false;
+            if (scanPollInterval) {
+                clearInterval(scanPollInterval);
+                scanPollInterval = null;
+            }
+        }
+    } catch (e) {
+        console.error('Lỗi poll tiến trình quét:', e);
+    }
+}
+
+async function cancelMusicScan() {
+    try {
+        const res = await fetch('/api/music/scan/cancel', { method: 'POST' });
+        const data = await res.json();
+        alertToast(data.message || 'Đã gửi yêu cầu hủy quét.');
+    } catch (e) {
+        alertToast('Lỗi gửi lệnh hủy: ' + e.message);
+    }
+}
+
+function finishAndCloseScanModal() {
+    closeScanModal();
+    loadMusicData(true);
 }
 
 // Edit Track Modal
