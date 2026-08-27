@@ -236,12 +236,20 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-hairline">
                 <div>
                     <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Số Tin Nhắn Quét / Kênh:</label>
-                    <select id="scan-limit-select" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary">
+                    <select id="scan-limit-select" onchange="onScanLimitChange()" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary">
                         <option value="50">50 tin nhắn gần nhất</option>
                         <option value="100" selected>100 tin nhắn</option>
                         <option value="250">250 tin nhắn</option>
                         <option value="500">500 tin nhắn</option>
-                        <option value="1000">1000 tin nhắn (Quét sâu)</option>
+                        <option value="1000">1,000 tin nhắn (Quét sâu)</option>
+                        <option value="2500">2,500 tin nhắn</option>
+                        <option value="5000">5,000 tin nhắn</option>
+                        <option value="10000">10,000 tin nhắn</option>
+                        <option value="25000">25,000 tin nhắn</option>
+                        <option value="50000">50,000 tin nhắn</option>
+                        <option value="100000">100,000 tin nhắn</option>
+                        <option value="0">🌟 Quét Toàn Bộ Kênh (Không giới hạn)</option>
+                        <option value="custom">🎯 Quét Theo Dải ID Tin Nhắn (Tùy chỉnh)</option>
                     </select>
                 </div>
                 <div>
@@ -250,6 +258,24 @@
                         <option value="append" selected>Bổ sung bài mới (Giữ bài cũ)</option>
                         <option value="fresh">Quét mới toàn bộ (Làm mới thư viện)</option>
                     </select>
+                </div>
+            </div>
+
+            <!-- Custom Message ID Range Container (Expandable) -->
+            <div id="scan-range-container" class="hidden grid grid-cols-2 gap-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 animate-fadeIn">
+                <div>
+                    <label class="block text-[11px] font-bold uppercase text-amber-300 mb-1">
+                        <i class="fa-solid fa-play text-[10px] mr-1"></i> Từ Tin Nhắn ID (From ID):
+                    </label>
+                    <input type="number" id="scan-from-msg-id" min="1" placeholder="Ví dụ: 1 hoặc 5000"
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-amber-500/40 text-xs font-mono focus:ring-2 focus:ring-amber-400">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold uppercase text-amber-300 mb-1">
+                        <i class="fa-solid fa-flag-checkered text-[10px] mr-1"></i> Đến Tin Nhắn ID (To ID):
+                    </label>
+                    <input type="number" id="scan-to-msg-id" min="1" placeholder="Ví dụ: 25000 (để trống = mới nhất)"
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-amber-500/40 text-xs font-mono focus:ring-2 focus:ring-amber-400">
                 </div>
             </div>
 
@@ -1371,6 +1397,16 @@ async function deleteChannel(chatId) {
     }
 }
 
+function onScanLimitChange() {
+    const val = document.getElementById('scan-limit-select').value;
+    const rangeBox = document.getElementById('scan-range-container');
+    if (val === 'custom') {
+        rangeBox.classList.remove('hidden');
+    } else {
+        rangeBox.classList.add('hidden');
+    }
+}
+
 async function startMusicScan() {
     const checkedBoxes = Array.from(document.querySelectorAll('.channel-scan-checkbox:checked'));
     const selectedChannels = checkedBoxes.map(cb => cb.value);
@@ -1380,7 +1416,23 @@ async function startMusicScan() {
         return;
     }
 
-    const limit = parseInt(document.getElementById('scan-limit-select').value || '100', 10);
+    const limitSelect = document.getElementById('scan-limit-select').value;
+    let limit = 100;
+    let fromMsgId = 0;
+    let toMsgId = 0;
+
+    if (limitSelect === 'custom') {
+        fromMsgId = parseInt(document.getElementById('scan-from-msg-id').value || '0', 10);
+        toMsgId = parseInt(document.getElementById('scan-to-msg-id').value || '0', 10);
+        if (fromMsgId <= 0) {
+            alertToast('Vui lòng nhập ID tin nhắn bắt đầu (From ID > 0)!');
+            return;
+        }
+        limit = 0;
+    } else {
+        limit = parseInt(limitSelect, 10);
+    }
+
     const mode = document.getElementById('scan-mode-select').value || 'append';
     const defaultArtist = document.getElementById('scan-default-artist').value.trim();
     const defaultAlbum = document.getElementById('scan-default-album').value.trim();
@@ -1396,6 +1448,8 @@ async function startMusicScan() {
             body: JSON.stringify({
                 channels: selectedChannels,
                 limit,
+                from_msg_id: fromMsgId,
+                to_msg_id: toMsgId,
                 mode,
                 default_artist: defaultArtist,
                 default_album: defaultAlbum,

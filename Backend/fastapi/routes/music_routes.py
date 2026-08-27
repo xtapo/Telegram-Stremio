@@ -15,6 +15,7 @@ from fastapi.responses import Response as PlainResponse
 from fastapi.responses import StreamingResponse
 
 from Backend import db
+from pyrogram.errors import FloodWait
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
@@ -646,6 +647,8 @@ class MusicScanManager:
         auto_scrape: bool = True,
         default_artist: str = "",
         default_album: str = "",
+        from_msg_id: int = 0,
+        to_msg_id: int = 0,
     ) -> dict:
         if self._status == "running":
             return {"ok": False, "message": "Tiến trình quét nhạc đang chạy."}
@@ -657,7 +660,13 @@ class MusicScanManager:
         self._cancel_requested = False
         self._status = "running"
         self._processed_messages = 0
-        self._target_messages = len(channels) * limit
+        if from_msg_id > 0 and to_msg_id >= from_msg_id:
+            self._target_messages = len(channels) * (to_msg_id - from_msg_id + 1)
+        elif limit > 0:
+            self._target_messages = len(channels) * limit
+        else:
+            self._target_messages = 0  # 0 = Không giới hạn
+
         self._found_tracks_count = 0
         self._duplicates_removed = 0
         self._current_track = ""
@@ -676,6 +685,8 @@ class MusicScanManager:
                 auto_scrape=auto_scrape,
                 default_artist=default_artist,
                 default_album=default_album,
+                from_msg_id=from_msg_id,
+                to_msg_id=to_msg_id,
             )
         )
         return {"ok": True, "message": f"Bắt đầu quét {len(channels)} kênh Telegram."}
@@ -699,6 +710,8 @@ class MusicScanManager:
         auto_scrape: bool,
         default_artist: str,
         default_album: str,
+        from_msg_id: int = 0,
+        to_msg_id: int = 0,
     ):
         try:
             client = _get_active_client()
@@ -737,30 +750,134 @@ class MusicScanManager:
                 self._log(f"Đang quét kênh [{idx}/{len(channels)}]: {chat_title} ({self._current_channel_id})")
 
                 messages_to_process = []
-                try:
-                    async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
+
+                # ── 1. Quét theo dải ID tin nhắn tùy chỉnh (From -> To) ──
+                if from_msg_id > 0:
+                    curr_to = to_msg_id
+                    if curr_to <= 0 or curr_to < from_msg_id:
+                        try:
+                            probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
+                            v_ids = [m.id for m in probe if m]
+                            curr_to = max(v_ids) if v_ids else from_msg_id + 500
+                        except Exception:
+                            curr_to = from_msg_id + 500
+
+                    scan_range = list(range(from_msg_id, curr_to + 1))
+                    self._log(f"Quét dải ID tin nhắn #{from_msg_id} -> #{curr_to} (Tổng {len(scan_range)} tin nhắn)...")
+                    for i in range(0, len(scan_range), 50):
                         if self._cancel_requested:
                             break
-                        if msg:
-                            messages_to_process.append(msg)
-                except Exception as hist_err:
-                    self._log(f"get_chat_history failed ({hist_err}), thử dò batch...")
-                    try:
-                        probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
-                        v_ids = [m.id for m in probe if m]
-                        max_id = max(v_ids) if v_ids else 100
-                        scan_range = list(range(max(1, max_id - limit), max_id + 1))
-                        for i in range(0, len(scan_range), 50):
-                            if self._cancel_requested:
-                                break
-                            sub_ids = scan_range[i:i+50]
+                        sub_ids = scan_range[i:i+50]
+                        try:
                             b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
                             for m in b_msgs:
                                 if m:
                                     messages_to_process.append(m)
-                    except Exception as b_err:
-                        self._log(f"Lỗi đọc tin nhắn {chat_title}: {b_err}")
-                        continue
+                        except FloodWait as fw:
+                            self._log(f"FloodWait {fw.value}s trong batch — đang tự động chờ...")
+                            await asyncio.sleep(fw.value + 1)
+                            b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                            for m in b_msgs:
+                                if m:
+                                    messages_to_process.append(m)
+                        except Exception as e:
+                            self._log(f"Lỗi lấy cụm tin nhắn {sub_ids[0]}-{sub_ids[-1]}: {e}")
+                        await asyncio.sleep(0.04)
+
+                # ── 2. Quét Toàn Bộ Lịch Sử Kênh (limit == 0) ──
+                elif limit == 0:
+                    self._log("Chế độ quét toàn bộ lịch sử kênh...")
+                    try:
+                        async for msg in client.get_chat_history(resolved_chat_id):
+                            if self._cancel_requested:
+                                break
+                            if msg:
+                                messages_to_process.append(msg)
+                    except FloodWait as fw:
+                        self._log(f"FloodWait {fw.value}s — đang tự động chờ...")
+                        await asyncio.sleep(fw.value + 1)
+                        try:
+                            async for msg in client.get_chat_history(resolved_chat_id):
+                                if self._cancel_requested:
+                                    break
+                                if msg:
+                                    messages_to_process.append(msg)
+                        except Exception as e:
+                            self._log(f"Thử lại get_chat_history thất bại: {e}")
+                    except Exception as hist_err:
+                        self._log(f"get_chat_history ({hist_err}), fallback dò batch toàn bộ...")
+                        try:
+                            probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
+                            v_ids = [m.id for m in probe if m]
+                            max_id = max(v_ids) if v_ids else 1000
+                            scan_range = list(range(1, max_id + 1))
+                            for i in range(0, len(scan_range), 50):
+                                if self._cancel_requested:
+                                    break
+                                sub_ids = scan_range[i:i+50]
+                                try:
+                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                                    for m in b_msgs:
+                                        if m:
+                                            messages_to_process.append(m)
+                                except FloodWait as fw:
+                                    self._log(f"FloodWait {fw.value}s trong batch — đang chờ...")
+                                    await asyncio.sleep(fw.value + 1)
+                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                                    for m in b_msgs:
+                                        if m:
+                                            messages_to_process.append(m)
+                                await asyncio.sleep(0.04)
+                        except Exception as b_err:
+                            self._log(f"Lỗi đọc tin nhắn {chat_title}: {b_err}")
+                            continue
+
+                # ── 3. Quét theo số lượng tin nhắn gần nhất (limit > 0) ──
+                else:
+                    try:
+                        async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
+                            if self._cancel_requested:
+                                break
+                            if msg:
+                                messages_to_process.append(msg)
+                    except FloodWait as fw:
+                        self._log(f"Telegram yêu cầu tạm dừng {fw.value}s (FloodWait) — đang tự động chờ...")
+                        await asyncio.sleep(fw.value + 1)
+                        try:
+                            async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
+                                if self._cancel_requested:
+                                    break
+                                if msg:
+                                    messages_to_process.append(msg)
+                        except Exception as e:
+                            self._log(f"Thử lại get_chat_history thất bại: {e}")
+                    except Exception as hist_err:
+                        self._log(f"get_chat_history failed ({hist_err}), thử dò batch...")
+                        try:
+                            probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
+                            v_ids = [m.id for m in probe if m]
+                            max_id = max(v_ids) if v_ids else 100
+                            scan_range = list(range(max(1, max_id - limit), max_id + 1))
+                            for i in range(0, len(scan_range), 50):
+                                if self._cancel_requested:
+                                    break
+                                sub_ids = scan_range[i:i+50]
+                                try:
+                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                                    for m in b_msgs:
+                                        if m:
+                                            messages_to_process.append(m)
+                                except FloodWait as fw:
+                                    self._log(f"FloodWait {fw.value}s trong batch — đang chờ...")
+                                    await asyncio.sleep(fw.value + 1)
+                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                                    for m in b_msgs:
+                                        if m:
+                                            messages_to_process.append(m)
+                                await asyncio.sleep(0.04)
+                        except Exception as b_err:
+                            self._log(f"Lỗi đọc tin nhắn {chat_title}: {b_err}")
+                            continue
 
                 media_group_context = {}
                 nearby_text_context = {}
@@ -992,7 +1109,10 @@ async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
     if not channels:
         raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất 1 kênh để quét.")
 
-    limit = min(max(int(payload.get("limit", 100)), 5), 1000)
+    raw_limit = int(payload.get("limit", 100))
+    limit = 0 if raw_limit == 0 else max(raw_limit, 5)
+    from_msg_id = max(0, int(payload.get("from_msg_id", 0) or 0))
+    to_msg_id = max(0, int(payload.get("to_msg_id", 0) or 0))
     mode = str(payload.get("mode", "append")).lower()
     auto_scrape = bool(payload.get("auto_scrape", True))
     default_artist = str(payload.get("default_artist", "")).strip()
@@ -1005,6 +1125,8 @@ async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
         auto_scrape=auto_scrape,
         default_artist=default_artist,
         default_album=default_album,
+        from_msg_id=from_msg_id,
+        to_msg_id=to_msg_id,
     )
     if not result.get("ok"):
         raise HTTPException(status_code=409, detail=result.get("message"))
