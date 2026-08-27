@@ -295,13 +295,13 @@ class XTAPOMusicApp {
                         this.albumCountBadge.textContent = `${this.albums.length} Albums (TG)`;
                     }
                     if (this.tgStorageLabel) {
-                        this.tgStorageLabel.textContent = 'âš¡ Telegram Live';
+                        this.tgStorageLabel.textContent = '⚡ Telegram Live';
                     }
-                    this.showToast(`ÄÃ£ Ä‘á»“ng bá»™ ${this.albums.length} Album tá»« Telegram Cloud!`);
+                    this.showToast(`Đã đồng bộ ${this.albums.length} Album từ Telegram Cloud!`);
                 }
             }
         } catch (err) {
-            // Äang má»Ÿ file tÄ©nh hoáº·c backend chÆ°a káº¿t ná»‘i
+            // Đang mở file tĩnh hoặc backend chưa kết nối
             console.log('[XTAPO MUSIC] Backend API offline or file mode, using local database.');
         }
     }
@@ -309,13 +309,13 @@ class XTAPOMusicApp {
     // --- Scan Telegram Channel ---
     async scanTelegramChannel(chatId, limit = 100) {
         if (!chatId || !chatId.trim()) {
-            this.showToast('Vui lÃ²ng nháº­p ID hoáº·c Username kÃªnh Telegram!');
+            this.showToast('Vui lòng nhập ID hoặc Username kênh Telegram!');
             return;
         }
 
         if (this.tgStatusIndicator) {
             this.tgStatusIndicator.style.display = 'flex';
-            this.tgStatusMessage.textContent = 'Äang káº¿t ná»‘i Telegram & quÃ©t bÃ i hÃ¡t audio...';
+            this.tgStatusMessage.textContent = 'Đang kết nối Telegram & quét bài hát audio...';
         }
         if (this.tgScanSubmitBtn) {
             this.tgScanSubmitBtn.disabled = true;
@@ -334,7 +334,7 @@ class XTAPOMusicApp {
             try {
                 data = JSON.parse(rawText);
             } catch (jsonErr) {
-                data = { status: 'error', message: rawText || `Lá»—i HTTP ${res.status}` };
+                data = { status: 'error', message: rawText || `Lỗi HTTP ${res.status}` };
             }
 
             if (res.ok && data.status === 'success' && data.albums && data.albums.length > 0) {
@@ -348,23 +348,23 @@ class XTAPOMusicApp {
                     this.albumCountBadge.textContent = `${this.albums.length} Albums (TG)`;
                 }
                 if (this.tgStorageLabel) {
-                    this.tgStorageLabel.textContent = 'âš¡ Telegram Live';
+                    this.tgStorageLabel.textContent = '⚡ Telegram Live';
                 }
 
                 this.closeModal(this.tgModal);
-                this.showToast(data.message || `ÄÃ£ quÃ©t ${data.count} bÃ i hÃ¡t tá»« kÃªnh!`);
+                this.showToast(data.message || `Đã quét ${data.count} bài hát từ kênh!`);
             } else {
-                const errMsg = data.message || data.detail || 'KhÃ´ng tÃ¬m tháº¥y file nháº¡c hoáº·c Bot chÆ°a cÃ³ quyá»n Ä‘á»c tin nháº¯n trong kÃªnh nÃ y.';
+                const errMsg = data.message || data.detail || 'Không tìm thấy file nhạc hoặc Bot chưa có quyền đọc tin nhắn trong kênh này.';
                 if (this.tgStatusMessage) {
-                    this.tgStatusMessage.textContent = `âŒ ${errMsg}`;
+                    this.tgStatusMessage.textContent = `❌ ${errMsg}`;
                 }
-                this.showToast(`ThÃ´ng bÃ¡o: ${errMsg}`);
+                this.showToast(`Thông báo: ${errMsg}`);
             }
         } catch (err) {
             if (this.tgStatusMessage) {
-                this.tgStatusMessage.textContent = `âŒ Lá»—i: ${err.message}. HÃ£y kiá»ƒm tra ID/Username kÃªnh vÃ  Ä‘áº£m báº£o Bot Ä‘Ã£ vÃ o kÃªnh!`;
+                this.tgStatusMessage.textContent = `❌ Lỗi: ${err.message}. Hãy kiểm tra ID/Username kênh và đảm bảo Bot đã vào kênh!`;
             }
-            this.showToast(`Lá»—i: ${err.message}`);
+            this.showToast(`Lỗi: ${err.message}`);
         } finally {
             if (this.tgScanSubmitBtn) {
                 this.tgScanSubmitBtn.disabled = false;
@@ -1165,14 +1165,14 @@ class XTAPOMusicApp {
                 <div class="album-card-info">
                     <span class="album-card-title">${album.title}</span>
                     <span class="album-card-artist">${album.artist}</span>
-                    <span class="album-card-year">${album.year} â€¢ ${album.tracks.length} Tracks</span>
+                    <span class="album-card-year">${album.year} • ${album.tracks.length} Tracks</span>
                 </div>
             `;
 
             card.addEventListener('click', () => {
                 this.loadAlbum(idx, 0, true);
                 this.closeModal(this.albumModal);
-                this.showToast(`ÄÃ£ chuyá»ƒn sang album: ${album.title}`);
+                this.showToast(`Đã chuyển sang album: ${album.title}`);
                 this.renderAlbumGrid();
             });
 
@@ -1196,10 +1196,10 @@ class XTAPOMusicApp {
             row.innerHTML = `
                 <div class="file-info">
                     <div class="file-title">${idx + 1}. ${track.name}</div>
-                    <div class="file-meta">${track.artist || album.artist} â€¢ ${track.format || album.format || 'Lossless'} â€¢ ${track.duration || ''}</div>
+                    <div class="file-meta">${track.artist || album.artist} • ${track.format || album.format || 'Lossless'} • ${track.duration || ''}</div>
                 </div>
                 <div class="file-actions">
-                    <button class="file-action-btn download-btn">PhÃ¡t Ngay</button>
+                    <button class="file-action-btn download-btn">Phát Ngay</button>
                 </div>
             `;
 
@@ -1207,7 +1207,7 @@ class XTAPOMusicApp {
             btn.addEventListener('click', () => {
                 this.loadTrack(idx, true);
                 this.metaDrawer.classList.remove('open');
-                this.showToast(`Äang phÃ¡t: ${track.name}`);
+                this.showToast(`Đang phát: ${track.name}`);
             });
 
             this.drawerFileList.appendChild(row);
@@ -1216,7 +1216,7 @@ class XTAPOMusicApp {
 
     handleSearch(query) {
         if (!query.trim()) {
-            this.searchResults.innerHTML = '<div class="search-empty">Nháº­p tá»« khoÃ¡ Ä‘á»ƒ tÃ¬m bÃ i hÃ¡t nhanh...</div>';
+            this.searchResults.innerHTML = '<div class="search-empty">Nhập từ khoá để tìm bài hát nhanh...</div>';
             return;
         }
 
@@ -1232,7 +1232,7 @@ class XTAPOMusicApp {
         });
 
         if (matches.length === 0) {
-            this.searchResults.innerHTML = `<div class="search-empty">KhÃ´ng tÃ¬m tháº¥y bÃ i hÃ¡t nÃ o khá»›p vá»›i "${query}"</div>`;
+            this.searchResults.innerHTML = `<div class="search-empty">Không tìm thấy bài hát nào khớp với "${query}"</div>`;
             return;
         }
 
@@ -1243,9 +1243,20 @@ class XTAPOMusicApp {
             el.innerHTML = `
                 <div>
                     <div style="font-weight:600; color:#fff;">${item.track.name}</div>
-                    <div style="font-size:0.78rem; color:rgba(255,255,255,0.5);">${item.album.artist} â€¢ ${item.album.title}</div>
+                    <div style="font-size:0.78rem; color:rgba(255,255,255,0.5);">${item.album.artist} • ${item.album.title}</div>
                 </div>
                 <span style="color:var(--accent-gold); font-size:0.8rem;">${item.track.duration}</span>
+            `;
+
+            el.addEventListener('click', () => {
+                this.loadAlbum(item.albumIdx, item.trackIdx, true);
+                this.closeModal(this.searchModal);
+                this.showToast(`Đang phát: ${item.track.name}`);
+            });
+
+            this.searchResults.appendChild(el);
+        });
+    }m;">${item.track.duration}</span>
             `;
 
             el.addEventListener('click', () => {
