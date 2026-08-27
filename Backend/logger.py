@@ -1,5 +1,5 @@
 from datetime import datetime
-from logging import ERROR, INFO, FileHandler, Formatter, StreamHandler, basicConfig, getLogger
+from logging import ERROR, INFO, CRITICAL, FileHandler, Formatter, StreamHandler, basicConfig, getLogger
 
 import pytz
 
@@ -24,6 +24,9 @@ basicConfig(handlers=[file_handler, stream_handler], level=INFO)
 
 getLogger("httpx").setLevel(ERROR)
 getLogger("pyrogram").setLevel(ERROR)
+getLogger("pyrogram.session").setLevel(CRITICAL)
+getLogger("pyrogram.session.session").setLevel(CRITICAL)
+getLogger("pyrogram.connection").setLevel(CRITICAL)
 getLogger("fastapi").setLevel(ERROR)
 
 LOGGER = getLogger(__name__)
