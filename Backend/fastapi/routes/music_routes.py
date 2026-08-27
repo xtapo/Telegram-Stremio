@@ -1150,6 +1150,32 @@ async def scan_telegram_channel(payload: dict, _: bool = Depends(require_auth)):
     return await start_music_scan_api(payload)
 
 
+def _fix_audio_mime(file_name: str, raw_mime: str) -> tuple[str, str]:
+    ext = os.path.splitext(file_name)[1].lower() if "." in file_name else ""
+    mime_type = raw_mime or ""
+    
+    if ext == ".flac":
+        mime_type = "audio/flac"
+    elif ext == ".mp3":
+        mime_type = "audio/mpeg"
+    elif ext in [".m4a", ".aac"]:
+        mime_type = "audio/mp4"
+    elif ext in [".ogg", ".oga"]:
+        mime_type = "audio/ogg"
+    elif ext == ".opus":
+        mime_type = "audio/opus"
+    elif ext in [".wav", ".wave"]:
+        mime_type = "audio/wav"
+    elif ext in [".weba", ".webm"]:
+        mime_type = "audio/webm"
+    elif not mime_type or mime_type == "application/octet-stream" or not mime_type.startswith("audio/"):
+        mime_type = "audio/mpeg"
+        if not ext:
+            file_name = f"{file_name}.mp3"
+            
+    return file_name, mime_type
+
+
 # ── 4. Stream trực tiếp Audio từ Telegram với HTTP Range 206 ──────────────────
 @router.get("/api/music/stream/{chat_id}/{msg_id}")
 @router.head("/api/music/stream/{chat_id}/{msg_id}")
@@ -1159,7 +1185,16 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         raise HTTPException(status_code=503, detail="Telegram client chưa kết nối.")
 
     index = select_best_client(0)
-    tg_client = multi_clients[index] if multi_clients else client
+    tg_client = multi_clients.get(index) if multi_clients else client
+    if not tg_client:
+        tg_client = client
+        index = 0
+
+    if index not in work_loads:
+        work_loads[index] = 0
+    if index not in client_failures:
+        client_failures[index] = 0
+
     streamer: ByteStreamer = _get_streamer(tg_client, index)
 
     try:
@@ -1194,7 +1229,7 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         last_part_cut=last_part_cut,
         part_count=part_count,
         chunk_size=chunk_size,
-        prefetch=3,
+        prefetch=2,
         stream_id=stream_id,
         meta=meta,
         parallelism=1,
@@ -1204,12 +1239,35 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         extra_clients=[],
     )
 
-    file_name, mime_type = _resolve_filename_mime(file_id)
+    raw_file_name, raw_mime = _resolve_filename_mime(file_id)
+    file_name, mime_type = _fix_audio_mime(raw_file_name, raw_mime)
     headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
     if request.method == "HEAD":
         return PlainResponse(status_code=status, headers=headers)
     return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
+
+
+DEFAULT_COVER_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1e24"/>
+      <stop offset="50%" stop-color="#121217"/>
+      <stop offset="100%" stop-color="#0a0a0d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg)"/>
+  <circle cx="250" cy="250" r="180" fill="#18181c" stroke="#2a2a32" stroke-width="6"/>
+  <circle cx="250" cy="250" r="140" fill="none" stroke="#22222a" stroke-width="3" stroke-dasharray="8 6"/>
+  <circle cx="250" cy="250" r="100" fill="none" stroke="#262630" stroke-width="2"/>
+  <circle cx="250" cy="250" r="70" fill="url(#accent)"/>
+  <circle cx="250" cy="250" r="22" fill="#0f0f12"/>
+  <path d="M245 235 v30 l20 -15 z" fill="#ffffff" opacity="0.9"/>
+</svg>""".encode("utf-8")
 
 
 # ── 5. Lấy Ảnh Cover / Thumbnail từ Telegram Message ──────────────────────────
@@ -1218,30 +1276,41 @@ async def get_music_cover(chat_id: int, msg_id: int):
     cache_key = f"{chat_id}_{msg_id}"
     now = time.time()
     if cache_key in _cover_cache:
-        data, exp = _cover_cache[cache_key]
+        data, mime, exp = _cover_cache[cache_key]
         if now < exp:
-            return PlainResponse(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+            return PlainResponse(content=data, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
 
-    client = _get_active_client()
-    if not client:
-        raise HTTPException(status_code=503, detail="No Telegram client")
+    clients_to_try = []
+    active = _get_active_client()
+    if active:
+        clients_to_try.append(active)
+    if StreamBot and StreamBot not in clients_to_try:
+        clients_to_try.append(StreamBot)
+    if multi_clients:
+        for c in multi_clients.values():
+            if c not in clients_to_try:
+                clients_to_try.append(c)
 
-    try:
-        msg = await client.get_messages(chat_id, msg_id)
-        media = getattr(msg, "audio", None) or getattr(msg, "document", None)
-        thumbs = getattr(media, "thumbs", None) if media else None
-        if not thumbs:
-            raise HTTPException(status_code=404, detail="No cover available")
+    data = None
+    for cl in clients_to_try:
+        try:
+            msg = await cl.get_messages(chat_id, msg_id)
+            media = getattr(msg, "audio", None) or getattr(msg, "document", None)
+            thumbs = getattr(media, "thumbs", None) if media else None
+            if thumbs:
+                buf = await cl.download_media(thumbs[-1], in_memory=True)
+                if buf and hasattr(buf, "getvalue"):
+                    data = buf.getvalue()
+                    break
+        except Exception:
+            continue
 
-        buf = await client.download_media(thumbs[-1].file_id, in_memory=True)
-        data = buf.getvalue()
-        _cover_cache[cache_key] = (data, now + _COVER_CACHE_TTL)
+    if data:
+        _cover_cache[cache_key] = (data, "image/jpeg", now + _COVER_CACHE_TTL)
         return PlainResponse(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
-    except HTTPException:
-        raise
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC COVER] Failed for {chat_id}/{msg_id}: {e}")
-        raise HTTPException(status_code=404, detail="Cover not found")
+
+    _cover_cache[cache_key] = (DEFAULT_COVER_SVG, "image/svg+xml", now + 3600)
+    return PlainResponse(content=DEFAULT_COVER_SVG, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=3600"})
 
 
 # ── 6. Xóa Album / Xóa Bài Hát khỏi Thư Viện Cache & MongoDB ─────────────────

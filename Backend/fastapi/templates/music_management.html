@@ -1003,10 +1003,21 @@ function previewTrack(streamUrl, title, artist, cover, format = '', qualityTier 
         badgeEl.innerHTML = format ? formatQualityBadge(format, qualityTier) : '';
     }
     
-    audio.src = streamUrl;
-    audio.play();
-
     bar.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+
+    try {
+        audio.pause();
+        audio.src = streamUrl;
+        audio.load();
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(e => {
+                console.warn("Audio autoplay prevented:", e);
+            });
+        }
+    } catch (err) {
+        console.error("Failed to load audio:", err);
+    }
 }
 
 function closeMiniPlayer() {
