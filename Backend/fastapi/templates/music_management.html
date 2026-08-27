@@ -295,9 +295,7 @@
                     <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp từ Apple Music / Deezer:</span>
                     <button onclick="document.getElementById('track-cover-search-results').classList.add('hidden')" class="text-xs text-text-secondary hover:text-text"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <div id="track-cover-grid" class="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto pr-1">
-                    <!-- Thumbnail items injected by JS -->
-                </div>
+                <div id="track-cover-grid" class="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto pr-1"></div>
             </div>
         </div>
 
@@ -366,9 +364,7 @@
                     <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp từ Apple Music / Deezer:</span>
                     <button onclick="document.getElementById('album-cover-search-results').classList.add('hidden')" class="text-xs text-text-secondary hover:text-text"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <div id="album-cover-grid" class="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto pr-1">
-                    <!-- Thumbnail items injected by JS -->
-                </div>
+                <div id="album-cover-grid" class="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto pr-1"></div>
             </div>
         </div>
 
@@ -381,9 +377,73 @@
     </div>
 </div>
 
+<!-- Modal 4: Xem Danh Sách Bài Hát Trong Album (Album Tracklist Modal) -->
+<div id="album-tracklist-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] flex flex-col">
+        
+        <!-- Album Header Info -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-hairline">
+            <div class="flex items-center gap-4 min-w-0">
+                <img id="tracklist-album-cover" src="" class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-hairline shadow-lg shrink-0" alt="Cover">
+                <div class="min-w-0">
+                    <span id="tracklist-album-format" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 inline-block mb-1">Hi-Res</span>
+                    <h3 id="tracklist-album-title" class="text-base sm:text-lg font-black text-text truncate">Tên Album</h3>
+                    <p id="tracklist-album-artist" class="text-xs sm:text-sm font-semibold text-text-secondary truncate mt-0.5">Ca Sĩ</p>
+                    <div class="flex items-center gap-3 text-xs text-text-secondary mt-2">
+                        <span id="tracklist-album-tracks-count">0 Bài hát</span>
+                        <span>•</span>
+                        <span id="tracklist-album-size">0 MB</span>
+                        <span>•</span>
+                        <span id="tracklist-album-year">2026</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Header Action Buttons -->
+            <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button id="tracklist-play-all-btn" class="px-3.5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/25 hover:brightness-110 flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-play"></i> Phát Toàn Bộ
+                </button>
+                <button id="tracklist-edit-album-btn" class="w-8 h-8 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs flex items-center justify-center transition" title="Sửa Album">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button onclick="closeAlbumTracklistModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tracklist Content Table -->
+        <div class="flex-1 overflow-y-auto mt-4 pr-1">
+            <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                    <tr class="border-b border-hairline text-text-secondary font-bold uppercase text-[10px]">
+                        <th class="py-2.5 px-3 w-10 text-center">#</th>
+                        <th class="py-2.5 px-3">Tên Bài Hát</th>
+                        <th class="py-2.5 px-3">Ca Sĩ</th>
+                        <th class="py-2.5 px-3">Thời Lượng</th>
+                        <th class="py-2.5 px-3">Dung Lượng</th>
+                        <th class="py-2.5 px-3 text-right">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody id="tracklist-modal-body" class="divide-y divide-hairline">
+                    <!-- Tracks in this album injected by JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <div class="pt-3 mt-3 border-t border-hairline flex items-center justify-between text-xs text-text-secondary">
+            <span id="tracklist-footer-info">Tổng cộng 0 bài hát</span>
+            <button onclick="closeAlbumTracklistModal()" class="px-4 py-1.5 rounded-xl bg-surface hover:bg-surface-2 text-text font-bold transition">Đóng</button>
+        </div>
+    </div>
+</div>
+
 <script>
 let globalAlbums = [];
 let currentActiveTab = 'albums';
+let currentViewAlbumId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     loadMusicData();
@@ -405,6 +465,11 @@ async function loadMusicData(showToastAlert = false) {
 
         renderStats();
         renderCurrentView();
+
+        // If Tracklist modal is open, refresh it
+        if (currentViewAlbumId) {
+            openAlbumTracklistModal(currentViewAlbumId, false);
+        }
 
         if (showToastAlert) {
             alertToast('Đã làm mới dữ liệu thành công!');
@@ -499,24 +564,35 @@ function renderAlbumsGrid(query = '') {
         card.className = 'glass-panel rounded-2xl p-4 flex flex-col justify-between hover:border-primary/50 transition group';
         
         card.innerHTML = `
-            <div>
+            <!-- Clickable top part to open Album Tracklist -->
+            <div class="cursor-pointer" onclick="openAlbumTracklistModal('${album.id}')">
                 <div class="relative w-full aspect-square rounded-xl overflow-hidden mb-3 bg-black/20">
                     <img src="${album.coverUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
                          alt="${album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
                     <span class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-bold text-amber-300 border border-amber-500/30">
                         ${album.format || 'Hi-Res'}
                     </span>
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                        <span class="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
+                            <i class="fa-solid fa-list-ul"></i> Xem Bài Hát
+                        </span>
+                    </div>
                 </div>
-                <h3 class="text-sm font-bold text-text truncate" title="${album.title}">${album.title}</h3>
+                <h3 class="text-sm font-bold text-text truncate group-hover:text-primary transition" title="${album.title}">${album.title}</h3>
                 <p class="text-xs text-text-secondary truncate mt-0.5">${album.artist}</p>
                 <div class="flex items-center justify-between text-[11px] text-text-secondary mt-2 pt-2 border-t border-hairline">
-                    <span>${album.tracks ? album.tracks.length : 0} Bài hát</span>
+                    <span class="text-primary font-bold"><i class="fa-solid fa-lines-leaning mr-1"></i>${album.tracks ? album.tracks.length : 0} Bài hát</span>
                     <span class="font-semibold text-text">${album.totalSize || ''}</span>
                 </div>
             </div>
+
+            <!-- Action buttons -->
             <div class="flex items-center gap-1.5 mt-4 pt-3 border-t border-hairline">
                 <button onclick="playTrackFromAlbum('${album.id}', 0)" class="flex-1 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center justify-center gap-1">
                     <i class="fa-solid fa-play text-[10px]"></i> Phát
+                </button>
+                <button onclick="openAlbumTracklistModal('${album.id}')" class="px-2.5 py-1.5 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center justify-center gap-1" title="Xem danh sách bài">
+                    <i class="fa-solid fa-list-ul text-[10px]"></i> Bài
                 </button>
                 <button onclick="openEditAlbumModal('${album.id}')" class="w-8 h-8 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs transition flex items-center justify-center" title="Chỉnh sửa Album">
                     <i class="fa-solid fa-pen-to-square text-[11px]"></i>
@@ -645,6 +721,79 @@ function playTrackFromAlbum(albumId, trackIndex) {
         const track = album.tracks[trackIndex];
         previewTrack(track.previewUrl, track.name, track.artist || album.artist, track.coverUrl || album.coverUrl);
     }
+}
+
+// ── Modal 4: Album Tracklist View ───────────────────────────────────────────────
+function openAlbumTracklistModal(albumId, animate = true) {
+    const album = globalAlbums.find(a => a.id === albumId);
+    if (!album) return;
+
+    currentViewAlbumId = albumId;
+
+    document.getElementById('tracklist-album-cover').src = album.coverUrl || '';
+    document.getElementById('tracklist-album-title').textContent = album.title || '';
+    document.getElementById('tracklist-album-artist').textContent = album.artist || 'Unknown Artist';
+    document.getElementById('tracklist-album-format').textContent = album.format || 'Hi-Res';
+    document.getElementById('tracklist-album-tracks-count').textContent = `${album.tracks ? album.tracks.length : 0} Bài hát`;
+    document.getElementById('tracklist-album-size').textContent = album.totalSize || '';
+    document.getElementById('tracklist-album-year').textContent = album.year || '2026';
+    document.getElementById('tracklist-footer-info').textContent = `Album: ${album.title} • ${album.tracks ? album.tracks.length : 0} bài hát`;
+
+    document.getElementById('tracklist-play-all-btn').onclick = () => playTrackFromAlbum(album.id, 0);
+    document.getElementById('tracklist-edit-album-btn').onclick = () => openEditAlbumModal(album.id);
+
+    const tbody = document.getElementById('tracklist-modal-body');
+    tbody.innerHTML = '';
+
+    if (!album.tracks || album.tracks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-text-secondary">Chưa có bài hát nào trong album này.</td></tr>`;
+    } else {
+        album.tracks.forEach((track, idx) => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-surface/50 transition group';
+            tr.innerHTML = `
+                <td class="py-2.5 px-3 text-center font-bold text-text-secondary">${idx + 1}</td>
+                <td class="py-2.5 px-3 font-bold text-text">
+                    <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}')">
+                        ${track.name}
+                    </span>
+                </td>
+                <td class="py-2.5 px-3 text-text-secondary">${track.artist || album.artist}</td>
+                <td class="py-2.5 px-3 text-text-secondary">${track.duration || '--:--'}</td>
+                <td class="py-2.5 px-3 text-text-secondary">${track.size || ''}</td>
+                <td class="py-2.5 px-3 text-right">
+                    <div class="inline-flex items-center gap-1">
+                        <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}')" 
+                                class="w-6 h-6 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
+                            <i class="fa-solid fa-play text-[9px]"></i>
+                        </button>
+                        <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 
+                                class="w-6 h-6 rounded-lg bg-surface hover:bg-surface-2 text-text flex items-center justify-center transition" title="Sửa bài">
+                            <i class="fa-solid fa-pen-to-square text-[9px]"></i>
+                        </button>
+                        <button onclick="deleteTrack('${track.chatId}', '${track.msgId}')" 
+                                class="w-6 h-6 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white flex items-center justify-center transition" title="Xóa bài">
+                            <i class="fa-solid fa-trash-can text-[9px]"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    const modal = document.getElementById('album-tracklist-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    if (animate) {
+        modal.querySelector('.transform').classList.remove('scale-95');
+    }
+}
+
+function closeAlbumTracklistModal() {
+    currentViewAlbumId = null;
+    const modal = document.getElementById('album-tracklist-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
 }
 
 // Modal Scanner
