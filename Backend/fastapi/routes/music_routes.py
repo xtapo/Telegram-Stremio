@@ -71,6 +71,7 @@ def _get_active_client():
 
 # ── 1. Giao diện Web Music Player ─────────────────────────────────────────────
 @router.get("/music", response_class=HTMLResponse)
+@router.get("/music/", response_class=HTMLResponse)
 async def get_music_player(request: Request):
     index_path = os.path.join(MUSIC_DIR, "index.html")
     if os.path.exists(index_path):

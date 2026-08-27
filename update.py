@@ -57,11 +57,11 @@ def _fetch_upstream_from_db() -> tuple[str | None, str]:
     return None, "master"
 
 
-# ── Priority: DB value  >  config.env value ──────────────────────────────────
+# ── Priority: config.env / ENV value  >  DB value ────────────────────────────
 db_repo, db_branch = _fetch_upstream_from_db()
 
-UPSTREAM_REPO   = db_repo   or environ.get("UPSTREAM_REPO",   "").strip() or None
-UPSTREAM_BRANCH = db_branch or environ.get("UPSTREAM_BRANCH", "").strip() or "master"
+UPSTREAM_REPO   = environ.get("UPSTREAM_REPO",   "").strip() or db_repo or None
+UPSTREAM_BRANCH = environ.get("UPSTREAM_BRANCH", "").strip() or db_branch or "master"
 
 # ── Git update ────────────────────────────────────────────────────────────────
 if UPSTREAM_REPO:
