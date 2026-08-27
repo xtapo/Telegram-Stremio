@@ -80,7 +80,7 @@ html, body {
     background: var(--accent-gold);
 }
 
-/* --- Dynamic Ambient Background --- */
+/* --- Dynamic Ambient Background & Studio Visualizer --- */
 .dynamic-backdrop {
     position: fixed;
     inset: 0;
@@ -88,6 +88,18 @@ html, body {
     pointer-events: none;
     overflow: hidden;
     background-color: #07080b;
+}
+
+.ambient-visualizer-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.85;
+    mix-blend-mode: screen;
+    transition: opacity 0.8s ease;
 }
 
 .backdrop-glow {
@@ -378,22 +390,111 @@ html, body {
     color: var(--text-secondary);
 }
 
-/* Audio Visualizer Waveform */
+/* Audio Visualizer Waveform & Studio Mode Controls */
 .visualizer-container {
     width: 100%;
     max-width: 440px;
-    height: 36px;
     margin-bottom: 22px;
-    background: rgba(0, 0, 0, 0.25);
-    border-radius: var(--radius-sm);
-    padding: 4px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(14, 16, 22, 0.7);
+    border-radius: var(--radius-md);
+    padding: 10px 14px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.visualizer-container:hover {
+    border-color: rgba(252, 191, 71, 0.25);
+}
+
+.visualizer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.visualizer-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.visualizer-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: liveDotPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes liveDotPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.55; }
+}
+
+.visualizer-title {
+    font-family: var(--font-heading);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+}
+
+.visualizer-modes {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(0, 0, 0, 0.38);
+    padding: 2px 4px;
+    border-radius: var(--radius-full);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.viz-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.67rem;
+    font-weight: 600;
+    font-family: var(--font-body);
+    padding: 2px 7px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: var(--transition-fast);
+    white-space: nowrap;
+}
+
+.viz-mode-btn .viz-icon {
+    font-size: 0.72rem;
+}
+
+.viz-mode-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.viz-mode-btn.active {
+    color: #0f1117;
+    background: linear-gradient(135deg, var(--accent-gold) 0%, #ff8c42 100%);
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(252, 191, 71, 0.4);
 }
 
 #visualizerCanvas {
     width: 100%;
-    height: 100%;
+    height: 40px;
     display: block;
+    border-radius: 4px;
 }
 
 /* Tracklist */
@@ -555,6 +656,23 @@ html, body {
     perspective: 1200px;
 }
 
+/* Realtime Circular Spectrum Halo Canvas around Vinyl */
+.vinyl-spectrum-canvas {
+    position: absolute;
+    inset: -90px;
+    width: calc(100% + 180px);
+    height: calc(100% + 180px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+}
+
+.vinyl-stage.is-playing .vinyl-spectrum-canvas,
+.vinyl-stage.is-active .vinyl-spectrum-canvas {
+    opacity: 1;
+}
+
 /* Vinyl Disc 3D Realistic Design */
 .vinyl-disc {
     position: absolute;
@@ -569,7 +687,7 @@ html, body {
     top: 20px;
     left: 20px;
     z-index: 1;
-    transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.15s ease;
     transform-origin: center center;
     overflow: hidden;
 }
