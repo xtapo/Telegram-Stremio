@@ -1883,9 +1883,29 @@ async function deleteTrack(chatId, msgId) {
 function alertToast(msg) {
     const el = document.createElement('div');
     el.className = 'fixed top-24 right-6 bg-primary text-white font-bold text-xs px-4 py-3 rounded-2xl shadow-2xl z-50 animate-bounce flex items-center gap-2 border border-white/20';
-    el.innerHTML = `<i class="fa-solid fa-check-circle"></i> <span>${msg}</span>`;
+    el.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <span>${msg}</span>`;
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 3500);
+    setTimeout(() => el.remove(), 4000);
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const audioEl = document.getElementById('admin-audio');
+    if (audioEl) {
+        audioEl.addEventListener('error', () => {
+            const err = audioEl.error;
+            let msg = "Không thể phát bài hát này.";
+            if (err) {
+                if (err.code === 4) {
+                    msg = "Định dạng file này (như DSD .dsf, .ape, .wma) trình duyệt web không hỗ trợ giải mã trực tiếp.";
+                } else if (err.code === 2) {
+                    msg = "Lỗi kết nối mạng khi tải luồng âm thanh từ Telegram.";
+                } else if (err.code === 3) {
+                    msg = "Lỗi giải mã file âm thanh.";
+                }
+            }
+            alertToast(msg);
+        });
+    }
+});
 </script>
 {% endblock %}

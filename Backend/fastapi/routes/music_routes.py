@@ -1168,6 +1168,14 @@ def _fix_audio_mime(file_name: str, raw_mime: str) -> tuple[str, str]:
         mime_type = "audio/wav"
     elif ext in [".weba", ".webm"]:
         mime_type = "audio/webm"
+    elif ext in [".dsf", ".dff"]:
+        mime_type = "audio/x-dsd"
+    elif ext == ".ape":
+        mime_type = "audio/x-ape"
+    elif ext == ".wma":
+        mime_type = "audio/x-ms-wma"
+    elif ext == ".wv":
+        mime_type = "audio/x-wavpack"
     elif not mime_type or mime_type == "application/octet-stream" or not mime_type.startswith("audio/"):
         mime_type = "audio/mpeg"
         if not ext:
