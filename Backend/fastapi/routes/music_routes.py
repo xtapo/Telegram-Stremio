@@ -222,6 +222,32 @@ def detect_audio_quality_from_track_info(track: dict) -> tuple[str, str, int]:
     )
 
 
+def detect_genre_from_track_info(track: dict) -> str:
+    name = track.get("name") or track.get("title") or track.get("file_name") or ""
+    album = track.get("album") or ""
+    caption = track.get("caption") or ""
+    combined = f"{name} {album} {caption}".lower()
+    
+    if any(k in combined for k in ["bolero", "trữ tình", "nhạc vàng", "sến"]):
+        return "Bolero"
+    elif any(k in combined for k in ["lofi", "chill"]):
+        return "Lofi"
+    elif any(k in combined for k in ["gym", "workout", "edm", "remix", "vinahouse", "nonstop", "dance"]):
+        return "EDM/Remix"
+    elif any(k in combined for k in ["acoustic", "cover", "guitar", "piano", "không lời", "instrumental"]):
+        return "Acoustic/Instrumental"
+    elif any(k in combined for k in ["rap", "hip hop", "hiphop"]):
+        return "Rap/Hip-Hop"
+    elif any(k in combined for k in ["jazz", "blues"]):
+        return "Jazz"
+    elif any(k in combined for k in ["rock", "metal"]):
+        return "Rock"
+    elif any(k in combined for k in ["pop", "ballad", "nhạc trẻ"]):
+        return "Pop/Ballad"
+    else:
+        return "Khác"
+
+
 def _normalize_str(s: str) -> str:
     if not s:
         return ""
@@ -466,6 +492,62 @@ async def _db_save_library(albums: list):
         LOGGER.warning(f"[MUSIC DB] Could not sync library to MongoDB: {e}")
 
 
+PLAYLISTS_FILE = os.path.join(MUSIC_DIR, "telegram_playlists.json")
+
+def _load_playlists_file() -> list:
+    if os.path.exists(PLAYLISTS_FILE):
+        try:
+            with open(PLAYLISTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Error reading playlists file: {e}")
+    return []
+
+def _save_playlists_file(playlists: list):
+    try:
+        os.makedirs(MUSIC_DIR, exist_ok=True)
+        with open(PLAYLISTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(playlists, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        LOGGER.error(f"[MUSIC] Error saving playlists file: {e}")
+
+async def _db_load_playlists() -> list:
+    try:
+        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+            cursor = db.dbs["tracking"]["music_playlists"].find()
+            docs = [d async for d in cursor]
+            if docs:
+                playlists = [{"id": str(d.get("id") or d.get("_id")), "name": d.get("name", ""), "tracks": d.get("tracks", []), "created_at": d.get("created_at", time.time())} for d in docs]
+                _save_playlists_file(playlists)
+                return playlists
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Could not read playlists from MongoDB: {e}")
+    return _load_playlists_file()
+
+async def _db_save_playlists(playlists: list):
+    _save_playlists_file(playlists)
+    try:
+        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+            coll = db.dbs["tracking"]["music_playlists"]
+            curr_ids = [str(p.get("id")) for p in playlists]
+            if curr_ids:
+                await coll.delete_many({"_id": {"$nin": curr_ids}})
+                for p in playlists:
+                    p_id = str(p.get("id"))
+                    await coll.update_one(
+                        {"_id": p_id},
+                        {"$set": {"_id": p_id, "id": p_id, "name": p.get("name", ""), "tracks": p.get("tracks", []), "created_at": p.get("created_at", time.time())}},
+                        upsert=True
+                    )
+            else:
+                await coll.delete_many({})
+            LOGGER.info(f"[MUSIC DB] Đã đồng bộ {len(playlists)} playlists lên MongoDB.")
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Could not save playlists to MongoDB: {e}")
+
+
 # ── 2. Lấy danh sách Albums & Tracks từ MongoDB / Telegram Cache ───────────────
 @router.get("/api/music/albums")
 async def get_music_albums():
@@ -478,6 +560,13 @@ async def get_music_albums():
                 if tracks:
                     for t in tracks:
                         t["album"] = alb.get("title", "")
+                        
+                        # Detect Genre
+                        detected_genre = detect_genre_from_track_info(t)
+                        if not t.get("genre") or t.get("genre") == "Khác":
+                            t["genre"] = detected_genre
+                            changed = True
+
                         current_fmt = t.get("format", "")
                         if not current_fmt or current_fmt in ["FLAC Hi-Res", "MP3 Master", "Hi-Res", "AUDIO Hi-Res", "AUDIO Master"]:
                             fmt, tier, br = detect_audio_quality_from_track_info(t)
@@ -590,6 +679,68 @@ async def delete_music_channel(chat_id: str, _: bool = Depends(require_auth)):
     new_list = [c for c in saved if str(c.get("id")) != str(chat_id)]
     await _db_save_channels(new_list)
     return {"status": "success", "message": "Đã xóa kênh khỏi danh sách quản lý."}
+
+
+# ── 3.5 Quản lý Playlist (Custom Playlists) ───────────────────────────────────
+@router.get("/api/music/playlists")
+async def get_music_playlists():
+    saved = await _db_load_playlists()
+    return {"status": "success", "playlists": saved}
+
+@router.post("/api/music/playlists")
+async def create_music_playlist(payload: dict, _: bool = Depends(require_auth)):
+    name = payload.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp tên Playlist.")
+    
+    saved = await _db_load_playlists()
+    # Check duplicate name
+    for p in saved:
+        if p.get("name", "").lower() == name.lower():
+            return {"status": "error", "message": "Playlist đã tồn tại."}
+            
+    new_playlist = {
+        "id": secrets.token_hex(8),
+        "name": name,
+        "tracks": [],
+        "created_at": time.time()
+    }
+    saved.append(new_playlist)
+    await _db_save_playlists(saved)
+    return {"status": "success", "message": f"Đã tạo playlist '{name}'.", "playlist": new_playlist}
+
+@router.put("/api/music/playlists/{playlist_id}")
+async def update_music_playlist(playlist_id: str, payload: dict, _: bool = Depends(require_auth)):
+    saved = await _db_load_playlists()
+    tracks = payload.get("tracks")
+    name = payload.get("name")
+    
+    target = None
+    for p in saved:
+        if str(p.get("id")) == playlist_id:
+            target = p
+            break
+            
+    if not target:
+        raise HTTPException(status_code=404, detail="Không tìm thấy playlist.")
+        
+    if tracks is not None:
+        if not isinstance(tracks, list):
+            raise HTTPException(status_code=400, detail="tracks phải là một mảng.")
+        target["tracks"] = tracks
+        
+    if name is not None:
+        target["name"] = name.strip()
+        
+    await _db_save_playlists(saved)
+    return {"status": "success", "message": "Đã cập nhật playlist.", "playlist": target}
+
+@router.delete("/api/music/playlists/{playlist_id}")
+async def delete_music_playlist(playlist_id: str, _: bool = Depends(require_auth)):
+    saved = await _db_load_playlists()
+    new_list = [p for p in saved if str(p.get("id")) != playlist_id]
+    await _db_save_playlists(new_list)
+    return {"status": "success", "message": "Đã xóa playlist."}
 
 
 # ── 4. Bộ Quét Kênh Bất Đồng Bộ (Background Music Scanner) ────────────────────
@@ -949,6 +1100,7 @@ class MusicScanManager:
 
                         # 3.5 Audio Fingerprinting for unknown tracks
                         fingerprint_cover = None
+                        fingerprint_genre = None
                         if final_artist == "Unknown Artist" or final_title.lower().startswith("track") or final_title.lower().startswith("audio") or "track" in f_name.lower():
                             fg_res = await recognize_audio_from_telegram(client, msg)
                             if fg_res:
@@ -956,6 +1108,7 @@ class MusicScanManager:
                                 final_artist = fg_res.get("artist") or final_artist
                                 final_album = fg_res.get("album") or final_album
                                 fingerprint_cover = fg_res.get("cover_url")
+                                fingerprint_genre = fg_res.get("genre")
 
                         audio_fmt, q_tier, calc_br = detect_audio_quality(
                             file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
@@ -983,6 +1136,7 @@ class MusicScanManager:
                             t_cover = scraped_meta.get("cover_url") or fallback_cover
                             t_year = scraped_meta.get("year", time.strftime("%Y"))
                             t_pub = scraped_meta.get("publisher", f"Telegram: {chat_title}")
+                            t_genre = scraped_meta.get("genre") or fingerprint_genre or ""
                         else:
                             t_title = final_title
                             t_artist = final_artist
@@ -990,6 +1144,7 @@ class MusicScanManager:
                             t_cover = fallback_cover
                             t_year = time.strftime("%Y")
                             t_pub = f"Telegram: {chat_title}"
+                            t_genre = fingerprint_genre or ""
 
                         self._current_track = f"{t_title} - {t_artist}"
                         all_scanned_tracks.append({
@@ -1009,6 +1164,7 @@ class MusicScanManager:
                             "cover_url": t_cover,
                             "year": t_year,
                             "publisher": t_pub,
+                            "genre": t_genre,
                             "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
                         })
                         self._found_tracks_count = len(all_scanned_tracks)

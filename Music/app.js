@@ -1025,3 +1025,99 @@ class XTAPOMusicApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.xtapoApp = new XTAPOMusicApp();
 });
+
+// --- Playlists Management (Injected) ---
+document.addEventListener('DOMContentLoaded', () => {
+    const navPlaylists = document.getElementById('navPlaylists');
+    const playlistModal = document.getElementById('playlistModal');
+    const closePlaylistModal = document.getElementById('closePlaylistModal');
+    const playlistGrid = document.getElementById('playlistGrid');
+    const createPlaylistBtn = document.getElementById('createPlaylistBtn');
+    const newPlaylistName = document.getElementById('newPlaylistName');
+
+    if(navPlaylists) {
+        navPlaylists.addEventListener('click', (e) => {
+            e.preventDefault();
+            playlistModal.classList.add('active');
+            loadPlaylists();
+        });
+    }
+
+    if(closePlaylistModal) {
+        closePlaylistModal.addEventListener('click', () => {
+            playlistModal.classList.remove('active');
+        });
+    }
+
+    async function loadPlaylists() {
+        try {
+            const res = await fetch('/api/music/playlists');
+            const data = await res.json();
+            if(data.status === 'success') {
+                renderPlaylists(data.playlists);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function renderPlaylists(playlists) {
+        if(!playlistGrid) return;
+        playlistGrid.innerHTML = '';
+        if(playlists.length === 0) {
+            playlistGrid.innerHTML = '<div style="color:#aaa; text-align:center;">Chua có Playlist nào.</div>';
+            return;
+        }
+        playlists.forEach(p => {
+            const el = document.createElement('div');
+            el.style.background = '#1a1a1a';
+            el.style.padding = '15px';
+            el.style.borderRadius = '8px';
+            el.style.display = 'flex';
+            el.style.justifyContent = 'space-between';
+            el.style.alignItems = 'center';
+            
+            const nameEl = document.createElement('div');
+            nameEl.style.fontWeight = 'bold';
+            nameEl.innerText = p.name +  ( bài);
+            
+            const playBtn = document.createElement('button');
+            playBtn.innerText = 'Phát';
+            playBtn.style.padding = '5px 10px';
+            playBtn.style.borderRadius = '4px';
+            playBtn.style.background = '#0284c7';
+            playBtn.style.color = '#fff';
+            playBtn.style.border = 'none';
+            playBtn.style.cursor = 'pointer';
+            
+            el.appendChild(nameEl);
+            el.appendChild(playBtn);
+            playlistGrid.appendChild(el);
+        });
+    }
+
+    if(createPlaylistBtn) {
+        createPlaylistBtn.addEventListener('click', async () => {
+            const name = newPlaylistName.value.trim();
+            if(!name) return alert('Nh?p tên playlist!');
+            
+            try {
+                const res = await fetch('/api/music/playlists', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({name})
+                });
+                const data = await res.json();
+                if(data.status === 'success') {
+                    newPlaylistName.value = '';
+                    loadPlaylists();
+                } else {
+                    alert(data.message);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        });
+    }
+});
+

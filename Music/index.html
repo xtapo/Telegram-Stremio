@@ -44,6 +44,7 @@
                     <li><a href="#" class="nav-link">ALBUMS</a></li>
                     <li><a href="#" class="nav-link">ARTISTS</a></li>
                     <li><a href="#" class="nav-link">GENRES</a></li>
+                    <li><a href="#" class="nav-link" id="navPlaylists">PLAYLISTS</a></li>
                 </ul>
             </nav>
 
@@ -284,6 +285,23 @@
             </div>
             <div class="search-results" id="searchResults">
                 <div class="search-empty">Nhập từ khoá để tìm bài hát nhanh...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Playlist Modal -->
+    <div class="modal-overlay" id="playlistModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Quản Lý Playlists</h3>
+                <button class="modal-close" id="closePlaylistModal">&times;</button>
+            </div>
+            <div class="playlist-grid" id="playlistGrid" style="display: grid; gap: 10px; margin-bottom: 15px; max-height: 300px; overflow-y: auto;">
+                <!-- Playlists populated by js -->
+            </div>
+            <div class="playlist-footer" style="display: flex; gap: 10px;">
+                <input type="text" id="newPlaylistName" placeholder="Tên Playlist Mới..." style="flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #fff;">
+                <button id="createPlaylistBtn" style="padding: 10px 15px; border-radius: 6px; background: #0284c7; color: white; border: none; cursor: pointer;">Tạo Mới</button>
             </div>
         </div>
     </div>

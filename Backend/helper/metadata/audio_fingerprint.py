@@ -48,14 +48,16 @@ async def recognize_audio_from_telegram(client, message, is_manual: bool = False
                         break
                         
         cover = track.get('images', {}).get('coverarthq', track.get('images', {}).get('coverart', ''))
+        genre = track.get('genres', {}).get('primary')
         
-        LOGGER.info(f"[SHAZAM] Nhận diện thành công: {artist} - {title}")
+        LOGGER.info(f"[SHAZAM] Nhận diện thành công: {artist} - {title} (Genre: {genre})")
         
         return {
             "title": title,
             "artist": artist,
             "album": album or f"{title} - Single",
-            "cover_url": cover
+            "cover_url": cover,
+            "genre": genre
         }
     except Exception as e:
         LOGGER.error(f"[SHAZAM] Lỗi nhận diện: {e}")
