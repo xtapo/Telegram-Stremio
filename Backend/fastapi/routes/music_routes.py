@@ -1449,23 +1449,30 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         "token": "music-player",
     }
 
-    body_gen = await streamer.prefetch_stream(
-        file_id=file_id,
-        client_index=client_idx,
-        offset=offset,
-        first_part_cut=first_part_cut,
-        last_part_cut=last_part_cut,
-        part_count=part_count,
-        chunk_size=chunk_size,
-        prefetch=2,
-        stream_id=stream_id,
-        meta=meta,
-        parallelism=1,
-        request=request,
-        chat_id=chat_id,
-        message_id=msg_id,
-        extra_clients=[],
-    )
+    try:
+        body_gen = await streamer.prefetch_stream(
+            file_id=file_id,
+            client_index=client_idx,
+            offset=offset,
+            first_part_cut=first_part_cut,
+            last_part_cut=last_part_cut,
+            part_count=part_count,
+            chunk_size=chunk_size,
+            prefetch=2,
+            stream_id=stream_id,
+            meta=meta,
+            parallelism=1,
+            request=request,
+            chat_id=chat_id,
+            message_id=msg_id,
+            extra_clients=[],
+        )
+    except FloodWait as e:
+        LOGGER.error(f"[MUSIC STREAM] FloodWait: Telegram yêu cầu đợi {e.value} giây.")
+        return PlainResponse(content=f"Telegram giới hạn request, vui lòng đợi {e.value} giây.", status_code=429)
+    except Exception as e:
+        LOGGER.error(f"[MUSIC STREAM] Lỗi không xác định: {e}")
+        return PlainResponse(content="Lỗi server nội bộ khi lấy stream.", status_code=500)
 
     raw_file_name, raw_mime = _resolve_filename_mime(file_id)
     file_name, mime_type = _fix_audio_mime(raw_file_name, raw_mime)
