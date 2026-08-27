@@ -16,7 +16,8 @@ from fastapi.responses import StreamingResponse
 
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.logger import LOGGER
-from Backend.pyrofork.bot import StreamBot, Userbot, multi_clients, work_loads, client_dc_map, client_failures
+import Backend.pyrofork.bot as botmod
+from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads, client_dc_map, client_failures
 from Backend.fastapi.routes.stream_routes import select_best_client, _get_streamer, parse_range_header, _resolve_filename_mime, _build_stream_headers
 
 router = APIRouter(tags=["Music Player & Telegram Storage"])
@@ -27,7 +28,7 @@ LIBRARY_CACHE_FILE = os.path.join(MUSIC_DIR, "telegram_library.json")
 _cover_cache: Dict[str, tuple] = {}
 _COVER_CACHE_TTL = 86400
 
-# Color palette generators for dynamic album vibes
+# Color palette presets for dynamic vinyl glow
 GLOW_PRESETS = [
     {"glow1": "radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)", "glow2": "radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%)"},
     {"glow1": "radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)", "glow2": "radial-gradient(circle, #f59e0b 0%, #c2410c 60%, transparent 80%)"},
@@ -59,17 +60,15 @@ def _format_duration(seconds: int) -> str:
 
 
 def _get_active_client():
+    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+        return botmod.Userbot
     if multi_clients:
         idx = select_best_client(0)
-        return multi_clients[idx]
-    if Userbot and getattr(Userbot, "is_connected", False):
-        return Userbot
-    if getattr(StreamBot, "is_connected", False):
-        return StreamBot
-    return None
+        return multi_clients.get(idx) or StreamBot
+    return StreamBot
 
 
-# ── 1. Giao diện Web Music Player ─────────────────────────────────────────────
+# ── 1. Giao diện Web Music Player & Static Files Fallback ─────────────────────
 @router.get("/music", response_class=HTMLResponse)
 @router.get("/music/", response_class=HTMLResponse)
 async def get_music_player(request: Request):
@@ -77,6 +76,28 @@ async def get_music_player(request: Request):
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return HTMLResponse("<h3>Music Player template not found in /Music/index.html</h3>", status_code=404)
+
+
+@router.get("/music/{filename:path}")
+async def get_music_static_file(filename: str):
+    """
+    Phục vụ trực tiếp CSS, JS, Fonts, Images khi người dùng truy cập /music/style.css, /music/app.js, v.v.
+    Bảo đảm 100% không bị lỗi 404 trên Linux / Hugging Face.
+    """
+    if not filename or filename.strip("/") in ["", "index.html"]:
+        return FileResponse(os.path.join(MUSIC_DIR, "index.html"))
+
+    clean_name = filename.lstrip("/")
+    file_path = os.path.join(MUSIC_DIR, clean_name)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        mime_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+        return FileResponse(file_path, media_type=mime_type)
+
+    # Fallback to index.html if not a static file
+    index_path = os.path.join(MUSIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return HTMLResponse("File not found", status_code=404)
 
 
 # ── 2. Lấy danh sách Albums & Tracks từ Telegram Cache / Database ─────────────
@@ -105,83 +126,159 @@ async def scan_telegram_channel(payload: dict):
     """
     raw_chat_id = payload.get("chat_id")
     if not raw_chat_id:
-        raise HTTPException(status_code=400, detail="Vui lòng cung cấp chat_id hoặc username kênh Telegram.")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Vui lòng cung cấp Chat ID hoặc Username kênh Telegram."}
+        )
 
-    limit = int(payload.get("limit", 150))
+    limit = min(max(int(payload.get("limit", 100)), 5), 500)
     client = _get_active_client()
     if not client:
-        raise HTTPException(status_code=503, detail="Telegram client chưa sẵn sàng hoặc chưa kết nối.")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "Telegram Bot / Client chưa sẵn sàng hoặc chưa khởi động xong."}
+        )
 
     # Parse chat_id
     chat_target = raw_chat_id
-    if isinstance(raw_chat_id, str) and (raw_chat_id.startswith("-100") or raw_chat_id.lstrip("-").isdigit()):
-        chat_target = int(raw_chat_id)
+    if isinstance(raw_chat_id, str):
+        clean_id = raw_chat_id.strip()
+        if clean_id.startswith("-100") or clean_id.lstrip("-").isdigit():
+            try:
+                chat_target = int(clean_id)
+            except ValueError:
+                chat_target = clean_id
+        else:
+            chat_target = clean_id
 
     LOGGER.info(f"[MUSIC] Bắt đầu quét kênh Telegram: {chat_target} (tối đa {limit} tin nhắn)...")
 
     found_tracks = []
+    resolved_chat_id = None
+    chat_title = str(chat_target)
+
+    # Bước 1: Lấy thông tin kênh
     try:
         chat_info = await client.get_chat(chat_target)
-        chat_title = chat_info.title or str(chat_target)
+        chat_title = getattr(chat_info, "title", None) or getattr(chat_info, "username", None) or str(chat_target)
         resolved_chat_id = chat_info.id
     except Exception as e:
-        LOGGER.error(f"[MUSIC] Không thể truy cập kênh Telegram {chat_target}: {e}")
-        raise HTTPException(status_code=400, detail=f"Không thể truy cập kênh Telegram: {e}")
+        err_msg = str(e)
+        LOGGER.warning(f"[MUSIC] get_chat failed for {chat_target}: {err_msg}")
+        # Nếu là ID số nguyên âm, thử dùng trực tiếp
+        if isinstance(chat_target, int):
+            resolved_chat_id = chat_target
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": f"Không thể tìm thấy kênh Telegram '{chat_target}'. Lỗi: {err_msg}. Vui lòng kiểm tra lại ID/Username hoặc đảm bảo Bot đã tham gia kênh."
+                }
+            )
 
-    audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf")
+    audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
 
-    async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
-        media = msg.audio or msg.document
-        if not media:
+    # Bước 2: Thu thập tin nhắn (hỗ trợ cả get_chat_history và batch message fetch)
+    messages_to_process = []
+    try:
+        # Cách 1: Thử get_chat_history
+        async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
+            if msg:
+                messages_to_process.append(msg)
+    except Exception as hist_err:
+        LOGGER.warning(f"[MUSIC] get_chat_history failed ({hist_err}), thử dò batch messages...")
+        # Cách 2: Fallback dò ID tin nhắn
+        try:
+            # Dò 1 tin nhắn cuối để lấy max_id
+            probe_batch = await client.get_messages(resolved_chat_id, list(range(1, 20)))
+            valid_ids = [m.id for m in probe_batch if m]
+            start_id = max(valid_ids) if valid_ids else 100
+            scan_range = list(range(max(1, start_id - limit), start_id + 1))
+            
+            # Lấy theo batch 50 tin nhắn
+            for i in range(0, len(scan_range), 50):
+                sub_ids = scan_range[i:i+50]
+                batch_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                for m in batch_msgs:
+                    if m:
+                        messages_to_process.append(m)
+        except Exception as batch_err:
+            LOGGER.error(f"[MUSIC] Cả 2 phương thức quét đều lỗi: {batch_err}")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": f"Không thể đọc tin nhắn từ kênh: {hist_err}. Hãy đảm bảo Bot được cấp quyền 'Read Messages' / 'Add Admins' trong kênh!"
+                }
+            )
+
+    # Bước 3: Bóc tách file âm thanh
+    for msg in messages_to_process:
+        try:
+            media = getattr(msg, "audio", None) or getattr(msg, "document", None)
+            if not media:
+                continue
+
+            file_name = getattr(media, "file_name", "") or ""
+            mime_type = getattr(media, "mime_type", "") or ""
+            
+            is_audio = bool(getattr(msg, "audio", None)) or mime_type.startswith("audio/") or file_name.lower().endswith(audio_extensions)
+            if not is_audio:
+                continue
+
+            title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
+            if not title:
+                title = os.path.splitext(file_name)[0] or getattr(msg, "caption", "") or f"Track {msg.id}"
+            
+            artist = getattr(msg.audio, "performer", None) if getattr(msg, "audio", None) else None
+            if not artist:
+                artist = "Unknown Artist"
+
+            album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
+            if not album:
+                album = chat_title or "Telegram Music Collection"
+
+            duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
+            file_size_bytes = getattr(media, "file_size", 0) or 0
+
+            # Đoán format & bitrate
+            ext = os.path.splitext(file_name)[1].lower().replace(".", "").upper()
+            if not ext:
+                ext = mime_type.split("/")[-1].upper() if "/" in mime_type else "AUDIO"
+            
+            audio_format = f"{ext} Hi-Res" if ext in ["FLAC", "WAV", "ALAC", "DSF"] else f"{ext} Master"
+
+            has_cover = bool(getattr(media, "thumbs", None))
+            cover_url = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
+
+            found_tracks.append({
+                "msg_id": msg.id,
+                "chat_id": resolved_chat_id,
+                "title": title.strip(),
+                "artist": artist.strip(),
+                "album": album.strip(),
+                "duration": _format_duration(duration_sec),
+                "duration_sec": duration_sec,
+                "size": _format_size(file_size_bytes),
+                "size_bytes": file_size_bytes,
+                "format": audio_format,
+                "file_name": file_name,
+                "cover_url": cover_url,
+                "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
+            })
+        except Exception as parse_err:
+            LOGGER.warning(f"[MUSIC] Bỏ qua tin nhắn lỗi {getattr(msg, 'id', 'unknown')}: {parse_err}")
             continue
-
-        file_name = getattr(media, "file_name", "") or ""
-        mime_type = getattr(media, "mime_type", "") or ""
-        
-        is_audio = bool(msg.audio) or mime_type.startswith("audio/") or file_name.lower().endswith(audio_extensions)
-        if not is_audio:
-            continue
-
-        title = getattr(msg.audio, "title", None) or os.path.splitext(file_name)[0] or f"Track {msg.id}"
-        artist = getattr(msg.audio, "performer", None) or "Unknown Artist"
-        album = getattr(msg.audio, "album", None) or chat_title or "Telegram Music Collection"
-        duration_sec = getattr(msg.audio, "duration", 0) or 0
-        file_size_bytes = getattr(media, "file_size", 0) or 0
-
-        # Đoán format & bitrate
-        ext = os.path.splitext(file_name)[1].lower().replace(".", "").upper()
-        if not ext:
-            ext = mime_type.split("/")[-1].upper() if "/" in mime_type else "AUDIO"
-        
-        audio_format = f"{ext} Hi-Res" if ext in ["FLAC", "WAV", "ALAC", "DSF"] else f"{ext} Master"
-
-        has_cover = bool(getattr(media, "thumbs", None))
-        cover_url = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
-
-        found_tracks.append({
-            "msg_id": msg.id,
-            "chat_id": resolved_chat_id,
-            "title": title.strip(),
-            "artist": artist.strip(),
-            "album": album.strip(),
-            "duration": _format_duration(duration_sec),
-            "duration_sec": duration_sec,
-            "size": _format_size(file_size_bytes),
-            "size_bytes": file_size_bytes,
-            "format": audio_format,
-            "file_name": file_name,
-            "cover_url": cover_url,
-            "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
-        })
 
     if not found_tracks:
         return JSONResponse(content={
             "status": "warning",
-            "message": f"Không tìm thấy file nhạc nào trong {limit} tin nhắn gần nhất của kênh.",
+            "message": f"Đã quét qua {len(messages_to_process)} tin nhắn nhưng không tìm thấy file nhạc (.mp3, .flac, audio) nào.",
             "albums": []
         })
 
-    # Nhóm các bài hát theo Album
+    # Bước 4: Nhóm các bài hát theo Album
     albums_dict = {}
     for track in found_tracks:
         album_name = track["album"]
@@ -227,6 +324,7 @@ async def scan_telegram_channel(payload: dict):
 
     # Lưu cache ra file
     try:
+        os.makedirs(MUSIC_DIR, exist_ok=True)
         with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(album_list, f, ensure_ascii=False, indent=2)
         LOGGER.info(f"[MUSIC] Đã lưu {len(album_list)} albums ({len(found_tracks)} bài hát) vào cache.")
@@ -235,7 +333,7 @@ async def scan_telegram_channel(payload: dict):
 
     return JSONResponse(content={
         "status": "success",
-        "message": f"Đã quét thành công {len(found_tracks)} bài hát, gom thành {len(album_list)} albums!",
+        "message": f"Đã quét thành công {len(found_tracks)} bài hát, gom thành {len(album_list)} Album!",
         "count": len(found_tracks),
         "albums": album_list
     })
@@ -319,8 +417,8 @@ async def get_music_cover(chat_id: int, msg_id: int):
 
     try:
         msg = await client.get_messages(chat_id, msg_id)
-        media = msg.audio or msg.document
-        thumbs = getattr(media, "thumbs", None)
+        media = getattr(msg, "audio", None) or getattr(msg, "document", None)
+        thumbs = getattr(media, "thumbs", None) if media else None
         if not thumbs:
             raise HTTPException(status_code=404, detail="No cover available")
 

@@ -294,7 +294,13 @@ class XTAPOMusicApp {
                 body: JSON.stringify({ chat_id: chatId.trim(), limit: parseInt(limit, 10) || 100 })
             });
 
-            const data = await res.json();
+            const rawText = await res.text();
+            let data = {};
+            try {
+                data = JSON.parse(rawText);
+            } catch (jsonErr) {
+                data = { status: 'error', message: rawText || `Lỗi HTTP ${res.status}` };
+            }
 
             if (res.ok && data.status === 'success' && data.albums && data.albums.length > 0) {
                 this.albums = data.albums;
@@ -313,17 +319,17 @@ class XTAPOMusicApp {
                 this.closeModal(this.tgModal);
                 this.showToast(data.message || `Đã quét ${data.count} bài hát từ kênh!`);
             } else {
-                const errMsg = data.detail || data.message || 'Không tìm thấy file nhạc trong kênh này.';
+                const errMsg = data.message || data.detail || 'Không tìm thấy file nhạc hoặc Bot chưa có quyền đọc tin nhắn trong kênh này.';
                 if (this.tgStatusMessage) {
                     this.tgStatusMessage.textContent = `❌ ${errMsg}`;
                 }
-                this.showToast(`Lỗi quét: ${errMsg}`);
+                this.showToast(`Thông báo: ${errMsg}`);
             }
         } catch (err) {
             if (this.tgStatusMessage) {
-                this.tgStatusMessage.textContent = `❌ Lỗi kết nối: ${err.message}. Kiểm tra lại server Telegram-Stremio!`;
+                this.tgStatusMessage.textContent = `❌ Lỗi: ${err.message}. Hãy kiểm tra ID/Username kênh và đảm bảo Bot đã vào kênh!`;
             }
-            this.showToast(`Lỗi kết nối server: ${err.message}`);
+            this.showToast(`Lỗi: ${err.message}`);
         } finally {
             if (this.tgScanSubmitBtn) {
                 this.tgScanSubmitBtn.disabled = false;
