@@ -1449,30 +1449,66 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         "token": "music-player",
     }
 
-    try:
-        body_gen = await streamer.prefetch_stream(
-            file_id=file_id,
-            client_index=client_idx,
-            offset=offset,
-            first_part_cut=first_part_cut,
-            last_part_cut=last_part_cut,
-            part_count=part_count,
-            chunk_size=chunk_size,
-            prefetch=2,
-            stream_id=stream_id,
-            meta=meta,
-            parallelism=1,
-            request=request,
-            chat_id=chat_id,
-            message_id=msg_id,
-            extra_clients=[],
-        )
-    except FloodWait as e:
-        LOGGER.error(f"[MUSIC STREAM] FloodWait: Telegram yêu cầu đợi {e.value} giây.")
-        return PlainResponse(content=f"Telegram giới hạn request, vui lòng đợi {e.value} giây.", status_code=429)
-    except Exception as e:
-        LOGGER.error(f"[MUSIC STREAM] Lỗi không xác định: {e}")
-        return PlainResponse(content="Lỗi server nội bộ khi lấy stream.", status_code=500)
+    body_gen = None
+    last_flood_wait = None
+    last_err = None
+
+    # Prepare list of clients to try (primary first, then alternatives)
+    candidates_to_stream = [(client_idx, tg_client, streamer)]
+    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False) and tg_client != botmod.Userbot:
+        candidates_to_stream.append((USERBOT_CLIENT_INDEX, botmod.Userbot, _get_streamer(botmod.Userbot, USERBOT_CLIENT_INDEX)))
+    if multi_clients:
+        for idx, cl in multi_clients.items():
+            if cl != tg_client:
+                candidates_to_stream.append((idx, cl, _get_streamer(cl, idx)))
+    if StreamBot != tg_client:
+        candidates_to_stream.append((0, StreamBot, _get_streamer(StreamBot, 0)))
+
+    for c_idx, cl, strm in candidates_to_stream:
+        try:
+            # Refresh file_id for specific client if needed
+            c_file_id = file_id
+            if cl != tg_client:
+                try:
+                    c_file_id = await strm.get_file_properties(chat_id=chat_id, message_id=msg_id)
+                except Exception:
+                    continue
+
+            body_gen = await strm.prefetch_stream(
+                file_id=c_file_id,
+                client_index=c_idx,
+                offset=offset,
+                first_part_cut=first_part_cut,
+                last_part_cut=last_part_cut,
+                part_count=part_count,
+                chunk_size=chunk_size,
+                prefetch=2,
+                stream_id=stream_id,
+                meta=meta,
+                parallelism=1,
+                request=request,
+                chat_id=chat_id,
+                message_id=msg_id,
+                extra_clients=[],
+            )
+            if body_gen:
+                file_id = c_file_id
+                break
+        except FloodWait as e:
+            last_flood_wait = e
+            LOGGER.warning(f"[MUSIC STREAM] Client {c_idx} bị FloodWait ({e.value}s), thử client khác...")
+            continue
+        except Exception as e:
+            last_err = e
+            LOGGER.warning(f"[MUSIC STREAM] Client {c_idx} lỗi stream: {e}, thử client khác...")
+            continue
+
+    if not body_gen:
+        if last_flood_wait:
+            LOGGER.error(f"[MUSIC STREAM] Tất cả clients đều bị FloodWait: {last_flood_wait.value}s")
+            return PlainResponse(content=f"Telegram tạm thời giới hạn tải file này. Vui lòng đợi {last_flood_wait.value} giây.", status_code=429)
+        LOGGER.error(f"[MUSIC STREAM] Không thể stream bài hát {chat_id}/{msg_id}: {last_err}")
+        return PlainResponse(content="Lỗi khi kết nối Telegram để lấy file audio.", status_code=500)
 
     raw_file_name, raw_mime = _resolve_filename_mime(file_id)
     file_name, mime_type = _fix_audio_mime(raw_file_name, raw_mime)

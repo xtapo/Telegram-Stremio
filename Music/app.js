@@ -686,6 +686,7 @@ class XTAPOMusicApp {
 
         this.audio.addEventListener('error', (e) => {
             console.warn("Audio stream load error, triggering synth mode fallback.", e);
+            this.showToast('Telegram đang giới hạn tải bài hát này (FloodWait). Vui lòng đợi vài phút hoặc chọn bài khác!');
             if (this.isPlaying) {
                 this.startAudioSynth();
             }
