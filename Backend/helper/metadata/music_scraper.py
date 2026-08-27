@@ -52,103 +52,128 @@ def clean_audio_filename(fn: str) -> str:
     return fn
 
 
+_GARBAGE_KEYWORDS = {
+    "admin", "download", "link", "join", "group", "channel", "pass", "password", 
+    "zalo", "facebook", "telegram", "bot", "lossless", "flac", "mp3", "wav", 
+    "320kbps", "192khz", "24bit", "16bit", "m4a", "dsd", "dsf", "hi-res", "hires",
+    "http", "https", "t.me", "fshare", "drive", "youtube", "mediafire", "mega.nz"
+}
+
+
+def _is_valid_name(text: str, max_len: int = 60) -> bool:
+    if not text:
+        return False
+    t = text.strip()
+    if len(t) < 2 or len(t) > max_len:
+        return False
+    if re.search(r'https?://|t\.me/|@[\w_]+|\b(?:fshare|drive\.google|mediafire)\b', t, re.I):
+        return False
+    words = set(re.findall(r'\b\w+\b', t.lower()))
+    if words and words.issubset(_GARBAGE_KEYWORDS):
+        return False
+    return True
+
+
 def extract_context_from_text(text: str) -> Tuple[str, str]:
     """
-    Trích xuất tên Album và Ca Sĩ từ tin nhắn văn bản, caption hoặc tựa đề gần chỗ gửi file nhạc.
-    Hỗ trợ cả tiếng Việt có dấu lẫn không dấu.
-    Ví dụ:
-      - '💿 Album: Khúc Tình Xưa'       (có dấu)
-      - 'Ca si: Le Quyen'                (không dấu)
-      - 'Le Quyen - Khuc Tinh Xua [FLAC]' (không dấu, dạng dòng)
+    Trích xuất tên Album và Ca Sĩ từ tin nhắn văn bản / caption một cách an toàn và nghiêm ngặt (Strict).
+    Loại bỏ link rác, quảng cáo, và chỉ nhận diện khi có tiền tố hoặc cú pháp rõ ràng.
     """
     if not text:
         return "", ""
-    text = text.strip()
+    
+    # Loại bỏ link, username @, hashtag
+    clean = re.sub(r'https?://\S+|t\.me/\S+|@[\w_]+|#\w+', '', text).strip()
+    if not clean:
+        return "", ""
+
     artist = ""
     album = ""
 
-    # 1. Tìm theo nhãn rõ ràng — hỗ trợ cả có dấu và không dấu
-    #    Ca sĩ / Ca si / Nghệ sĩ / Nghe si / Trình bày / Trinh bay / Artist / Singer / Hat / Hát
-    artist_labels = (
-        r'Ca\s*s[ĩỹi]'        # Ca sĩ / Ca sỹ / Ca si
-        r'|Ngh[eệ]\s*s[ĩi]'   # Nghệ sĩ / Nghe si
-        r'|Tr[iì]nh\s*b[aà]y' # Trình bày / Trinh bay
-        r'|H[aá]t'             # Hát / Hat
-        r'|Artist|Singer|Performer'
-    )
-    m_artist = re.search(
-        rf'(?:{artist_labels})\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE
-    )
+    # 1. Tìm theo tiền tố rõ ràng (Strict label match)
+    artist_labels = r'Ca\s*s[ĩỹi]|Ngh[eệ]\s*s[ĩi]|Tr[iì]nh\s*b[aà]y|Artist|Singer|Performer'
+    m_artist = re.search(rf'(?:{artist_labels})\s*[:\-–]\s*([^\n\r,;\|]+)', clean, re.IGNORECASE)
     if m_artist:
-        artist = m_artist.group(1).strip()
+        candidate_artist = m_artist.group(1).strip()
+        if _is_valid_name(candidate_artist, 50):
+            artist = candidate_artist
 
-    #    Album / CD / Tuyển tập / Tuyen tap / Đĩa hát / Dia hat / Collection / Nhac tuyen
-    album_labels = (
-        r'Album'
-        r'|CD\s*\d*'
-        r'|Tuy[eể]n\s*t[aậ]p'  # Tuyển tập / Tuyen tap
-        r'|[ĐD][ĩi]a\s*h[aá]t' # Đĩa hát / Dia hat
-        r'|Collection'
-        r'|Nh[aạ]c\s*tuy[eể]n'  # Nhạc tuyển / Nhac tuyen
-    )
-    m_album = re.search(
-        rf'(?:{album_labels})\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE
-    )
+    album_labels = r'Album|CD\s*\d*|Tuy[eể]n\s*t[aậ]p|[ĐD][ĩi]a\s*h[aá]t|Collection|Nh[aạ]c\s*tuy[eể]n'
+    m_album = re.search(rf'(?:{album_labels})\s*[:\-–]\s*([^\n\r,;\|]+)', clean, re.IGNORECASE)
     if m_album:
-        album = m_album.group(1).strip()
+        candidate_album = m_album.group(1).strip()
+        if _is_valid_name(candidate_album, 60):
+            album = candidate_album
 
-    # 2. Nếu là dạng dòng đầu 'Artist - Album' hoặc 'Artist - Album (Year)'
+    # 2. Dạng dòng đầu 'Artist - Album' ngắn gọn (< 70 ký tự)
     if not artist or not album:
-        first_line = text.split('\n')[0].strip()
-        # Loại bỏ emoji / icon ở đầu dòng
-        first_line = re.sub(r'^[^\w\s\u00C0-\u1EF9]+', '', first_line).strip()
-        # Loại bỏ tag [FLAC], [WAV], [320kbps]...
-        first_line = re.sub(r'\[.*?\]', '', first_line).strip()
-        # Loại bỏ năm trong ngoặc (2010), (2024)
-        first_line = re.sub(r'\((?:19|20)\d{2}\)', '', first_line).strip()
+        lines = [line.strip() for line in clean.split('\n') if line.strip()]
+        if lines:
+            first_line = lines[0]
+            if len(first_line) <= 70:
+                first_line = re.sub(r'^[^\w\s\u00C0-\u1EF9]+', '', first_line).strip()
+                first_line = re.sub(r'\[.*?\]', '', first_line).strip()
+                first_line = re.sub(r'\((?:19|20)\d{2}\)', '', first_line).strip()
 
-        if ' - ' in first_line:
-            parts = first_line.split(' - ')
-            if len(parts) >= 2:
-                if not artist: artist = parts[0].strip()
-                if not album: album = parts[1].strip()
+                for sep in [' - ', ' – ', ' — ']:
+                    if sep in first_line:
+                        parts = first_line.split(sep)
+                        if len(parts) >= 2:
+                            p_art = parts[0].strip()
+                            p_alb = parts[1].strip()
+                            if not artist and _is_valid_name(p_art, 50):
+                                artist = p_art
+                            if not album and _is_valid_name(p_alb, 60):
+                                album = p_alb
+                        break
 
     return artist, album
 
 
 def parse_artist_and_title(raw_title: str = "", raw_artist: str = "", raw_album: str = "", file_name: str = "", caption: str = "") -> Tuple[str, str, str]:
     """
-    Trích xuất Artist, Title, Album một cách chính xác nhất từ nhiều nguồn dữ liệu của Telegram
+    Trích xuất Artist, Title, Album ưu tiên dữ liệu gốc từ ID3 tag và File Name.
     """
     clean_fn = clean_audio_filename(file_name)
     clean_cap = clean_audio_filename(caption)
     clean_title = clean_audio_filename(raw_title)
     clean_artist = clean_audio_filename(raw_artist)
     
-    # Loại bỏ artist nếu chứa tên channel hoặc rác
-    if clean_artist and ('@' in clean_artist or clean_artist.lower() in ["unknown artist", "unknown", "va", "various artists", "telegram"]):
+    # Loại bỏ số thứ tự track ở đầu (ví dụ: "01. ", "01 - ", "[01] ")
+    def _strip_track_number(s: str) -> str:
+        s = re.sub(r'^(?:\[?\d{1,3}\]?[\s.\-_–]+)', '', s).strip()
+        return s
+
+    if clean_title:
+        clean_title = _strip_track_number(clean_title)
+    if clean_fn:
+        clean_fn = _strip_track_number(clean_fn)
+
+    # Loại bỏ artist nếu là rác / bot / channel
+    if clean_artist and ('@' in clean_artist or clean_artist.lower() in ["unknown artist", "unknown", "va", "various artists", "telegram", "lossless"]):
         clean_artist = ""
 
-    # Trường hợp 1: ID3 Tag đã có đầy đủ Artist & Title chuẩn
+    # Trường hợp 1: ID3 Tag đã có đầy đủ Artist & Title hợp lệ (Ưu tiên 100%)
     if clean_artist and clean_title and clean_title.lower() != clean_artist.lower():
         return clean_artist, clean_title, raw_album or ""
 
-    # Trường hợp 2: Phân tách từ filename dạng "Artist - Title" hoặc "Title - Artist"
-    target_str = clean_title or clean_fn or clean_cap
-    if ' - ' in target_str:
-        parts = target_str.split(' - ')
-        if len(parts) == 2:
-            part1 = parts[0].strip()
-            part2 = parts[1].strip()
-            # Thường part1 là Artist, part2 là Title
-            artist = clean_artist or part1
-            title = part2 if clean_artist else part2
-            return artist, title, raw_album or ""
-        elif len(parts) >= 3:
-            # Dạng "Artist - Album - Title" hoặc "Artist - Track - Title"
-            return parts[0].strip(), parts[-1].strip(), parts[1].strip()
+    # Trường hợp 2: Tách từ File Name dạng "Artist - Title" hoặc "Title - Artist"
+    target_str = clean_fn or clean_cap or clean_title
+    for sep in [' - ', ' – ', ' — ']:
+        if sep in target_str:
+            parts = target_str.split(sep)
+            if len(parts) == 2:
+                part1 = _strip_track_number(parts[0].strip())
+                part2 = _strip_track_number(parts[1].strip())
+                artist = clean_artist or part1
+                title = part2 if clean_artist else part2
+                return artist, title, raw_album or ""
+            elif len(parts) >= 3:
+                p_art = _strip_track_number(parts[0].strip())
+                p_alb = parts[1].strip()
+                p_tit = _strip_track_number(parts[-1].strip())
+                return clean_artist or p_art, p_tit, raw_album or p_alb
 
-    # Trường hợp 3: Không có dấu gạch ngang, dùng chuỗi đã làm sạch
     artist = clean_artist or ""
     title = clean_title or clean_fn or clean_cap or "Track"
     return artist, title, raw_album or ""

@@ -880,15 +880,18 @@ class MusicScanManager:
                             continue
 
                 media_group_context = {}
+                nearby_text_context = {}
                 for msg in messages_to_process:
                     mgid = getattr(msg, "media_group_id", None)
                     cap = getattr(msg, "caption", "") or ""
                     txt = getattr(msg, "text", "") or ""
                     combined = (cap + "\n" + txt).strip()
-                    if combined and mgid:
+                    if combined:
                         c_art, c_alb = extract_context_from_text(combined)
                         if c_art or c_alb:
-                            media_group_context[mgid] = (c_art, c_alb, combined)
+                            if mgid:
+                                media_group_context[mgid] = (c_art, c_alb, combined)
+                            nearby_text_context[msg.id] = (c_art, c_alb)
 
                 for m_idx, msg in enumerate(messages_to_process):
                     if self._cancel_requested:
@@ -904,24 +907,44 @@ class MusicScanManager:
                         if not is_audio:
                             continue
 
-                        ctx_artist, ctx_album = "", ""
-                        mgid = getattr(msg, "media_group_id", None)
-                        if mgid and mgid in media_group_context:
-                            ctx_artist, ctx_album, _ = media_group_context[mgid]
-                        else:
-                            # Chỉ lấy ngữ cảnh từ chính caption/text của tin nhắn này
-                            msg_cap = (getattr(msg, "caption", "") or getattr(msg, "text", "") or "").strip()
-                            if msg_cap:
-                                ctx_artist, ctx_album = extract_context_from_text(msg_cap)
-
-                        eff_artist = default_artist or ctx_artist
-                        eff_album = default_album or ctx_album
+                        # 1. Trích xuất thông tin cơ bản từ chính file
                         caption_text = getattr(msg, "caption", "") or ""
                         raw_title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
                         raw_artist = getattr(msg.audio, "performer", None) if getattr(msg, "audio", None) else None
                         raw_album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
                         duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
                         file_size_bytes = getattr(media, "file_size", 0) or 0
+
+                        p_art, p_tit, p_alb = parse_artist_and_title(raw_title, raw_artist, raw_album, f_name, caption_text)
+
+                        # 2. Dò ngữ cảnh an toàn (Chỉ dò khi file thiếu Ca Sĩ hoặc Album)
+                        ctx_artist, ctx_album = "", ""
+                        mgid = getattr(msg, "media_group_id", None)
+                        if mgid and mgid in media_group_context:
+                            ctx_artist, ctx_album, _ = media_group_context[mgid]
+                        
+                        if not ctx_artist and not ctx_album and caption_text:
+                            ctx_artist, ctx_album = extract_context_from_text(caption_text)
+
+                        if not ctx_artist or not ctx_album:
+                            # Chỉ dò tin nhắn liền kề ngay phía trước (-1, -2), không dò xa và không dò tới trước
+                            for offset in [-1, -2]:
+                                chk_i = m_idx + offset
+                                if 0 <= chk_i < len(messages_to_process):
+                                    chk_m = messages_to_process[chk_i]
+                                    msg_date = getattr(msg, "date", None)
+                                    chk_date = getattr(chk_m, "date", None)
+                                    time_diff = abs((msg_date - chk_date).total_seconds()) if msg_date and chk_date else 0
+                                    if time_diff <= 300 and chk_m.id in nearby_text_context:
+                                        n_art, n_alb = nearby_text_context[chk_m.id]
+                                        if not ctx_artist and n_art: ctx_artist = n_art
+                                        if not ctx_album and n_alb: ctx_album = n_alb
+                                        break
+
+                        # 3. Phân cấp thông tin rõ ràng: ID3 Tag > File Name > Proximity Context > Fallback
+                        final_artist = default_artist or raw_artist or p_art or ctx_artist or "Unknown Artist"
+                        final_album = default_album or raw_album or p_alb or ctx_album or chat_title or "Telegram Music Collection"
+                        final_title = p_tit or raw_title or os.path.splitext(f_name)[0] or f"Track {msg.id}"
 
                         audio_fmt, q_tier, calc_br = detect_audio_quality(
                             file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
@@ -933,27 +956,26 @@ class MusicScanManager:
                         scraped_meta = None
                         if auto_scrape:
                             scraped_meta = await fetch_music_metadata(
-                                raw_title=raw_title or "",
-                                raw_artist=raw_artist or eff_artist or "",
-                                raw_album=raw_album or eff_album or "",
+                                raw_title=final_title,
+                                raw_artist=final_artist,
+                                raw_album=final_album,
                                 file_name=f_name or "",
                                 caption=caption_text or "",
-                                default_artist=eff_artist or "",
-                                default_album=eff_album or ""
+                                default_artist=default_artist or "",
+                                default_album=default_album or ""
                             )
 
                         if scraped_meta:
-                            t_title = scraped_meta.get("title") or raw_title or os.path.splitext(f_name)[0] or f"Track {msg.id}"
-                            t_artist = scraped_meta.get("artist") or eff_artist or raw_artist or "Unknown Artist"
-                            t_album = scraped_meta.get("album") or eff_album or raw_album or chat_title or "Telegram Music Collection"
+                            t_title = scraped_meta.get("title") or final_title
+                            t_artist = scraped_meta.get("artist") or final_artist
+                            t_album = scraped_meta.get("album") or final_album
                             t_cover = scraped_meta.get("cover_url") or fallback_cover
                             t_year = scraped_meta.get("year", time.strftime("%Y"))
                             t_pub = scraped_meta.get("publisher", f"Telegram: {chat_title}")
                         else:
-                            p_art, p_tit, p_alb = parse_artist_and_title(raw_title, raw_artist, raw_album, f_name, caption_text)
-                            t_title = p_tit or os.path.splitext(f_name)[0] or f"Track {msg.id}"
-                            t_artist = eff_artist or p_art or raw_artist or "Unknown Artist"
-                            t_album = eff_album or p_alb or raw_album or chat_title or "Telegram Music Collection"
+                            t_title = final_title
+                            t_artist = final_artist
+                            t_album = final_album
                             t_cover = fallback_cover
                             t_year = time.strftime("%Y")
                             t_pub = f"Telegram: {chat_title}"
