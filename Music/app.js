@@ -3,24 +3,6 @@
  * High-Fidelity Audio Experience & Interactive Vinyl Animation
  */
 
-// Polyfill: CanvasRenderingContext2D.roundRect for older browsers
-if (!CanvasRenderingContext2D.prototype.roundRect) {
-    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
-        const r = Array.isArray(radii) ? radii : [radii, radii, radii, radii];
-        const [tl, tr, br, bl] = r.map(v => Math.min(v || 0, w / 2, h / 2));
-        this.moveTo(x + tl, y);
-        this.lineTo(x + w - tr, y);
-        this.quadraticCurveTo(x + w, y, x + w, y + tr);
-        this.lineTo(x + w, y + h - br);
-        this.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
-        this.lineTo(x + bl, y + h);
-        this.quadraticCurveTo(x, y + h, x, y + h - bl);
-        this.lineTo(x, y + tl);
-        this.quadraticCurveTo(x, y, x + tl, y);
-        this.closePath();
-        return this;
-    };
-}
 // --- Albums & Tracks Database ---
 const ALBUMS_DATABASE = [
     {
@@ -216,21 +198,10 @@ class XTAPOMusicApp {
         this.mobileMenuBackdrop = document.getElementById('mobileMenuBackdrop');
         this.mobileSelectAlbumBtn = document.getElementById('mobileSelectAlbumBtn');
 
-        // Visualizer Canvas & Web Audio API
+        // Visualizer Canvas
         this.canvas = document.getElementById('visualizerCanvas');
         this.canvasCtx = this.canvas.getContext('2d');
         this.visualizerAnimationId = null;
-        this.visualizerSection = document.getElementById('visualizerSection');
-        this.vizFreqLabel = document.getElementById('vizFreqLabel');
-        this.vizDbLabel = document.getElementById('vizDbLabel');
-        this.vizModeBtns = document.querySelectorAll('.viz-mode-btn');
-        this.vizMode = 'bars'; // 'bars', 'wave', 'circular', 'mirror'
-        this.analyserNode = null;
-        this.audioSourceNode = null;
-        this.audioCtx = null;
-        this.freqData = null;
-        this.timeData = null;
-        this.smoothedFreqData = null;
 
         // Telegram Storage & Scanner Elements
         this.albums = [...ALBUMS_DATABASE];
@@ -486,9 +457,6 @@ class XTAPOMusicApp {
     play() {
         this.isPlaying = true;
         this.updatePlayStateVisuals(true);
-
-        // Initialize Web Audio API analyser on first play (requires user gesture)
-        this.initAudioAnalyser();
 
         const playPromise = this.audio.play();
         if (playPromise !== undefined) {
@@ -770,393 +738,40 @@ class XTAPOMusicApp {
         }
     }
 
-    // --- Audio Spectrum Visualizer (Web Audio API) ---
+    // --- Visualizer Waveform Animation ---
     setupVisualizer() {
-        // Set canvas to high-DPI
-        this.resizeCanvas();
-        window.addEventListener('resize', () => this.resizeCanvas());
-
-        // Mode toggle buttons
-        this.vizModeBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.vizModeBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this.vizMode = btn.dataset.mode;
-            });
-        });
-
-        // Start animation loop
-        this.drawVisualizer();
-    }
-
-    resizeCanvas() {
-        const wrap = this.canvas.parentElement;
-        const dpr = window.devicePixelRatio || 1;
-        const rect = wrap.getBoundingClientRect();
-        this.canvas.width = rect.width * dpr;
-        this.canvas.height = rect.height * dpr;
-        this.canvasCtx.scale(dpr, dpr);
-        this.canvas.style.width = rect.width + 'px';
-        this.canvas.style.height = rect.height + 'px';
-    }
-
-    initAudioAnalyser() {
-        if (this.analyserNode) return; // already connected
-        try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (!AudioCtx) return;
-            
-            if (!this.audioCtx) {
-                this.audioCtx = new AudioCtx();
-            }
-            if (this.audioCtx.state === 'suspended') {
-                this.audioCtx.resume();
-            }
-
-            this.analyserNode = this.audioCtx.createAnalyser();
-            this.analyserNode.fftSize = 256;
-            this.analyserNode.smoothingTimeConstant = 0.82;
-            this.analyserNode.minDecibels = -90;
-            this.analyserNode.maxDecibels = -10;
-
-            // Connect audio element → analyser → destination
-            if (!this.audioSourceNode) {
-                this.audioSourceNode = this.audioCtx.createMediaElementSource(this.audio);
-            }
-            this.audioSourceNode.connect(this.analyserNode);
-            this.analyserNode.connect(this.audioCtx.destination);
-
-            const bufferLength = this.analyserNode.frequencyBinCount;
-            this.freqData = new Uint8Array(bufferLength);
-            this.timeData = new Uint8Array(bufferLength);
-            this.smoothedFreqData = new Float32Array(bufferLength);
-        } catch (e) {
-            console.warn('[Visualizer] Web Audio API init failed:', e.message);
-            this.analyserNode = null;
-        }
-    }
-
-    drawVisualizer() {
         const ctx = this.canvasCtx;
-        const dpr = window.devicePixelRatio || 1;
-        const w = this.canvas.width / dpr;
-        const h = this.canvas.height / dpr;
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+        const numBars = 32;
+        const barWidth = width / numBars - 2;
 
-        ctx.clearRect(0, 0, w, h);
+        const draw = () => {
+            ctx.clearRect(0, 0, width, height);
 
-        let hasRealData = false;
-
-        // Try to get real audio frequency data
-        if (this.analyserNode && this.freqData && this.isPlaying && !this.synthesizerActive) {
-            this.analyserNode.getByteFrequencyData(this.freqData);
-            this.analyserNode.getByteTimeDomainData(this.timeData);
-
-            // Check if we have actual audio data (not all zeros)
-            let sum = 0;
-            for (let i = 0; i < this.freqData.length; i++) sum += this.freqData[i];
-            hasRealData = sum > 0;
-
-            // Smooth frequency data
-            if (hasRealData) {
-                for (let i = 0; i < this.freqData.length; i++) {
-                    this.smoothedFreqData[i] += (this.freqData[i] - this.smoothedFreqData[i]) * 0.3;
+            for (let i = 0; i < numBars; i++) {
+                let barHeight = 4;
+                if (this.isPlaying) {
+                    const time = Date.now() * 0.005;
+                    const noise = Math.sin(i * 0.4 + time) * Math.cos(i * 0.2 - time * 0.8);
+                    barHeight = Math.max(4, Math.abs(noise) * (height - 6) + Math.random() * 6);
                 }
+
+                const x = i * (barWidth + 2);
+                const y = height - barHeight;
+
+                const grad = ctx.createLinearGradient(0, height, 0, 0);
+                grad.addColorStop(0, '#fcbf47');
+                grad.addColorStop(1, '#ff6dc4');
+
+                ctx.fillStyle = grad;
+                ctx.fillRect(x, y, barWidth, barHeight);
             }
-        }
 
-        // If no real data, generate procedural data for visual effect
-        if (!hasRealData && this.isPlaying) {
-            if (!this.freqData) {
-                this.freqData = new Uint8Array(128);
-                this.timeData = new Uint8Array(128);
-                this.smoothedFreqData = new Float32Array(128);
-            }
-            const t = Date.now() * 0.003;
-            for (let i = 0; i < this.freqData.length; i++) {
-                const wave1 = Math.sin(i * 0.15 + t) * 0.5 + 0.5;
-                const wave2 = Math.cos(i * 0.08 - t * 1.3) * 0.3 + 0.3;
-                const wave3 = Math.sin(i * 0.3 + t * 0.7) * 0.2;
-                const noise = Math.random() * 0.12;
-                const envelope = Math.pow(Math.sin((i / this.freqData.length) * Math.PI), 0.6);
-                this.freqData[i] = Math.max(0, Math.min(255, (wave1 + wave2 + wave3 + noise) * envelope * 255));
-                this.timeData[i] = 128 + Math.sin(i * 0.08 + t * 2) * 60 + Math.random() * 10;
-                this.smoothedFreqData[i] += (this.freqData[i] - this.smoothedFreqData[i]) * 0.15;
-            }
-            hasRealData = true; // use procedural data as if it's real
-        }
+            this.visualizerAnimationId = requestAnimationFrame(draw);
+        };
 
-        // Update section active state
-        if (this.isPlaying && hasRealData) {
-            this.visualizerSection.classList.add('is-active');
-        } else {
-            this.visualizerSection.classList.remove('is-active');
-        }
-
-        // Draw based on current mode
-        if (hasRealData && this.isPlaying) {
-            switch (this.vizMode) {
-                case 'bars': this.drawBars(ctx, w, h); break;
-                case 'wave': this.drawWave(ctx, w, h); break;
-                case 'circular': this.drawCircular(ctx, w, h); break;
-                case 'mirror': this.drawMirror(ctx, w, h); break;
-                default: this.drawBars(ctx, w, h);
-            }
-            this.updateVizInfo();
-        } else {
-            // Idle state: dim bars
-            this.drawIdleBars(ctx, w, h);
-            if (this.vizFreqLabel) this.vizFreqLabel.textContent = '—';
-            if (this.vizDbLabel) this.vizDbLabel.textContent = '—';
-        }
-
-        this.visualizerAnimationId = requestAnimationFrame(() => this.drawVisualizer());
-    }
-
-    // Mode 1: Frequency Bars with gradient glow
-    drawBars(ctx, w, h) {
-        const data = this.smoothedFreqData;
-        const numBars = Math.min(64, data.length);
-        const gap = 2;
-        const barW = (w - gap * (numBars - 1)) / numBars;
-        const cornerR = Math.max(1, barW / 3);
-
-        for (let i = 0; i < numBars; i++) {
-            const val = data[i] / 255;
-            const barH = Math.max(2, val * (h - 4));
-            const x = i * (barW + gap);
-            const y = h - barH;
-
-            // Gradient per bar
-            const grad = ctx.createLinearGradient(x, h, x, y);
-            const hue = 35 + (i / numBars) * 280; // gold → pink → cyan
-            grad.addColorStop(0, `hsla(${hue}, 90%, 65%, 0.9)`);
-            grad.addColorStop(0.5, `hsla(${hue + 20}, 85%, 55%, 0.7)`);
-            grad.addColorStop(1, `hsla(${hue + 40}, 80%, 45%, 0.4)`);
-
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.roundRect(x, y, barW, barH, [cornerR, cornerR, 0, 0]);
-            ctx.fill();
-
-            // Glow effect for loud bars
-            if (val > 0.6) {
-                ctx.save();
-                ctx.shadowColor = `hsla(${hue}, 100%, 60%, 0.5)`;
-                ctx.shadowBlur = 8 + val * 12;
-                ctx.fillStyle = `hsla(${hue}, 100%, 70%, ${val * 0.3})`;
-                ctx.fillRect(x, y, barW, barH);
-                ctx.restore();
-            }
-        }
-    }
-
-    // Mode 2: Smooth Waveform
-    drawWave(ctx, w, h) {
-        const data = this.timeData;
-        const len = data.length;
-        const sliceW = w / len;
-        const midH = h / 2;
-
-        // Draw filled area under waveform
-        ctx.beginPath();
-        ctx.moveTo(0, midH);
-        for (let i = 0; i < len; i++) {
-            const v = data[i] / 128.0;
-            const y = v * midH;
-            if (i === 0) ctx.moveTo(0, y);
-            else {
-                const prevX = (i - 1) * sliceW;
-                const currX = i * sliceW;
-                const cpX = (prevX + currX) / 2;
-                const prevY = (data[i - 1] / 128.0) * midH;
-                ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2);
-            }
-        }
-        ctx.lineTo(w, midH);
-        ctx.lineTo(0, midH);
-        ctx.closePath();
-
-        const fillGrad = ctx.createLinearGradient(0, 0, w, 0);
-        fillGrad.addColorStop(0, 'rgba(252, 191, 71, 0.12)');
-        fillGrad.addColorStop(0.5, 'rgba(255, 109, 196, 0.12)');
-        fillGrad.addColorStop(1, 'rgba(56, 189, 248, 0.12)');
-        ctx.fillStyle = fillGrad;
-        ctx.fill();
-
-        // Draw waveform line
-        ctx.beginPath();
-        for (let i = 0; i < len; i++) {
-            const v = data[i] / 128.0;
-            const y = v * midH;
-            const x = i * sliceW;
-            if (i === 0) ctx.moveTo(x, y);
-            else {
-                const prevX = (i - 1) * sliceW;
-                const prevY = (data[i - 1] / 128.0) * midH;
-                const cpX = (prevX + x) / 2;
-                ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2);
-            }
-        }
-
-        const lineGrad = ctx.createLinearGradient(0, 0, w, 0);
-        lineGrad.addColorStop(0, '#fcbf47');
-        lineGrad.addColorStop(0.5, '#ff6dc4');
-        lineGrad.addColorStop(1, '#38bdf8');
-        ctx.strokeStyle = lineGrad;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = '#ff6dc4';
-        ctx.shadowBlur = 6;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Draw center line
-        ctx.beginPath();
-        ctx.moveTo(0, midH);
-        ctx.lineTo(w, midH);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    }
-
-    // Mode 3: Circular Spectrum
-    drawCircular(ctx, w, h) {
-        const data = this.smoothedFreqData;
-        const cx = w / 2;
-        const cy = h / 2;
-        const innerR = Math.min(w, h) * 0.18;
-        const maxBarH = Math.min(w, h) * 0.28;
-        const numBars = Math.min(72, data.length);
-        const angleStep = (Math.PI * 2) / numBars;
-
-        // Inner circle glow
-        const innerGlow = ctx.createRadialGradient(cx, cy, innerR * 0.3, cx, cy, innerR);
-        innerGlow.addColorStop(0, 'rgba(252, 191, 71, 0.15)');
-        innerGlow.addColorStop(1, 'rgba(252, 191, 71, 0.02)');
-        ctx.fillStyle = innerGlow;
-        ctx.beginPath();
-        ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Inner circle ring
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Draw frequency bars radiating outward
-        for (let i = 0; i < numBars; i++) {
-            const val = data[i] / 255;
-            const barH = Math.max(2, val * maxBarH);
-            const angle = i * angleStep - Math.PI / 2;
-
-            const x1 = cx + Math.cos(angle) * innerR;
-            const y1 = cy + Math.sin(angle) * innerR;
-            const x2 = cx + Math.cos(angle) * (innerR + barH);
-            const y2 = cy + Math.sin(angle) * (innerR + barH);
-
-            const hue = (i / numBars) * 360;
-            ctx.strokeStyle = `hsla(${hue}, 85%, 60%, ${0.4 + val * 0.6})`;
-            ctx.lineWidth = Math.max(1.5, (Math.PI * 2 * innerR) / numBars * 0.5);
-            ctx.lineCap = 'round';
-
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-
-            // Glow for loud bars
-            if (val > 0.5) {
-                ctx.save();
-                ctx.shadowColor = `hsla(${hue}, 100%, 65%, 0.6)`;
-                ctx.shadowBlur = 6 + val * 8;
-                ctx.beginPath();
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
-                ctx.stroke();
-                ctx.restore();
-            }
-        }
-    }
-
-    // Mode 4: Mirror Bars (reflected top/bottom)
-    drawMirror(ctx, w, h) {
-        const data = this.smoothedFreqData;
-        const numBars = Math.min(48, data.length);
-        const gap = 2;
-        const barW = (w - gap * (numBars - 1)) / numBars;
-        const midY = h / 2;
-        const maxBarH = midY - 2;
-
-        for (let i = 0; i < numBars; i++) {
-            const val = data[i] / 255;
-            const barH = Math.max(1, val * maxBarH);
-            const x = i * (barW + gap);
-
-            const hue = 35 + (i / numBars) * 200;
-
-            // Top bar (growing up from center)
-            const gradUp = ctx.createLinearGradient(x, midY, x, midY - barH);
-            gradUp.addColorStop(0, `hsla(${hue}, 90%, 65%, 0.85)`);
-            gradUp.addColorStop(1, `hsla(${hue + 30}, 80%, 50%, 0.3)`);
-            ctx.fillStyle = gradUp;
-            ctx.fillRect(x, midY - barH, barW, barH);
-
-            // Bottom bar (growing down, reflection)
-            const gradDown = ctx.createLinearGradient(x, midY, x, midY + barH);
-            gradDown.addColorStop(0, `hsla(${hue}, 80%, 60%, 0.6)`);
-            gradDown.addColorStop(1, `hsla(${hue + 30}, 70%, 45%, 0.08)`);
-            ctx.fillStyle = gradDown;
-            ctx.fillRect(x, midY, barW, barH);
-        }
-
-        // Center line
-        ctx.beginPath();
-        ctx.moveTo(0, midY);
-        ctx.lineTo(w, midY);
-        const centerGrad = ctx.createLinearGradient(0, 0, w, 0);
-        centerGrad.addColorStop(0, 'rgba(252, 191, 71, 0.25)');
-        centerGrad.addColorStop(0.5, 'rgba(255, 109, 196, 0.35)');
-        centerGrad.addColorStop(1, 'rgba(56, 189, 248, 0.25)');
-        ctx.strokeStyle = centerGrad;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    }
-
-    // Idle state: dim minimal bars
-    drawIdleBars(ctx, w, h) {
-        const numBars = 48;
-        const gap = 2;
-        const barW = (w - gap * (numBars - 1)) / numBars;
-
-        for (let i = 0; i < numBars; i++) {
-            const x = i * (barW + gap);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-            ctx.fillRect(x, h - 2, barW, 2);
-        }
-    }
-
-    updateVizInfo() {
-        if (!this.smoothedFreqData) return;
-
-        // Find dominant frequency band
-        let maxVal = 0, maxIdx = 0;
-        for (let i = 0; i < this.smoothedFreqData.length; i++) {
-            if (this.smoothedFreqData[i] > maxVal) {
-                maxVal = this.smoothedFreqData[i];
-                maxIdx = i;
-            }
-        }
-
-        // Approximate frequency (assuming 44100 sample rate and fftSize 256)
-        const sampleRate = this.audioCtx ? this.audioCtx.sampleRate : 44100;
-        const fftSize = this.analyserNode ? this.analyserNode.fftSize : 256;
-        const freqHz = (maxIdx * sampleRate) / fftSize;
-        const dbVal = -90 + (maxVal / 255) * 80; // approximate dB
-
-        const freqLabel = freqHz >= 1000 ? `${(freqHz / 1000).toFixed(1)} kHz` : `${Math.round(freqHz)} Hz`;
-        if (this.vizFreqLabel) this.vizFreqLabel.textContent = `Peak: ${freqLabel}`;
-        if (this.vizDbLabel) this.vizDbLabel.textContent = `${dbVal.toFixed(1)} dB`;
+        draw();
     }
 
     // --- Modals & Drawers Setup ---
