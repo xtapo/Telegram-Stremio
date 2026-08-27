@@ -13,9 +13,8 @@
     <link rel="stylesheet" href="/Music/style.css">
 </head>
 <body class="kmusic-body">
-    <!-- Ambient Dynamic Background Blur & Realtime Studio Spectrum Waves -->
+    <!-- Ambient Dynamic Background Blur -->
     <div class="dynamic-backdrop" id="dynamicBackdrop">
-        <canvas id="ambientVisualizerCanvas" class="ambient-visualizer-canvas"></canvas>
         <div class="backdrop-glow glow-1"></div>
         <div class="backdrop-glow glow-2"></div>
         <div class="backdrop-overlay"></div>
@@ -104,29 +103,36 @@
                         <span class="label-company" id="albumCompany">℗ Republic Records / UMG</span>
                     </div>
 
-                    <!-- Audio Visualizer Realtime Waveform & Studio Mode Switcher -->
-                    <div class="visualizer-container">
+                    <!-- Audio Spectrum Visualizer (Realtime) -->
+                    <div class="visualizer-section" id="visualizerSection">
                         <div class="visualizer-header">
-                            <div class="visualizer-title-wrap">
-                                <span class="visualizer-live-dot"></span>
-                                <span class="visualizer-title">STUDIO SPECTRUM</span>
+                            <div class="visualizer-label">
+                                <span class="viz-pulse"></span>
+                                <span>AUDIO SPECTRUM</span>
                             </div>
-                            <div class="visualizer-modes" id="visualizerModes">
-                                <button class="viz-mode-btn active" data-mode="aura" title="Hào quang Đĩa than & Sóng nền">
-                                    <span class="viz-icon">💿</span> Aura
+                            <div class="visualizer-modes">
+                                <button class="viz-mode-btn active" data-mode="bars" title="Frequency Bars">
+                                    <svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor"><rect x="1" y="10" width="2" height="7" rx="1"/><rect x="5" y="6" width="2" height="11" rx="1"/><rect x="9" y="3" width="2" height="14" rx="1"/><rect x="13" y="8" width="2" height="9" rx="1"/></svg>
                                 </button>
-                                <button class="viz-mode-btn" data-mode="cyber" title="Tia quang phổ Cyberpunk">
-                                    <span class="viz-icon">⚡</span> Cyber
+                                <button class="viz-mode-btn" data-mode="wave" title="Waveform">
+                                    <svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 9c2-4 4 4 6 0s4-4 6 0 2 4 4 0"/></svg>
                                 </button>
-                                <button class="viz-mode-btn" data-mode="wave" title="Dải sóng mượt mà Fluid Wave">
-                                    <span class="viz-icon">🌊</span> Wave
+                                <button class="viz-mode-btn" data-mode="circular" title="Circular Spectrum">
+                                    <svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="6"/><circle cx="9" cy="9" r="3"/><line x1="9" y1="3" x2="9" y2="1"/><line x1="15" y1="9" x2="17" y2="9"/><line x1="9" y1="15" x2="9" y2="17"/><line x1="3" y1="9" x2="1" y2="9"/></svg>
                                 </button>
-                                <button class="viz-mode-btn" data-mode="equalizer" title="Cột đèn EQ Studio">
-                                    <span class="viz-icon">📊</span> EQ
+                                <button class="viz-mode-btn" data-mode="mirror" title="Mirror Bars">
+                                    <svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor"><rect x="1" y="7" width="2" height="4" rx="1"/><rect x="5" y="4" width="2" height="10" rx="1"/><rect x="9" y="2" width="2" height="14" rx="1"/><rect x="13" y="5" width="2" height="8" rx="1"/></svg>
                                 </button>
                             </div>
                         </div>
-                        <canvas id="visualizerCanvas" width="440" height="40"></canvas>
+                        <div class="visualizer-canvas-wrap">
+                            <canvas id="visualizerCanvas"></canvas>
+                            <div class="viz-glow-overlay"></div>
+                        </div>
+                        <div class="visualizer-info">
+                            <span class="viz-freq-label" id="vizFreqLabel">—</span>
+                            <span class="viz-db-label" id="vizDbLabel">—</span>
+                        </div>
                     </div>
 
                     <!-- Scrollable Tracklist -->
@@ -144,9 +150,6 @@
                 <!-- Right Column: Vinyl Disc & Album Cover Jacket -->
                 <section class="kmusic-cover-col">
                     <div class="vinyl-stage" id="vinylStage">
-                        <!-- Realtime Circular Spectrum Halo around Vinyl -->
-                        <canvas id="vinylSpectrumCanvas" class="vinyl-spectrum-canvas" width="600" height="600"></canvas>
-                        
                         <!-- Vinyl Record Disc -->
                         <div class="vinyl-disc" id="vinylDisc">
                             <div class="vinyl-grooves"></div>
