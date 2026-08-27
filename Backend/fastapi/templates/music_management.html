@@ -843,6 +843,7 @@ function playTrackFromAlbum(albumId, trackIndex) {
 
 // ── Modal 4: Album Tracklist View ───────────────────────────────────────────────
 let bulkSelectedTracks = [];
+let lastCheckedTracklistIndex = null;
 
 function openAlbumTracklistModal(albumId, animate = true) {
     const album = globalAlbums.find(a => a.id === albumId);
@@ -850,6 +851,7 @@ function openAlbumTracklistModal(albumId, animate = true) {
 
     currentViewAlbumId = albumId;
     bulkSelectedTracks = [];
+    lastCheckedTracklistIndex = null;
     updateBulkToolbar();
 
     document.getElementById('tracklist-album-cover').src = album.coverUrl || '';
@@ -859,7 +861,7 @@ function openAlbumTracklistModal(albumId, animate = true) {
     document.getElementById('tracklist-album-tracks-count').textContent = `${album.tracks ? album.tracks.length : 0} Bài hát`;
     document.getElementById('tracklist-album-size').textContent = album.totalSize || '';
     document.getElementById('tracklist-album-year').textContent = album.year || '2026';
-    document.getElementById('tracklist-footer-info').textContent = `Album: ${album.title} • ${album.tracks ? album.tracks.length : 0} bài hát`;
+    document.getElementById('tracklist-footer-info').textContent = `Album: ${album.title} • ${album.tracks ? album.tracks.length : 0} bài hát • 💡 Giữ phím Shift để chọn nhanh nhiều bài`;
 
     document.getElementById('tracklist-play-all-btn').onclick = () => playTrackFromAlbum(album.id, 0);
     document.getElementById('tracklist-edit-album-btn').onclick = () => openEditAlbumModal(album.id);
@@ -873,10 +875,12 @@ function openAlbumTracklistModal(albumId, animate = true) {
     } else {
         album.tracks.forEach((track, idx) => {
             const tr = document.createElement('tr');
-            tr.className = 'hover:bg-surface/50 transition group';
+            tr.className = 'hover:bg-surface/50 transition group select-none';
             tr.innerHTML = `
-                <td class="py-2.5 px-2 text-center">
-                    <input type="checkbox" class="track-checkbox w-3.5 h-3.5 accent-primary cursor-pointer" data-chat-id="${track.chatId}" data-msg-id="${track.msgId}" data-name="${track.name}" onchange="onTrackCheckboxChange()">
+                <td class="py-2.5 px-2 text-center" onclick="event.stopPropagation();">
+                    <input type="checkbox" class="track-checkbox w-3.5 h-3.5 accent-primary cursor-pointer" 
+                           data-chat-id="${track.chatId}" data-msg-id="${track.msgId}" data-name="${track.name}"
+                           onclick="handleTracklistCheckboxClick(event, ${idx})">
                 </td>
                 <td class="py-2.5 px-2 text-center font-bold text-text-secondary">${idx + 1}</td>
                 <td class="py-2.5 px-3 font-bold text-text">
@@ -918,6 +922,7 @@ function openAlbumTracklistModal(albumId, animate = true) {
 function closeAlbumTracklistModal() {
     currentViewAlbumId = null;
     bulkSelectedTracks = [];
+    lastCheckedTracklistIndex = null;
     updateBulkToolbar();
     const modal = document.getElementById('album-tracklist-modal');
     modal.classList.add('opacity-0', 'pointer-events-none');
@@ -925,6 +930,27 @@ function closeAlbumTracklistModal() {
 }
 
 // ── Bulk Selection & Bulk Edit ────────────────────────────────────────────────
+function handleTracklistCheckboxClick(e, index) {
+    const checkboxes = Array.from(document.querySelectorAll('#tracklist-modal-body .track-checkbox'));
+    const targetCheckbox = checkboxes[index];
+    if (!targetCheckbox) return;
+
+    if (e.shiftKey && lastCheckedTracklistIndex !== null && lastCheckedTracklistIndex !== index) {
+        const start = Math.min(lastCheckedTracklistIndex, index);
+        const end = Math.max(lastCheckedTracklistIndex, index);
+        const shouldCheck = targetCheckbox.checked;
+
+        for (let i = start; i <= end; i++) {
+            if (checkboxes[i]) {
+                checkboxes[i].checked = shouldCheck;
+            }
+        }
+    }
+
+    lastCheckedTracklistIndex = index;
+    onTrackCheckboxChange();
+}
+
 function onTrackCheckboxChange() {
     const checkboxes = document.querySelectorAll('#tracklist-modal-body .track-checkbox');
     bulkSelectedTracks = [];
@@ -943,11 +969,13 @@ function onTrackCheckboxChange() {
 function toggleSelectAllTracks(checked) {
     const checkboxes = document.querySelectorAll('#tracklist-modal-body .track-checkbox');
     checkboxes.forEach(cb => cb.checked = checked);
+    lastCheckedTracklistIndex = null;
     onTrackCheckboxChange();
 }
 
 function clearBulkSelection() {
     document.getElementById('tracklist-select-all').checked = false;
+    lastCheckedTracklistIndex = null;
     toggleSelectAllTracks(false);
 }
 
