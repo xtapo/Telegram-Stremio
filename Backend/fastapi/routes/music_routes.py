@@ -19,7 +19,7 @@ from pyrogram.errors import FloodWait
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
-from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads, client_dc_map, client_failures
+from Backend.pyrofork.bot import StreamBot, Userbot, USERBOT_CLIENT_INDEX, multi_clients, work_loads, client_dc_map, client_failures
 from Backend.fastapi.routes.stream_routes import select_best_client, _get_streamer, parse_range_header, _resolve_filename_mime, _build_stream_headers
 from Backend.fastapi.security.credentials import get_current_user, require_auth
 from Backend.fastapi.routes.template_routes import _base_context, templates
@@ -1180,27 +1180,64 @@ def _fix_audio_mime(file_name: str, raw_mime: str) -> tuple[str, str]:
 @router.get("/api/music/stream/{chat_id}/{msg_id}")
 @router.head("/api/music/stream/{chat_id}/{msg_id}")
 async def stream_music_track(request: Request, chat_id: int, msg_id: int):
-    client = _get_active_client()
-    if not client:
-        raise HTTPException(status_code=503, detail="Telegram client chưa kết nối.")
+    # Ưu tiên Userbot nếu đang kết nối (để đọc được mọi kênh private/public)
+    streamer = None
+    client_idx = 0
+    tg_client = None
 
-    index = select_best_client(0)
-    tg_client = multi_clients.get(index) if multi_clients else client
-    if not tg_client:
-        tg_client = client
-        index = 0
+    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+        tg_client = botmod.Userbot
+        client_idx = USERBOT_CLIENT_INDEX
+        streamer = _get_streamer(tg_client, client_idx)
+    elif multi_clients:
+        client_idx = select_best_client(0)
+        tg_client = multi_clients.get(client_idx) or StreamBot
+        streamer = _get_streamer(tg_client, client_idx)
+    else:
+        tg_client = StreamBot
+        client_idx = 0
+        streamer = _get_streamer(tg_client, client_idx)
 
-    if index not in work_loads:
-        work_loads[index] = 0
-    if index not in client_failures:
-        client_failures[index] = 0
+    if client_idx not in work_loads:
+        work_loads[client_idx] = 0
+    if client_idx not in client_failures:
+        client_failures[client_idx] = 0
 
-    streamer: ByteStreamer = _get_streamer(tg_client, index)
-
+    file_id = None
     try:
         file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
     except Exception as e:
-        LOGGER.error(f"[MUSIC STREAM] Message {msg_id} in {chat_id} not found: {e}")
+        LOGGER.warning(f"[MUSIC STREAM] Client {client_idx} failed to get file properties for {chat_id}/{msg_id}: {e}, thử các client khác...")
+        
+        # Fallback thử lần lượt các client còn lại
+        candidates = []
+        if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False) and tg_client != botmod.Userbot:
+            candidates.append((USERBOT_CLIENT_INDEX, botmod.Userbot))
+        if multi_clients:
+            for idx, cl in multi_clients.items():
+                if cl != tg_client:
+                    candidates.append((idx, cl))
+        if StreamBot != tg_client:
+            candidates.append((0, StreamBot))
+
+        for c_idx, cl in candidates:
+            try:
+                alt_streamer = _get_streamer(cl, c_idx)
+                if c_idx not in work_loads:
+                    work_loads[c_idx] = 0
+                if c_idx not in client_failures:
+                    client_failures[c_idx] = 0
+                file_id = await alt_streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
+                if file_id:
+                    streamer = alt_streamer
+                    client_idx = c_idx
+                    tg_client = cl
+                    break
+            except Exception:
+                continue
+
+    if not file_id:
+        LOGGER.error(f"[MUSIC STREAM] Message {msg_id} in {chat_id} not accessible by any Telegram client")
         raise HTTPException(status_code=404, detail="Track not found in Telegram")
 
     file_size = file_id.file_size
@@ -1223,7 +1260,7 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
 
     body_gen = await streamer.prefetch_stream(
         file_id=file_id,
-        client_index=index,
+        client_index=client_idx,
         offset=offset,
         first_part_cut=first_part_cut,
         last_part_cut=last_part_cut,

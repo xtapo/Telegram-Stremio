@@ -1006,13 +1006,17 @@ function previewTrack(streamUrl, title, artist, cover, format = '', qualityTier 
     bar.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
 
     try {
-        audio.pause();
+        if (!audio.paused) {
+            audio.pause();
+        }
         audio.src = streamUrl;
-        audio.load();
+        audio.currentTime = 0;
         const playPromise = audio.play();
         if (playPromise !== undefined) {
             playPromise.catch(e => {
-                console.warn("Audio autoplay prevented:", e);
+                if (e.name !== 'AbortError') {
+                    console.warn("Audio playback prevented:", e);
+                }
             });
         }
     } catch (err) {
