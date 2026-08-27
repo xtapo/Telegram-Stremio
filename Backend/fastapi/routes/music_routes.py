@@ -317,6 +317,7 @@ def _get_active_client():
 
 # ── 1. Giao diện Quản trị Backend Music Management (/music/manage) ──────────
 @router.get("/music/manage", response_class=HTMLResponse)
+@router.get("/music/manage/", response_class=HTMLResponse)
 async def music_management_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
@@ -334,15 +335,21 @@ async def get_music_player(request: Request):
 
 
 @router.get("/music/{filename:path}")
-async def get_music_static_file(filename: str):
+async def get_music_static_file(filename: str, request: Request):
     """
     Phục vụ trực tiếp CSS, JS, Fonts, Images khi người dùng truy cập /music/style.css, /music/app.js, v.v.
     Bảo đảm 100% không bị lỗi 404 trên Linux / Hugging Face.
     """
-    if not filename or filename.strip("/") in ["", "index.html"]:
-        return FileResponse(os.path.join(MUSIC_DIR, "index.html"))
+    clean_name = filename.strip("/")
+    if clean_name in ["", "index.html"]:
+        index_path = os.path.join(MUSIC_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return HTMLResponse("<h3>Music Player</h3>", status_code=200)
 
-    clean_name = filename.lstrip("/")
+    if clean_name == "manage":
+        return await music_management_page(request)
+
     file_path = os.path.join(MUSIC_DIR, clean_name)
     if os.path.exists(file_path) and os.path.isfile(file_path):
         mime_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"

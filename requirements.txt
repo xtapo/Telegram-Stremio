@@ -15,3 +15,4 @@ uv
 uvloop
 httptools
 shazamlite
+itsdangerous
