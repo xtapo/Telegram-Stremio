@@ -614,3 +614,67 @@ async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
+# ── 8. Tìm Kiếm Ảnh Bìa Album Trực Tuyến (Cover Art Search) ──────────────────
+@router.get("/api/music/search-covers")
+async def search_music_covers(query: str = Query(..., min_length=1), _: bool = Depends(require_auth)):
+    """
+    Tìm kiếm danh sách ảnh bìa Album HD từ Apple Music / iTunes và Deezer theo tên nghệ sĩ / album / bài hát
+    """
+    covers = []
+    seen_urls = set()
+    import httpx
+    import urllib.parse
+
+    # 1. Tìm trên Apple Music / iTunes (entity=album và entity=song)
+    for entity in ["album", "song"]:
+        try:
+            url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity={entity}&limit=6"
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for item in data.get("results", []):
+                        raw_art = item.get("artworkUrl100", "")
+                        if not raw_art:
+                            continue
+                        hd_cover = raw_art.replace("100x100bb.jpg", "1200x1200bb.webp").replace("100x100bb.png", "1200x1200bb.webp")
+                        if hd_cover not in seen_urls:
+                            seen_urls.add(hd_cover)
+                            title = item.get("collectionName") or item.get("trackName") or query
+                            artist = item.get("artistName", "")
+                            covers.append({
+                                "title": title,
+                                "artist": artist,
+                                "cover_url": hd_cover,
+                                "preview_url": raw_art,
+                                "source": "Apple Music"
+                            })
+        except Exception as e:
+            LOGGER.warning(f"[COVER SEARCH] iTunes search failed: {e}")
+
+    # 2. Tìm trên Deezer API
+    try:
+        url = f"https://api.deezer.com/search/album?q={urllib.parse.quote(query)}&limit=4"
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data.get("data", []):
+                    hd_cover = item.get("cover_xl") or item.get("cover_big") or item.get("cover_medium") or ""
+                    if hd_cover and hd_cover not in seen_urls:
+                        seen_urls.add(hd_cover)
+                        artist_obj = item.get("artist", {})
+                        covers.append({
+                            "title": item.get("title", query),
+                            "artist": artist_obj.get("name", ""),
+                            "cover_url": hd_cover,
+                            "preview_url": item.get("cover_medium", hd_cover),
+                            "source": "Deezer"
+                        })
+    except Exception as e:
+        LOGGER.warning(f"[COVER SEARCH] Deezer search failed: {e}")
+
+    return JSONResponse(content={"status": "success", "count": len(covers), "covers": covers})
+
+
+

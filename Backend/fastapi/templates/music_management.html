@@ -240,7 +240,7 @@
 
 <!-- Modal 2: Chỉnh Sửa Bài Hát (Edit Track) -->
 <div id="edit-track-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
-    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
@@ -248,7 +248,7 @@
                 </div>
                 <div>
                     <h3 class="text-lg font-extrabold text-text">Sửa Thông Tin Bài Hát</h3>
-                    <p class="text-xs text-text-secondary">Chỉnh sửa tên bài hát, ca sĩ, album</p>
+                    <p class="text-xs text-text-secondary">Chỉnh sửa tên bài hát, ca sĩ, album & ảnh bìa</p>
                 </div>
             </div>
             <button onclick="closeEditTrackModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
@@ -259,25 +259,45 @@
         <input type="hidden" id="edit-track-chat-id">
         <input type="hidden" id="edit-track-msg-id">
 
-        <div class="space-y-3">
+        <div class="space-y-3.5">
             <div>
                 <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Bài Hát:</label>
                 <input type="text" id="edit-track-name" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm">
             </div>
 
-            <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ / Nghệ Sĩ:</label>
-                <input type="text" id="edit-track-artist" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ / Nghệ Sĩ:</label>
+                    <input type="text" id="edit-track-artist" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album:</label>
+                    <input type="text" id="edit-track-album" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Khúc Tình Xưa">
+                </div>
             </div>
 
             <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album:</label>
-                <input type="text" id="edit-track-album" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Khúc Tình Xưa">
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">URL Ảnh Bìa:</label>
+                    <button type="button" onclick="searchOnlineCovers('track')" class="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-magnifying-glass"></i> Tìm Ảnh Bìa Online
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <img id="edit-track-cover-preview" src="" class="w-12 h-12 rounded-xl object-cover border border-hairline shrink-0 bg-black/20" alt="Preview" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                    <input type="text" id="edit-track-cover" oninput="document.getElementById('edit-track-cover-preview').src = this.value" class="flex-1 px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="https://...">
+                </div>
             </div>
 
-            <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">URL Ảnh Bìa (Cover URL):</label>
-                <input type="text" id="edit-track-cover" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="https://...">
+            <!-- Online Cover Search Results Container -->
+            <div id="track-cover-search-results" class="hidden p-3 rounded-2xl bg-surface border border-hairline">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp từ Apple Music / Deezer:</span>
+                    <button onclick="document.getElementById('track-cover-search-results').classList.add('hidden')" class="text-xs text-text-secondary hover:text-text"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="track-cover-grid" class="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto pr-1">
+                    <!-- Thumbnail items injected by JS -->
+                </div>
             </div>
         </div>
 
@@ -292,7 +312,7 @@
 
 <!-- Modal 3: Chỉnh Sửa Album (Edit Album) -->
 <div id="edit-album-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
-    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
@@ -300,7 +320,7 @@
                 </div>
                 <div>
                     <h3 class="text-lg font-extrabold text-text">Sửa Thông Tin Album</h3>
-                    <p class="text-xs text-text-secondary">Chỉnh sửa tên Album, ca sĩ, ảnh bìa</p>
+                    <p class="text-xs text-text-secondary">Chỉnh sửa tên Album, ca sĩ & ảnh bìa</p>
                 </div>
             </div>
             <button onclick="closeEditAlbumModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
@@ -310,25 +330,45 @@
 
         <input type="hidden" id="edit-album-id">
 
-        <div class="space-y-3">
+        <div class="space-y-3.5">
             <div>
                 <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album:</label>
                 <input type="text" id="edit-album-title" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm">
             </div>
 
-            <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ Chính:</label>
-                <input type="text" id="edit-album-artist" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ Chính:</label>
+                    <input type="text" id="edit-album-artist" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Năm Phát Hành:</label>
+                    <input type="text" id="edit-album-year" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: 2010">
+                </div>
             </div>
 
             <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Năm Phát Hành:</label>
-                <input type="text" id="edit-album-year" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: 2010">
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">URL Ảnh Bìa Album:</label>
+                    <button type="button" onclick="searchOnlineCovers('album')" class="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-magnifying-glass"></i> Tìm Ảnh Bìa Online
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <img id="edit-album-cover-preview" src="" class="w-14 h-14 rounded-xl object-cover border border-hairline shrink-0 bg-black/20" alt="Preview" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                    <input type="text" id="edit-album-cover" oninput="document.getElementById('edit-album-cover-preview').src = this.value" class="flex-1 px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="https://...">
+                </div>
             </div>
 
-            <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">URL Ảnh Bìa Album:</label>
-                <input type="text" id="edit-album-cover" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="https://...">
+            <!-- Online Cover Search Results Container -->
+            <div id="album-cover-search-results" class="hidden p-3 rounded-2xl bg-surface border border-hairline">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp từ Apple Music / Deezer:</span>
+                    <button onclick="document.getElementById('album-cover-search-results').classList.add('hidden')" class="text-xs text-text-secondary hover:text-text"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="album-cover-grid" class="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto pr-1">
+                    <!-- Thumbnail items injected by JS -->
+                </div>
             </div>
         </div>
 
@@ -693,6 +733,8 @@ function openEditTrackModal(chatId, msgId) {
     document.getElementById('edit-track-artist').value = track.artist || '';
     document.getElementById('edit-track-album').value = albumName || '';
     document.getElementById('edit-track-cover').value = track.coverUrl || '';
+    document.getElementById('edit-track-cover-preview').src = track.coverUrl || '';
+    document.getElementById('track-cover-search-results').classList.add('hidden');
 
     const modal = document.getElementById('edit-track-modal');
     modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -747,6 +789,8 @@ function openEditAlbumModal(albumId) {
     document.getElementById('edit-album-artist').value = album.artist || '';
     document.getElementById('edit-album-year').value = album.year || '';
     document.getElementById('edit-album-cover').value = album.coverUrl || '';
+    document.getElementById('edit-album-cover-preview').src = album.coverUrl || '';
+    document.getElementById('album-cover-search-results').classList.add('hidden');
 
     const modal = document.getElementById('edit-album-modal');
     modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -788,6 +832,76 @@ async function saveAlbumEdit() {
     } catch (e) {
         alertToast('Lỗi kết nối: ' + e.message);
     }
+}
+
+// ── Search Online Album Covers Feature ─────────────────────────────────────────
+async function searchOnlineCovers(type) {
+    let query = '';
+    let resultsContainer = null;
+    let grid = null;
+
+    if (type === 'track') {
+        const artist = document.getElementById('edit-track-artist').value.trim();
+        const album = document.getElementById('edit-track-album').value.trim();
+        const name = document.getElementById('edit-track-name').value.trim();
+        query = `${artist} ${album || name}`.trim() || name;
+        resultsContainer = document.getElementById('track-cover-search-results');
+        grid = document.getElementById('track-cover-grid');
+    } else {
+        const artist = document.getElementById('edit-album-artist').value.trim();
+        const title = document.getElementById('edit-album-title').value.trim();
+        query = `${artist} ${title}`.trim() || title;
+        resultsContainer = document.getElementById('album-cover-search-results');
+        grid = document.getElementById('album-cover-grid');
+    }
+
+    if (!query) {
+        alertToast('Vui lòng nhập Tên Ca Sĩ hoặc Tên Album để tìm ảnh bìa!');
+        return;
+    }
+
+    resultsContainer.classList.remove('hidden');
+    grid.innerHTML = '<div class="col-span-4 py-4 text-center text-xs text-text-secondary"><i class="fa-solid fa-spinner animate-spin mr-1"></i> Đang tìm ảnh bìa từ Apple Music & Deezer...</div>';
+
+    try {
+        const res = await fetch(`/api/music/search-covers?query=${encodeURIComponent(query)}`);
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success' && data.covers && data.covers.length > 0) {
+            grid.innerHTML = '';
+            data.covers.forEach(c => {
+                const item = document.createElement('div');
+                item.className = 'cursor-pointer group relative rounded-xl overflow-hidden aspect-square border border-hairline hover:border-primary transition transform hover:scale-105 bg-black/40';
+                item.title = `${c.artist} - ${c.title} (${c.source})`;
+                item.onclick = () => selectCoverUrl(type, c.cover_url);
+
+                item.innerHTML = `
+                    <img src="${c.preview_url || c.cover_url}" class="w-full h-full object-cover" alt="Cover">
+                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center p-1 text-center">
+                        <span class="text-[9px] font-bold text-white leading-tight">${c.artist || 'Select'}</span>
+                    </div>
+                `;
+                grid.appendChild(item);
+            });
+        } else {
+            grid.innerHTML = '<div class="col-span-4 py-3 text-center text-xs text-text-secondary">Không tìm thấy ảnh bìa nào cho từ khóa này.</div>';
+        }
+    } catch (e) {
+        grid.innerHTML = `<div class="col-span-4 py-3 text-center text-xs text-red-400">Lỗi tìm kiếm: ${e.message}</div>`;
+    }
+}
+
+function selectCoverUrl(type, coverUrl) {
+    if (type === 'track') {
+        document.getElementById('edit-track-cover').value = coverUrl;
+        document.getElementById('edit-track-cover-preview').src = coverUrl;
+        document.getElementById('track-cover-search-results').classList.add('hidden');
+    } else {
+        document.getElementById('edit-album-cover').value = coverUrl;
+        document.getElementById('edit-album-cover-preview').src = coverUrl;
+        document.getElementById('album-cover-search-results').classList.add('hidden');
+    }
+    alertToast('Đã chọn ảnh bìa! Nhớ bấm "Lưu" để cập nhật.');
 }
 
 // Delete functions
