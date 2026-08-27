@@ -137,6 +137,7 @@ from Backend.fastapi.routes.template_routes import (
 )
 from Backend.fastapi.security.credentials import require_auth
 from Backend.pyrofork.bot import work_loads_summary
+from Backend.logger import LOGGER
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
@@ -178,8 +179,9 @@ try:
         app.mount("/Music", StaticFiles(directory="Music"), name="music_static")
     from Backend.fastapi.routes.music_routes import router as music_router
     app.include_router(music_router)
-except Exception:
-    pass
+    LOGGER.info("[STARTUP] Music Player & Management router mounted successfully at /music and /music/manage.")
+except Exception as e:
+    LOGGER.error(f"[STARTUP] Error including music_router: {e}", exc_info=True)
 
 
 #----- Public routes (no authentication)
