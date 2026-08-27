@@ -547,29 +547,30 @@ html, body {
 
 .vinyl-stage {
     position: relative;
-    width: 440px;
-    height: 440px;
+    width: 520px;
+    height: 400px;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     perspective: 1200px;
+    overflow: visible;
 }
 
 /* Vinyl Disc 3D Realistic Design */
 .vinyl-disc {
     position: absolute;
-    width: 400px;
-    height: 400px;
+    width: 370px;
+    height: 370px;
     border-radius: 50%;
     background: radial-gradient(circle, #0e0e11 0%, #15161b 45%, #08080a 70%, #000000 100%);
     box-shadow: 
         0 15px 40px rgba(0, 0, 0, 0.8),
         inset 0 0 0 2px rgba(255, 255, 255, 0.08),
         inset 0 0 10px rgba(0, 0, 0, 0.9);
-    top: 20px;
-    left: 20px;
+    top: 15px;
+    left: 15px;
     z-index: 1;
-    transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
     transform-origin: center center;
     overflow: hidden;
 }
@@ -670,17 +671,18 @@ html, body {
 /* Album Cover Sleeve Jacket */
 .album-sleeve {
     position: relative;
-    width: 380px;
-    height: 380px;
+    width: 370px;
+    height: 370px;
     border-radius: var(--radius-md);
     overflow: hidden;
-    z-index: 2;
+    z-index: 3;
     background: #1a1b22;
     box-shadow: 
         -15px 20px 45px rgba(0, 0, 0, 0.7),
         0 0 0 1px rgba(255, 255, 255, 0.1);
     transform: translateZ(20px);
     transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+    flex-shrink: 0;
 }
 
 .album-sleeve:hover {
@@ -1634,28 +1636,52 @@ html, body {
     }
     
     .vinyl-stage {
-        width: 360px;
-        height: 360px;
+        width: 440px;
+        height: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        overflow: visible;
     }
     
     .vinyl-disc {
-        width: 330px;
-        height: 330px;
+        width: 300px;
+        height: 300px;
+        top: 10px;
+        left: 10px;
+        z-index: 1;
+        transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .vinyl-center-label {
+        width: 105px;
+        height: 105px;
     }
     
     .album-sleeve {
-        width: 320px;
-        height: 320px;
+        width: 300px;
+        height: 300px;
+        z-index: 3;
+        flex-shrink: 0;
     }
     
     .vinyl-stage.is-playing .vinyl-disc,
     .vinyl-stage.is-active .vinyl-disc {
-        transform: translateX(120px);
+        transform: translateX(130px) rotate(0deg);
+    }
+
+    .vinyl-stage.is-spinning .vinyl-disc {
+        animation: vinylSpinTablet 5s linear infinite;
+        animation-play-state: running;
+    }
+
+    .vinyl-stage.is-paused .vinyl-disc {
+        animation-play-state: paused;
     }
     
-    @keyframes vinylSpin {
-        from { transform: translateX(120px) rotate(0deg); }
-        to { transform: translateX(120px) rotate(360deg); }
+    @keyframes vinylSpinTablet {
+        from { transform: translateX(130px) rotate(0deg); }
+        to { transform: translateX(130px) rotate(360deg); }
     }
 }
 
@@ -1691,41 +1717,63 @@ html, body {
         display: flex;
         justify-content: center;
         align-items: center;
-        overflow: hidden;
-        padding: 10px 0;
+        overflow: visible;
+        padding: 10px 0 20px 0;
     }
     
     .vinyl-stage {
-        width: 260px;
-        height: 260px;
+        width: 310px;
+        max-width: 88vw;
+        height: 210px;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
         margin: 0 auto;
+        overflow: visible;
     }
     
     .vinyl-disc {
-        width: 235px;
-        height: 235px;
-        top: 12px;
-        left: 12px;
+        width: 200px;
+        height: 200px;
+        top: 5px;
+        left: 5px;
+        position: absolute;
+        z-index: 1;
+        transform: translateX(0px) rotate(0deg);
+        transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     
     .vinyl-center-label {
-        width: 80px;
-        height: 80px;
+        width: 75px;
+        height: 75px;
     }
     
     .album-sleeve {
-        width: 235px;
-        height: 235px;
+        width: 200px;
+        height: 200px;
+        position: relative;
+        z-index: 3;
+        flex-shrink: 0;
     }
     
     .vinyl-stage.is-playing .vinyl-disc,
     .vinyl-stage.is-active .vinyl-disc {
-        transform: translateX(60px);
+        transform: translateX(105px) rotate(0deg);
+    }
+
+    .vinyl-stage.is-spinning .vinyl-disc {
+        animation: vinylSpinMobile 5s linear infinite;
+        animation-play-state: running;
+    }
+
+    .vinyl-stage.is-paused .vinyl-disc {
+        animation-play-state: paused;
     }
     
-    @keyframes vinylSpin {
-        from { transform: translateX(60px) rotate(0deg); }
-        to { transform: translateX(60px) rotate(360deg); }
+    @keyframes vinylSpinMobile {
+        from { transform: translateX(105px) rotate(0deg); }
+        to { transform: translateX(105px) rotate(360deg); }
     }
     
     .mobile-sleeve-play-btn {
