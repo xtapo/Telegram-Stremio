@@ -127,6 +127,10 @@ class XTAPOMusicApp {
 
         // Elements
         this.audio = document.getElementById('mainAudio');
+        if (this.audio) this.audio.preload = 'auto';
+        this.preloaderAudio = new Audio();
+        this.preloaderAudio.preload = 'auto';
+        this._preloadedTrackUrl = null;
         this.albumTitle = document.getElementById('albumTitle');
         this.artistName = document.getElementById('artistName');
         this.albumYearTag = document.getElementById('albumYearTag');
@@ -382,12 +386,18 @@ class XTAPOMusicApp {
 
         // Calculate total album duration
         let totalSec = 0;
-        album.tracks.forEach(t => {
-            const parts = t.duration.split(':');
-            totalSec += parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        (album.tracks || []).forEach(t => {
+            if (t.duration && typeof t.duration === 'string' && t.duration.includes(':')) {
+                const parts = t.duration.split(':');
+                const m = parseInt(parts[0], 10) || 0;
+                const s = parseInt(parts[1], 10) || 0;
+                totalSec += m * 60 + s;
+            } else if (typeof t.duration === 'number' && !isNaN(t.duration)) {
+                totalSec += t.duration;
+            }
         });
         const mins = Math.floor(totalSec / 60);
-        this.totalDurationLabel.textContent = `${mins} Minutes`;
+        this.totalDurationLabel.textContent = (!isNaN(mins) && mins > 0) ? `${mins} Minutes` : `${(album.tracks || []).length} Songs`;
 
         // Update Covers
         this.albumCoverImg.src = album.coverUrl;
@@ -413,9 +423,10 @@ class XTAPOMusicApp {
         const album = this.currentAlbum;
         this.tracklistEl.innerHTML = '';
 
-        album.tracks.forEach((track, idx) => {
+        (album.tracks || []).forEach((track, idx) => {
             const li = document.createElement('li');
             li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}`;
+            const trackName = track.name || 'Không có tên';
             li.innerHTML = `
                 <div class="track-item-left">
                     <span class="track-number">${idx + 1}</span>
@@ -424,13 +435,13 @@ class XTAPOMusicApp {
                         <div class="eq-bar"></div>
                         <div class="eq-bar"></div>
                     </div>
-                    <span class="track-name" title="${track.name}">${track.name}</span>
+                    <span class="track-name" title="${this.escapeHtml(trackName)}">${this.escapeHtml(trackName)}</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="track-item-right">
                     <button class="track-add-playlist-btn" title="Thêm vào Playlist">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>
                     </button>
-                    <span class="track-duration">${track.duration}</span>
+                    <span class="track-duration">${track.duration || '--:--'}</span>
                 </div>
             `;
 
@@ -485,6 +496,7 @@ class XTAPOMusicApp {
 
         // Set Audio Source
         this.stopAudioSynth();
+        this._preloadedTrackUrl = null;
         if (track.previewUrl) {
             this.audio.src = track.previewUrl;
             this.audio.load();
@@ -494,6 +506,28 @@ class XTAPOMusicApp {
             this.play();
         } else {
             this.pauseVisuals();
+        }
+
+        // Tự động nạp trước (preload) bài hát kế tiếp sau 1.2s
+        setTimeout(() => this.preloadNextTrack(), 1200);
+    }
+
+    preloadNextTrack() {
+        if (!this.currentAlbum || !this.currentAlbum.tracks || this.currentAlbum.tracks.length <= 1) return;
+        let nextIdx;
+        if (this.isShuffle) {
+            nextIdx = (this.currentTrackIndex + 1) % this.currentAlbum.tracks.length;
+        } else {
+            nextIdx = (this.currentTrackIndex + 1) % this.currentAlbum.tracks.length;
+        }
+        const nextTrack = this.currentAlbum.tracks[nextIdx];
+        if (nextTrack && nextTrack.previewUrl && nextTrack.previewUrl !== this._preloadedTrackUrl) {
+            this._preloadedTrackUrl = nextTrack.previewUrl;
+            if (this.preloaderAudio) {
+                this.preloaderAudio.src = nextTrack.previewUrl;
+                this.preloaderAudio.load();
+                console.log(`[Music Preloader] Đang tải ngầm bài kế tiếp: ${nextTrack.name}`);
+            }
         }
     }
 
@@ -786,13 +820,28 @@ class XTAPOMusicApp {
     // --- Visualizer Waveform Animation ---
     setupVisualizer() {
         const ctx = this.canvasCtx;
-        const width = this.canvas.width;
-        const height = this.canvas.height;
         const numBars = 32;
-        const barWidth = width / numBars - 2;
+
+        const resizeCanvas = () => {
+            if (this.canvas) {
+                const rect = this.canvas.getBoundingClientRect();
+                const width = Math.floor(rect.width) || 300;
+                const height = Math.floor(rect.height) || 36;
+                if (this.canvas.width !== width) this.canvas.width = width;
+                if (this.canvas.height !== height) this.canvas.height = height;
+            }
+        };
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
         const draw = () => {
+            const width = this.canvas.width || 300;
+            const height = this.canvas.height || 36;
             ctx.clearRect(0, 0, width, height);
+
+            const gap = 2;
+            const barWidth = Math.max(2, (width - (numBars - 1) * gap) / numBars);
 
             for (let i = 0; i < numBars; i++) {
                 let barHeight = 4;
@@ -802,7 +851,7 @@ class XTAPOMusicApp {
                     barHeight = Math.max(4, Math.abs(noise) * (height - 6) + Math.random() * 6);
                 }
 
-                const x = i * (barWidth + 2);
+                const x = i * (barWidth + gap);
                 const y = height - barHeight;
 
                 const grad = ctx.createLinearGradient(0, height, 0, 0);

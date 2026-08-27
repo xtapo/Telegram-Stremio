@@ -20,7 +20,7 @@ from Backend.helper.custom_dl import ByteStreamer
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, Userbot, USERBOT_CLIENT_INDEX, multi_clients, work_loads, client_dc_map, client_failures
-from Backend.fastapi.routes.stream_routes import select_best_client, _get_streamer, parse_range_header, _resolve_filename_mime, _build_stream_headers
+from Backend.fastapi.routes.stream_routes import select_best_client, _get_streamer, parse_range_header, _resolve_filename_mime, _build_stream_headers, get_parallel_prefetch
 from Backend.fastapi.security.credentials import get_current_user, require_auth
 from Backend.fastapi.routes.template_routes import _base_context, templates
 
@@ -28,9 +28,43 @@ router = APIRouter(tags=["Music Player & Telegram Storage"])
 
 MUSIC_DIR = os.path.abspath("Music")
 LIBRARY_CACHE_FILE = os.path.join(MUSIC_DIR, "telegram_library.json")
+AUDIO_CACHE_DIR = os.path.join(MUSIC_DIR, "cache")
+os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
+MAX_AUDIO_CACHE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB cache giới hạn tự dọn dẹp
 
 _cover_cache: Dict[str, tuple] = {}
 _COVER_CACHE_TTL = 86400
+
+def _clean_audio_cache():
+    try:
+        if not os.path.exists(AUDIO_CACHE_DIR):
+            return
+        files = []
+        total_size = 0
+        for fname in os.listdir(AUDIO_CACHE_DIR):
+            fpath = os.path.join(AUDIO_CACHE_DIR, fname)
+            if os.path.isfile(fpath):
+                stat = os.stat(fpath)
+                files.append((fpath, stat.st_atime, stat.st_size))
+                total_size += stat.st_size
+        
+        if total_size > MAX_AUDIO_CACHE_SIZE:
+            files.sort(key=lambda x: x[1])
+            target_size = int(MAX_AUDIO_CACHE_SIZE * 0.75)
+            for fpath, _, fsize in files:
+                if total_size <= target_size:
+                    break
+                try:
+                    os.remove(fpath)
+                    total_size -= fsize
+                    if fpath.endswith(".dat"):
+                        meta_f = fpath[:-4] + ".json"
+                        if os.path.exists(meta_f):
+                            os.remove(meta_f)
+                except Exception:
+                    pass
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC CACHE] Lỗi dọn dẹp audio cache: {e}")
 
 # Color palette presets for dynamic vinyl glow
 GLOW_PRESETS = [
@@ -1367,11 +1401,117 @@ def _fix_audio_mime(file_name: str, raw_mime: str) -> tuple[str, str]:
     return file_name, mime_type
 
 
-# ── 4. Stream trực tiếp Audio từ Telegram với HTTP Range 206 ──────────────────
+async def _file_range_gen(file_path: str, start: int, length: int, chunk_size: int = 128 * 1024):
+    try:
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                read_len = min(chunk_size, remaining)
+                chunk = f.read(read_len)
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC CACHE] Lỗi đọc file cache {file_path}: {e}")
+
+
+async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mime_type: str, total_size: int, start_offset: int):
+    tmp_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.tmp")
+    dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
+    json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")
+    
+    can_cache = (start_offset == 0)
+    tmp_file = None
+    bytes_written = 0
+    
+    if can_cache:
+        try:
+            tmp_file = open(tmp_path, "wb")
+        except Exception:
+            tmp_file = None
+            can_cache = False
+
+    try:
+        async for chunk in body_gen:
+            if can_cache and tmp_file:
+                try:
+                    tmp_file.write(chunk)
+                    bytes_written += len(chunk)
+                except Exception:
+                    can_cache = False
+                    if tmp_file:
+                        try:
+                            tmp_file.close()
+                        except Exception:
+                            pass
+                        tmp_file = None
+            yield chunk
+    finally:
+        if tmp_file:
+            try:
+                tmp_file.close()
+            except Exception:
+                pass
+            if can_cache and bytes_written == total_size:
+                try:
+                    meta = {
+                        "file_name": file_name,
+                        "mime_type": mime_type,
+                        "file_size": total_size,
+                        "cached_at": time.time()
+                    }
+                    with open(json_path, "w", encoding="utf-8") as jf:
+                        json.dump(meta, jf)
+                    if os.path.exists(dat_path):
+                        os.remove(dat_path)
+                    os.replace(tmp_path, dat_path)
+                    LOGGER.info(f"[MUSIC CACHE] Đã cache thành công bài hát {cache_key} ({_format_size(total_size)})")
+                    asyncio.create_task(asyncio.to_thread(_clean_audio_cache))
+                except Exception as e:
+                    LOGGER.warning(f"[MUSIC CACHE] Lỗi khi hoàn tất lưu cache: {e}")
+            else:
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+
+
+# ── 4. Stream trực tiếp Audio từ Telegram với HTTP Range 206 + Multi-Bot + Local Cache ──────────────────
 @router.get("/api/music/stream/{chat_id}/{msg_id}")
 @router.head("/api/music/stream/{chat_id}/{msg_id}")
 async def stream_music_track(request: Request, chat_id: int, msg_id: int):
-    # Ưu tiên Userbot nếu đang kết nối (để đọc được mọi kênh private/public)
+    cache_key = f"{abs(chat_id)}_{msg_id}"
+    dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
+    json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")
+
+    # 1. Kiểm tra cache cục bộ (Cache Hit -> Phục vụ tức thì 0ms, không tốn băng thông Telegram)
+    if os.path.exists(dat_path) and os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as jf:
+                cache_meta = json.load(jf)
+            cached_size = cache_meta.get("file_size", 0)
+            cached_name = cache_meta.get("file_name", f"track_{msg_id}.mp3")
+            cached_mime = cache_meta.get("mime_type", "audio/mpeg")
+            
+            if cached_size > 0 and os.path.getsize(dat_path) == cached_size:
+                try:
+                    os.utime(dat_path, None)
+                except Exception:
+                    pass
+                range_header = request.headers.get("Range", "")
+                start, end = parse_range_header(range_header, cached_size)
+                req_length = end - start + 1
+                headers, status = _build_stream_headers(cached_mime, cached_name, req_length, range_header, start, end, cached_size)
+                if request.method == "HEAD":
+                    return PlainResponse(status_code=status, headers=headers)
+                return StreamingResponse(_file_range_gen(dat_path, start, req_length), headers=headers, status_code=status, media_type=cached_mime)
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC CACHE] Đọc cache thất bại ({e}), fallback sang tải Telegram.")
+
+    # 2. Cache Miss: Tìm client Telegram phù hợp
     streamer = None
     client_idx = 0
     tg_client = None
@@ -1449,6 +1589,29 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         "token": "music-player",
     }
 
+    # Tính toán số lượng worker song song và prefetch dựa trên số lượng bot clients
+    token_count = len(multi_clients) - 1 if multi_clients else 0
+    parallelism, prefetch_count = get_parallel_prefetch(token_count)
+    parallelism = max(1, parallelism)
+    prefetch_count = max(3, prefetch_count)  # Đảm bảo tối thiểu 3 chunks prefetch để nhạc không bị vấp
+
+    extra_clients_for_stream = []
+    if parallelism > 1 and len(multi_clients) > 1:
+        other_indices = sorted((i for i in multi_clients if i != client_idx), key=lambda i: work_loads.get(i, 0))
+
+        async def _get_extra_file_id(ec_idx: int):
+            ec_client = multi_clients[ec_idx]
+            ec_streamer = _get_streamer(ec_client, ec_idx)
+            try:
+                ec_fid = await ec_streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
+                return (ec_idx, ec_streamer, ec_fid)
+            except Exception as e:
+                LOGGER.warning("Extra client %s file_id fetch failed: %s", ec_idx, e)
+                return None
+
+        results = await asyncio.gather(*[_get_extra_file_id(i) for i in other_indices[:parallelism - 1]])
+        extra_clients_for_stream = [r for r in results if r is not None]
+
     body_gen = None
     last_flood_wait = None
     last_err = None
@@ -1466,7 +1629,6 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
 
     for c_idx, cl, strm in candidates_to_stream:
         try:
-            # Refresh file_id for specific client if needed
             c_file_id = file_id
             if cl != tg_client:
                 try:
@@ -1482,14 +1644,14 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
                 last_part_cut=last_part_cut,
                 part_count=part_count,
                 chunk_size=chunk_size,
-                prefetch=2,
+                prefetch=prefetch_count,
                 stream_id=stream_id,
                 meta=meta,
-                parallelism=1,
+                parallelism=parallelism,
                 request=request,
                 chat_id=chat_id,
                 message_id=msg_id,
-                extra_clients=[],
+                extra_clients=extra_clients_for_stream,
             )
             if body_gen:
                 file_id = c_file_id
@@ -1516,7 +1678,10 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
 
     if request.method == "HEAD":
         return PlainResponse(status_code=status, headers=headers)
-    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
+
+    # Wrap body_gen với cache writer nếu đang tải từ đầu
+    cached_stream = _caching_stream_generator(body_gen, cache_key, file_name, mime_type, file_size, start)
+    return StreamingResponse(cached_stream, headers=headers, status_code=status, media_type=mime_type)
 
 
 DEFAULT_COVER_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
