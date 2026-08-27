@@ -237,17 +237,10 @@ async def scan_telegram_channel(payload: dict):
             if not is_audio:
                 continue
 
-            title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
-            if not title:
-                title = os.path.splitext(file_name)[0] or getattr(msg, "caption", "") or f"Track {msg.id}"
-            
-            artist = getattr(msg.audio, "performer", None) if getattr(msg, "audio", None) else None
-            if not artist:
-                artist = "Unknown Artist"
-
-            album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
-            if not album:
-                album = chat_title or "Telegram Music Collection"
+            caption_text = getattr(msg, "caption", "") or ""
+            raw_title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
+            raw_artist = getattr(msg.audio, "performer", None) if getattr(msg, "audio", None) else None
+            raw_album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
 
             duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
             file_size_bytes = getattr(media, "file_size", 0) or 0
@@ -257,23 +250,32 @@ async def scan_telegram_channel(payload: dict):
             if not ext:
                 ext = mime_type.split("/")[-1].upper() if "/" in mime_type else "AUDIO"
             
-            audio_format = f"{ext} Hi-Res" if ext in ["FLAC", "WAV", "ALAC", "DSF"] else f"{ext} Master"
+            audio_format = f"{ext} Hi-Res" if ext in ["FLAC", "WAV", "ALAC", "DSF", "APE"] else f"{ext} Master"
 
             has_cover = bool(getattr(media, "thumbs", None))
             fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
 
-            # Tự động quét siêu dữ liệu (Metadata Scraper) từ Apple Music / Deezer API (tương tự TMDB cho phim)
+            # Tự động quét siêu dữ liệu chuẩn xác (Apple Music / Deezer API với Fuzzy Validation)
             from Backend.helper.metadata.music_scraper import fetch_music_metadata
-            scraped_meta = await fetch_music_metadata(raw_title=title, raw_artist=artist, file_name=file_name)
+            scraped_meta = await fetch_music_metadata(
+                raw_title=raw_title or "",
+                raw_artist=raw_artist or "",
+                raw_album=raw_album or "",
+                file_name=file_name or "",
+                caption=caption_text or ""
+            )
             
             if scraped_meta:
-                title = scraped_meta.get("title") or title
-                artist = scraped_meta.get("artist") or artist
-                album = scraped_meta.get("album") or album
+                title = scraped_meta.get("title") or raw_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
+                artist = scraped_meta.get("artist") or raw_artist or "Unknown Artist"
+                album = scraped_meta.get("album") or raw_album or chat_title or "Telegram Music Collection"
                 cover_url = scraped_meta.get("cover_url") or fallback_cover
                 album_year = scraped_meta.get("year", "2026")
                 album_publisher = scraped_meta.get("publisher", f"Telegram: {chat_title}")
             else:
+                title = raw_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
+                artist = raw_artist or "Unknown Artist"
+                album = raw_album or chat_title or "Telegram Music Collection"
                 cover_url = fallback_cover
                 album_year = "2026"
                 album_publisher = f"Telegram: {chat_title}"
