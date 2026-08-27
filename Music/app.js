@@ -911,7 +911,7 @@ class XTAPOMusicApp {
             row.innerHTML = `
                 <div class="file-info">
                     <div class="file-title">${idx + 1}. ${track.name}</div>
-                    <div class="file-meta">${track.artist || album.artist} • ${track.size || 'Hi-Res'}</div>
+                    <div class="file-meta">${track.artist || album.artist} • ${track.format || album.format || 'Lossless'} • ${track.duration || ''}</div>
                 </div>
                 <div class="file-actions">
                     <button class="file-action-btn download-btn">Phát Ngay</button>

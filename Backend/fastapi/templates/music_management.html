@@ -159,7 +159,10 @@
     <div class="flex items-center gap-3 min-w-0">
         <img id="player-cover" src="" class="w-12 h-12 rounded-xl object-cover border border-hairline shrink-0" alt="Cover">
         <div class="min-w-0">
-            <h4 id="player-title" class="text-sm font-bold text-text truncate">Title</h4>
+            <div class="flex items-center gap-2">
+                <h4 id="player-title" class="text-sm font-bold text-text truncate">Title</h4>
+                <div id="player-format-badge" class="shrink-0"></div>
+            </div>
             <p id="player-artist" class="text-xs text-text-secondary truncate">Artist</p>
         </div>
     </div>
@@ -438,6 +441,7 @@
                         <th class="py-2.5 px-2 w-8 text-center">#</th>
                         <th class="py-2.5 px-3">Tên Bài Hát</th>
                         <th class="py-2.5 px-3">Ca Sĩ</th>
+                        <th class="py-2.5 px-3">Chất Lượng</th>
                         <th class="py-2.5 px-3">Thời Lượng</th>
                         <th class="py-2.5 px-3">Dung Lượng</th>
                         <th class="py-2.5 px-3 text-right">Thao Tác</th>
@@ -572,6 +576,23 @@ let globalAlbums = [];
 let currentActiveTab = 'albums';
 let currentViewAlbumId = null;
 
+// Hàm định dạng huy hiệu chất lượng âm thanh chuyên nghiệp
+function formatQualityBadge(formatStr, qualityTier = '') {
+    const fmt = formatStr || 'Lossless';
+    const lower = fmt.toLowerCase();
+    
+    if (qualityTier === 'hi-res' || lower.includes('hi-res') || lower.includes('24-bit') || lower.includes('32-bit') || lower.includes('dsd')) {
+        return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-bolt text-[9px] text-amber-400"></i> ${fmt}</span>`;
+    }
+    if (qualityTier === 'lossless' || lower.includes('lossless') || lower.includes('flac') || lower.includes('alac') || lower.includes('wav') || lower.includes('16-bit')) {
+        return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-gem text-[9px] text-cyan-400"></i> ${fmt}</span>`;
+    }
+    if (qualityTier === 'hq' || lower.includes('320') || lower.includes('256')) {
+        return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-music text-[9px] text-purple-400"></i> ${fmt}</span>`;
+    }
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/15 text-slate-300 border border-slate-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-headphones text-[9px] text-slate-400"></i> ${fmt}</span>`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadMusicData();
 });
@@ -694,9 +715,9 @@ function renderAlbumsGrid(query = '') {
                 <div class="relative w-full aspect-square rounded-xl overflow-hidden mb-3 bg-black/20">
                     <img src="${album.coverUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
                          alt="${album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
-                    <span class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-bold text-amber-300 border border-amber-500/30">
-                        ${album.format || 'Hi-Res'}
-                    </span>
+                    <div class="absolute top-2 right-2 max-w-[85%] truncate">
+                        ${formatQualityBadge(album.format, album.qualityTier)}
+                    </div>
                     <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
                         <span class="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
                             <i class="fa-solid fa-list-ul"></i> Xem Bài Hát
@@ -739,7 +760,7 @@ function renderTracksTable(query = '') {
     globalAlbums.forEach(a => {
         if (a.tracks) {
             a.tracks.forEach(t => {
-                allTracks.push({ ...t, albumName: a.title, albumCover: a.coverUrl });
+                allTracks.push({ ...t, albumName: a.title, albumCover: a.coverUrl, albumFormat: a.format, albumQualityTier: a.qualityTier });
             });
         }
     });
@@ -772,12 +793,12 @@ function renderTracksTable(query = '') {
             </td>
             <td class="py-3 px-4 text-text-secondary text-xs font-semibold">${track.artist || 'Unknown'}</td>
             <td class="py-3 px-4 text-text-secondary text-xs truncate max-w-xs">${track.albumName || ''}</td>
-            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">${track.format || 'Hi-Res'}</span></td>
+            <td class="py-3 px-4">${formatQualityBadge(track.format || track.albumFormat, track.qualityTier || track.albumQualityTier)}</td>
             <td class="py-3 px-4 text-text-secondary text-xs">${track.duration || '--:--'}</td>
             <td class="py-3 px-4 text-text-secondary text-xs">${track.size || ''}</td>
             <td class="py-3 px-4 text-right">
                 <div class="inline-flex items-center gap-1.5">
-                    <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || '').replace(/'/g, "\\'")}', '${track.coverUrl || track.albumCover}')" 
+                    <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || '').replace(/'/g, "\\'")}', '${track.coverUrl || track.albumCover}', '${track.format || track.albumFormat}', '${track.qualityTier || track.albumQualityTier}')" 
                             class="w-7 h-7 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
                         <i class="fa-solid fa-play text-[10px]"></i>
                     </button>
@@ -818,13 +839,18 @@ function switchTab(tab) {
 }
 
 // Mini Player Preview
-function previewTrack(streamUrl, title, artist, cover) {
+function previewTrack(streamUrl, title, artist, cover, format = '', qualityTier = '') {
     const bar = document.getElementById('mini-player-bar');
     const audio = document.getElementById('admin-audio');
     
     document.getElementById('player-title').textContent = title;
     document.getElementById('player-artist').textContent = artist;
     document.getElementById('player-cover').src = cover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
+    
+    const badgeEl = document.getElementById('player-format-badge');
+    if (badgeEl) {
+        badgeEl.innerHTML = format ? formatQualityBadge(format, qualityTier) : '';
+    }
     
     audio.src = streamUrl;
     audio.play();
@@ -843,7 +869,7 @@ function playTrackFromAlbum(albumId, trackIndex) {
     const album = globalAlbums.find(a => a.id === albumId);
     if (album && album.tracks && album.tracks[trackIndex]) {
         const track = album.tracks[trackIndex];
-        previewTrack(track.previewUrl, track.name, track.artist || album.artist, track.coverUrl || album.coverUrl);
+        previewTrack(track.previewUrl, track.name, track.artist || album.artist, track.coverUrl || album.coverUrl, track.format || album.format, track.qualityTier || album.qualityTier);
     }
 }
 
@@ -863,7 +889,7 @@ function openAlbumTracklistModal(albumId, animate = true) {
     document.getElementById('tracklist-album-cover').src = album.coverUrl || '';
     document.getElementById('tracklist-album-title').textContent = album.title || '';
     document.getElementById('tracklist-album-artist').textContent = album.artist || 'Unknown Artist';
-    document.getElementById('tracklist-album-format').textContent = album.format || 'Hi-Res';
+    document.getElementById('tracklist-album-format').innerHTML = formatQualityBadge(album.format, album.qualityTier);
     document.getElementById('tracklist-album-tracks-count').textContent = `${album.tracks ? album.tracks.length : 0} Bài hát`;
     document.getElementById('tracklist-album-size').textContent = album.totalSize || '';
     document.getElementById('tracklist-album-year').textContent = album.year || '2026';
@@ -877,7 +903,7 @@ function openAlbumTracklistModal(albumId, animate = true) {
     tbody.innerHTML = '';
 
     if (!album.tracks || album.tracks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-text-secondary">Chưa có bài hát nào trong album này.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-text-secondary">Chưa có bài hát nào trong album này.</td></tr>`;
     } else {
         album.tracks.forEach((track, idx) => {
             const tr = document.createElement('tr');
@@ -890,16 +916,17 @@ function openAlbumTracklistModal(albumId, animate = true) {
                 </td>
                 <td class="py-2.5 px-2 text-center font-bold text-text-secondary">${idx + 1}</td>
                 <td class="py-2.5 px-3 font-bold text-text">
-                    <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}')">
+                    <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')">
                         ${track.name}
                     </span>
                 </td>
                 <td class="py-2.5 px-3 text-text-secondary">${track.artist || album.artist}</td>
+                <td class="py-2.5 px-3">${formatQualityBadge(track.format || album.format, track.qualityTier || album.qualityTier)}</td>
                 <td class="py-2.5 px-3 text-text-secondary">${track.duration || '--:--'}</td>
                 <td class="py-2.5 px-3 text-text-secondary">${track.size || ''}</td>
                 <td class="py-2.5 px-3 text-right">
                     <div class="inline-flex items-center gap-1">
-                        <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}')" 
+                        <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')" 
                                 class="w-6 h-6 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
                             <i class="fa-solid fa-play text-[9px]"></i>
                         </button>

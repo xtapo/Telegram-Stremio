@@ -51,6 +51,38 @@ def _format_size(size_bytes: int) -> str:
     return f"{size_bytes:.2f} TB"
 
 
+def _parse_size_str(s: str) -> int:
+    if not s:
+        return 0
+    s = s.strip().upper()
+    try:
+        parts = s.split()
+        if len(parts) >= 2:
+            val = float(parts[0])
+            unit = parts[1]
+            if "GB" in unit: return int(val * 1024 * 1024 * 1024)
+            if "MB" in unit: return int(val * 1024 * 1024)
+            if "KB" in unit: return int(val * 1024)
+            if "B" in unit: return int(val)
+    except Exception:
+        pass
+    return 0
+
+
+def _parse_duration_str(s: str) -> int:
+    if not s or s == "--:--":
+        return 0
+    try:
+        parts = list(map(int, s.strip().split(":")))
+        if len(parts) == 2:
+            return parts[0] * 60 + parts[1]
+        elif len(parts) == 3:
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    except Exception:
+        pass
+    return 0
+
+
 def _format_duration(seconds: int) -> str:
     if not seconds:
         return "--:--"
@@ -59,6 +91,133 @@ def _format_duration(seconds: int) -> str:
     if h > 0:
         return f"{h}:{m:02d}:{s:02d}"
     return f"{m}:{s:02d}"
+
+
+def detect_audio_quality(
+    file_name: str = "",
+    mime_type: str = "",
+    file_size_bytes: int = 0,
+    duration_sec: int = 0,
+    caption_text: str = ""
+) -> tuple[str, str, int]:
+    """
+    Phân tích chính xác chất lượng âm thanh dựa trên:
+    - Kích thước file & thời lượng phát (tính Bitrate thực tế kbps)
+    - Tên file & Caption (nhận diện tags 24bit, 96kHz, 192kHz, DSD, 320k, MQA,...)
+    - Định dạng MIME / Extension (FLAC, WAV, ALAC, DSF, MP3, AAC, OPUS,...)
+    
+    Returns:
+        (format_string, quality_tier, bitrate_kbps)
+        format_string: 'FLAC 24-Bit / 96kHz', 'FLAC Lossless 16-Bit', 'MP3 • 320 kbps', 'DSD64 Hi-Res'
+        quality_tier: 'hi-res' | 'lossless' | 'hq' | 'standard'
+    """
+    ext = os.path.splitext(file_name)[1].lower().replace(".", "").upper() if file_name else ""
+    if not ext:
+        ext = mime_type.split("/")[-1].upper() if "/" in mime_type else "AUDIO"
+    if ext == "MPEG":
+        ext = "MP3"
+    
+    bitrate_kbps = 0
+    if duration_sec > 0 and file_size_bytes > 0:
+        bitrate_kbps = int(round((file_size_bytes * 8) / (duration_sec * 1000)))
+
+    combined = f"{file_name} {caption_text}".lower()
+
+    # Nhận diện Bit Depth (24-bit, 32-bit, 16-bit)
+    bit_depth = None
+    bd_match = re.search(r'\b(24|32|16)\s*[-_ ]?bit\b|\b(24|32|16)b\b', combined)
+    if bd_match:
+        m_str = bd_match.group(0)
+        if "24" in m_str: bit_depth = 24
+        elif "32" in m_str: bit_depth = 32
+        elif "16" in m_str: bit_depth = 16
+
+    # Nhận diện Sample Rate (192kHz, 176.4kHz, 96kHz, 88.2kHz, 48kHz, 44.1kHz)
+    sample_rate = None
+    sr_match = re.search(r'\b(192|176\.4|96|88\.2|48|44\.1)\s*k(?:hz)?\b|\b(192000|96000|88200|48000|44100)\s*hz\b', combined)
+    if sr_match:
+        raw_sr = sr_match.group(1) or sr_match.group(2) or ""
+        if raw_sr in ["192000", "192"]: sample_rate = "192kHz"
+        elif raw_sr in ["96000", "96"]: sample_rate = "96kHz"
+        elif raw_sr in ["88200", "88.2"]: sample_rate = "88.2kHz"
+        elif raw_sr in ["48000", "48"]: sample_rate = "48kHz"
+        elif raw_sr in ["44100", "44.1"]: sample_rate = "44.1kHz"
+        elif raw_sr in ["176.4"]: sample_rate = "176.4kHz"
+
+    # Nhận diện DSD
+    dsd_match = re.search(r'\b(dsd\s*512|dsd\s*256|dsd\s*128|dsd\s*64|dsd)\b', combined)
+    
+    # Nhận diện Bitrate tag MP3/Lossy
+    br_tag_match = re.search(r'\b(320|256|192|128)\s*k(?:bps)?\b', combined)
+    explicit_br = int(br_tag_match.group(1)) if br_tag_match else 0
+
+    # 1. DSD / DSF / DFF
+    if ext in ["DSF", "DFF"] or dsd_match:
+        dsd_tag = dsd_match.group(1).upper().replace(" ", "") if dsd_match else "DSD"
+        return (f"{dsd_tag} Hi-Res DSD", "hi-res", bitrate_kbps)
+
+    # 2. FLAC / WAV / ALAC / APE / AIFF (Lossless & Hi-Res)
+    if ext in ["FLAC", "WAV", "ALAC", "APE", "AIFF"]:
+        if bit_depth and sample_rate:
+            is_hires = (bit_depth >= 24) or (sample_rate in ["48kHz", "88.2kHz", "96kHz", "176.4kHz", "192kHz"])
+            tier = "hi-res" if is_hires else "lossless"
+            label = "Hi-Res" if is_hires else "Lossless"
+            return (f"{ext} {label} {bit_depth}-Bit / {sample_rate}", tier, bitrate_kbps)
+        elif bit_depth in [24, 32]:
+            sr_str = f" / {sample_rate}" if sample_rate else (f" • ~{bitrate_kbps} kbps" if bitrate_kbps else "")
+            return (f"{ext} Hi-Res {bit_depth}-Bit{sr_str}", "hi-res", bitrate_kbps)
+        elif sample_rate in ["88.2kHz", "96kHz", "176.4kHz", "192kHz"]:
+            return (f"{ext} Hi-Res 24-Bit / {sample_rate}", "hi-res", bitrate_kbps)
+        
+        # Dựa trên Bitrate thực tế tính từ kích thước & thời lượng
+        if bitrate_kbps >= 2200:
+            return (f"{ext} Hi-Res 24-Bit (~{bitrate_kbps} kbps)", "hi-res", bitrate_kbps)
+        elif bitrate_kbps >= 1350:
+            return (f"{ext} Hi-Res (~{bitrate_kbps} kbps)", "hi-res", bitrate_kbps)
+        elif bitrate_kbps > 0:
+            return (f"{ext} Lossless 16-Bit (~{bitrate_kbps} kbps)", "lossless", bitrate_kbps)
+        else:
+            return (f"{ext} Lossless", "lossless", bitrate_kbps)
+
+    # 3. MP3
+    if ext == "MP3":
+        effective_br = explicit_br or (bitrate_kbps if bitrate_kbps > 0 else 320)
+        tier = "hq" if effective_br >= 256 else "standard"
+        return (f"MP3 • {effective_br} kbps", tier, effective_br)
+
+    # 4. AAC / M4A
+    if ext in ["AAC", "M4A"]:
+        if "alac" in combined or "lossless" in combined or bitrate_kbps >= 650:
+            tier = "hi-res" if bitrate_kbps >= 1350 else "lossless"
+            label = "Hi-Res" if tier == "hi-res" else "Lossless"
+            return (f"ALAC {label} (~{bitrate_kbps} kbps)" if bitrate_kbps else "Apple Lossless (ALAC)", tier, bitrate_kbps)
+        effective_br = explicit_br or (bitrate_kbps if bitrate_kbps > 0 else 256)
+        tier = "hq" if effective_br >= 256 else "standard"
+        return (f"AAC • {effective_br} kbps", tier, effective_br)
+
+    # 5. OGG / OPUS
+    if ext in ["OGG", "OPUS"]:
+        br_str = f" • {bitrate_kbps} kbps" if bitrate_kbps > 0 else ""
+        tier = "hq" if bitrate_kbps >= 160 else "standard"
+        return (f"{ext}{br_str}", tier, bitrate_kbps)
+
+    # 6. Fallback
+    br_str = f" • {bitrate_kbps} kbps" if bitrate_kbps > 0 else ""
+    tier = "hi-res" if bitrate_kbps >= 1350 else ("lossless" if bitrate_kbps >= 600 else "standard")
+    return (f"{ext}{br_str}", tier, bitrate_kbps)
+
+
+def detect_audio_quality_from_track_info(track: dict) -> tuple[str, str, int]:
+    name = track.get("name") or track.get("title") or track.get("file_name") or ""
+    size_bytes = track.get("size_bytes") or _parse_size_str(track.get("size", ""))
+    duration_sec = track.get("duration_sec") or _parse_duration_str(track.get("duration", ""))
+    return detect_audio_quality(
+        file_name=name,
+        mime_type="",
+        file_size_bytes=size_bytes,
+        duration_sec=duration_sec,
+        caption_text=""
+    )
 
 
 def _get_active_client():
@@ -117,7 +276,36 @@ async def get_music_albums():
         try:
             with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return JSONResponse(content={"status": "success", "source": "telegram", "albums": data})
+            
+            # Tự động chuẩn hoá & tính toán format chính xác cho dữ liệu cũ (nếu có)
+            changed = False
+            for alb in data:
+                track_formats = []
+                for t in alb.get("tracks", []):
+                    current_fmt = t.get("format", "")
+                    if not current_fmt or current_fmt in ["FLAC Hi-Res", "MP3 Master", "Hi-Res", "AUDIO Hi-Res", "AUDIO Master"]:
+                        fmt, tier, br = detect_audio_quality_from_track_info(t)
+                        t["format"] = fmt
+                        t["qualityTier"] = tier
+                        t["bitrate"] = br
+                        changed = True
+                    track_formats.append(t.get("format", ""))
+                
+                # Cập nhật format tốt nhất cho album
+                if track_formats and (not alb.get("format") or alb.get("format") in ["FLAC Hi-Res", "MP3 Master", "Hi-Res"]):
+                    # Ưu tiên format có Hi-Res hoặc format của bài đầu tiên
+                    hires_fmt = next((f for f in track_formats if "Hi-Res" in f or "24-Bit" in f or "DSD" in f), track_formats[0])
+                    alb["format"] = hires_fmt
+                    changed = True
+
+            if changed:
+                try:
+                    with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+
+            return JSONResponse(content={"status": "success", "source": "telegram", "albums": data})
         except Exception as e:
             LOGGER.error(f"[MUSIC] Failed to load library cache: {e}")
 
@@ -286,12 +474,14 @@ async def scan_telegram_channel(payload: dict):
             duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
             file_size_bytes = getattr(media, "file_size", 0) or 0
 
-            # Đoán format & bitrate
-            ext = os.path.splitext(file_name)[1].lower().replace(".", "").upper()
-            if not ext:
-                ext = mime_type.split("/")[-1].upper() if "/" in mime_type else "AUDIO"
-            
-            audio_format = f"{ext} Hi-Res" if ext in ["FLAC", "WAV", "ALAC", "DSF", "APE"] else f"{ext} Master"
+            # Phân tích chính xác định dạng, chất lượng âm thanh (Lossless, Hi-Res 24-bit, MP3 320k, DSD...)
+            audio_format, quality_tier, calculated_bitrate = detect_audio_quality(
+                file_name=file_name,
+                mime_type=mime_type,
+                file_size_bytes=file_size_bytes,
+                duration_sec=duration_sec,
+                caption_text=caption_text
+            )
 
             has_cover = bool(getattr(media, "thumbs", None))
             fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
@@ -336,6 +526,8 @@ async def scan_telegram_channel(payload: dict):
                 "size": _format_size(file_size_bytes),
                 "size_bytes": file_size_bytes,
                 "format": audio_format,
+                "qualityTier": quality_tier,
+                "bitrate": calculated_bitrate,
                 "file_name": file_name,
                 "cover_url": cover_url,
                 "year": album_year,
@@ -365,6 +557,7 @@ async def scan_telegram_channel(payload: dict):
                 "artist": track["artist"].upper(),
                 "year": track.get("year") or time.strftime("%Y"),
                 "format": track["format"],
+                "qualityTier": track["qualityTier"],
                 "totalSize": "0 MB",
                 "publisher": track.get("publisher") or f"Telegram: {chat_title}",
                 "coverUrl": track["cover_url"],
@@ -380,17 +573,31 @@ async def scan_telegram_channel(payload: dict):
             "artist": track["artist"],
             "duration": track["duration"],
             "size": track["size"],
+            "format": track["format"],
+            "qualityTier": track["qualityTier"],
+            "bitrate": track["bitrate"],
             "previewUrl": track["stream_url"],
             "chatId": track["chat_id"],
             "msgId": track["msg_id"],
             "coverUrl": track["cover_url"]
         })
 
-    # Tính tổng dung lượng cho từng album
+    # Tính tổng dung lượng & cập nhật format tốt nhất cho từng album
     album_list = list(albums_dict.values())
     for alb in album_list:
-        total_b = sum(t.get("size_bytes", 0) for t in found_tracks if t["album"].upper() == alb["title"])
+        alb_tracks = [t for t in found_tracks if t["album"].upper() == alb["title"]]
+        total_b = sum(t.get("size_bytes", 0) for t in alb_tracks)
         alb["totalSize"] = _format_size(total_b)
+        
+        # Chọn format tối ưu cho Album
+        hires_track = next((t for t in alb_tracks if t.get("qualityTier") == "hi-res"), None)
+        if hires_track:
+            alb["format"] = hires_track["format"]
+            alb["qualityTier"] = "hi-res"
+        elif alb_tracks:
+            alb["format"] = alb_tracks[0]["format"]
+            alb["qualityTier"] = alb_tracks[0].get("qualityTier", "lossless")
+
         # Lấy ảnh bài hát đầu tiên làm ảnh đại diện nếu có
         for t in alb["tracks"]:
             if "/api/music/cover/" in t.get("coverUrl", ""):
