@@ -292,10 +292,10 @@
             <!-- Online Cover Search Results Container -->
             <div id="track-cover-search-results" class="hidden p-3 rounded-2xl bg-surface border border-hairline">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp từ Apple Music / Deezer:</span>
+                    <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp (Bấm để xem to / Chọn):</span>
                     <button onclick="document.getElementById('track-cover-search-results').classList.add('hidden')" class="text-xs text-text-secondary hover:text-text"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <div id="track-cover-grid" class="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto pr-1"></div>
+                <div id="track-cover-grid" class="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1"></div>
             </div>
         </div>
 
@@ -318,7 +318,7 @@
                 </div>
                 <div>
                     <h3 class="text-lg font-extrabold text-text">Sửa Thông Tin Album</h3>
-                    <p class="text-xs text-text-secondary">Chỉnh sửa tên Album, ca sĩ & ảnh bìa</p>
+                    <p class="text-xs text-text-secondary">Chỉnh sửa tên Album, ca sĩ, năm & ảnh bìa</p>
                 </div>
             </div>
             <button onclick="closeEditAlbumModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
@@ -361,10 +361,10 @@
             <!-- Online Cover Search Results Container -->
             <div id="album-cover-search-results" class="hidden p-3 rounded-2xl bg-surface border border-hairline">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp từ Apple Music / Deezer:</span>
+                    <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa phù hợp (Bấm để xem to / Chọn):</span>
                     <button onclick="document.getElementById('album-cover-search-results').classList.add('hidden')" class="text-xs text-text-secondary hover:text-text"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <div id="album-cover-grid" class="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto pr-1"></div>
+                <div id="album-cover-grid" class="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1"></div>
             </div>
         </div>
 
@@ -426,9 +426,7 @@
                         <th class="py-2.5 px-3 text-right">Thao Tác</th>
                     </tr>
                 </thead>
-                <tbody id="tracklist-modal-body" class="divide-y divide-hairline">
-                    <!-- Tracks in this album injected by JS -->
-                </tbody>
+                <tbody id="tracklist-modal-body" class="divide-y divide-hairline"></tbody>
             </table>
         </div>
 
@@ -436,6 +434,40 @@
         <div class="pt-3 mt-3 border-t border-hairline flex items-center justify-between text-xs text-text-secondary">
             <span id="tracklist-footer-info">Tổng cộng 0 bài hát</span>
             <button onclick="closeAlbumTracklistModal()" class="px-4 py-1.5 rounded-xl bg-surface hover:bg-surface-2 text-text font-bold transition">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 5: Xem To Ảnh Bìa (Cover Art Lightbox Modal) -->
+<div id="cover-lightbox-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all text-center">
+        <div class="flex items-center justify-between pb-3 border-b border-hairline mb-4">
+            <h4 class="text-sm font-extrabold text-text flex items-center gap-2">
+                <i class="fa-solid fa-expand text-primary"></i> Chi Tiết Ảnh Bìa Ultra HD
+            </h4>
+            <button onclick="closeCoverLightbox()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="relative w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl border border-hairline mb-4 bg-black/30">
+            <img id="lightbox-cover-img" src="" class="w-full h-full object-cover" alt="Large Cover">
+        </div>
+
+        <div class="mb-4">
+            <h3 id="lightbox-cover-title" class="text-base font-bold text-text truncate">Tên Album</h3>
+            <p id="lightbox-cover-artist" class="text-xs font-semibold text-text-secondary truncate mt-0.5">Ca Sĩ</p>
+            <div class="flex items-center justify-center gap-2 text-xs text-text-secondary mt-2">
+                <span id="lightbox-cover-year" class="px-2.5 py-0.5 rounded-full bg-primary/15 text-primary font-bold">Năm: 2026</span>
+                <span id="lightbox-cover-source" class="px-2.5 py-0.5 rounded-full bg-surface border border-hairline text-text font-semibold">Apple Music</span>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-center gap-3 pt-3 border-t border-hairline">
+            <button onclick="closeCoverLightbox()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Đóng</button>
+            <button id="lightbox-select-btn" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-1.5">
+                <i class="fa-solid fa-check"></i> Chọn Ảnh Này & Tự Điền Năm
+            </button>
         </div>
     </div>
 </div>
@@ -466,7 +498,6 @@ async function loadMusicData(showToastAlert = false) {
         renderStats();
         renderCurrentView();
 
-        // If Tracklist modal is open, refresh it
         if (currentViewAlbumId) {
             openAlbumTracklistModal(currentViewAlbumId, false);
         }
@@ -564,7 +595,6 @@ function renderAlbumsGrid(query = '') {
         card.className = 'glass-panel rounded-2xl p-4 flex flex-col justify-between hover:border-primary/50 transition group';
         
         card.innerHTML = `
-            <!-- Clickable top part to open Album Tracklist -->
             <div class="cursor-pointer" onclick="openAlbumTracklistModal('${album.id}')">
                 <div class="relative w-full aspect-square rounded-xl overflow-hidden mb-3 bg-black/20">
                     <img src="${album.coverUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
@@ -586,7 +616,6 @@ function renderAlbumsGrid(query = '') {
                 </div>
             </div>
 
-            <!-- Action buttons -->
             <div class="flex items-center gap-1.5 mt-4 pt-3 border-t border-hairline">
                 <button onclick="playTrackFromAlbum('${album.id}', 0)" class="flex-1 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center justify-center gap-1">
                     <i class="fa-solid fa-play text-[10px]"></i> Phát
@@ -1020,14 +1049,17 @@ async function searchOnlineCovers(type) {
             grid.innerHTML = '';
             data.covers.forEach(c => {
                 const item = document.createElement('div');
-                item.className = 'cursor-pointer group relative rounded-xl overflow-hidden aspect-square border border-hairline hover:border-primary transition transform hover:scale-105 bg-black/40';
-                item.title = `${c.artist} - ${c.title} (${c.source})`;
-                item.onclick = () => selectCoverUrl(type, c.cover_url);
+                item.className = 'group relative rounded-xl overflow-hidden aspect-square border border-hairline hover:border-primary transition transform hover:scale-105 bg-black/40 shadow';
 
                 item.innerHTML = `
-                    <img src="${c.preview_url || c.cover_url}" class="w-full h-full object-cover" alt="Cover">
-                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center p-1 text-center">
-                        <span class="text-[9px] font-bold text-white leading-tight">${c.artist || 'Select'}</span>
+                    <img src="${c.preview_url || c.cover_url}" class="w-full h-full object-cover cursor-pointer" alt="Cover">
+                    <div class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center p-1 gap-1 text-center">
+                        <button onclick='openCoverLightbox("${type}", ${JSON.stringify(c).replace(/'/g, "&apos;")})' class="w-7 h-7 rounded-full bg-white/20 hover:bg-white text-white hover:text-black flex items-center justify-center transition" title="Xem To">
+                            <i class="fa-solid fa-expand text-[10px]"></i>
+                        </button>
+                        <button onclick='selectCoverObj("${type}", ${JSON.stringify(c).replace(/'/g, "&apos;")})' class="px-2 py-0.5 rounded-md bg-primary text-white text-[9px] font-bold shadow hover:brightness-110">
+                            Chọn
+                        </button>
                     </div>
                 `;
                 grid.appendChild(item);
@@ -1040,7 +1072,42 @@ async function searchOnlineCovers(type) {
     }
 }
 
-function selectCoverUrl(type, coverUrl) {
+// Lightbox modal functions
+let currentLightboxCover = null;
+let currentLightboxType = null;
+
+function openCoverLightbox(type, coverObj) {
+    currentLightboxType = type;
+    currentLightboxCover = coverObj;
+
+    document.getElementById('lightbox-cover-img').src = coverObj.cover_url || coverObj.preview_url || '';
+    document.getElementById('lightbox-cover-title').textContent = coverObj.title || 'Album';
+    document.getElementById('lightbox-cover-artist').textContent = coverObj.artist || 'Unknown Artist';
+    document.getElementById('lightbox-cover-year').textContent = coverObj.year ? `Năm: ${coverObj.year}` : 'Chưa rõ năm';
+    document.getElementById('lightbox-cover-source').textContent = coverObj.source || 'Online';
+
+    document.getElementById('lightbox-select-btn').onclick = () => {
+        selectCoverObj(currentLightboxType, currentLightboxCover);
+        closeCoverLightbox();
+    };
+
+    const modal = document.getElementById('cover-lightbox-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeCoverLightbox() {
+    currentLightboxCover = null;
+    currentLightboxType = null;
+    const modal = document.getElementById('cover-lightbox-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+function selectCoverObj(type, coverObj) {
+    const coverUrl = coverObj.cover_url || coverObj.preview_url;
+    const year = coverObj.year || '';
+
     if (type === 'track') {
         document.getElementById('edit-track-cover').value = coverUrl;
         document.getElementById('edit-track-cover-preview').src = coverUrl;
@@ -1048,9 +1115,17 @@ function selectCoverUrl(type, coverUrl) {
     } else {
         document.getElementById('edit-album-cover').value = coverUrl;
         document.getElementById('edit-album-cover-preview').src = coverUrl;
+        if (year) {
+            document.getElementById('edit-album-year').value = year;
+        }
         document.getElementById('album-cover-search-results').classList.add('hidden');
     }
-    alertToast('Đã chọn ảnh bìa! Nhớ bấm "Lưu" để cập nhật.');
+
+    if (year) {
+        alertToast(`Đã chọn ảnh bìa và tự động điền năm phát hành: ${year}!`);
+    } else {
+        alertToast('Đã chọn ảnh bìa thành công!');
+    }
 }
 
 // Delete functions

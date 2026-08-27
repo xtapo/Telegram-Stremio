@@ -642,9 +642,12 @@ async def search_music_covers(query: str = Query(..., min_length=1), _: bool = D
                             seen_urls.add(hd_cover)
                             title = item.get("collectionName") or item.get("trackName") or query
                             artist = item.get("artistName", "")
+                            rel_date = item.get("releaseDate", "")
+                            year = rel_date[:4] if len(rel_date) >= 4 else ""
                             covers.append({
                                 "title": title,
                                 "artist": artist,
+                                "year": year,
                                 "cover_url": hd_cover,
                                 "preview_url": raw_art,
                                 "source": "Apple Music"
@@ -664,9 +667,12 @@ async def search_music_covers(query: str = Query(..., min_length=1), _: bool = D
                     if hd_cover and hd_cover not in seen_urls:
                         seen_urls.add(hd_cover)
                         artist_obj = item.get("artist", {})
+                        rel_date = item.get("release_date", "")
+                        year = rel_date[:4] if len(rel_date) >= 4 else ""
                         covers.append({
                             "title": item.get("title", query),
                             "artist": artist_obj.get("name", ""),
+                            "year": year,
                             "cover_url": hd_cover,
                             "preview_url": item.get("cover_medium", hd_cover),
                             "source": "Deezer"
