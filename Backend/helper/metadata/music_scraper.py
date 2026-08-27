@@ -52,6 +52,42 @@ def clean_audio_filename(fn: str) -> str:
     return fn
 
 
+def extract_context_from_text(text: str) -> Tuple[str, str]:
+    """
+    Trích xuất tên Album và Ca Sĩ từ tin nhắn văn bản, caption hoặc tựa đề gần chỗ gửi file nhạc
+    Ví dụ: '💿 Album: Khúc Tình Xưa - Lệ Quyên' hoặc 'Khánh Ly - Gởi Người Một Niềm Vui'
+    """
+    if not text:
+        return "", ""
+    text = text.strip()
+    artist = ""
+    album = ""
+    
+    # 1. Tìm theo nhãn rõ ràng: Ca sĩ / Artist / Album / CD
+    m_artist = re.search(r'(?:Ca\s*s[ĩỹ]|Artist|Singer|Nghệ\s*sĩ|Trình\s*bày)\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE)
+    if m_artist:
+        artist = m_artist.group(1).strip()
+        
+    m_album = re.search(r'(?:Album|CD\s*\d*|Tuyển\s*tập|Đĩa\s*hát|Collection)\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE)
+    if m_album:
+        album = m_album.group(1).strip()
+
+    # 2. Nếu là dạng dòng đầu 'Artist - Album' hoặc 'Artist - Album (Year)'
+    if not artist or not album:
+        first_line = text.split('\n')[0].strip()
+        first_line = re.sub(r'^[^\w\s\u00C0-\u1EF9]+', '', first_line).strip()
+        first_line = re.sub(r'\[.*?\]', '', first_line).strip()
+        first_line = re.sub(r'\((?:19|20)\d{2}\)', '', first_line).strip()
+        
+        if ' - ' in first_line:
+            parts = first_line.split(' - ')
+            if len(parts) >= 2:
+                if not artist: artist = parts[0].strip()
+                if not album: album = parts[1].strip()
+
+    return artist, album
+
+
 def parse_artist_and_title(raw_title: str = "", raw_artist: str = "", raw_album: str = "", file_name: str = "", caption: str = "") -> Tuple[str, str, str]:
     """
     Trích xuất Artist, Title, Album một cách chính xác nhất từ nhiều nguồn dữ liệu của Telegram

@@ -227,8 +227,27 @@ async def scan_telegram_channel(payload: dict):
                 }
             )
 
-    # Bước 3: Bóc tách file âm thanh
+    # Bước 2.5: Xây dựng bản đồ ngữ cảnh (Context Map) từ tin nhắn lân cận & Media Groups
+    from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title
+    
+    media_group_context = {}
+    nearby_text_context = {}
+
     for msg in messages_to_process:
+        mgid = getattr(msg, "media_group_id", None)
+        cap = getattr(msg, "caption", "") or ""
+        txt = getattr(msg, "text", "") or ""
+        combined_text = (cap + "\n" + txt).strip()
+
+        if combined_text:
+            ctx_art, ctx_alb = extract_context_from_text(combined_text)
+            if ctx_art or ctx_alb:
+                if mgid:
+                    media_group_context[mgid] = (ctx_art, ctx_alb, combined_text)
+                nearby_text_context[msg.id] = (ctx_art, ctx_alb)
+
+    # Bước 3: Bóc tách file âm thanh kèm nhận diện ngữ cảnh tin nhắn lân cận
+    for idx, msg in enumerate(messages_to_process):
         try:
             media = getattr(msg, "audio", None) or getattr(msg, "document", None)
             if not media:
@@ -240,6 +259,24 @@ async def scan_telegram_channel(payload: dict):
             is_audio = bool(getattr(msg, "audio", None)) or mime_type.startswith("audio/") or file_name.lower().endswith(audio_extensions)
             if not is_audio:
                 continue
+
+            # Tìm kiếm ngữ cảnh từ media_group hoặc tin nhắn tựa đề lân cận
+            ctx_artist, ctx_album = "", ""
+            mgid = getattr(msg, "media_group_id", None)
+            if mgid and mgid in media_group_context:
+                ctx_artist, ctx_album, _ = media_group_context[mgid]
+
+            if not ctx_artist and not ctx_album:
+                for offset in range(-5, 6):
+                    check_idx = idx + offset
+                    if 0 <= check_idx < len(messages_to_process):
+                        chk_msg = messages_to_process[check_idx]
+                        if chk_msg.id in nearby_text_context:
+                            ctx_artist, ctx_album = nearby_text_context[chk_msg.id]
+                            break
+
+            effective_artist = default_artist or ctx_artist
+            effective_album = default_album or ctx_album
 
             caption_text = getattr(msg, "caption", "") or ""
             raw_title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
@@ -259,33 +296,31 @@ async def scan_telegram_channel(payload: dict):
             has_cover = bool(getattr(media, "thumbs", None))
             fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
 
-            # Tự động quét siêu dữ liệu chuẩn xác (Apple Music / Deezer API với Strict Validation)
+            # Tự động quét siêu dữ liệu chuẩn xác (Apple Music / Deezer API với Context & Strict Validation)
             scraped_meta = None
             if auto_scrape:
-                from Backend.helper.metadata.music_scraper import fetch_music_metadata
                 scraped_meta = await fetch_music_metadata(
                     raw_title=raw_title or "",
-                    raw_artist=raw_artist or "",
-                    raw_album=raw_album or "",
+                    raw_artist=raw_artist or effective_artist or "",
+                    raw_album=raw_album or effective_album or "",
                     file_name=file_name or "",
                     caption=caption_text or "",
-                    default_artist=default_artist or "",
-                    default_album=default_album or ""
+                    default_artist=effective_artist or "",
+                    default_album=effective_album or ""
                 )
             
             if scraped_meta:
                 title = scraped_meta.get("title") or raw_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
-                artist = scraped_meta.get("artist") or default_artist or raw_artist or "Unknown Artist"
-                album = scraped_meta.get("album") or default_album or raw_album or chat_title or "Telegram Music Collection"
+                artist = scraped_meta.get("artist") or effective_artist or raw_artist or "Unknown Artist"
+                album = scraped_meta.get("album") or effective_album or raw_album or chat_title or "Telegram Music Collection"
                 cover_url = scraped_meta.get("cover_url") or fallback_cover
                 album_year = scraped_meta.get("year", "2026")
                 album_publisher = scraped_meta.get("publisher", f"Telegram: {chat_title}")
             else:
-                from Backend.helper.metadata.music_scraper import clean_audio_filename, parse_artist_and_title
                 p_artist, p_title, p_album = parse_artist_and_title(raw_title, raw_artist, raw_album, file_name, caption_text)
                 title = p_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
-                artist = default_artist or p_artist or raw_artist or "Unknown Artist"
-                album = default_album or p_album or raw_album or chat_title or "Telegram Music Collection"
+                artist = effective_artist or p_artist or raw_artist or "Unknown Artist"
+                album = effective_album or p_album or raw_album or chat_title or "Telegram Music Collection"
                 cover_url = fallback_cover
                 album_year = "2026"
                 album_publisher = f"Telegram: {chat_title}"
