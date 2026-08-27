@@ -45,7 +45,19 @@ async def start_services():
         await db.reload_extra_databases(SettingsManager.current().extra_databases)
         await asyncio.sleep(0.5)
 
-        await StreamBot.start()
+        # Khởi động StreamBot với cơ chế tự động chờ FloodWait
+        from pyrogram.errors import FloodWait
+        while True:
+            try:
+                await StreamBot.start()
+                break
+            except FloodWait as e:
+                LOGGER.warning(f"[FLOOD WAIT] Telegram yêu cầu đợi {e.value}s do restart bot nhiều lần liên tục. Đang tự động ngủ {e.value}s trước khi kết nối lại...")
+                await asyncio.sleep(e.value + 2)
+            except Exception as e:
+                LOGGER.error(f"[STREAMBOT START ERROR] {e}")
+                raise
+
         StreamBot.username = StreamBot.me.username
         LOGGER.info(f"Bot Client : [@{StreamBot.username}]")
         await asyncio.sleep(1.2)
@@ -57,9 +69,14 @@ async def start_services():
                 LOGGER.info("Loaded Userbot session from encrypted storage.")
 
         if botmod.Userbot is not None:
-            await botmod.Userbot.start()
-            botmod.Userbot.username = botmod.Userbot.me.username
-            LOGGER.info(f"Userbot Client : [@{botmod.Userbot.username}]")
+            try:
+                await botmod.Userbot.start()
+                botmod.Userbot.username = botmod.Userbot.me.username
+                LOGGER.info(f"Userbot Client : [@{botmod.Userbot.username}]")
+            except FloodWait as e:
+                LOGGER.warning(f"[USERBOT FLOOD WAIT] Đang chờ {e.value}s...")
+                await asyncio.sleep(e.value + 2)
+                await botmod.Userbot.start()
         else:
             LOGGER.info("Userbot not configured — running with StreamBot only.")
         await asyncio.sleep(1.2)
@@ -97,9 +114,17 @@ async def stop_services():
             task.cancel()
         await asyncio.gather(*pending_tasks, return_exceptions=True)
 
-        await StreamBot.stop()
-        if botmod.Userbot is not None:
-            await botmod.Userbot.stop()
+        try:
+            if getattr(StreamBot, "is_connected", False):
+                await StreamBot.stop()
+        except Exception:
+            pass
+
+        try:
+            if botmod.Userbot is not None and getattr(botmod.Userbot, "is_connected", False):
+                await botmod.Userbot.stop()
+        except Exception:
+            pass
 
         await db.disconnect()
         LOGGER.info("Services stopped successfully.")
