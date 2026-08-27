@@ -220,6 +220,89 @@ def detect_audio_quality_from_track_info(track: dict) -> tuple[str, str, int]:
     )
 
 
+def _normalize_str(s: str) -> str:
+    if not s:
+        return ""
+    s = s.lower().strip()
+    # Loại bỏ các tag phụ trợ như (Audio), [Official Audio], (Lyric Video), [FLAC], [320kbps]
+    s = re.sub(r'[\(\[\{].*?(?:audio|video|lyrics?|flac|mp3|320|lossless|hi-res|master|official|feat|ft\.).*?[\)\]\}]', '', s, flags=re.IGNORECASE)
+    return re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', s)
+
+
+def _get_quality_score(track: dict) -> int:
+    """
+    Tính điểm số chất lượng âm thanh:
+    Hi-Res (24-bit/DSD) > Lossless (16-bit FLAC/WAV/ALAC) > High Quality MP3 (320k) > Standard MP3 (128k)
+    """
+    tier = track.get("qualityTier", "standard")
+    bitrate = track.get("bitrate", 0) or 0
+    size = track.get("size_bytes", 0) or _parse_size_str(track.get("size", ""))
+    
+    tier_weights = {
+        "hi-res": 3_000_000,
+        "lossless": 2_000_000,
+        "hq": 1_000_000,
+        "standard": 0
+    }
+    base_score = tier_weights.get(tier, 0)
+    return base_score + (bitrate * 10) + min(size // 1024, 9999)
+
+
+def deduplicate_tracks(tracks: list[dict]) -> tuple[list[dict], int]:
+    """
+    Tự động nhận diện & loại bỏ bài hát trùng lặp:
+    1. Lọc trùng cùng Message ID Telegram (chat_id, msg_id).
+    2. Lọc trùng cùng Album + Tên bài hát: Giữ lại bản có chất lượng âm thanh cao nhất.
+    
+    Returns:
+        (unique_tracks, removed_count)
+    """
+    seen_messages = set()
+    unique_by_msg = []
+    
+    # Bước 1: Lọc trùng theo chat_id & msg_id
+    for t in tracks:
+        key = (int(t.get("chat_id", 0) or t.get("chatId", 0)), int(t.get("msg_id", 0) or t.get("msgId", 0)))
+        if key not in seen_messages:
+            seen_messages.add(key)
+            unique_by_msg.append(t)
+
+    # Bước 2: Lọc trùng bài hát trong cùng Album (cùng Album + Tên bài hát)
+    groups: Dict[tuple, list[dict]] = {}
+    for t in unique_by_msg:
+        norm_album = _normalize_str(t.get("album", ""))
+        norm_title = _normalize_str(t.get("title", "") or t.get("name", ""))
+        
+        # Nếu không có tên bài thì dùng msg_id để tránh gom nhầm
+        if not norm_title:
+            group_key = ("__msg__", t.get("msg_id") or t.get("msgId"))
+        else:
+            group_key = (norm_album, norm_title)
+            
+        groups.setdefault(group_key, []).append(t)
+
+    final_tracks = []
+    removed_count = 0
+
+    for group_key, track_list in groups.items():
+        if len(track_list) == 1:
+            final_tracks.append(track_list[0])
+        else:
+            # Sắp xếp theo chất lượng giảm dần -> Giữ bản tốt nhất
+            track_list.sort(key=_get_quality_score, reverse=True)
+            best_track = track_list[0]
+            final_tracks.append(best_track)
+            
+            dropped_formats = [f"{t.get('format', 'Unknown')} ({t.get('size', '')})" for t in track_list[1:]]
+            LOGGER.info(
+                f"[MUSIC DEDUP] Giữ bản chất lượng cao: '{best_track.get('title') or best_track.get('name')}' [{best_track.get('format')}] - "
+                f"Tự động loại bỏ {len(track_list) - 1} bản trùng: {', '.join(dropped_formats)}"
+            )
+            removed_count += len(track_list) - 1
+
+    return final_tracks, removed_count
+
+
 def _get_active_client():
     if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
         return botmod.Userbot
@@ -277,23 +360,32 @@ async def get_music_albums():
             with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
-            # Tự động chuẩn hoá & tính toán format chính xác cho dữ liệu cũ (nếu có)
+            # Tự động chuẩn hoá format & loại bỏ bài trùng lặp trong thư viện cũ (nếu có)
             changed = False
             for alb in data:
-                track_formats = []
-                for t in alb.get("tracks", []):
-                    current_fmt = t.get("format", "")
-                    if not current_fmt or current_fmt in ["FLAC Hi-Res", "MP3 Master", "Hi-Res", "AUDIO Hi-Res", "AUDIO Master"]:
-                        fmt, tier, br = detect_audio_quality_from_track_info(t)
-                        t["format"] = fmt
-                        t["qualityTier"] = tier
-                        t["bitrate"] = br
+                tracks = alb.get("tracks", [])
+                if tracks:
+                    for t in tracks:
+                        t["album"] = alb.get("title", "")
+                        current_fmt = t.get("format", "")
+                        if not current_fmt or current_fmt in ["FLAC Hi-Res", "MP3 Master", "Hi-Res", "AUDIO Hi-Res", "AUDIO Master"]:
+                            fmt, tier, br = detect_audio_quality_from_track_info(t)
+                            t["format"] = fmt
+                            t["qualityTier"] = tier
+                            t["bitrate"] = br
+                            changed = True
+
+                    # Tự động lọc trùng trong album
+                    deduped_tracks, removed = deduplicate_tracks(tracks)
+                    if removed > 0:
+                        for idx, t in enumerate(deduped_tracks, 1):
+                            t["id"] = idx
+                        alb["tracks"] = deduped_tracks
                         changed = True
-                    track_formats.append(t.get("format", ""))
-                
+
+                track_formats = [t.get("format", "") for t in alb.get("tracks", [])]
                 # Cập nhật format tốt nhất cho album
                 if track_formats and (not alb.get("format") or alb.get("format") in ["FLAC Hi-Res", "MP3 Master", "Hi-Res"]):
-                    # Ưu tiên format có Hi-Res hoặc format của bài đầu tiên
                     hires_fmt = next((f for f in track_formats if "Hi-Res" in f or "24-Bit" in f or "DSD" in f), track_formats[0])
                     alb["format"] = hires_fmt
                     changed = True
@@ -545,6 +637,10 @@ async def scan_telegram_channel(payload: dict):
             "albums": []
         })
 
+    raw_track_count = len(found_tracks)
+    # Tự động lọc trùng thông minh: Ưu tiên giữ file chất lượng âm thanh cao nhất
+    found_tracks, removed_dup_count = deduplicate_tracks(found_tracks)
+
     # Bước 4: Nhóm các bài hát theo Album chuẩn chỉnh
     albums_dict = {}
     for track in found_tracks:
@@ -609,14 +705,19 @@ async def scan_telegram_channel(payload: dict):
         os.makedirs(MUSIC_DIR, exist_ok=True)
         with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(album_list, f, ensure_ascii=False, indent=2)
-        LOGGER.info(f"[MUSIC] Đã lưu {len(album_list)} albums ({len(found_tracks)} bài hát) vào cache.")
+        LOGGER.info(f"[MUSIC] Đã lưu {len(album_list)} albums ({len(found_tracks)} bài hát) vào cache (Lọc {removed_dup_count} bài trùng).")
     except Exception as e:
         LOGGER.error(f"[MUSIC] Lỗi ghi cache thư viện: {e}")
 
+    message_text = f"Đã quét thành công {len(found_tracks)} bài hát, gom thành {len(album_list)} Album!"
+    if removed_dup_count > 0:
+        message_text += f" (Tự động loại bỏ {removed_dup_count} bài trùng lặp, ưu tiên chất lượng cao nhất)"
+
     return JSONResponse(content={
         "status": "success",
-        "message": f"Đã quét thành công {len(found_tracks)} bài hát, gom thành {len(album_list)} Album!",
+        "message": message_text,
         "count": len(found_tracks),
+        "removed_duplicates": removed_dup_count,
         "albums": album_list
     })
 
