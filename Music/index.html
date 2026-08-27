@@ -39,11 +39,11 @@
 
             <nav class="nav-center">
                 <ul class="nav-links">
-                    <li><a href="#" class="nav-link active">MUSICS</a></li>
-                    <li><a href="#" class="nav-link">HI-RES</a></li>
-                    <li><a href="#" class="nav-link">ALBUMS</a></li>
-                    <li><a href="#" class="nav-link">ARTISTS</a></li>
-                    <li><a href="#" class="nav-link">GENRES</a></li>
+                    <li><a href="#" class="nav-link active" id="navMusics">MUSICS</a></li>
+                    <li><a href="#" class="nav-link" id="navHires">HI-RES</a></li>
+                    <li><a href="#" class="nav-link" id="navAlbums">ALBUMS</a></li>
+                    <li><a href="#" class="nav-link" id="navArtists">ARTISTS</a></li>
+                    <li><a href="#" class="nav-link" id="navGenres">GENRES</a></li>
                     <li><a href="#" class="nav-link" id="navPlaylists">PLAYLISTS</a></li>
                 </ul>
             </nav>
@@ -336,6 +336,44 @@
         </div>
     </div>
 
+    <!-- Artists Picker Modal -->
+    <div class="modal-overlay" id="artistModal">
+        <div class="modal-card" style="max-width: 780px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.4rem;">🎙️</span>
+                    <div>
+                        <h3 style="margin: 0;">Khám Phá Theo Ca Sĩ / Nghệ Sĩ (Artists)</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Chọn ca sĩ để phát tuyển tập bài hát và album tương ứng</p>
+                    </div>
+                </div>
+                <button class="modal-close" id="closeArtistModal">&times;</button>
+            </div>
+            <div class="artist-grid" id="artistGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; max-height: 65vh; overflow-y: auto; padding-right: 4px;">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Genres Filter Modal -->
+    <div class="modal-overlay" id="genreModal">
+        <div class="modal-card" style="max-width: 780px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.4rem;">🏷️</span>
+                    <div>
+                        <h3 style="margin: 0;">Phân Loại Theo Thể Loại (Genres)</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Lọc và phát danh sách bài hát theo từng gu âm nhạc</p>
+                    </div>
+                </div>
+                <button class="modal-close" id="closeGenreModal">&times;</button>
+            </div>
+            <div class="genre-grid" id="genreGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; max-height: 65vh; overflow-y: auto; padding-right: 4px;">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
     <!-- Telegram Channel Scanner Modal -->
     <div class="modal-overlay" id="tgModal">
         <div class="tg-modal-card">
@@ -445,11 +483,12 @@
                 <button class="mobile-menu-close" id="closeMobileMenu">&times;</button>
             </div>
             <ul class="mobile-nav-list">
-                <li><a href="#" class="mobile-nav-item active">🎵 MUSICS (US-UK)</a></li>
-                <li><a href="#" class="mobile-nav-item">⚡ HI-RES LOSSLESS</a></li>
-                <li><a href="#" class="mobile-nav-item">💿 VINYL EXPERIENCES</a></li>
-                <li><a href="#" class="mobile-nav-item">🎨 GRAPHICS</a></li>
-                <li><a href="#" class="mobile-nav-item">🎬 FILMS & TUTS</a></li>
+                <li><a href="#" class="mobile-nav-item active" id="mobileNavMusics">🎵 TẤT CẢ BÀI HÁT</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavHires">⚡ HI-RES LOSSLESS</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavAlbums">💿 ALBUMS</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavArtists">🎙️ CA SĨ / NGHỆ SĨ</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavGenres">🏷️ THỂ LOẠI (GENRES)</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavPlaylists">📑 PLAYLISTS CỦA TÔI</a></li>
             </ul>
             <div class="mobile-menu-footer">
                 <button class="mobile-action-btn" id="mobileSelectAlbumBtn">

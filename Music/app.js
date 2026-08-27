@@ -231,6 +231,22 @@ class XTAPOMusicApp {
         this.selectedTrackForPlaylist = null;
         this.playlists = [];
 
+        // Nav Links
+        this.navMusics = document.getElementById('navMusics');
+        this.navHires = document.getElementById('navHires');
+        this.navAlbums = document.getElementById('navAlbums');
+        this.navArtists = document.getElementById('navArtists');
+        this.navGenres = document.getElementById('navGenres');
+
+        // Artists & Genres Modals
+        this.artistModal = document.getElementById('artistModal');
+        this.closeArtistModal = document.getElementById('closeArtistModal');
+        this.artistGrid = document.getElementById('artistGrid');
+
+        this.genreModal = document.getElementById('genreModal');
+        this.closeGenreModal = document.getElementById('closeGenreModal');
+        this.genreGrid = document.getElementById('genreGrid');
+
         // Init
         this.init();
     }
@@ -875,10 +891,80 @@ class XTAPOMusicApp {
             });
         }
 
+        // Nav Links Events
+        if (this.navMusics) {
+            this.navMusics.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navMusics);
+                this.showToast('Đang phát kho nhạc chính');
+            });
+        }
+
+        if (this.navHires) {
+            this.navHires.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navHires);
+                this.filterHiresAlbums();
+            });
+        }
+
+        if (this.navAlbums) {
+            this.navAlbums.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navAlbums);
+                this.openModal(this.albumModal);
+            });
+        }
+
+        if (this.navArtists && this.artistModal) {
+            this.navArtists.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navArtists);
+                this.renderArtistGrid();
+                this.openModal(this.artistModal);
+            });
+        }
+        if (this.closeArtistModal && this.artistModal) {
+            this.closeArtistModal.addEventListener('click', () => this.closeModal(this.artistModal));
+        }
+
+        if (this.navGenres && this.genreModal) {
+            this.navGenres.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navGenres);
+                this.renderGenreGrid();
+                this.openModal(this.genreModal);
+            });
+        }
+        if (this.closeGenreModal && this.genreModal) {
+            this.closeGenreModal.addEventListener('click', () => this.closeModal(this.genreModal));
+        }
+
+        // Mobile Nav Links Events
+        const mobileLinks = [
+            { id: 'mobileNavMusics', action: () => this.showToast('Đang phát kho nhạc chính') },
+            { id: 'mobileNavHires', action: () => this.filterHiresAlbums() },
+            { id: 'mobileNavAlbums', action: () => this.openModal(this.albumModal) },
+            { id: 'mobileNavArtists', action: () => { this.renderArtistGrid(); this.openModal(this.artistModal); } },
+            { id: 'mobileNavGenres', action: () => { this.renderGenreGrid(); this.openModal(this.genreModal); } },
+            { id: 'mobileNavPlaylists', action: () => { this.loadPlaylists(); this.openModal(this.playlistModal); } },
+        ];
+        mobileLinks.forEach(item => {
+            const el = document.getElementById(item.id);
+            if (el) {
+                el.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.closeMobileDrawer();
+                    item.action();
+                });
+            }
+        });
+
         // Playlist Modal Events
         if (this.navPlaylists && this.playlistModal) {
             this.navPlaylists.addEventListener('click', (e) => {
                 e.preventDefault();
+                this.setActiveNavLink(this.navPlaylists);
                 this.openModal(this.playlistModal);
                 this.loadPlaylists();
             });
@@ -899,7 +985,7 @@ class XTAPOMusicApp {
         }
 
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) this.closeModal(modal);
@@ -1052,6 +1138,8 @@ class XTAPOMusicApp {
                 this.closeModal(this.tgModal);
                 this.closeModal(this.playlistModal);
                 this.closeModal(this.addToPlaylistModal);
+                this.closeModal(this.artistModal);
+                this.closeModal(this.genreModal);
                 this.metaDrawer.classList.remove('open');
                 this.closeMobileDrawer();
             }
@@ -1338,6 +1426,206 @@ class XTAPOMusicApp {
     escapeHtml(str) {
         if (!str) return '';
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // --- Artists & Genres Feature Methods ---
+    setActiveNavLink(activeEl) {
+        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+        if (activeEl) activeEl.classList.add('active');
+    }
+
+    filterHiresAlbums() {
+        const hiresAlbums = this.albums.filter(a => {
+            const fmt = (a.format || '').toLowerCase();
+            return fmt.includes('flac') || fmt.includes('24-bit') || fmt.includes('hi-res') || fmt.includes('dsd') || fmt.includes('lossless');
+        });
+        if (hiresAlbums.length > 0) {
+            this.openModal(this.albumModal);
+            this.showToast(`Tìm thấy ${hiresAlbums.length} Album chất lượng Hi-Res Lossless!`);
+        } else {
+            this.showToast('Tất cả các bài nhạc đều hỗ trợ phát Lossless!');
+        }
+    }
+
+    renderArtistGrid() {
+        if (!this.artistGrid) return;
+        this.artistGrid.innerHTML = '';
+
+        // Extract and aggregate all artists
+        const artistMap = new Map();
+        this.albums.forEach(album => {
+            const albArtist = (album.artist || 'Unknown Artist').trim();
+            (album.tracks || []).forEach(track => {
+                const trackArtist = (track.artist || albArtist || 'Unknown Artist').trim();
+                if (!artistMap.has(trackArtist)) {
+                    artistMap.set(trackArtist, {
+                        name: trackArtist,
+                        coverUrl: track.coverUrl || album.coverUrl,
+                        albums: new Set([album.title]),
+                        tracks: [track]
+                    });
+                } else {
+                    const existing = artistMap.get(trackArtist);
+                    existing.albums.add(album.title);
+                    if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                        existing.tracks.push(track);
+                    }
+                }
+            });
+        });
+
+        if (artistMap.size === 0) {
+            this.artistGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có dữ liệu ca sĩ trong thư viện.</div>';
+            return;
+        }
+
+        const sortedArtists = Array.from(artistMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
+
+        sortedArtists.forEach(art => {
+            const card = document.createElement('div');
+            card.className = 'artist-card-item';
+            card.innerHTML = `
+                <img src="${art.coverUrl}" class="artist-avatar-img" alt="${this.escapeHtml(art.name)}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                <div class="artist-card-info">
+                    <h4>${this.escapeHtml(art.name)}</h4>
+                    <p>${art.tracks.length} bài hát • ${art.albums.size} album</p>
+                </div>
+            `;
+
+            card.addEventListener('click', () => {
+                this.closeModal(this.artistModal);
+                const artistAlbum = {
+                    id: `artist-${encodeURIComponent(art.name)}`,
+                    title: `Tuyển Tập: ${art.name}`,
+                    artist: art.name,
+                    coverUrl: art.coverUrl,
+                    format: 'FLAC Hi-Res Lossless',
+                    year: new Date().getFullYear().toString(),
+                    publisher: 'Artist Spotlight Collection',
+                    glowColors: { glow1: 'radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)', glow2: 'radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%)' },
+                    tracks: art.tracks
+                };
+
+                const existingIdx = this.albums.findIndex(a => a.id === artistAlbum.id);
+                if (existingIdx !== -1) {
+                    this.albums[existingIdx] = artistAlbum;
+                    this.loadAlbum(existingIdx, 0, true);
+                } else {
+                    this.albums.unshift(artistAlbum);
+                    this.loadAlbum(0, 0, true);
+                }
+                this.renderAlbumGrid();
+                this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${art.tracks.length} bài)`);
+            });
+
+            this.artistGrid.appendChild(card);
+        });
+    }
+
+    renderGenreGrid() {
+        if (!this.genreGrid) return;
+        this.genreGrid.innerHTML = '';
+
+        const genreIcons = {
+            'Bolero': '🎻',
+            'Lofi': '☕',
+            'EDM / Remix': '⚡',
+            'EDM': '⚡',
+            'Remix': '⚡',
+            'Acoustic / Instrumental': '🎸',
+            'Acoustic': '🎸',
+            'Instrumental': '🎹',
+            'Rap / Hip-Hop': '🎤',
+            'Rap': '🎤',
+            'Hip-Hop': '🎤',
+            'Pop / Ballad': '💖',
+            'Pop': '✨',
+            'Ballad': '🎼',
+            'Jazz': '🎷',
+            'Rock': '🤘',
+            'Khác': '🎵'
+        };
+
+        const genreColors = {
+            'Bolero': 'linear-gradient(135deg, rgba(217, 119, 6, 0.3), rgba(180, 83, 9, 0.1))',
+            'Lofi': 'linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(67, 56, 202, 0.1))',
+            'EDM / Remix': 'linear-gradient(135deg, rgba(236, 72, 153, 0.3), rgba(190, 24, 93, 0.1))',
+            'Acoustic / Instrumental': 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(4, 120, 87, 0.1))',
+            'Rap / Hip-Hop': 'linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(185, 28, 28, 0.1))',
+            'Pop / Ballad': 'linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(3, 105, 161, 0.1))',
+            'Jazz': 'linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.1))',
+            'Rock': 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(109, 40, 217, 0.1))',
+            'Khác': 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.1))'
+        };
+
+        // Aggregate tracks by genre
+        const genreMap = new Map();
+        this.albums.forEach(album => {
+            (album.tracks || []).forEach(track => {
+                const g = (track.genre || 'Khác').trim() || 'Khác';
+                if (!genreMap.has(g)) {
+                    genreMap.set(g, {
+                        genre: g,
+                        tracks: [track],
+                        coverUrl: track.coverUrl || album.coverUrl
+                    });
+                } else {
+                    const existing = genreMap.get(g);
+                    if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                        existing.tracks.push(track);
+                    }
+                }
+            });
+        });
+
+        if (genreMap.size === 0) {
+            this.genreGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có dữ liệu thể loại trong thư viện.</div>';
+            return;
+        }
+
+        const sortedGenres = Array.from(genreMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
+
+        sortedGenres.forEach(gObj => {
+            const icon = genreIcons[gObj.genre] || '🎵';
+            const bg = genreColors[gObj.genre] || 'linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02))';
+
+            const card = document.createElement('div');
+            card.className = 'genre-card-item';
+            card.style.background = bg;
+            card.innerHTML = `
+                <div class="genre-card-icon">${icon}</div>
+                <div class="genre-card-name">${this.escapeHtml(gObj.genre)}</div>
+                <div class="genre-card-count">${gObj.tracks.length} bài hát</div>
+            `;
+
+            card.addEventListener('click', () => {
+                this.closeModal(this.genreModal);
+                const genreAlbum = {
+                    id: `genre-${encodeURIComponent(gObj.genre)}`,
+                    title: `Thể Loại: ${gObj.genre}`,
+                    artist: 'Tuyển Tập Thể Loại',
+                    coverUrl: gObj.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop',
+                    format: 'FLAC Hi-Res Lossless',
+                    year: new Date().getFullYear().toString(),
+                    publisher: `Genre Collection • ${gObj.genre}`,
+                    glowColors: { glow1: 'radial-gradient(circle, #ec4899 0%, #be185d 60%, transparent 80%)', glow2: 'radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)' },
+                    tracks: gObj.tracks
+                };
+
+                const existingIdx = this.albums.findIndex(a => a.id === genreAlbum.id);
+                if (existingIdx !== -1) {
+                    this.albums[existingIdx] = genreAlbum;
+                    this.loadAlbum(existingIdx, 0, true);
+                } else {
+                    this.albums.unshift(genreAlbum);
+                    this.loadAlbum(0, 0, true);
+                }
+                this.renderAlbumGrid();
+                this.showToast(`Đang phát thể loại "${gObj.genre}" (${gObj.tracks.length} bài)`);
+            });
+
+            this.genreGrid.appendChild(card);
+        });
     }
 }
 
