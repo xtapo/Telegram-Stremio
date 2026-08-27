@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+
+{% block title %}Music Management - Telegram Stremio{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- Header Toolbar -->
+    <section class="glass-panel rounded-3xl p-4 sm:p-5 mb-6 sm:mb-8">
+        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-primary/20 flex items-center justify-center text-primary text-lg border border-primary/30">
+                    <i class="fa-solid fa-music"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-text">
+                        Music Management
+                    </h1>
+                    <p class="text-xs text-text-secondary">Quản lý kho nhạc Hi-Res & Lưu trữ đám mây Telegram</p>
+                </div>
+            </div>
+
+            <!-- Search input -->
+            <div class="relative flex-1 max-w-md min-w-0">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
+                <input type="text" id="music-search"
+                       placeholder="Tìm kiếm bài hát, nghệ sĩ, album..."
+                       oninput="filterMusicList(this.value)"
+                       class="w-full pl-11 pr-10 py-2.5 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition text-sm">
+                <button onclick="document.getElementById('music-search').value=''; filterMusicList('');" 
+                        class="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+                <button type="button" onclick="openScanModal()"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-primary text-white border-primary shadow-lg shadow-primary/25 hover:brightness-110">
+                    <i class="fa-solid fa-satellite-dish"></i> Quét Kênh Telegram
+                </button>
+                <a href="/music" target="_blank"
+                   class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25">
+                    <i class="fa-solid fa-record-vinyl"></i> Mở Vinyl Player
+                </a>
+                <button type="button" onclick="loadMusicData(true)"
+                        class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border glass-panel text-text hover:bg-surface-2 border-hairline"
+                        title="Tải lại">
+                    <i class="fa-solid fa-rotate-right" id="refresh-icon"></i>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Overview Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 sm:mb-8">
+        <div class="glass-panel rounded-2xl p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center text-xl shrink-0 border border-purple-500/20">
+                <i class="fa-solid fa-compact-disc"></i>
+            </div>
+            <div>
+                <span class="text-xs text-text-secondary font-semibold uppercase tracking-wider block">Albums</span>
+                <span class="text-2xl font-black text-text" id="stat-albums-count">0</span>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center text-xl shrink-0 border border-blue-500/20">
+                <i class="fa-solid fa-lines-leaning"></i>
+            </div>
+            <div>
+                <span class="text-xs text-text-secondary font-semibold uppercase tracking-wider block">Tổng Bài Hát</span>
+                <span class="text-2xl font-black text-text" id="stat-tracks-count">0</span>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xl shrink-0 border border-emerald-500/20">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+            </div>
+            <div>
+                <span class="text-xs text-text-secondary font-semibold uppercase tracking-wider block">Dung Lượng Lưu Trữ</span>
+                <span class="text-2xl font-black text-emerald-400" id="stat-storage-size">0 MB</span>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center text-xl shrink-0 border border-sky-500/20">
+                <i class="fa-brands fa-telegram"></i>
+            </div>
+            <div class="min-w-0">
+                <span class="text-xs text-text-secondary font-semibold uppercase tracking-wider block">Nguồn Lưu Trữ</span>
+                <span class="text-sm font-bold text-sky-300 truncate block" id="stat-source-label">Telegram Cloud</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Mode Switch Tabs -->
+    <div class="flex items-center justify-between mb-4">
+        <div class="inline-flex p-1 bg-black/20 rounded-xl border border-hairline">
+            <button id="tab-albums-btn" onclick="switchTab('albums')" 
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow">
+                <i class="fa-solid fa-layer-group mr-1"></i> Danh Sách Albums
+            </button>
+            <button id="tab-tracks-btn" onclick="switchTab('tracks')" 
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
+                <i class="fa-solid fa-list-ol mr-1"></i> Toàn Bộ Bài Hát
+            </button>
+        </div>
+        <span class="text-xs text-text-secondary" id="items-count-indicator">Đang hiển thị...</span>
+    </div>
+
+    <!-- Content Area: Album Grid -->
+    <div id="albums-view-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mb-8">
+        <!-- Album cards injected by JS -->
+    </div>
+
+    <!-- Content Area: Track Table -->
+    <div id="tracks-view-container" class="glass-panel rounded-3xl overflow-hidden mb-8 hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
+                        <th class="py-3.5 px-4 w-12 text-center">#</th>
+                        <th class="py-3.5 px-4">Bài Hát</th>
+                        <th class="py-3.5 px-4">Nghệ Sĩ</th>
+                        <th class="py-3.5 px-4">Album</th>
+                        <th class="py-3.5 px-4">Định Dạng</th>
+                        <th class="py-3.5 px-4">Thời Lượng</th>
+                        <th class="py-3.5 px-4">Dung Lượng</th>
+                        <th class="py-3.5 px-4 text-right">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody id="tracks-table-body" class="divide-y divide-hairline">
+                    <!-- Tracks rows injected by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="glass-panel rounded-3xl p-12 text-center hidden mb-8">
+        <div class="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center text-3xl mx-auto mb-4 border border-primary/20">
+            <i class="fa-solid fa-music-slash"></i>
+        </div>
+        <h3 class="text-lg font-bold text-text mb-1">Chưa Có Bài Hát Nào Trong Thư Viện</h3>
+        <p class="text-xs text-text-secondary max-w-md mx-auto mb-5">
+            Nhấn vào nút bên dưới để quét các file âm thanh (.mp3, .flac, .m4a) từ Kênh Telegram của bạn vào hệ thống.
+        </p>
+        <button onclick="openScanModal()" class="inline-flex items-center gap-2 bg-primary text-white font-bold px-5 py-2.5 rounded-full text-sm shadow-lg shadow-primary/25 hover:brightness-110">
+            <i class="fa-solid fa-satellite-dish"></i> Bắt Đầu Quét Kênh Telegram
+        </button>
+    </div>
+
+</div>
+
+<!-- Floating Mini Audio Preview Bar -->
+<div id="mini-player-bar" class="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-4xl glass-panel rounded-2xl p-3 shadow-2xl border border-primary/30 z-50 flex items-center justify-between gap-4 transition-all duration-300 translate-y-24 opacity-0 pointer-events-none">
+    <div class="flex items-center gap-3 min-w-0">
+        <img id="player-cover" src="" class="w-12 h-12 rounded-xl object-cover border border-hairline shrink-0" alt="Cover">
+        <div class="min-w-0">
+            <h4 id="player-title" class="text-sm font-bold text-text truncate">Title</h4>
+            <p id="player-artist" class="text-xs text-text-secondary truncate">Artist</p>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <audio id="admin-audio" class="h-8 max-w-xs md:max-w-md" controls></audio>
+        <button onclick="closeMiniPlayer()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Modal: Quét Kênh Telegram -->
+<div id="scan-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-5">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-satellite-dish"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Quét Kênh Telegram</h3>
+                    <p class="text-xs text-text-secondary">Tự động nhận diện file nhạc Hi-Res</p>
+                </div>
+            </div>
+            <button onclick="closeScanModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1.5">ID Hoặc Username Kênh:</label>
+                <input type="text" id="scan-chat-id" placeholder="Ví dụ: -1001987654321 hoặc @my_music_channel"
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border focus:ring-2 focus:ring-primary text-sm">
+                <p class="text-[11px] text-text-secondary mt-1">💡 Yêu cầu: Bot của bạn phải là Thành viên / Admin của kênh này.</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1.5">Số Tin Nhắn Quét:</label>
+                <input type="number" id="scan-limit" value="100" min="10" max="500"
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border focus:ring-2 focus:ring-primary text-sm">
+            </div>
+
+            <div id="scan-progress-indicator" class="hidden p-3 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3">
+                <div class="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent shrink-0"></div>
+                <span class="text-xs text-primary font-semibold" id="scan-status-text">Đang kết nối bot và quét bài hát...</span>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-hairline">
+            <button onclick="closeScanModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
+            <button id="start-scan-btn" onclick="submitScanTelegram()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-2">
+                <i class="fa-solid fa-play"></i> Bắt Đầu Quét
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let globalAlbums = [];
+let currentActiveTab = 'albums';
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadMusicData();
+});
+
+async function loadMusicData(showToastAlert = false) {
+    const refreshIcon = document.getElementById('refresh-icon');
+    if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+    try {
+        const res = await fetch('/api/music/albums');
+        const data = await res.json();
+
+        if (data.status === 'success' && data.albums) {
+            globalAlbums = data.albums;
+        } else {
+            globalAlbums = [];
+        }
+
+        renderStats();
+        renderCurrentView();
+
+        if (showToastAlert) {
+            alertToast('Đã làm mới dữ liệu thành công!');
+        }
+    } catch (e) {
+        console.error('Failed to load music data:', e);
+        globalAlbums = [];
+        renderStats();
+        renderCurrentView();
+    } finally {
+        if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+    }
+}
+
+function renderStats() {
+    let totalTracks = 0;
+    globalAlbums.forEach(a => totalTracks += (a.tracks ? a.tracks.length : 0));
+
+    document.getElementById('stat-albums-count').textContent = globalAlbums.length;
+    document.getElementById('stat-tracks-count').textContent = totalTracks;
+
+    let publisher = 'Telegram Cloud';
+    if (globalAlbums.length > 0 && globalAlbums[0].publisher) {
+        publisher = globalAlbums[0].publisher;
+    }
+    document.getElementById('stat-source-label').textContent = publisher;
+
+    // Estimate total size
+    let totalSizeMB = 0;
+    globalAlbums.forEach(a => {
+        if (a.totalSize && a.totalSize.includes('GB')) {
+            totalSizeMB += parseFloat(a.totalSize) * 1024;
+        } else if (a.totalSize) {
+            totalSizeMB += parseFloat(a.totalSize);
+        }
+    });
+
+    if (totalSizeMB > 1024) {
+        document.getElementById('stat-storage-size').textContent = (totalSizeMB / 1024).toFixed(2) + ' GB';
+    } else {
+        document.getElementById('stat-storage-size').textContent = totalSizeMB.toFixed(1) + ' MB';
+    }
+}
+
+function renderCurrentView() {
+    const filterQuery = (document.getElementById('music-search')?.value || '').toLowerCase().trim();
+    const emptyState = document.getElementById('empty-state');
+    const albumsView = document.getElementById('albums-view-container');
+    const tracksView = document.getElementById('tracks-view-container');
+    const indicator = document.getElementById('items-count-indicator');
+
+    if (globalAlbums.length === 0) {
+        emptyState.classList.remove('hidden');
+        albumsView.classList.add('hidden');
+        tracksView.classList.add('hidden');
+        indicator.textContent = '0 mục';
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+
+    if (currentActiveTab === 'albums') {
+        albumsView.classList.remove('hidden');
+        tracksView.classList.add('hidden');
+        renderAlbumsGrid(filterQuery);
+    } else {
+        albumsView.classList.add('hidden');
+        tracksView.classList.remove('hidden');
+        renderTracksTable(filterQuery);
+    }
+}
+
+function renderAlbumsGrid(query = '') {
+    const container = document.getElementById('albums-view-container');
+    container.innerHTML = '';
+
+    const filtered = globalAlbums.filter(a => 
+        !query || 
+        a.title.toLowerCase().includes(query) || 
+        a.artist.toLowerCase().includes(query) ||
+        (a.tracks && a.tracks.some(t => t.name.toLowerCase().includes(query)))
+    );
+
+    document.getElementById('items-count-indicator').textContent = `Hiển thị ${filtered.length} / ${globalAlbums.length} Albums`;
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="col-span-full py-12 text-center text-text-secondary">Không tìm thấy album nào phù hợp từ khóa "${query}".</div>`;
+        return;
+    }
+
+    filtered.forEach(album => {
+        const card = document.createElement('div');
+        card.className = 'glass-panel rounded-2xl p-4 flex flex-col justify-between hover:border-primary/50 transition group';
+        
+        card.innerHTML = `
+            <div>
+                <div class="relative w-full aspect-square rounded-xl overflow-hidden mb-3 bg-black/20">
+                    <img src="${album.coverUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
+                         alt="${album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                    <span class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-bold text-amber-300 border border-amber-500/30">
+                        ${album.format || 'Hi-Res'}
+                    </span>
+                </div>
+                <h3 class="text-sm font-bold text-text truncate" title="${album.title}">${album.title}</h3>
+                <p class="text-xs text-text-secondary truncate mt-0.5">${album.artist}</p>
+                <div class="flex items-center justify-between text-[11px] text-text-secondary mt-2 pt-2 border-t border-hairline">
+                    <span>${album.tracks ? album.tracks.length : 0} Bài hát</span>
+                    <span class="font-semibold text-text">${album.totalSize || ''}</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-hairline">
+                <button onclick="playTrackFromAlbum('${album.id}', 0)" class="flex-1 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-play text-[10px]"></i> Phát
+                </button>
+                <button onclick="deleteAlbum('${album.id}')" class="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white text-xs transition flex items-center justify-center" title="Xóa Album">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+        `;
+
+        container.appendChild(card);
+    });
+}
+
+function renderTracksTable(query = '') {
+    const tbody = document.getElementById('tracks-table-body');
+    tbody.innerHTML = '';
+
+    let allTracks = [];
+    globalAlbums.forEach(a => {
+        if (a.tracks) {
+            a.tracks.forEach(t => {
+                allTracks.push({ ...t, albumName: a.title, albumCover: a.coverUrl });
+            });
+        }
+    });
+
+    const filtered = allTracks.filter(t => 
+        !query || 
+        t.name.toLowerCase().includes(query) || 
+        (t.artist && t.artist.toLowerCase().includes(query)) ||
+        (t.albumName && t.albumName.toLowerCase().includes(query))
+    );
+
+    document.getElementById('items-count-indicator').textContent = `Hiển thị ${filtered.length} / ${allTracks.length} Bài hát`;
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-text-secondary">Không tìm thấy bài hát nào.</td></tr>`;
+        return;
+    }
+
+    filtered.forEach((track, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-surface/50 transition group';
+        
+        tr.innerHTML = `
+            <td class="py-3 px-4 text-center text-text-secondary text-xs">${idx + 1}</td>
+            <td class="py-3 px-4">
+                <div class="flex items-center gap-3">
+                    <img src="${track.coverUrl || track.albumCover}" class="w-8 h-8 rounded-lg object-cover" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                    <span class="font-bold text-text text-sm">${track.name}</span>
+                </div>
+            </td>
+            <td class="py-3 px-4 text-text-secondary text-xs">${track.artist || 'Unknown'}</td>
+            <td class="py-3 px-4 text-text-secondary text-xs truncate max-w-xs">${track.albumName || ''}</td>
+            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">FLAC / Hi-Res</span></td>
+            <td class="py-3 px-4 text-text-secondary text-xs">${track.duration || '--:--'}</td>
+            <td class="py-3 px-4 text-text-secondary text-xs">${track.size || ''}</td>
+            <td class="py-3 px-4 text-right">
+                <div class="inline-flex items-center gap-2">
+                    <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || '').replace(/'/g, "\\'")}', '${track.coverUrl || track.albumCover}')" 
+                            class="w-7 h-7 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
+                        <i class="fa-solid fa-play text-[10px]"></i>
+                    </button>
+                    <button onclick="deleteTrack('${track.chatId}', '${track.msgId}')" 
+                            class="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white flex items-center justify-center transition" title="Xóa bài">
+                        <i class="fa-solid fa-trash-can text-[10px]"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+function filterMusicList(val) {
+    renderCurrentView();
+}
+
+function switchTab(tab) {
+    currentActiveTab = tab;
+    const albumsBtn = document.getElementById('tab-albums-btn');
+    const tracksBtn = document.getElementById('tab-tracks-btn');
+
+    if (tab === 'albums') {
+        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    } else {
+        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    }
+
+    renderCurrentView();
+}
+
+// Mini Player Preview
+function previewTrack(streamUrl, title, artist, cover) {
+    const bar = document.getElementById('mini-player-bar');
+    const audio = document.getElementById('admin-audio');
+    
+    document.getElementById('player-title').textContent = title;
+    document.getElementById('player-artist').textContent = artist;
+    document.getElementById('player-cover').src = cover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
+    
+    audio.src = streamUrl;
+    audio.play();
+
+    bar.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+}
+
+function closeMiniPlayer() {
+    const bar = document.getElementById('mini-player-bar');
+    const audio = document.getElementById('admin-audio');
+    audio.pause();
+    bar.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
+}
+
+function playTrackFromAlbum(albumId, trackIndex) {
+    const album = globalAlbums.find(a => a.id === albumId);
+    if (album && album.tracks && album.tracks[trackIndex]) {
+        const track = album.tracks[trackIndex];
+        previewTrack(track.previewUrl, track.name, track.artist || album.artist, track.coverUrl || album.coverUrl);
+    }
+}
+
+// Modal Scanner
+function openScanModal() {
+    const modal = document.getElementById('scan-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeScanModal() {
+    const modal = document.getElementById('scan-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+async function submitScanTelegram() {
+    const chatId = document.getElementById('scan-chat-id').value.trim();
+    const limit = document.getElementById('scan-limit').value || 100;
+
+    if (!chatId) {
+        alertToast('Vui lòng nhập Chat ID hoặc Username kênh!');
+        return;
+    }
+
+    const indicator = document.getElementById('scan-progress-indicator');
+    const statusText = document.getElementById('scan-status-text');
+    const btn = document.getElementById('start-scan-btn');
+
+    indicator.classList.remove('hidden');
+    statusText.textContent = 'Đang kết nối Telegram & quét bài hát...';
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+
+    try {
+        const res = await fetch('/api/music/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, limit: parseInt(limit, 10) })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+            closeScanModal();
+            alertToast(data.message || `Đã quét thành công ${data.count} bài hát!`);
+            loadMusicData();
+        } else {
+            statusText.textContent = `❌ ${data.message || 'Không thể quét kênh này.'}`;
+        }
+    } catch (e) {
+        statusText.textContent = `❌ Lỗi kết nối: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+    }
+}
+
+// Delete functions
+async function deleteAlbum(albumId) {
+    if (!confirm('Bạn có chắc chắn muốn xóa toàn bộ album này khỏi thư viện?')) return;
+
+    try {
+        const res = await fetch(`/api/music/album/${encodeURIComponent(albumId)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast('Đã xóa album khỏi thư viện!');
+            loadMusicData();
+        } else {
+            alertToast(data.message || 'Lỗi khi xóa album');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối server: ' + e.message);
+    }
+}
+
+async function deleteTrack(chatId, msgId) {
+    if (!confirm('Bạn có chắc chắn muốn xóa bài hát này?')) return;
+
+    try {
+        const res = await fetch(`/api/music/track/${chatId}/${msgId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast('Đã xóa bài hát khỏi danh sách!');
+            loadMusicData();
+        } else {
+            alertToast(data.message || 'Lỗi khi xóa bài hát');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối server: ' + e.message);
+    }
+}
+
+function alertToast(msg) {
+    const el = document.createElement('div');
+    el.className = 'fixed top-24 right-6 bg-primary text-white font-bold text-xs px-4 py-3 rounded-2xl shadow-2xl z-50 animate-bounce flex items-center gap-2 border border-white/20';
+    el.innerHTML = `<i class="fa-solid fa-check-circle"></i> <span>${msg}</span>`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+}
+</script>
+{% endblock %}

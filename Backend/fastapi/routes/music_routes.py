@@ -19,6 +19,8 @@ from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads, client_dc_map, client_failures
 from Backend.fastapi.routes.stream_routes import select_best_client, _get_streamer, parse_range_header, _resolve_filename_mime, _build_stream_headers
+from Backend.fastapi.security.credentials import get_current_user, require_auth
+from Backend.fastapi.routes.template_routes import _base_context, templates
 
 router = APIRouter(tags=["Music Player & Telegram Storage"])
 
@@ -68,7 +70,15 @@ def _get_active_client():
     return StreamBot
 
 
-# ── 1. Giao diện Web Music Player & Static Files Fallback ─────────────────────
+# ── 1. Giao diện Quản trị Backend Music Management (/music/manage) ──────────
+@router.get("/music/manage", response_class=HTMLResponse)
+async def music_management_page(request: Request, _: bool = Depends(require_auth)):
+    ctx = _base_context(request)
+    ctx["current_user"] = get_current_user(request)
+    return templates.TemplateResponse("music_management.html", ctx)
+
+
+# ── 2. Giao diện Web Music Player & Static Files Fallback ─────────────────────
 @router.get("/music", response_class=HTMLResponse)
 @router.get("/music/", response_class=HTMLResponse)
 async def get_music_player(request: Request):
@@ -431,3 +441,38 @@ async def get_music_cover(chat_id: int, msg_id: int):
     except Exception as e:
         LOGGER.warning(f"[MUSIC COVER] Failed for {chat_id}/{msg_id}: {e}")
         raise HTTPException(status_code=404, detail="Cover not found")
+
+
+# ── 6. Xóa Album / Xóa Bài Hát khỏi Thư Viện Cache ───────────────────────────
+@router.delete("/api/music/album/{album_id}")
+async def delete_music_album(album_id: str, _: bool = Depends(require_auth)):
+    if not os.path.exists(LIBRARY_CACHE_FILE):
+        return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
+    try:
+        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+            albums = json.load(f)
+        new_albums = [a for a in albums if a.get("id") != album_id]
+        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(new_albums, f, ensure_ascii=False, indent=2)
+        return JSONResponse(content={"status": "success", "message": "Đã xóa album khỏi thư viện"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@router.delete("/api/music/track/{chat_id}/{msg_id}")
+async def delete_music_track(chat_id: int, msg_id: int, _: bool = Depends(require_auth)):
+    if not os.path.exists(LIBRARY_CACHE_FILE):
+        return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
+    try:
+        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+            albums = json.load(f)
+        for a in albums:
+            a["tracks"] = [t for t in a.get("tracks", []) if not (int(t.get("chatId", 0)) == int(chat_id) and int(t.get("msgId", 0)) == int(msg_id))]
+        # Loại bỏ album nếu không còn bài hát nào
+        albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
+        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(albums, f, ensure_ascii=False, indent=2)
+        return JSONResponse(content={"status": "success", "message": "Đã xóa bài hát khỏi danh sách"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
