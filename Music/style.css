@@ -1660,9 +1660,13 @@ html, body {
 }
 
 @media (max-width: 768px) {
+    html, body {
+        overflow-x: hidden;
+    }
+
     .top-nav {
-        padding: 0 18px;
-        height: 64px;
+        padding: 0 16px;
+        height: 60px;
     }
     
     .nav-btn.action-badge-btn {
@@ -1670,52 +1674,58 @@ html, body {
     }
     
     .kmusic-hero {
-        padding: 20px 18px 10px;
+        padding: 16px 14px 10px;
     }
     
     .hero-inner {
         display: flex;
         flex-direction: column-reverse;
-        gap: 28px;
+        gap: 20px;
         min-height: auto;
     }
     
     /* Cover Stage on Mobile */
     .kmusic-cover-col {
         width: 100%;
-        margin-top: 10px;
+        margin-top: 6px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        padding: 10px 0;
     }
     
     .vinyl-stage {
-        width: 280px;
-        height: 280px;
+        width: 260px;
+        height: 260px;
+        margin: 0 auto;
     }
     
     .vinyl-disc {
-        width: 250px;
-        height: 250px;
-        top: 15px;
-        left: 15px;
+        width: 235px;
+        height: 235px;
+        top: 12px;
+        left: 12px;
     }
     
     .vinyl-center-label {
-        width: 85px;
-        height: 85px;
+        width: 80px;
+        height: 80px;
     }
     
     .album-sleeve {
-        width: 250px;
-        height: 250px;
+        width: 235px;
+        height: 235px;
     }
     
     .vinyl-stage.is-playing .vinyl-disc,
     .vinyl-stage.is-active .vinyl-disc {
-        transform: translateX(65px);
+        transform: translateX(60px);
     }
     
     @keyframes vinylSpin {
-        from { transform: translateX(65px) rotate(0deg); }
-        to { transform: translateX(65px) rotate(360deg); }
+        from { transform: translateX(60px) rotate(0deg); }
+        to { transform: translateX(60px) rotate(360deg); }
     }
     
     .mobile-sleeve-play-btn {
@@ -1724,41 +1734,116 @@ html, body {
     
     /* Tracklist on Mobile */
     .kmusic-album-title {
-        font-size: 1.8rem;
+        font-size: 1.5rem;
+        line-height: 1.25;
+        text-align: center;
     }
     
     .kmusic-artist-name {
-        font-size: 1.05rem;
+        font-size: 0.95rem;
+        text-align: center;
+    }
+
+    .album-badge-row {
+        justify-content: center;
+    }
+
+    .album-metadata-snippet {
+        text-align: center;
+        font-size: 0.78rem;
     }
     
+    .tracklist-container {
+        margin-top: 14px;
+    }
+
     .tracklist {
-        max-height: 220px;
+        max-height: 260px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .track-item {
+        padding: 10px 12px;
+    }
+
+    .track-add-playlist-btn {
+        opacity: 0.9;
+        display: inline-flex;
     }
     
     /* Player Bar on Mobile */
     .kmusic-player-bar {
         height: auto;
-        padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 60;
+        background: rgba(13, 14, 20, 0.96);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
     }
     
     .player-bar-inner {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         padding: 0;
     }
     
     .player-current-info {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
         text-align: center;
         width: 100%;
     }
     
     .now-playing-tag {
-        justify-content: center;
+        display: none;
+    }
+
+    .current-track-name {
+        font-size: 0.88rem;
+        max-width: 85vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .current-track-artist {
+        font-size: 0.75rem;
     }
     
     .player-core-controls {
         width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .player-btn-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+    }
+
+    .ctrl-btn.main-play-btn {
+        width: 46px;
+        height: 46px;
+    }
+
+    .progress-wrapper {
+        gap: 8px;
+    }
+
+    .time-label {
+        font-size: 0.72rem;
+        min-width: 38px;
     }
     
     .player-right-options {
@@ -1766,7 +1851,85 @@ html, body {
     }
     
     .app-container {
-        padding-bottom: 140px;
+        padding-bottom: 160px;
+    }
+
+    /* Modals Responsive */
+    .modal-card {
+        width: 95vw;
+        max-width: 95vw;
+        padding: 20px 16px;
+        max-height: 85vh;
+        border-radius: 16px;
+    }
+
+    .album-grid,
+    .artist-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .genre-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .playlist-create-bar {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .playlist-card-item {
+        padding: 12px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .kmusic-hero {
+        padding: 12px 10px 10px;
+    }
+
+    .vinyl-stage {
+        width: 220px;
+        height: 220px;
+    }
+    
+    .vinyl-disc {
+        width: 200px;
+        height: 200px;
+        top: 10px;
+        left: 10px;
+    }
+    
+    .vinyl-center-label {
+        width: 68px;
+        height: 68px;
+    }
+    
+    .album-sleeve {
+        width: 200px;
+        height: 200px;
+    }
+    
+    .vinyl-stage.is-playing .vinyl-disc,
+    .vinyl-stage.is-active .vinyl-disc {
+        transform: translateX(45px);
+    }
+    
+    @keyframes vinylSpin {
+        from { transform: translateX(45px) rotate(0deg); }
+        to { transform: translateX(45px) rotate(360deg); }
+    }
+
+    .genre-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .genre-card-item {
+        padding: 12px 8px;
     }
 }
 
