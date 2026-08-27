@@ -142,6 +142,10 @@ async def scan_telegram_channel(payload: dict):
         )
 
     limit = min(max(int(payload.get("limit", 100)), 5), 500)
+    default_artist = payload.get("default_artist", "").strip()
+    default_album = payload.get("default_album", "").strip()
+    auto_scrape = payload.get("auto_scrape", True)
+
     client = _get_active_client()
     if not client:
         return JSONResponse(
@@ -255,27 +259,33 @@ async def scan_telegram_channel(payload: dict):
             has_cover = bool(getattr(media, "thumbs", None))
             fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
 
-            # Tự động quét siêu dữ liệu chuẩn xác (Apple Music / Deezer API với Fuzzy Validation)
-            from Backend.helper.metadata.music_scraper import fetch_music_metadata
-            scraped_meta = await fetch_music_metadata(
-                raw_title=raw_title or "",
-                raw_artist=raw_artist or "",
-                raw_album=raw_album or "",
-                file_name=file_name or "",
-                caption=caption_text or ""
-            )
+            # Tự động quét siêu dữ liệu chuẩn xác (Apple Music / Deezer API với Strict Validation)
+            scraped_meta = None
+            if auto_scrape:
+                from Backend.helper.metadata.music_scraper import fetch_music_metadata
+                scraped_meta = await fetch_music_metadata(
+                    raw_title=raw_title or "",
+                    raw_artist=raw_artist or "",
+                    raw_album=raw_album or "",
+                    file_name=file_name or "",
+                    caption=caption_text or "",
+                    default_artist=default_artist or "",
+                    default_album=default_album or ""
+                )
             
             if scraped_meta:
                 title = scraped_meta.get("title") or raw_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
-                artist = scraped_meta.get("artist") or raw_artist or "Unknown Artist"
-                album = scraped_meta.get("album") or raw_album or chat_title or "Telegram Music Collection"
+                artist = scraped_meta.get("artist") or default_artist or raw_artist or "Unknown Artist"
+                album = scraped_meta.get("album") or default_album or raw_album or chat_title or "Telegram Music Collection"
                 cover_url = scraped_meta.get("cover_url") or fallback_cover
                 album_year = scraped_meta.get("year", "2026")
                 album_publisher = scraped_meta.get("publisher", f"Telegram: {chat_title}")
             else:
-                title = raw_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
-                artist = raw_artist or "Unknown Artist"
-                album = raw_album or chat_title or "Telegram Music Collection"
+                from Backend.helper.metadata.music_scraper import clean_audio_filename, parse_artist_and_title
+                p_artist, p_title, p_album = parse_artist_and_title(raw_title, raw_artist, raw_album, file_name, caption_text)
+                title = p_title or os.path.splitext(file_name)[0] or f"Track {msg.id}"
+                artist = default_artist or p_artist or raw_artist or "Unknown Artist"
+                album = default_album or p_album or raw_album or chat_title or "Telegram Music Collection"
                 cover_url = fallback_cover
                 album_year = "2026"
                 album_publisher = f"Telegram: {chat_title}"
@@ -495,4 +505,112 @@ async def delete_music_track(chat_id: int, msg_id: int, _: bool = Depends(requir
         return JSONResponse(content={"status": "success", "message": "Đã xóa bài hát khỏi danh sách"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+# ── 7. Chỉnh Sửa Thông Tin Bài Hát / Album (Edit Metadata) ───────────────────
+@router.post("/api/music/track/edit")
+async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
+    if not os.path.exists(LIBRARY_CACHE_FILE):
+        return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
+
+    chat_id = int(payload.get("chat_id", 0))
+    msg_id = int(payload.get("msg_id", 0))
+    new_title = payload.get("title", "").strip()
+    new_artist = payload.get("artist", "").strip()
+    new_album = payload.get("album", "").strip()
+    new_cover = payload.get("cover_url", "").strip()
+
+    if not chat_id or not msg_id or not new_title:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Thiếu thông tin bài hát"})
+
+    try:
+        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+            albums = json.load(f)
+
+        target_track = None
+        for a in albums:
+            for t in a.get("tracks", []):
+                if int(t.get("chatId", 0)) == chat_id and int(t.get("msgId", 0)) == msg_id:
+                    target_track = t
+                    if new_title: t["name"] = new_title
+                    if new_artist: t["artist"] = new_artist
+                    if new_cover: t["coverUrl"] = new_cover
+                    break
+            if target_track:
+                break
+
+        if not target_track:
+            return JSONResponse(status_code=404, content={"status": "error", "message": "Không tìm thấy bài hát"})
+
+        # Chuyển bài hát sang Album mới nếu có đổi tên album
+        if new_album:
+            for a in albums:
+                a["tracks"] = [t for t in a.get("tracks", []) if not (int(t.get("chatId", 0)) == chat_id and int(t.get("msgId", 0)) == msg_id)]
+
+            dest_album = next((a for a in albums if a.get("title", "").upper() == new_album.upper()), None)
+            if not dest_album:
+                color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
+                dest_album = {
+                    "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', new_album.lower())[:30]}",
+                    "title": new_album.upper(),
+                    "artist": (new_artist or target_track.get("artist", "Unknown")).upper(),
+                    "year": time.strftime("%Y"),
+                    "format": target_track.get("format", "FLAC Hi-Res"),
+                    "totalSize": target_track.get("size", "0 MB"),
+                    "publisher": f"{new_artist or 'Telegram'}",
+                    "coverUrl": new_cover or target_track.get("coverUrl", ""),
+                    "glowColors": color_preset,
+                    "tracks": []
+                }
+                albums.append(dest_album)
+
+            dest_album["tracks"].append(target_track)
+
+        albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
+
+        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(albums, f, ensure_ascii=False, indent=2)
+
+        return JSONResponse(content={"status": "success", "message": "Đã cập nhật thông tin bài hát", "albums": albums})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@router.post("/api/music/album/edit")
+async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
+    if not os.path.exists(LIBRARY_CACHE_FILE):
+        return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
+
+    album_id = payload.get("album_id", "").strip()
+    new_title = payload.get("title", "").strip()
+    new_artist = payload.get("artist", "").strip()
+    new_cover = payload.get("cover_url", "").strip()
+    new_year = payload.get("year", "").strip()
+
+    if not album_id or not new_title:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Thiếu thông tin album"})
+
+    try:
+        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+            albums = json.load(f)
+
+        target_album = next((a for a in albums if a.get("id") == album_id), None)
+        if not target_album:
+            return JSONResponse(status_code=404, content={"status": "error", "message": "Không tìm thấy album"})
+
+        if new_title: target_album["title"] = new_title.upper()
+        if new_artist:
+            target_album["artist"] = new_artist.upper()
+            for t in target_album.get("tracks", []):
+                t["artist"] = new_artist
+        if new_cover: target_album["coverUrl"] = new_cover
+        if new_year: target_album["year"] = new_year
+
+        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(albums, f, ensure_ascii=False, indent=2)
+
+        return JSONResponse(content={"status": "success", "message": "Đã cập nhật thông tin album", "albums": albums})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
 

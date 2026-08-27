@@ -90,15 +90,22 @@ def parse_artist_and_title(raw_title: str = "", raw_artist: str = "", raw_album:
     return artist, title, raw_album or ""
 
 
-async def fetch_music_metadata(raw_title: str = "", raw_artist: str = "", raw_album: str = "", file_name: str = "", caption: str = "") -> Optional[dict]:
+async def fetch_music_metadata(raw_title: str = "", raw_artist: str = "", raw_album: str = "", file_name: str = "", caption: str = "", default_artist: str = "", default_album: str = "") -> Optional[dict]:
     """
     Tự động nhận diện chính xác bài hát & Album từ Apple Music / iTunes API & Deezer API
-    Áp dụng thuật toán so khớp Fuzzy Token Similarity để không bao giờ nhận diện nhầm bài hát.
+    Quy tắc an toàn: Tuyệt đối KHÔNG tự ý gán ca sĩ khác nếu file gốc không chứa tên ca sĩ đó.
     """
-    artist, title, album_hint = parse_artist_and_title(raw_title, raw_artist, raw_album, file_name, caption)
+    artist, title, album_hint = parse_artist_and_title(raw_title, raw_artist or default_artist, raw_album or default_album, file_name, caption)
     
     if not title:
         return None
+
+    # Nếu người dùng có cung cấp ca sĩ mặc định khi quét CD
+    if default_artist and (not artist or artist.lower() in ["unknown artist", "unknown"]):
+        artist = default_artist
+
+    if default_album and (not album_hint or album_hint.lower() in ["telegram music collection"]):
+        album_hint = default_album
 
     search_query = f"{artist} {title}".strip() if artist else title
     cache_key = search_query.lower()
@@ -109,11 +116,9 @@ async def fetch_music_metadata(raw_title: str = "", raw_artist: str = "", raw_al
 
     # 1. Tìm kiếm trên Apple Music / iTunes API
     candidates: List[dict] = []
-    
-    # Chiến thuật 1: Tìm kiếm theo "Artist Title"
     queries_to_try = [search_query]
     if artist and title and search_query != title:
-        queries_to_try.append(title)  # Chiến thuật 2: Tìm kiếm riêng Title
+        queries_to_try.append(title)
 
     for q in queries_to_try:
         try:
@@ -127,26 +132,28 @@ async def fetch_music_metadata(raw_title: str = "", raw_artist: str = "", raw_al
                         cand_artist = item.get("artistName", "")
                         cand_album = item.get("collectionName", "")
                         
-                        # Tính điểm tương đồng
                         score_full = token_similarity(search_query, f"{cand_artist} {cand_title}")
                         score_title = token_similarity(title, cand_title)
                         
-                        # Điểm tổng hợp
-                        final_score = max(score_full, score_title * 0.85)
-                        
-                        # Thưởng điểm nếu nghệ sĩ khớp
-                        if artist and artist.lower() in cand_artist.lower():
-                            final_score = min(1.0, final_score + 0.2)
-                        
-                        # Phạt điểm các bản Remix / DJ Mix nếu bài gốc không có chữ remix
-                        is_remix_cand = bool(re.search(r'\b(remix|mixed|dj mix|karaoke|tribute)\b', cand_title, re.I))
-                        is_remix_orig = bool(re.search(r'\b(remix|mixed|dj mix|karaoke|tribute)\b', search_query, re.I))
-                        if is_remix_cand and not is_remix_orig:
-                            final_score -= 0.25
+                        final_score = max(score_full, score_title * 0.8)
+
+                        # KIỂM TRA NGHIÊM NGẶT:
+                        # Nếu file gốc KHÔNG có ca sĩ (chỉ có tên bài hát như "Chiếc lá cuối cùng"),
+                        # thì KHÔNG được tự tiện gán một ca sĩ ngẫu nhiên từ mạng (như Khánh Phương thay vì Lệ Quyên)!
+                        if not artist:
+                            # Không có ca sĩ trong file gốc -> Chỉ chấp nhận nếu cand_artist xuất hiện trong filename/caption
+                            if cand_artist.lower() not in (file_name + ' ' + caption + ' ' + raw_title).lower():
+                                continue  # Bỏ qua ứng viên này vì khác ca sĩ
+                        else:
+                            # Nếu có ca sĩ -> Kiểm tra ca sĩ có khớp không
+                            artist_score = token_similarity(artist, cand_artist)
+                            if artist_score < 0.4 and artist.lower() not in cand_artist.lower() and cand_artist.lower() not in artist.lower():
+                                continue  # Ca sĩ không khớp -> Bỏ qua
+
+                            final_score = min(1.0, final_score + 0.25)
 
                         raw_art = item.get("artworkUrl100", "")
                         hd_cover = raw_art.replace("100x100bb.jpg", "1200x1200bb.webp").replace("100x100bb.png", "1200x1200bb.webp")
-                        
                         release_date = item.get("releaseDate", "")
                         year = release_date[:4] if len(release_date) >= 4 else "2026"
 
@@ -166,51 +173,16 @@ async def fetch_music_metadata(raw_title: str = "", raw_artist: str = "", raw_al
         except Exception as e:
             LOGGER.warning(f"[MUSIC SCRAPER] iTunes search failed for '{q}': {e}")
 
-    # 2. Nếu tìm thấy candidate tốt (Điểm >= 0.50), chọn candidate có điểm cao nhất
+    # 2. Nếu tìm thấy candidate hợp lệ (Điểm >= 0.50)
     if candidates:
         candidates.sort(key=lambda x: x["score"], reverse=True)
         best = candidates[0]
         if best["score"] >= 0.50:
             _METADATA_CACHE[cache_key] = best
-            LOGGER.info(f"[MUSIC SCRAPER] ✅ Khớp chính xác (Score {best['score']:.2f}): {best['artist']} - {best['title']} (Album: {best['album']})")
+            LOGGER.info(f"[MUSIC SCRAPER] ✅ Khớp chính xác: {best['artist']} - {best['title']} (Album: {best['album']})")
             return best
-        else:
-            LOGGER.info(f"[MUSIC SCRAPER] ⚠️ Điểm khớp thấp ({best['score']:.2f}) cho '{search_query}', giữ nguyên thông tin gốc.")
 
-    # 3. Thử Deezer API dự phòng
-    try:
-        url = f"https://api.deezer.com/search?q={urllib.parse.quote(search_query)}&limit=3"
-        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
-            resp = await client.get(url)
-            if resp.status_code == 200:
-                data = resp.json()
-                for item in data.get("data", []):
-                    cand_title = item.get("title", "")
-                    artist_obj = item.get("artist", {})
-                    album_obj = item.get("album", {})
-                    cand_artist = artist_obj.get("name", "")
-                    
-                    score = token_similarity(search_query, f"{cand_artist} {cand_title}")
-                    if score >= 0.50:
-                        cover_url = album_obj.get("cover_xl") or album_obj.get("cover_big") or album_obj.get("cover_medium") or ""
-                        result = {
-                            "score": score,
-                            "title": cand_title,
-                            "artist": cand_artist,
-                            "album": album_obj.get("title", f"{cand_title} - Single"),
-                            "cover_url": cover_url,
-                            "year": "2026",
-                            "genre": "Lossless Audio",
-                            "publisher": f"{cand_artist} / Deezer",
-                            "source": "Deezer"
-                        }
-                        _METADATA_CACHE[cache_key] = result
-                        LOGGER.info(f"[MUSIC SCRAPER] ✅ Deezer khớp (Score {score:.2f}): {result['artist']} - {result['title']}")
-                        return result
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC SCRAPER] Deezer lookup failed for '{search_query}': {e}")
-
-    # Fallback: Giữ nguyên thông tin gốc của file nhạc, KHÔNG gán bừa bài hát sai
+    # Fallback an toàn: Giữ nguyên tên bài hát và ca sĩ thực tế của file
     fallback_res = {
         "title": title,
         "artist": artist or "Unknown Artist",

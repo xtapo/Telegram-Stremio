@@ -24,7 +24,7 @@
             <div class="relative flex-1 max-w-md min-w-0">
                 <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
                 <input type="text" id="music-search"
-                       placeholder="Tìm kiếm bài hát, nghệ sĩ, album..."
+                       placeholder="Tìm kiếm bài hát, ca sĩ, album..."
                        oninput="filterMusicList(this.value)"
                        class="w-full pl-11 pr-10 py-2.5 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition text-sm">
                 <button onclick="document.getElementById('music-search').value=''; filterMusicList('');" 
@@ -123,7 +123,7 @@
                     <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
                         <th class="py-3.5 px-4 w-12 text-center">#</th>
                         <th class="py-3.5 px-4">Bài Hát</th>
-                        <th class="py-3.5 px-4">Nghệ Sĩ</th>
+                        <th class="py-3.5 px-4">Ca Sĩ</th>
                         <th class="py-3.5 px-4">Album</th>
                         <th class="py-3.5 px-4">Định Dạng</th>
                         <th class="py-3.5 px-4">Thời Lượng</th>
@@ -145,7 +145,7 @@
         </div>
         <h3 class="text-lg font-bold text-text mb-1">Chưa Có Bài Hát Nào Trong Thư Viện</h3>
         <p class="text-xs text-text-secondary max-w-md mx-auto mb-5">
-            Nhấn vào nút bên dưới để quét các file âm thanh (.mp3, .flac, .m4a) từ Kênh Telegram của bạn vào hệ thống.
+            Nhấn vào nút bên dưới để quét các file âm thanh (.mp3, .flac, .wav) từ Kênh Telegram của bạn.
         </p>
         <button onclick="openScanModal()" class="inline-flex items-center gap-2 bg-primary text-white font-bold px-5 py-2.5 rounded-full text-sm shadow-lg shadow-primary/25 hover:brightness-110">
             <i class="fa-solid fa-satellite-dish"></i> Bắt Đầu Quét Kênh Telegram
@@ -172,17 +172,17 @@
     </div>
 </div>
 
-<!-- Modal: Quét Kênh Telegram -->
+<!-- Modal 1: Quét Kênh Telegram -->
 <div id="scan-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
     <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
-        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-5">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
                     <i class="fa-solid fa-satellite-dish"></i>
                 </div>
                 <div>
                     <h3 class="text-lg font-extrabold text-text">Quét Kênh Telegram</h3>
-                    <p class="text-xs text-text-secondary">Tự động nhận diện file nhạc Hi-Res</p>
+                    <p class="text-xs text-text-secondary">Tự động nhận diện file nhạc & CD Album</p>
                 </div>
             </div>
             <button onclick="closeScanModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
@@ -190,18 +190,37 @@
             </button>
         </div>
 
-        <div class="space-y-4">
+        <div class="space-y-3.5">
             <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1.5">ID Hoặc Username Kênh:</label>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">ID Hoặc Username Kênh:</label>
                 <input type="text" id="scan-chat-id" placeholder="Ví dụ: -1001987654321 hoặc @my_music_channel"
-                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border focus:ring-2 focus:ring-primary text-sm">
-                <p class="text-[11px] text-text-secondary mt-1">💡 Yêu cầu: Bot của bạn phải là Thành viên / Admin của kênh này.</p>
+                       class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border focus:ring-2 focus:ring-primary text-sm">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ Mặc Định (Tuỳ chọn):</label>
+                    <input type="text" id="scan-default-artist" placeholder="Ví dụ: Lệ Quyên"
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" title="Áp dụng nếu file không ghi tên ca sĩ">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album (Tuỳ chọn):</label>
+                    <input type="text" id="scan-default-album" placeholder="Ví dụ: Khúc Tình Xưa"
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm">
+                </div>
             </div>
 
             <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1.5">Số Tin Nhắn Quét:</label>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Số Tin Nhắn Quét:</label>
                 <input type="number" id="scan-limit" value="100" min="10" max="500"
-                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border focus:ring-2 focus:ring-primary text-sm">
+                       class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm">
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+                <input type="checkbox" id="scan-auto-scrape" checked class="w-4 h-4 rounded accent-primary cursor-pointer">
+                <label for="scan-auto-scrape" class="text-xs text-text cursor-pointer select-none">
+                    Tìm kiếm bìa & thông tin trên Apple Music (Chỉ áp dụng khi khớp ca sĩ)
+                </label>
             </div>
 
             <div id="scan-progress-indicator" class="hidden p-3 rounded-xl bg-primary/10 border border-primary/30 flex items-center gap-3">
@@ -210,10 +229,113 @@
             </div>
         </div>
 
-        <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-hairline">
+        <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
             <button onclick="closeScanModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
             <button id="start-scan-btn" onclick="submitScanTelegram()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-2">
                 <i class="fa-solid fa-play"></i> Bắt Đầu Quét
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 2: Chỉnh Sửa Bài Hát (Edit Track) -->
+<div id="edit-track-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Sửa Thông Tin Bài Hát</h3>
+                    <p class="text-xs text-text-secondary">Chỉnh sửa tên bài hát, ca sĩ, album</p>
+                </div>
+            </div>
+            <button onclick="closeEditTrackModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <input type="hidden" id="edit-track-chat-id">
+        <input type="hidden" id="edit-track-msg-id">
+
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Bài Hát:</label>
+                <input type="text" id="edit-track-name" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ / Nghệ Sĩ:</label>
+                <input type="text" id="edit-track-artist" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album:</label>
+                <input type="text" id="edit-track-album" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Khúc Tình Xưa">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">URL Ảnh Bìa (Cover URL):</label>
+                <input type="text" id="edit-track-cover" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="https://...">
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
+            <button onclick="closeEditTrackModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
+            <button onclick="saveTrackEdit()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110">
+                <i class="fa-solid fa-check mr-1"></i> Lưu Thay Đổi
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 3: Chỉnh Sửa Album (Edit Album) -->
+<div id="edit-album-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-compact-disc"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Sửa Thông Tin Album</h3>
+                    <p class="text-xs text-text-secondary">Chỉnh sửa tên Album, ca sĩ, ảnh bìa</p>
+                </div>
+            </div>
+            <button onclick="closeEditAlbumModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <input type="hidden" id="edit-album-id">
+
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album:</label>
+                <input type="text" id="edit-album-title" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ Chính:</label>
+                <input type="text" id="edit-album-artist" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Năm Phát Hành:</label>
+                <input type="text" id="edit-album-year" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: 2010">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">URL Ảnh Bìa Album:</label>
+                <input type="text" id="edit-album-cover" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="https://...">
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
+            <button onclick="closeEditAlbumModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
+            <button onclick="saveAlbumEdit()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110">
+                <i class="fa-solid fa-check mr-1"></i> Lưu Album
             </button>
         </div>
     </div>
@@ -270,7 +392,6 @@ function renderStats() {
     }
     document.getElementById('stat-source-label').textContent = publisher;
 
-    // Estimate total size
     let totalSizeMB = 0;
     globalAlbums.forEach(a => {
         if (a.totalSize && a.totalSize.includes('GB')) {
@@ -353,12 +474,15 @@ function renderAlbumsGrid(query = '') {
                     <span class="font-semibold text-text">${album.totalSize || ''}</span>
                 </div>
             </div>
-            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-hairline">
-                <button onclick="playTrackFromAlbum('${album.id}', 0)" class="flex-1 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5">
+            <div class="flex items-center gap-1.5 mt-4 pt-3 border-t border-hairline">
+                <button onclick="playTrackFromAlbum('${album.id}', 0)" class="flex-1 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center justify-center gap-1">
                     <i class="fa-solid fa-play text-[10px]"></i> Phát
                 </button>
+                <button onclick="openEditAlbumModal('${album.id}')" class="w-8 h-8 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs transition flex items-center justify-center" title="Chỉnh sửa Album">
+                    <i class="fa-solid fa-pen-to-square text-[11px]"></i>
+                </button>
                 <button onclick="deleteAlbum('${album.id}')" class="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white text-xs transition flex items-center justify-center" title="Xóa Album">
-                    <i class="fa-solid fa-trash-can"></i>
+                    <i class="fa-solid fa-trash-can text-[11px]"></i>
                 </button>
             </div>
         `;
@@ -406,16 +530,20 @@ function renderTracksTable(query = '') {
                     <span class="font-bold text-text text-sm">${track.name}</span>
                 </div>
             </td>
-            <td class="py-3 px-4 text-text-secondary text-xs">${track.artist || 'Unknown'}</td>
+            <td class="py-3 px-4 text-text-secondary text-xs font-semibold">${track.artist || 'Unknown'}</td>
             <td class="py-3 px-4 text-text-secondary text-xs truncate max-w-xs">${track.albumName || ''}</td>
-            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">FLAC / Hi-Res</span></td>
+            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">${track.format || 'Hi-Res'}</span></td>
             <td class="py-3 px-4 text-text-secondary text-xs">${track.duration || '--:--'}</td>
             <td class="py-3 px-4 text-text-secondary text-xs">${track.size || ''}</td>
             <td class="py-3 px-4 text-right">
-                <div class="inline-flex items-center gap-2">
+                <div class="inline-flex items-center gap-1.5">
                     <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || '').replace(/'/g, "\\'")}', '${track.coverUrl || track.albumCover}')" 
                             class="w-7 h-7 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
                         <i class="fa-solid fa-play text-[10px]"></i>
+                    </button>
+                    <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 
+                            class="w-7 h-7 rounded-lg bg-surface hover:bg-surface-2 text-text flex items-center justify-center transition" title="Sửa bài hát">
+                        <i class="fa-solid fa-pen-to-square text-[10px]"></i>
                     </button>
                     <button onclick="deleteTrack('${track.chatId}', '${track.msgId}')" 
                             class="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white flex items-center justify-center transition" title="Xóa bài">
@@ -495,6 +623,9 @@ function closeScanModal() {
 async function submitScanTelegram() {
     const chatId = document.getElementById('scan-chat-id').value.trim();
     const limit = document.getElementById('scan-limit').value || 100;
+    const defaultArtist = document.getElementById('scan-default-artist').value.trim();
+    const defaultAlbum = document.getElementById('scan-default-album').value.trim();
+    const autoScrape = document.getElementById('scan-auto-scrape').checked;
 
     if (!chatId) {
         alertToast('Vui lòng nhập Chat ID hoặc Username kênh!');
@@ -514,7 +645,13 @@ async function submitScanTelegram() {
         const res = await fetch('/api/music/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, limit: parseInt(limit, 10) })
+            body: JSON.stringify({ 
+                chat_id: chatId, 
+                limit: parseInt(limit, 10),
+                default_artist: defaultArtist,
+                default_album: defaultAlbum,
+                auto_scrape: autoScrape
+            })
         });
 
         const data = await res.json();
@@ -531,6 +668,125 @@ async function submitScanTelegram() {
     } finally {
         btn.disabled = false;
         btn.classList.remove('opacity-50');
+    }
+}
+
+// Edit Track Modal
+function openEditTrackModal(chatId, msgId) {
+    let track = null;
+    let albumName = '';
+    for (const a of globalAlbums) {
+        if (a.tracks) {
+            const found = a.tracks.find(t => String(t.chatId) === String(chatId) && String(t.msgId) === String(msgId));
+            if (found) {
+                track = found;
+                albumName = a.title;
+                break;
+            }
+        }
+    }
+    if (!track) return;
+
+    document.getElementById('edit-track-chat-id').value = chatId;
+    document.getElementById('edit-track-msg-id').value = msgId;
+    document.getElementById('edit-track-name').value = track.name || '';
+    document.getElementById('edit-track-artist').value = track.artist || '';
+    document.getElementById('edit-track-album').value = albumName || '';
+    document.getElementById('edit-track-cover').value = track.coverUrl || '';
+
+    const modal = document.getElementById('edit-track-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeEditTrackModal() {
+    const modal = document.getElementById('edit-track-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+async function saveTrackEdit() {
+    const chatId = document.getElementById('edit-track-chat-id').value;
+    const msgId = document.getElementById('edit-track-msg-id').value;
+    const name = document.getElementById('edit-track-name').value.trim();
+    const artist = document.getElementById('edit-track-artist').value.trim();
+    const album = document.getElementById('edit-track-album').value.trim();
+    const coverUrl = document.getElementById('edit-track-cover').value.trim();
+
+    if (!name) {
+        alertToast('Vui lòng nhập tên bài hát!');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/music/track/edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: parseInt(chatId), msg_id: parseInt(msgId), title: name, artist, album, cover_url: coverUrl })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            closeEditTrackModal();
+            alertToast('Đã lưu thông tin bài hát thành công!');
+            loadMusicData();
+        } else {
+            alertToast(data.message || 'Lỗi cập nhật');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
+    }
+}
+
+// Edit Album Modal
+function openEditAlbumModal(albumId) {
+    const album = globalAlbums.find(a => a.id === albumId);
+    if (!album) return;
+
+    document.getElementById('edit-album-id').value = album.id;
+    document.getElementById('edit-album-title').value = album.title || '';
+    document.getElementById('edit-album-artist').value = album.artist || '';
+    document.getElementById('edit-album-year').value = album.year || '';
+    document.getElementById('edit-album-cover').value = album.coverUrl || '';
+
+    const modal = document.getElementById('edit-album-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeEditAlbumModal() {
+    const modal = document.getElementById('edit-album-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+async function saveAlbumEdit() {
+    const albumId = document.getElementById('edit-album-id').value;
+    const title = document.getElementById('edit-album-title').value.trim();
+    const artist = document.getElementById('edit-album-artist').value.trim();
+    const year = document.getElementById('edit-album-year').value.trim();
+    const coverUrl = document.getElementById('edit-album-cover').value.trim();
+
+    if (!title) {
+        alertToast('Vui lòng nhập tên Album!');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/music/album/edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ album_id: albumId, title, artist, year, cover_url: coverUrl })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            closeEditAlbumModal();
+            alertToast('Đã lưu thông tin Album thành công!');
+            loadMusicData();
+        } else {
+            alertToast(data.message || 'Lỗi cập nhật');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
     }
 }
 
