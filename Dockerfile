@@ -11,6 +11,7 @@ RUN apt-get update && \
 	bash \
         git \
         curl \
+        ffmpeg \
         ca-certificates \
         locales && \
     locale-gen en_US.UTF-8 && \
