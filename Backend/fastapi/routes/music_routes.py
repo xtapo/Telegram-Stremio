@@ -663,10 +663,11 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
     new_artist = payload.get("artist", "").strip()
     new_album = payload.get("album", "").strip()
     new_cover = payload.get("cover_url", "").strip()
+    new_year = payload.get("year", "").strip()
 
     if not track_ids:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Chưa chọn bài hát nào"})
-    if not new_artist and not new_album and not new_cover:
+    if not new_artist and not new_album and not new_cover and not new_year:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Chưa nhập thông tin cần sửa"})
 
     # Tạo set lookup nhanh
@@ -702,7 +703,7 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
                     "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', new_album.lower())[:30]}",
                     "title": new_album.upper(),
                     "artist": (new_artist or matched_tracks[0].get("artist", "Unknown")).upper(),
-                    "year": time.strftime("%Y"),
+                    "year": new_year or time.strftime("%Y"),
                     "format": matched_tracks[0].get("format", "FLAC Hi-Res"),
                     "totalSize": "",
                     "publisher": f"{new_artist or 'Telegram'}",
@@ -711,8 +712,20 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
                     "tracks": []
                 }
                 albums.append(dest_album)
+            else:
+                if new_year: dest_album["year"] = new_year
+                if new_cover: dest_album["coverUrl"] = new_cover
+                if new_artist: dest_album["artist"] = new_artist.upper()
 
             dest_album["tracks"].extend(matched_tracks)
+        else:
+            # Nếu không đổi tên album mà cập nhật năm/bìa cho album hiện tại của các bài hát
+            if new_year or new_cover or new_artist:
+                for a in albums:
+                    if any((int(t.get("chatId", 0)), int(t.get("msgId", 0))) in id_set for t in a.get("tracks", [])):
+                        if new_year: a["year"] = new_year
+                        if new_cover: a["coverUrl"] = new_cover
+                        if new_artist: a["artist"] = new_artist.upper()
 
         # Xóa album rỗng
         albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]

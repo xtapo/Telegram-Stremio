@@ -484,9 +484,15 @@
                 <input type="text" id="bulk-edit-artist" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên (để trống = giữ nguyên)">
             </div>
 
-            <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Chuyển Sang Album:</label>
-                <input type="text" id="bulk-edit-album" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Khúc Tình Xưa (để trống = giữ nguyên)">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Chuyển Sang Album:</label>
+                    <input type="text" id="bulk-edit-album" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Khúc Tình Xưa">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Năm Phát Hành:</label>
+                    <input type="text" id="bulk-edit-year" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: 2010">
+                </div>
             </div>
 
             <div>
@@ -1000,6 +1006,7 @@ function openBulkEditModal() {
     document.getElementById('bulk-edit-count').textContent = bulkSelectedTracks.length;
     document.getElementById('bulk-edit-artist').value = '';
     document.getElementById('bulk-edit-album').value = '';
+    document.getElementById('bulk-edit-year').value = '';
     document.getElementById('bulk-edit-cover').value = '';
     document.getElementById('bulk-edit-cover-preview').src = '';
     document.getElementById('bulk-edit-cover-preview').style.display = 'none';
@@ -1024,10 +1031,11 @@ function closeBulkEditModal() {
 async function submitBulkEdit() {
     const artist = document.getElementById('bulk-edit-artist').value.trim();
     const album = document.getElementById('bulk-edit-album').value.trim();
+    const year = document.getElementById('bulk-edit-year').value.trim();
     const coverUrl = document.getElementById('bulk-edit-cover').value.trim();
 
-    if (!artist && !album && !coverUrl) {
-        alertToast('Vui lòng nhập ít nhất 1 trường (Ca Sĩ, Album hoặc Ảnh Bìa)!');
+    if (!artist && !album && !coverUrl && !year) {
+        alertToast('Vui lòng nhập ít nhất 1 trường (Ca Sĩ, Album, Năm hoặc Ảnh Bìa)!');
         return;
     }
 
@@ -1039,6 +1047,7 @@ async function submitBulkEdit() {
                 tracks: bulkSelectedTracks.map(t => ({ chatId: t.chatId, msgId: t.msgId })),
                 artist,
                 album,
+                year,
                 cover_url: coverUrl
             })
         });
@@ -1354,6 +1363,9 @@ function selectCoverObj(type, coverObj) {
         const p = document.getElementById('bulk-edit-cover-preview');
         p.src = coverUrl;
         p.style.display = 'block';
+        if (year) {
+            document.getElementById('bulk-edit-year').value = year;
+        }
         document.getElementById('bulk-cover-search-results').classList.add('hidden');
     } else {
         document.getElementById('edit-album-cover').value = coverUrl;
