@@ -96,8 +96,8 @@
     </div>
 
     <!-- View Mode Switch Tabs -->
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-        <div class="inline-flex p-1 bg-black/20 rounded-xl border border-hairline flex-wrap gap-1">
+    <div class="flex items-center justify-between mb-4">
+        <div class="inline-flex p-1 bg-black/20 rounded-xl border border-hairline">
             <button id="tab-albums-btn" onclick="switchTab('albums')" 
                     class="px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow">
                 <i class="fa-solid fa-layer-group mr-1"></i> Danh Sách Albums
@@ -106,29 +106,8 @@
                     class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
                 <i class="fa-solid fa-list-ol mr-1"></i> Toàn Bộ Bài Hát
             </button>
-            <button id="tab-unrecognized-btn" onclick="switchTab('unrecognized')" 
-                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text flex items-center gap-1.5">
-                <i class="fa-solid fa-brain text-purple-400"></i> Cần Nhận Diện
-                <span id="tab-unrecognized-badge" class="px-1.5 py-0.2 rounded-full bg-purple-500/25 text-purple-300 font-extrabold text-[10px] hidden">0</span>
-            </button>
         </div>
         <span class="text-xs text-text-secondary" id="items-count-indicator">Đang hiển thị...</span>
-    </div>
-
-    <!-- Banner Cảnh Báo & Nhận Diện Nhanh Cho Bài Hát Rác / Mất Tên -->
-    <div id="unrecognized-banner" class="hidden mb-6 p-4 rounded-2xl bg-gradient-to-r from-purple-500/15 via-indigo-500/15 to-pink-500/15 border border-purple-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl shrink-0 border border-purple-500/30">
-                <i class="fa-solid fa-brain animate-pulse"></i>
-            </div>
-            <div>
-                <h4 class="text-xs font-black text-purple-200">Phát hiện <span id="unrecognized-banner-count" class="text-white font-extrabold underline">0</span> bài hát bị mất thông tin hoặc đặt tên dạng track_01.flac, audio_123.mp3</h4>
-                <p class="text-[11px] text-text-secondary">Sử dụng Audio Fingerprinting (Shazam) đọc sóng âm để nhận diện chính xác 100% tên bài hát & ca sĩ gốc.</p>
-            </div>
-        </div>
-        <button onclick="autoRecognizeAllGenericTracks()" id="btn-auto-shazam-all" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 hover:brightness-110 flex items-center gap-2 shrink-0 transition">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Nhận Diện Tự Động Tất Cả
-        </button>
     </div>
 
     <!-- Content Area: Album Grid -->
@@ -314,20 +293,11 @@
                 </div>
             </div>
 
-            <div class="space-y-2">
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" id="scan-enable-fingerprint" checked class="w-4 h-4 rounded accent-purple-500 cursor-pointer">
-                    <label for="scan-enable-fingerprint" class="text-xs text-text cursor-pointer select-none">
-                        🧠 Tự động nhận diện sóng âm <strong>(Audio Fingerprint - Shazam)</strong> cho các bài hát mất thông tin (track_01, audio_123)
-                    </label>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" id="scan-auto-scrape" checked class="w-4 h-4 rounded accent-primary cursor-pointer">
-                    <label for="scan-auto-scrape" class="text-xs text-text cursor-pointer select-none">
-                        Tự động tìm kiếm ảnh bìa HD & siêu dữ liệu từ <strong>Apple Music & Deezer</strong>
-                    </label>
-                </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" id="scan-auto-scrape" checked class="w-4 h-4 rounded accent-primary cursor-pointer">
+                <label for="scan-auto-scrape" class="text-xs text-text cursor-pointer select-none">
+                    Tự động tìm kiếm ảnh bìa HD & siêu dữ liệu từ <strong>Apple Music & Deezer</strong>
+                </label>
             </div>
 
             <div class="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-[11px] text-cyan-300 flex items-center gap-2">
@@ -604,9 +574,6 @@
                 <span class="font-bold text-primary">Đã chọn <span id="bulk-selected-count">0</span> bài hát</span>
             </div>
             <div class="flex items-center gap-2">
-                <button onclick="startBulkShazamRecognition()" class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold shadow hover:brightness-110 flex items-center gap-1.5 transition">
-                    <i class="fa-solid fa-brain"></i> Nhận Diện Shazam
-                </button>
                 <button onclick="openBulkEditModal()" class="px-3 py-1.5 rounded-lg bg-primary text-white text-[11px] font-bold shadow hover:brightness-110 flex items-center gap-1">
                     <i class="fa-solid fa-pen-to-square"></i> Sửa Hàng Loạt
                 </button>
@@ -755,138 +722,10 @@
     </div>
 </div>
 
-<!-- Modal 7: Kết Quả Nhận Diện Sóng Âm (Shazam Single Result Modal) -->
-<div id="shazam-result-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
-    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-purple-500/40 transform scale-95 transition-all text-center relative overflow-hidden">
-        
-        <!-- Glow accents -->
-        <div class="absolute -top-16 -left-16 w-32 h-32 bg-purple-500/30 rounded-full blur-3xl pointer-events-none"></div>
-        <div class="absolute -bottom-16 -right-16 w-32 h-32 bg-pink-500/30 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div class="flex items-center justify-between pb-3 border-b border-hairline mb-4 relative z-10">
-            <div class="flex items-center gap-2 text-purple-400 font-extrabold text-sm">
-                <i class="fa-solid fa-brain animate-pulse"></i> Nhận Diện Sóng Âm Thành Công!
-            </div>
-            <button onclick="closeShazamResultModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-
-        <div class="relative w-36 h-36 mx-auto rounded-2xl overflow-hidden shadow-2xl border border-purple-500/40 mb-4 bg-black/30 group">
-            <img id="shazam-res-cover" src="" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="Shazam Cover" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
-            <div class="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-[10px] font-bold text-purple-300 border border-purple-500/30">
-                <i class="fa-solid fa-bolt text-amber-400 mr-1"></i>Shazam
-            </div>
-        </div>
-
-        <div class="space-y-1 mb-4 relative z-10">
-            <h3 id="shazam-res-title" class="text-lg font-black text-text truncate">Tên Bài Hát</h3>
-            <p id="shazam-res-artist" class="text-sm font-bold text-purple-300 truncate">Ca Sĩ</p>
-            <p id="shazam-res-album" class="text-xs text-text-secondary truncate mt-0.5">Album</p>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-surface/70 border border-hairline text-left text-xs mb-5">
-            <div>
-                <span class="text-[10px] uppercase font-bold text-text-secondary block">Năm phát hành</span>
-                <span id="shazam-res-year" class="font-bold text-text">2026</span>
-            </div>
-            <div>
-                <span class="text-[10px] uppercase font-bold text-text-secondary block">Thể loại</span>
-                <span id="shazam-res-genre" class="font-bold text-text truncate block">Pop / Hi-Res</span>
-            </div>
-        </div>
-
-        <div class="flex items-center justify-center gap-3 pt-2 relative z-10">
-            <button onclick="closeShazamResultModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Đóng</button>
-            <button id="shazam-res-listen-btn" onclick="closeShazamResultModal()" class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 hover:brightness-110 flex items-center gap-2 transition">
-                <i class="fa-solid fa-check"></i> Đã Lưu Vào Thư Viện
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Modal 8: Tiến Trình Nhận Diện Sóng Âm Hàng Loạt (Bulk Shazam Progress Modal) -->
-<div id="bulk-shazam-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
-    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-purple-500/40 transform scale-95 transition-all flex flex-col max-h-[85vh]">
-        <div class="flex items-center justify-between pb-3 border-b border-hairline mb-4 shrink-0">
-            <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-base">
-                    <i class="fa-solid fa-brain animate-pulse"></i>
-                </div>
-                <div>
-                    <h3 class="text-base font-extrabold text-text">Nhận Diện Sóng Âm Hàng Loạt</h3>
-                    <p class="text-xs text-text-secondary">Đang đọc sóng âm và nhận diện qua Shazam...</p>
-                </div>
-            </div>
-            <button id="btn-close-bulk-shazam" onclick="closeBulkShazamModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text hidden">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-
-        <div class="space-y-4 flex-1 overflow-y-auto pr-1">
-            <!-- Progress indicator -->
-            <div>
-                <div class="flex items-center justify-between text-xs font-bold mb-1.5">
-                    <span id="bulk-shazam-status-label" class="text-text truncate max-w-xs">Đang chuẩn bị...</span>
-                    <span id="bulk-shazam-percent" class="text-purple-400 font-black">0%</span>
-                </div>
-                <div class="w-full h-3 rounded-full bg-surface border border-hairline overflow-hidden p-0.5">
-                    <div id="bulk-shazam-progress-fill" class="h-full rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-amber-500 transition-all duration-300" style="width: 0%;"></div>
-                </div>
-            </div>
-
-            <!-- Stats metric box -->
-            <div class="grid grid-cols-3 gap-2 text-center">
-                <div class="glass-panel p-2.5 rounded-xl">
-                    <span class="text-[10px] font-bold text-text-secondary uppercase block">Tổng bài</span>
-                    <span id="bulk-shazam-total" class="text-sm font-black text-text">0</span>
-                </div>
-                <div class="glass-panel p-2.5 rounded-xl">
-                    <span class="text-[10px] font-bold text-text-secondary uppercase block">Thành công</span>
-                    <span id="bulk-shazam-success" class="text-sm font-black text-emerald-400">0</span>
-                </div>
-                <div class="glass-panel p-2.5 rounded-xl">
-                    <span class="text-[10px] font-bold text-text-secondary uppercase block">Không khớp</span>
-                    <span id="bulk-shazam-failed" class="text-sm font-black text-amber-400">0</span>
-                </div>
-            </div>
-
-            <!-- Live logs box -->
-            <div>
-                <span class="text-[11px] font-bold uppercase text-text-secondary block mb-1.5">Nhật ký nhận diện:</span>
-                <div id="bulk-shazam-logs" class="p-3 bg-black/40 rounded-xl font-mono text-[11px] text-text-secondary space-y-1.5 max-h-48 overflow-y-auto border border-hairline">
-                    <div>[Bắt đầu] Đang kết nối máy chủ Shazam...</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="pt-3 mt-4 border-t border-hairline flex items-center justify-end gap-3 shrink-0">
-            <button id="btn-finish-bulk-shazam" onclick="finishBulkShazam()" disabled class="px-5 py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold shadow-lg shadow-purple-600/30 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-2">
-                <i class="fa-solid fa-check"></i> Hoàn Tất & Làm Mới Thư Viện
-            </button>
-        </div>
-    </div>
-</div>
-
 <script>
 let globalAlbums = [];
 let currentActiveTab = 'albums';
 let currentViewAlbumId = null;
-let currentShazamTrackData = null;
-
-const GENERIC_TRACK_REGEX = /^\s*(track[\s_.-]*\d+|audio[\s_.-]*\d+|song[\s_.-]*\d+|file[\s_.-]*\d+|\d{1,3}|untitled|unknown|noname|cd\d+[\s_.-]*track[\s_.-]*\d+|disc\d+[\s_.-]*\d+|bai[\s_.-]*\d+)(\.(mp3|flac|m4a|wav|aac|ogg|opus|alac|dsf|ape))?\s*$/i;
-
-function isGenericTrack(name, artist = '') {
-    if (!name) return true;
-    const n = name.trim().replace(/\.(mp3|flac|m4a|wav|aac|ogg|opus|alac|dsf|ape)$/i, '').trim();
-    if (!n || n.length <= 1) return true;
-    if (GENERIC_TRACK_REGEX.test(name) || GENERIC_TRACK_REGEX.test(n)) return true;
-    const a = (artist || '').toLowerCase().trim();
-    if (!a || a.includes('unknown') || a.includes('various') || a.includes('telegram') || a.includes('lossless')) {
-        if (/^\d+$/.test(n) || n.length <= 3) return true;
-    }
-    return false;
-}
 
 // Hàm định dạng huy hiệu chất lượng âm thanh chuyên nghiệp
 function formatQualityBadge(formatStr, qualityTier = '') {
@@ -945,40 +784,10 @@ async function loadMusicData(showToastAlert = false) {
 
 function renderStats() {
     let totalTracks = 0;
-    let genericTracksCount = 0;
-    
-    globalAlbums.forEach(a => {
-        if (a.tracks) {
-            totalTracks += a.tracks.length;
-            a.tracks.forEach(t => {
-                if (isGenericTrack(t.name, t.artist || a.artist)) {
-                    genericTracksCount++;
-                }
-            });
-        }
-    });
+    globalAlbums.forEach(a => totalTracks += (a.tracks ? a.tracks.length : 0));
 
     document.getElementById('stat-albums-count').textContent = globalAlbums.length;
     document.getElementById('stat-tracks-count').textContent = totalTracks;
-
-    // Cập nhật badge & banner bài hát chưa nhận diện
-    const unrecBadge = document.getElementById('tab-unrecognized-badge');
-    const unrecBanner = document.getElementById('unrecognized-banner');
-    const unrecCountSpan = document.getElementById('unrecognized-banner-count');
-
-    if (genericTracksCount > 0) {
-        if (unrecBadge) {
-            unrecBadge.textContent = genericTracksCount;
-            unrecBadge.classList.remove('hidden');
-        }
-        if (unrecBanner) {
-            unrecBanner.classList.remove('hidden');
-            if (unrecCountSpan) unrecCountSpan.textContent = genericTracksCount;
-        }
-    } else {
-        if (unrecBadge) unrecBadge.classList.add('hidden');
-        if (unrecBanner) unrecBanner.classList.add('hidden');
-    }
 
     let publisher = 'Telegram Cloud';
     if (globalAlbums.length > 0 && globalAlbums[0].publisher) {
@@ -1023,14 +832,10 @@ function renderCurrentView() {
         albumsView.classList.remove('hidden');
         tracksView.classList.add('hidden');
         renderAlbumsGrid(filterQuery);
-    } else if (currentActiveTab === 'unrecognized') {
-        albumsView.classList.add('hidden');
-        tracksView.classList.remove('hidden');
-        renderTracksTable(filterQuery, true);
     } else {
         albumsView.classList.add('hidden');
         tracksView.classList.remove('hidden');
-        renderTracksTable(filterQuery, false);
+        renderTracksTable(filterQuery);
     }
 }
 
@@ -1098,7 +903,7 @@ function renderAlbumsGrid(query = '') {
     });
 }
 
-function renderTracksTable(query = '', onlyUnrecognized = false) {
+function renderTracksTable(query = '') {
     const tbody = document.getElementById('tracks-table-body');
     tbody.innerHTML = '';
 
@@ -1111,10 +916,6 @@ function renderTracksTable(query = '', onlyUnrecognized = false) {
         }
     });
 
-    if (onlyUnrecognized) {
-        allTracks = allTracks.filter(t => isGenericTrack(t.name, t.artist));
-    }
-
     const filtered = allTracks.filter(t => 
         !query || 
         t.name.toLowerCase().includes(query) || 
@@ -1122,30 +923,23 @@ function renderTracksTable(query = '', onlyUnrecognized = false) {
         (t.albumName && t.albumName.toLowerCase().includes(query))
     );
 
-    const titlePrefix = onlyUnrecognized ? 'Bài hát cần nhận diện' : 'Bài hát';
-    document.getElementById('items-count-indicator').textContent = `Hiển thị ${filtered.length} / ${allTracks.length} ${titlePrefix}`;
+    document.getElementById('items-count-indicator').textContent = `Hiển thị ${filtered.length} / ${allTracks.length} Bài hát`;
 
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-text-secondary">${onlyUnrecognized ? 'Tuyệt vời! Không còn bài hát nào bị mất thông tin hoặc mang tên generic.' : 'Không tìm thấy bài hát nào.'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-text-secondary">Không tìm thấy bài hát nào.</td></tr>`;
         return;
     }
 
     filtered.forEach((track, idx) => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-surface/50 transition group';
-        const isGen = isGenericTrack(track.name, track.artist);
         
         tr.innerHTML = `
             <td class="py-3 px-4 text-center text-text-secondary text-xs">${idx + 1}</td>
             <td class="py-3 px-4">
                 <div class="flex items-center gap-3">
                     <img src="${track.coverUrl || track.albumCover}" class="w-8 h-8 rounded-lg object-cover" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <span class="font-bold text-text text-sm">${track.name}</span>
-                            ${isGen ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0"><i class="fa-solid fa-brain"></i> Chưa nhận diện</span>` : ''}
-                        </div>
-                    </div>
+                    <span class="font-bold text-text text-sm">${track.name}</span>
                 </div>
             </td>
             <td class="py-3 px-4 text-text-secondary text-xs font-semibold">${track.artist || 'Unknown'}</td>
@@ -1158,10 +952,6 @@ function renderTracksTable(query = '', onlyUnrecognized = false) {
                     <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || '').replace(/'/g, "\\'")}', '${track.coverUrl || track.albumCover}', '${track.format || track.albumFormat}', '${track.qualityTier || track.albumQualityTier}')" 
                             class="w-7 h-7 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
                         <i class="fa-solid fa-play text-[10px]"></i>
-                    </button>
-                    <button onclick="recognizeSingleTrack('${track.chatId}', '${track.msgId}', this)" 
-                            class="w-7 h-7 rounded-lg bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white flex items-center justify-center transition" title="Nhận diện bằng âm thanh qua Shazam">
-                        <i class="fa-solid fa-brain text-[10px]"></i>
                     </button>
                     <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 
                             class="w-7 h-7 rounded-lg bg-surface hover:bg-surface-2 text-text flex items-center justify-center transition" title="Sửa bài hát">
@@ -1187,18 +977,13 @@ function switchTab(tab) {
     currentActiveTab = tab;
     const albumsBtn = document.getElementById('tab-albums-btn');
     const tracksBtn = document.getElementById('tab-tracks-btn');
-    const unrecBtn = document.getElementById('tab-unrecognized-btn');
-
-    [albumsBtn, tracksBtn, unrecBtn].forEach(b => {
-        if (b) b.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text flex items-center gap-1.5';
-    });
 
     if (tab === 'albums') {
-        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow flex items-center gap-1.5';
-    } else if (tab === 'tracks') {
-        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow flex items-center gap-1.5';
-    } else if (tab === 'unrecognized') {
-        unrecBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-purple-600 text-white shadow-lg shadow-purple-600/30 flex items-center gap-1.5';
+        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    } else {
+        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
     }
 
     renderCurrentView();
@@ -1288,8 +1073,6 @@ function openAlbumTracklistModal(albumId, animate = true) {
         album.tracks.forEach((track, idx) => {
             const tr = document.createElement('tr');
             tr.className = 'hover:bg-surface/50 transition group select-none';
-            const isGen = isGenericTrack(track.name, track.artist || album.artist);
-            
             tr.innerHTML = `
                 <td class="py-2.5 px-2 text-center" onclick="event.stopPropagation();">
                     <input type="checkbox" class="track-checkbox w-3.5 h-3.5 accent-primary cursor-pointer" 
@@ -1298,12 +1081,9 @@ function openAlbumTracklistModal(albumId, animate = true) {
                 </td>
                 <td class="py-2.5 px-2 text-center font-bold text-text-secondary">${idx + 1}</td>
                 <td class="py-2.5 px-3 font-bold text-text">
-                    <div class="flex items-center gap-2">
-                        <span class="hover:text-primary cursor-pointer truncate" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')">
-                            ${track.name}
-                        </span>
-                        ${isGen ? `<span class="px-1.5 py-0.5 rounded text-[8px] font-black bg-purple-500/25 text-purple-300 border border-purple-500/30 shrink-0"><i class="fa-solid fa-brain"></i> Shazam</span>` : ''}
-                    </div>
+                    <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')">
+                        ${track.name}
+                    </span>
                 </td>
                 <td class="py-2.5 px-3 text-text-secondary">${track.artist || album.artist}</td>
                 <td class="py-2.5 px-3">${formatQualityBadge(track.format || album.format, track.qualityTier || album.qualityTier)}</td>
@@ -1314,10 +1094,6 @@ function openAlbumTracklistModal(albumId, animate = true) {
                         <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')" 
                                 class="w-6 h-6 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
                             <i class="fa-solid fa-play text-[9px]"></i>
-                        </button>
-                        <button onclick="recognizeSingleTrack('${track.chatId}', '${track.msgId}', this)" 
-                                class="w-6 h-6 rounded-lg bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white flex items-center justify-center transition" title="Nhận diện bằng âm thanh qua Shazam">
-                            <i class="fa-solid fa-brain text-[9px]"></i>
                         </button>
                         <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 
                                 class="w-6 h-6 rounded-lg bg-surface hover:bg-surface-2 text-text flex items-center justify-center transition" title="Sửa bài">
@@ -1675,7 +1451,6 @@ async function startMusicScan() {
     const defaultArtist = document.getElementById('scan-default-artist').value.trim();
     const defaultAlbum = document.getElementById('scan-default-album').value.trim();
     const autoScrape = document.getElementById('scan-auto-scrape').checked;
-    const enableFingerprint = document.getElementById('scan-enable-fingerprint') ? document.getElementById('scan-enable-fingerprint').checked : true;
 
     const startBtn = document.getElementById('start-scan-btn');
     startBtn.disabled = true;
@@ -1692,8 +1467,7 @@ async function startMusicScan() {
                 mode,
                 default_artist: defaultArtist,
                 default_album: defaultAlbum,
-                auto_scrape: autoScrape,
-                enable_fingerprint: enableFingerprint
+                auto_scrape: autoScrape
             })
         });
 
@@ -2103,204 +1877,6 @@ async function deleteTrack(chatId, msgId) {
     } catch (e) {
         alertToast('Lỗi kết nối server: ' + e.message);
     }
-}
-
-// ── 🧠 Shazam Audio Fingerprinting Functions ──────────────────────────────
-async function recognizeSingleTrack(chatId, msgId, btnEl) {
-    if (!chatId || !msgId) return;
-
-    let originalHtml = '';
-    if (btnEl) {
-        originalHtml = btnEl.innerHTML;
-        btnEl.disabled = true;
-        btnEl.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-[10px]"></i>`;
-    }
-
-    alertToast('🧠 Đang đọc sóng âm & nhận diện qua Shazam...');
-
-    try {
-        const res = await fetch('/api/music/track/recognize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: parseInt(chatId, 10),
-                msg_id: parseInt(msgId, 10),
-                auto_apply: true
-            })
-        });
-
-        const data = await res.json();
-
-        if (res.ok && data.status === 'success' && data.track) {
-            alertToast(`✅ Khớp: ${data.track.artist} - ${data.track.title}`);
-            if (data.albums) {
-                globalAlbums = data.albums;
-                renderStats();
-                renderCurrentView();
-                if (currentViewAlbumId) {
-                    openAlbumTracklistModal(currentViewAlbumId, false);
-                }
-            } else {
-                loadMusicData();
-            }
-            openShazamResultModal(data.track);
-        } else {
-            alertToast(data.message || 'Không thể nhận diện bài hát qua sóng âm.');
-        }
-    } catch (e) {
-        alertToast('Lỗi nhận diện: ' + e.message);
-    } finally {
-        if (btnEl) {
-            btnEl.disabled = false;
-            btnEl.innerHTML = originalHtml;
-        }
-    }
-}
-
-function openShazamResultModal(track) {
-    if (!track) return;
-    currentShazamTrackData = track;
-
-    document.getElementById('shazam-res-cover').src = track.cover_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
-    document.getElementById('shazam-res-title').textContent = track.title || 'Chưa rõ';
-    document.getElementById('shazam-res-artist').textContent = track.artist || 'Chưa rõ';
-    document.getElementById('shazam-res-album').textContent = track.album ? `Album: ${track.album}` : 'Single / Unknown Album';
-    document.getElementById('shazam-res-year').textContent = track.year || '2026';
-    document.getElementById('shazam-res-genre').textContent = track.genre || 'Hi-Res Audio';
-
-    const modal = document.getElementById('shazam-result-modal');
-    modal.classList.remove('opacity-0', 'pointer-events-none');
-    modal.querySelector('.transform').classList.remove('scale-95');
-}
-
-function closeShazamResultModal() {
-    const modal = document.getElementById('shazam-result-modal');
-    modal.classList.add('opacity-0', 'pointer-events-none');
-    modal.querySelector('.transform').classList.add('scale-95');
-}
-
-// Bulk Shazam Recognition
-let bulkShazamRunning = false;
-
-async function startBulkShazamRecognition() {
-    const selected = Array.from(bulkSelectedTracks.values());
-    if (selected.length === 0) {
-        alertToast('Vui lòng tích chọn ít nhất 1 bài hát để nhận diện!');
-        return;
-    }
-
-    runBulkShazamFlow(selected);
-}
-
-async function autoRecognizeAllGenericTracks() {
-    let genericList = [];
-    globalAlbums.forEach(a => {
-        if (a.tracks) {
-            a.tracks.forEach(t => {
-                if (isGenericTrack(t.name, t.artist || a.artist)) {
-                    genericList.push({
-                        chatId: t.chatId,
-                        msgId: t.msgId,
-                        name: t.name
-                    });
-                }
-            });
-        }
-    });
-
-    if (genericList.length === 0) {
-        alertToast('Không có bài hát nào bị mất thông tin hoặc mang tên generic.');
-        return;
-    }
-
-    runBulkShazamFlow(genericList);
-}
-
-async function runBulkShazamFlow(trackList) {
-    bulkShazamRunning = true;
-    const modal = document.getElementById('bulk-shazam-modal');
-    modal.classList.remove('opacity-0', 'pointer-events-none');
-    modal.querySelector('.transform').classList.remove('scale-95');
-
-    const totalEl = document.getElementById('bulk-shazam-total');
-    const successEl = document.getElementById('bulk-shazam-success');
-    const failedEl = document.getElementById('bulk-shazam-failed');
-    const percentEl = document.getElementById('bulk-shazam-percent');
-    const fillEl = document.getElementById('bulk-shazam-progress-fill');
-    const statusLabel = document.getElementById('bulk-shazam-status-label');
-    const logsEl = document.getElementById('bulk-shazam-logs');
-    const finishBtn = document.getElementById('btn-finish-bulk-shazam');
-    const closeBtn = document.getElementById('btn-close-bulk-shazam');
-
-    totalEl.textContent = trackList.length;
-    successEl.textContent = '0';
-    failedEl.textContent = '0';
-    percentEl.textContent = '0%';
-    fillEl.style.width = '0%';
-    finishBtn.disabled = true;
-    closeBtn.classList.add('hidden');
-
-    logsEl.innerHTML = `<div>[Bắt đầu] Đang chuẩn bị nhận diện ${trackList.length} bài hát qua Shazam...</div>`;
-
-    let successCount = 0;
-    let failedCount = 0;
-
-    for (let i = 0; i < trackList.length; i++) {
-        const item = trackList[i];
-        const currentIdx = i + 1;
-        const progressPct = Math.round((currentIdx / trackList.length) * 100);
-
-        statusLabel.textContent = `[${currentIdx}/${trackList.length}] Đang đọc sóng âm: ${item.name || item.msgId}...`;
-        percentEl.textContent = `${progressPct}%`;
-        fillEl.style.width = `${progressPct}%`;
-
-        try {
-            const res = await fetch('/api/music/track/recognize', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: parseInt(item.chatId, 10),
-                    msg_id: parseInt(item.msgId, 10),
-                    auto_apply: true
-                })
-            });
-
-            const data = await res.json();
-            if (res.ok && data.status === 'success' && data.track) {
-                successCount++;
-                successEl.textContent = successCount;
-                logsEl.innerHTML += `<div class="text-emerald-400">✅ [${currentIdx}/${trackList.length}] Khớp: <strong>${data.track.artist} - ${data.track.title}</strong> (Album: ${data.track.album || 'Single'})</div>`;
-                if (data.albums) globalAlbums = data.albums;
-            } else {
-                failedCount++;
-                failedEl.textContent = failedCount;
-                logsEl.innerHTML += `<div class="text-amber-400">⚠️ [${currentIdx}/${trackList.length}] Không khớp sóng âm: ${item.name || item.msgId}</div>`;
-            }
-        } catch (err) {
-            failedCount++;
-            failedEl.textContent = failedCount;
-            logsEl.innerHTML += `<div class="text-red-400">❌ [${currentIdx}/${trackList.length}] Lỗi: ${err.message}</div>`;
-        }
-
-        logsEl.scrollTop = logsEl.scrollHeight;
-        await new Promise(r => setTimeout(r, 400));
-    }
-
-    statusLabel.textContent = `Hoàn tất! Nhận diện thành công ${successCount}/${trackList.length} bài hát.`;
-    finishBtn.disabled = false;
-    closeBtn.classList.remove('hidden');
-    clearBulkSelection();
-}
-
-function closeBulkShazamModal() {
-    const modal = document.getElementById('bulk-shazam-modal');
-    modal.classList.add('opacity-0', 'pointer-events-none');
-    modal.querySelector('.transform').classList.add('scale-95');
-}
-
-function finishBulkShazam() {
-    closeBulkShazamModal();
-    loadMusicData(true);
 }
 
 function alertToast(msg) {

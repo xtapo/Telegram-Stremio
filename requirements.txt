@@ -14,5 +14,3 @@ uvicorn
 uv
 uvloop
 httptools
-shazamlite
-itsdangerous

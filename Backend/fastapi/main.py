@@ -137,7 +137,6 @@ from Backend.fastapi.routes.template_routes import (
 )
 from Backend.fastapi.security.credentials import require_auth
 from Backend.pyrofork.bot import work_loads_summary
-from Backend.logger import LOGGER
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
@@ -148,14 +147,6 @@ app = FastAPI(
 )
 
 #----- Middleware
-from starlette.middleware.sessions import SessionMiddleware
-import secrets
-
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=secrets.token_hex(32),
-)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -187,9 +178,8 @@ try:
         app.mount("/Music", StaticFiles(directory="Music"), name="music_static")
     from Backend.fastapi.routes.music_routes import router as music_router
     app.include_router(music_router)
-    LOGGER.info("[STARTUP] Music Player & Management router mounted successfully at /music and /music/manage.")
-except Exception as e:
-    LOGGER.error(f"[STARTUP] Error including music_router: {e}", exc_info=True)
+except Exception:
+    pass
 
 
 #----- Public routes (no authentication)
@@ -252,12 +242,6 @@ async def admin_dashboard(request: Request, _: bool = Depends(require_auth)):
 @app.get("/media/manage", response_class=HTMLResponse)
 async def media_management(request: Request, media_type: str = "movie", custom: bool = False, _: bool = Depends(require_auth)):
     return await media_management_page(request, media_type, custom, _)
-
-@app.get("/music/manage", response_class=HTMLResponse)
-@app.get("/music/manage/", response_class=HTMLResponse)
-async def music_management(request: Request, _: bool = Depends(require_auth)):
-    from Backend.fastapi.routes.music_routes import music_management_page
-    return await music_management_page(request, _)
 
 @app.get("/catalogs", response_class=HTMLResponse)
 async def custom_catalogs(request: Request, _: bool = Depends(require_auth)):

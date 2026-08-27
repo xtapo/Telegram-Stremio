@@ -23,7 +23,6 @@ from Backend.pyrofork.bot import StreamBot, Userbot, USERBOT_CLIENT_INDEX, multi
 from Backend.fastapi.routes.stream_routes import select_best_client, _get_streamer, parse_range_header, _resolve_filename_mime, _build_stream_headers
 from Backend.fastapi.security.credentials import get_current_user, require_auth
 from Backend.fastapi.routes.template_routes import _base_context, templates
-from Backend.helper.metadata.audio_fingerprint import is_generic_track_name, recognize_telegram_audio_track, recognize_audio_bytes
 
 router = APIRouter(tags=["Music Player & Telegram Storage"])
 
@@ -317,7 +316,6 @@ def _get_active_client():
 
 # ── 1. Giao diện Quản trị Backend Music Management (/music/manage) ──────────
 @router.get("/music/manage", response_class=HTMLResponse)
-@router.get("/music/manage/", response_class=HTMLResponse)
 async def music_management_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
@@ -335,21 +333,15 @@ async def get_music_player(request: Request):
 
 
 @router.get("/music/{filename:path}")
-async def get_music_static_file(filename: str, request: Request):
+async def get_music_static_file(filename: str):
     """
     Phục vụ trực tiếp CSS, JS, Fonts, Images khi người dùng truy cập /music/style.css, /music/app.js, v.v.
     Bảo đảm 100% không bị lỗi 404 trên Linux / Hugging Face.
     """
-    clean_name = filename.strip("/")
-    if clean_name in ["", "index.html"]:
-        index_path = os.path.join(MUSIC_DIR, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        return HTMLResponse("<h3>Music Player</h3>", status_code=200)
+    if not filename or filename.strip("/") in ["", "index.html"]:
+        return FileResponse(os.path.join(MUSIC_DIR, "index.html"))
 
-    if clean_name == "manage":
-        return await music_management_page(request)
-
+    clean_name = filename.lstrip("/")
     file_path = os.path.join(MUSIC_DIR, clean_name)
     if os.path.exists(file_path) and os.path.isfile(file_path):
         mime_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
@@ -653,7 +645,6 @@ class MusicScanManager:
         limit: int = 100,
         mode: str = "append",
         auto_scrape: bool = True,
-        enable_fingerprint: bool = True,
         default_artist: str = "",
         default_album: str = "",
         from_msg_id: int = 0,
@@ -692,7 +683,6 @@ class MusicScanManager:
                 limit=limit,
                 mode=mode,
                 auto_scrape=auto_scrape,
-                enable_fingerprint=enable_fingerprint,
                 default_artist=default_artist,
                 default_album=default_album,
                 from_msg_id=from_msg_id,
@@ -718,7 +708,6 @@ class MusicScanManager:
         limit: int,
         mode: str,
         auto_scrape: bool,
-        enable_fingerprint: bool,
         default_artist: str,
         default_album: str,
         from_msg_id: int = 0,
@@ -964,25 +953,8 @@ class MusicScanManager:
                         has_cover = bool(getattr(media, "thumbs", None))
                         fallback_cover = f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
 
-                        # 4. Tự động nhận diện sóng âm (Audio Fingerprint - Shazam) cho các bài bị mất thông tin
-                        is_generic = is_generic_track_name(final_title, final_artist)
-                        if enable_fingerprint and is_generic:
-                            self._log(f"🧠 Phát hiện bài '{f_name or final_title}' mất thông tin — đang đọc sóng âm Shazam...")
-                            try:
-                                fp_data = await recognize_telegram_audio_track(resolved_chat_id, msg.id)
-                                if fp_data and fp_data.get("title"):
-                                    final_title = fp_data["title"]
-                                    final_artist = fp_data["artist"]
-                                    if fp_data.get("album") and (not default_album or final_album == chat_title):
-                                        final_album = fp_data["album"]
-                                    if fp_data.get("cover_url"):
-                                        fallback_cover = fp_data["cover_url"]
-                                    self._log(f"✅ Sóng âm khớp: {final_artist} - {final_title} (Album: {final_album})")
-                            except Exception as fp_err:
-                                LOGGER.debug(f"[MUSIC SCAN] Fingerprint recognition failed: {fp_err}")
-
                         scraped_meta = None
-                        if auto_scrape and not (enable_fingerprint and is_generic and fp_data if 'fp_data' in locals() and fp_data else False):
+                        if auto_scrape:
                             scraped_meta = await fetch_music_metadata(
                                 raw_title=final_title,
                                 raw_artist=final_artist,
@@ -1159,7 +1131,6 @@ async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
     to_msg_id = max(0, int(payload.get("to_msg_id", 0) or 0))
     mode = str(payload.get("mode", "append")).lower()
     auto_scrape = bool(payload.get("auto_scrape", True))
-    enable_fingerprint = bool(payload.get("enable_fingerprint", True))
     default_artist = str(payload.get("default_artist", "")).strip()
     default_album = str(payload.get("default_album", "")).strip()
 
@@ -1168,7 +1139,6 @@ async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
         limit=limit,
         mode=mode,
         auto_scrape=auto_scrape,
-        enable_fingerprint=enable_fingerprint,
         default_artist=default_artist,
         default_album=default_album,
         from_msg_id=from_msg_id,
@@ -1678,244 +1648,6 @@ async def search_music_covers(query: str = Query(..., min_length=1), _: bool = D
         LOGGER.warning(f"[COVER SEARCH] Deezer search failed: {e}")
 
     return JSONResponse(content={"status": "success", "count": len(covers), "covers": covers})
-
-
-# ── 9. Nhận Diện Sóng Âm (Audio Fingerprinting - Shazam Song Recognition) ──────
-@router.post("/api/music/track/recognize")
-async def recognize_music_track(payload: dict, _: bool = Depends(require_auth)):
-    """
-    Nhận diện chính xác bài hát bằng đọc sóng âm (Audio Fingerprinting - Shazam) từ Telegram.
-    """
-    chat_id = int(payload.get("chat_id", 0))
-    msg_id = int(payload.get("msg_id", 0))
-    auto_apply = bool(payload.get("auto_apply", True))
-
-    if not chat_id or not msg_id:
-        raise HTTPException(status_code=400, detail="Thiếu thông tin chat_id hoặc msg_id.")
-
-    LOGGER.info(f"[AUDIO RECOGNIZE API] Bắt đầu nhận diện sóng âm cho track {chat_id}/{msg_id}...")
-    recog_data = await recognize_telegram_audio_track(chat_id=chat_id, msg_id=msg_id)
-
-    if not recog_data or not recog_data.get("title"):
-        return JSONResponse(status_code=404, content={
-            "status": "error",
-            "message": "Không thể nhận diện bài hát qua sóng âm (No Match / File không chứa đoạn nhạc nhận dạng được)."
-        })
-
-    # Tự động cập nhật vào thư viện nếu auto_apply = True
-    updated = False
-    albums = await _db_load_library()
-    if auto_apply and albums:
-        try:
-            target_track = None
-            old_album_title = ""
-            for a in albums:
-                for t in a.get("tracks", []):
-                    if int(t.get("chatId", 0)) == chat_id and int(t.get("msgId", 0)) == msg_id:
-                        target_track = t
-                        old_album_title = a.get("title", "")
-                        break
-                if target_track:
-                    break
-
-            if target_track:
-                new_title = recog_data["title"]
-                new_artist = recog_data["artist"]
-                new_album = recog_data["album"]
-                new_cover = recog_data.get("cover_url") or target_track.get("coverUrl", "")
-                new_year = recog_data.get("year", "2026")
-
-                target_track["name"] = new_title
-                target_track["artist"] = new_artist
-                if new_cover:
-                    target_track["coverUrl"] = new_cover
-
-                # Nếu chuyển sang Album mới
-                if new_album and new_album.upper() != old_album_title.upper():
-                    for a in albums:
-                        a["tracks"] = [t for t in a.get("tracks", []) if not (int(t.get("chatId", 0)) == chat_id and int(t.get("msgId", 0)) == msg_id)]
-
-                    dest_album = next((a for a in albums if a.get("title", "").upper() == new_album.upper()), None)
-                    if not dest_album:
-                        color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
-                        dest_album = {
-                            "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', new_album.lower())[:30]}",
-                            "title": new_album.upper(),
-                            "artist": new_artist.upper(),
-                            "year": new_year,
-                            "format": target_track.get("format", "FLAC Hi-Res"),
-                            "qualityTier": target_track.get("qualityTier", "lossless"),
-                            "totalSize": target_track.get("size", "0 MB"),
-                            "publisher": f"{new_artist} / Shazam",
-                            "coverUrl": new_cover,
-                            "glowColors": color_preset,
-                            "tracks": []
-                        }
-                        albums.append(dest_album)
-
-                    dest_album["tracks"].append(target_track)
-                else:
-                    # Cập nhật album hiện tại
-                    curr_album = next((a for a in albums if a.get("title", "").upper() == old_album_title.upper()), None)
-                    if curr_album:
-                        if new_artist: curr_album["artist"] = new_artist.upper()
-                        if new_cover and (not curr_album.get("coverUrl") or "/api/music/cover/" in curr_album.get("coverUrl", "")):
-                            curr_album["coverUrl"] = new_cover
-
-                albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-                await _db_save_library(albums)
-                updated = True
-        except Exception as e:
-            LOGGER.error(f"[AUDIO RECOGNIZE API] Lỗi cập nhật thư viện: {e}", exc_info=True)
-
-    return JSONResponse(content={
-        "status": "success",
-        "message": f"Đã nhận diện thành công: {recog_data['artist']} - {recog_data['title']}",
-        "track": recog_data,
-        "updated": updated,
-        "albums": albums if updated else None
-    })
-
-
-@router.post("/api/music/tracks/bulk-recognize")
-async def bulk_recognize_music_tracks(payload: dict, _: bool = Depends(require_auth)):
-    """
-    Nhận diện sóng âm hàng loạt cho nhiều bài hát được chọn.
-    """
-    track_list = payload.get("tracks", [])
-    auto_apply = bool(payload.get("auto_apply", True))
-
-    if not track_list:
-        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất 1 bài hát để nhận diện.")
-
-    results = []
-    recognized_count = 0
-    albums = await _db_load_library() or []
-
-    for item in track_list:
-        cid = int(item.get("chatId") or item.get("chat_id") or 0)
-        mid = int(item.get("msgId") or item.get("msg_id") or 0)
-        if not cid or not mid:
-            continue
-
-        try:
-            recog = await recognize_telegram_audio_track(chat_id=cid, msg_id=mid)
-            if recog and recog.get("title"):
-                recognized_count += 1
-                results.append({
-                    "chat_id": cid,
-                    "msg_id": mid,
-                    "recognized": True,
-                    "data": recog
-                })
-
-                if auto_apply:
-                    target_track = None
-                    old_album_title = ""
-                    for a in albums:
-                        for t in a.get("tracks", []):
-                            if int(t.get("chatId", 0)) == cid and int(t.get("msgId", 0)) == mid:
-                                target_track = t
-                                old_album_title = a.get("title", "")
-                                break
-                        if target_track:
-                            break
-
-                    if target_track:
-                        new_title = recog["title"]
-                        new_artist = recog["artist"]
-                        new_album = recog["album"]
-                        new_cover = recog.get("cover_url") or target_track.get("coverUrl", "")
-                        new_year = recog.get("year", "2026")
-
-                        target_track["name"] = new_title
-                        target_track["artist"] = new_artist
-                        if new_cover: target_track["coverUrl"] = new_cover
-
-                        if new_album and new_album.upper() != old_album_title.upper():
-                            for a in albums:
-                                a["tracks"] = [t for t in a.get("tracks", []) if not (int(t.get("chatId", 0)) == cid and int(t.get("msgId", 0)) == mid)]
-
-                            dest_album = next((a for a in albums if a.get("title", "").upper() == new_album.upper()), None)
-                            if not dest_album:
-                                color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
-                                dest_album = {
-                                    "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', new_album.lower())[:30]}",
-                                    "title": new_album.upper(),
-                                    "artist": new_artist.upper(),
-                                    "year": new_year,
-                                    "format": target_track.get("format", "FLAC Hi-Res"),
-                                    "qualityTier": target_track.get("qualityTier", "lossless"),
-                                    "totalSize": target_track.get("size", "0 MB"),
-                                    "publisher": f"{new_artist} / Shazam",
-                                    "coverUrl": new_cover,
-                                    "glowColors": color_preset,
-                                    "tracks": []
-                                }
-                                albums.append(dest_album)
-
-                            dest_album["tracks"].append(target_track)
-            else:
-                results.append({
-                    "chat_id": cid,
-                    "msg_id": mid,
-                    "recognized": False,
-                    "message": "No match found"
-                })
-        except Exception as e:
-            LOGGER.warning(f"[BULK RECOGNIZE] Error recognizing {cid}/{mid}: {e}")
-            results.append({
-                "chat_id": cid,
-                "msg_id": mid,
-                "recognized": False,
-                "message": str(e)
-            })
-        await asyncio.sleep(0.3)
-
-    if auto_apply and recognized_count > 0:
-        albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-        await _db_save_library(albums)
-
-    return JSONResponse(content={
-        "status": "success",
-        "message": f"Đã nhận diện thành công {recognized_count}/{len(track_list)} bài hát qua Shazam!",
-        "recognized_count": recognized_count,
-        "total": len(track_list),
-        "results": results,
-        "albums": albums if auto_apply else None
-    })
-
-
-@router.get("/api/music/unrecognized-tracks")
-async def get_unrecognized_tracks(_: bool = Depends(require_auth)):
-    """
-    Trả về danh sách các bài hát trong thư viện bị mất thông tin hoặc có tên dạng generic (track_01, audio_..., unknown).
-    """
-    albums = await _db_load_library() or []
-    unrecognized = []
-
-    for a in albums:
-        for t in a.get("tracks", []):
-            name = t.get("name", "")
-            artist = t.get("artist", "")
-            if is_generic_track_name(name, artist):
-                unrecognized.append({
-                    "chatId": t.get("chatId"),
-                    "msgId": t.get("msgId"),
-                    "name": name,
-                    "artist": artist,
-                    "album": a.get("title", ""),
-                    "format": t.get("format", a.get("format", "")),
-                    "coverUrl": t.get("coverUrl", a.get("coverUrl", "")),
-                    "previewUrl": t.get("previewUrl", "")
-                })
-
-    return JSONResponse(content={
-        "status": "success",
-        "count": len(unrecognized),
-        "tracks": unrecognized
-    })
-
 
 
 

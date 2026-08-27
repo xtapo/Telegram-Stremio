@@ -1,4 +1,3 @@
-from datetime import datetime
 from logging import ERROR, INFO, CRITICAL, FileHandler, Formatter, StreamHandler, basicConfig, getLogger
 
 import pytz
