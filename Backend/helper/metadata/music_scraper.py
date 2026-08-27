@@ -54,31 +54,59 @@ def clean_audio_filename(fn: str) -> str:
 
 def extract_context_from_text(text: str) -> Tuple[str, str]:
     """
-    Trích xuất tên Album và Ca Sĩ từ tin nhắn văn bản, caption hoặc tựa đề gần chỗ gửi file nhạc
-    Ví dụ: '💿 Album: Khúc Tình Xưa - Lệ Quyên' hoặc 'Khánh Ly - Gởi Người Một Niềm Vui'
+    Trích xuất tên Album và Ca Sĩ từ tin nhắn văn bản, caption hoặc tựa đề gần chỗ gửi file nhạc.
+    Hỗ trợ cả tiếng Việt có dấu lẫn không dấu.
+    Ví dụ:
+      - '💿 Album: Khúc Tình Xưa'       (có dấu)
+      - 'Ca si: Le Quyen'                (không dấu)
+      - 'Le Quyen - Khuc Tinh Xua [FLAC]' (không dấu, dạng dòng)
     """
     if not text:
         return "", ""
     text = text.strip()
     artist = ""
     album = ""
-    
-    # 1. Tìm theo nhãn rõ ràng: Ca sĩ / Artist / Album / CD
-    m_artist = re.search(r'(?:Ca\s*s[ĩỹ]|Artist|Singer|Nghệ\s*sĩ|Trình\s*bày)\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE)
+
+    # 1. Tìm theo nhãn rõ ràng — hỗ trợ cả có dấu và không dấu
+    #    Ca sĩ / Ca si / Nghệ sĩ / Nghe si / Trình bày / Trinh bay / Artist / Singer / Hat / Hát
+    artist_labels = (
+        r'Ca\s*s[ĩỹi]'        # Ca sĩ / Ca sỹ / Ca si
+        r'|Ngh[eệ]\s*s[ĩi]'   # Nghệ sĩ / Nghe si
+        r'|Tr[iì]nh\s*b[aà]y' # Trình bày / Trinh bay
+        r'|H[aá]t'             # Hát / Hat
+        r'|Artist|Singer|Performer'
+    )
+    m_artist = re.search(
+        rf'(?:{artist_labels})\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE
+    )
     if m_artist:
         artist = m_artist.group(1).strip()
-        
-    m_album = re.search(r'(?:Album|CD\s*\d*|Tuyển\s*tập|Đĩa\s*hát|Collection)\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE)
+
+    #    Album / CD / Tuyển tập / Tuyen tap / Đĩa hát / Dia hat / Collection / Nhac tuyen
+    album_labels = (
+        r'Album'
+        r'|CD\s*\d*'
+        r'|Tuy[eể]n\s*t[aậ]p'  # Tuyển tập / Tuyen tap
+        r'|[ĐD][ĩi]a\s*h[aá]t' # Đĩa hát / Dia hat
+        r'|Collection'
+        r'|Nh[aạ]c\s*tuy[eể]n'  # Nhạc tuyển / Nhac tuyen
+    )
+    m_album = re.search(
+        rf'(?:{album_labels})\s*[:\-]\s*([^\n\r,;]+)', text, re.IGNORECASE
+    )
     if m_album:
         album = m_album.group(1).strip()
 
     # 2. Nếu là dạng dòng đầu 'Artist - Album' hoặc 'Artist - Album (Year)'
     if not artist or not album:
         first_line = text.split('\n')[0].strip()
+        # Loại bỏ emoji / icon ở đầu dòng
         first_line = re.sub(r'^[^\w\s\u00C0-\u1EF9]+', '', first_line).strip()
+        # Loại bỏ tag [FLAC], [WAV], [320kbps]...
         first_line = re.sub(r'\[.*?\]', '', first_line).strip()
+        # Loại bỏ năm trong ngoặc (2010), (2024)
         first_line = re.sub(r'\((?:19|20)\d{2}\)', '', first_line).strip()
-        
+
         if ' - ' in first_line:
             parts = first_line.split(' - ')
             if len(parts) >= 2:
