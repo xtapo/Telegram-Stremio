@@ -857,7 +857,7 @@ html, body {
     font-weight: 600;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
-    min-width: 36px;
+    min-width: 45px;
     text-align: center;
 }
 
@@ -1945,5 +1945,116 @@ html, body {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0, 136, 204, 0.5);
     background: linear-gradient(135deg, #0099e6 0%, #00bfff 100%);
+}
+
+/* --- Playlists Management Styling --- */
+.playlist-card-item {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all var(--transition-fast);
+}
+
+.playlist-card-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(2, 132, 199, 0.4);
+    transform: translateY(-1px);
+}
+
+.playlist-card-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.playlist-icon-badge {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(3, 105, 161, 0.15));
+    border: 1px solid rgba(2, 132, 199, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.playlist-card-info h4 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.playlist-card-info p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.playlist-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-play-playlist {
+    background: #0284c7;
+    color: #ffffff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.btn-play-playlist:hover {
+    background: #0369a1;
+    transform: scale(1.03);
+}
+
+.btn-delete-playlist {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-delete-playlist:hover {
+    background: rgba(239, 68, 68, 0.3);
+    color: #ffffff;
+}
+
+.track-add-playlist-btn {
+    opacity: 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.track-item:hover .track-add-playlist-btn {
+    opacity: 1;
+}
+
+.track-add-playlist-btn:hover {
+    color: var(--accent-gold);
+    transform: scale(1.15);
 }
 

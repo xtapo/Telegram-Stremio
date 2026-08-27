@@ -291,17 +291,47 @@
 
     <!-- Playlist Modal -->
     <div class="modal-overlay" id="playlistModal">
-        <div class="modal-card">
+        <div class="modal-card playlist-modal-card">
             <div class="modal-header">
-                <h3>Quản Lý Playlists</h3>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.4rem;">📑</span>
+                    <div>
+                        <h3 style="margin: 0;">Quản Lý Playlist Cá Nhân</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Tạo và phát các danh sách bài hát yêu thích của bạn</p>
+                    </div>
+                </div>
                 <button class="modal-close" id="closePlaylistModal">&times;</button>
             </div>
-            <div class="playlist-grid" id="playlistGrid" style="display: grid; gap: 10px; margin-bottom: 15px; max-height: 300px; overflow-y: auto;">
-                <!-- Playlists populated by js -->
+
+            <!-- Create Playlist Bar -->
+            <div class="playlist-create-bar" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <input type="text" id="newPlaylistName" placeholder="Nhập tên playlist mới (VD: Nhạc chill, Acoustic...)..." style="flex: 1; padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff; font-size: 0.9rem; outline: none;">
+                <button id="createPlaylistBtn" style="padding: 12px 20px; border-radius: 8px; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    <span>Tạo Mới</span>
+                </button>
             </div>
-            <div class="playlist-footer" style="display: flex; gap: 10px;">
-                <input type="text" id="newPlaylistName" placeholder="Tên Playlist Mới..." style="flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #fff;">
-                <button id="createPlaylistBtn" style="padding: 10px 15px; border-radius: 6px; background: #0284c7; color: white; border: none; cursor: pointer;">Tạo Mới</button>
+
+            <!-- Playlist List Container -->
+            <div class="playlist-list-container" id="playlistGrid" style="display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; padding-right: 4px;">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add To Playlist Modal -->
+    <div class="modal-overlay" id="addToPlaylistModal">
+        <div class="modal-card" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3 style="margin: 0; font-size: 1.2rem;">Thêm Vào Playlist</h3>
+                <button class="modal-close" id="closeAddToPlaylistModal">&times;</button>
+            </div>
+            <div style="margin-bottom: 16px; padding: 10px 14px; background: rgba(255,255,255,0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">BÀI HÁT ĐƯỢC CHỌN:</div>
+                <div id="addToPlaylistTrackTitle" style="font-weight: 600; color: var(--accent-gold); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            </div>
+            <div id="addToPlaylistOptions" style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto;">
+                <!-- Options populated by js -->
             </div>
         </div>
     </div>

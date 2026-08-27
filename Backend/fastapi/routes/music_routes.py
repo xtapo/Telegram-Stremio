@@ -688,7 +688,7 @@ async def get_music_playlists():
     return {"status": "success", "playlists": saved}
 
 @router.post("/api/music/playlists")
-async def create_music_playlist(payload: dict, _: bool = Depends(require_auth)):
+async def create_music_playlist(payload: dict):
     name = payload.get("name", "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Vui lòng cung cấp tên Playlist.")
@@ -710,7 +710,7 @@ async def create_music_playlist(payload: dict, _: bool = Depends(require_auth)):
     return {"status": "success", "message": f"Đã tạo playlist '{name}'.", "playlist": new_playlist}
 
 @router.put("/api/music/playlists/{playlist_id}")
-async def update_music_playlist(playlist_id: str, payload: dict, _: bool = Depends(require_auth)):
+async def update_music_playlist(playlist_id: str, payload: dict):
     saved = await _db_load_playlists()
     tracks = payload.get("tracks")
     name = payload.get("name")
@@ -736,7 +736,7 @@ async def update_music_playlist(playlist_id: str, payload: dict, _: bool = Depen
     return {"status": "success", "message": "Đã cập nhật playlist.", "playlist": target}
 
 @router.delete("/api/music/playlists/{playlist_id}")
-async def delete_music_playlist(playlist_id: str, _: bool = Depends(require_auth)):
+async def delete_music_playlist(playlist_id: str):
     saved = await _db_load_playlists()
     new_list = [p for p in saved if str(p.get("id")) != playlist_id]
     await _db_save_playlists(new_list)
