@@ -400,8 +400,9 @@ class XTAPOMusicApp {
         this.totalDurationLabel.textContent = (!isNaN(mins) && mins > 0) ? `${mins} Minutes` : `${(album.tracks || []).length} Songs`;
 
         // Update Covers
-        this.albumCoverImg.src = album.coverUrl;
-        this.vinylCenterImg.src = album.coverUrl;
+        const initialCover = (album.tracks && album.tracks[trackIndex] && album.tracks[trackIndex].coverUrl) || album.coverUrl;
+        this.albumCoverImg.src = initialCover;
+        this.vinylCenterImg.src = initialCover;
 
         // Update Background Glows
         const glow1 = document.querySelector('.glow-1');
@@ -473,12 +474,44 @@ class XTAPOMusicApp {
         const track = this.currentTrack;
         const album = this.currentAlbum;
 
-        // Update Now Playing Labels
-        this.nowPlayingTitle.textContent = `${this.currentTrackIndex + 1}. ${track.name}`;
-        this.nowPlayingArtist.textContent = album.artist;
-        this.timeTotal.textContent = track.duration;
+        // Cập nhật ảnh đĩa than & Album Sleeve theo từng bài hát
+        const trackCover = (track && track.coverUrl) || (album && album.coverUrl) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
+        if (this.albumCoverImg && this.albumCoverImg.src !== trackCover) {
+            this.albumCoverImg.src = trackCover;
+        }
+        if (this.vinylCenterImg && this.vinylCenterImg.src !== trackCover) {
+            this.vinylCenterImg.src = trackCover;
+        }
+
+        // Cập nhật màu nền phát sáng theo bài hát nếu có
+        if (track && track.glowColors) {
+            const glow1 = document.querySelector('.glow-1');
+            const glow2 = document.querySelector('.glow-2');
+            if (glow1 && track.glowColors.glow1) glow1.style.background = track.glowColors.glow1;
+            if (glow2 && track.glowColors.glow2) glow2.style.background = track.glowColors.glow2;
+        }
+
+        // Cập nhật thông tin bài hát đang phát
+        const artistName = (track && track.artist) || (album && album.artist) || 'XTAPO Music';
+        this.nowPlayingTitle.textContent = `${this.currentTrackIndex + 1}. ${track.name || 'Unknown Track'}`;
+        this.nowPlayingArtist.textContent = artistName;
+        this.timeTotal.textContent = track.duration || '--:--';
         this.timeCurrent.textContent = "0:00";
         this.updateProgress(0);
+
+        // Cập nhật MediaSession cho màn hình khóa và thanh thông báo
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.name || 'Unknown Track',
+                    artist: artistName,
+                    album: album.title || 'XTAPO Music',
+                    artwork: [
+                        { src: trackCover, sizes: '512x512', type: 'image/jpeg' }
+                    ]
+                });
+            } catch (e) {}
+        }
 
         // Update Active Tracklist Item
         const items = this.tracklistEl.querySelectorAll('.track-item');
