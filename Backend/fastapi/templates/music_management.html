@@ -413,12 +413,29 @@
             </div>
         </div>
 
+        <!-- Bulk Selection Toolbar (hidden until tracks are selected) -->
+        <div id="bulk-toolbar" class="hidden mt-3 p-2.5 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-between gap-3 animate-bounce">
+            <div class="flex items-center gap-2 text-xs">
+                <i class="fa-solid fa-check-double text-primary"></i>
+                <span class="font-bold text-primary">Đã chọn <span id="bulk-selected-count">0</span> bài hát</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openBulkEditModal()" class="px-3 py-1.5 rounded-lg bg-primary text-white text-[11px] font-bold shadow hover:brightness-110 flex items-center gap-1">
+                    <i class="fa-solid fa-pen-to-square"></i> Sửa Hàng Loạt
+                </button>
+                <button onclick="clearBulkSelection()" class="px-2.5 py-1.5 rounded-lg bg-surface text-text text-[11px] font-bold hover:bg-surface-2">
+                    Bỏ chọn
+                </button>
+            </div>
+        </div>
+
         <!-- Tracklist Content Table -->
         <div class="flex-1 overflow-y-auto mt-4 pr-1">
             <table class="w-full text-left border-collapse text-xs">
                 <thead>
                     <tr class="border-b border-hairline text-text-secondary font-bold uppercase text-[10px]">
-                        <th class="py-2.5 px-3 w-10 text-center">#</th>
+                        <th class="py-2.5 px-2 w-8 text-center"><input type="checkbox" id="tracklist-select-all" onchange="toggleSelectAllTracks(this.checked)" class="w-3.5 h-3.5 accent-primary cursor-pointer" title="Chọn tất cả"></th>
+                        <th class="py-2.5 px-2 w-8 text-center">#</th>
                         <th class="py-2.5 px-3">Tên Bài Hát</th>
                         <th class="py-2.5 px-3">Ca Sĩ</th>
                         <th class="py-2.5 px-3">Thời Lượng</th>
@@ -434,6 +451,78 @@
         <div class="pt-3 mt-3 border-t border-hairline flex items-center justify-between text-xs text-text-secondary">
             <span id="tracklist-footer-info">Tổng cộng 0 bài hát</span>
             <button onclick="closeAlbumTracklistModal()" class="px-4 py-1.5 rounded-xl bg-surface hover:bg-surface-2 text-text font-bold transition">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 6: Sửa Hàng Loạt Nhiều Bài Hát (Bulk Edit Tracks Modal) -->
+<div id="bulk-edit-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <i class="fa-solid fa-list-check"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Sửa Hàng Loạt</h3>
+                    <p class="text-xs text-text-secondary">Áp dụng cùng Ca Sĩ, Album, Ảnh Bìa cho <span id="bulk-edit-count" class="text-primary font-bold">0</span> bài hát đã chọn</p>
+                </div>
+            </div>
+            <button onclick="closeBulkEditModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="space-y-3.5">
+            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+                <i class="fa-solid fa-circle-info mr-1"></i>
+                Chỉ các trường bạn nhập mới được áp dụng. Trường để trống sẽ <strong>giữ nguyên</strong> giá trị cũ.
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ / Nghệ Sĩ Chung:</label>
+                <input type="text" id="bulk-edit-artist" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Lệ Quyên (để trống = giữ nguyên)">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Chuyển Sang Album:</label>
+                <input type="text" id="bulk-edit-album" class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="Ví dụ: Khúc Tình Xưa (để trống = giữ nguyên)">
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">URL Ảnh Bìa Chung:</label>
+                    <button type="button" onclick="searchOnlineCovers('bulk')" class="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-magnifying-glass"></i> Tìm Ảnh Bìa Online
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <img id="bulk-edit-cover-preview" src="" class="w-12 h-12 rounded-xl object-cover border border-hairline shrink-0 bg-black/20" alt="Preview" onerror="this.style.display='none'">
+                    <input type="text" id="bulk-edit-cover" oninput="const p=document.getElementById('bulk-edit-cover-preview'); p.src=this.value; p.style.display='block';" class="flex-1 px-3 py-2 rounded-xl bg-background text-text border border-border text-sm" placeholder="https://... (để trống = giữ nguyên)">
+                </div>
+            </div>
+
+            <!-- Online Cover Search Results Container for Bulk -->
+            <div id="bulk-cover-search-results" class="hidden p-3 rounded-2xl bg-surface border border-hairline">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-bold text-text-secondary uppercase">Chọn ảnh bìa (Bấm để xem to / Chọn):</span>
+                    <button onclick="document.getElementById('bulk-cover-search-results').classList.add('hidden')" class="text-xs text-text-secondary hover:text-text"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="bulk-cover-grid" class="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1"></div>
+            </div>
+
+            <!-- Preview: Danh sách bài hát đang chọn -->
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Các bài hát sẽ được cập nhật:</label>
+                <div id="bulk-edit-track-list" class="max-h-28 overflow-y-auto bg-black/20 rounded-xl p-2 text-[11px] text-text-secondary space-y-0.5"></div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
+            <button onclick="closeBulkEditModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
+            <button onclick="submitBulkEdit()" class="px-5 py-2 rounded-xl bg-amber-500 text-black text-xs font-bold shadow-lg shadow-amber-500/20 hover:brightness-110 flex items-center gap-1.5">
+                <i class="fa-solid fa-check-double"></i> Áp Dụng Cho Tất Cả
+            </button>
         </div>
     </div>
 </div>
@@ -753,11 +842,15 @@ function playTrackFromAlbum(albumId, trackIndex) {
 }
 
 // ── Modal 4: Album Tracklist View ───────────────────────────────────────────────
+let bulkSelectedTracks = [];
+
 function openAlbumTracklistModal(albumId, animate = true) {
     const album = globalAlbums.find(a => a.id === albumId);
     if (!album) return;
 
     currentViewAlbumId = albumId;
+    bulkSelectedTracks = [];
+    updateBulkToolbar();
 
     document.getElementById('tracklist-album-cover').src = album.coverUrl || '';
     document.getElementById('tracklist-album-title').textContent = album.title || '';
@@ -770,18 +863,22 @@ function openAlbumTracklistModal(albumId, animate = true) {
 
     document.getElementById('tracklist-play-all-btn').onclick = () => playTrackFromAlbum(album.id, 0);
     document.getElementById('tracklist-edit-album-btn').onclick = () => openEditAlbumModal(album.id);
+    document.getElementById('tracklist-select-all').checked = false;
 
     const tbody = document.getElementById('tracklist-modal-body');
     tbody.innerHTML = '';
 
     if (!album.tracks || album.tracks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-text-secondary">Chưa có bài hát nào trong album này.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-text-secondary">Chưa có bài hát nào trong album này.</td></tr>`;
     } else {
         album.tracks.forEach((track, idx) => {
             const tr = document.createElement('tr');
             tr.className = 'hover:bg-surface/50 transition group';
             tr.innerHTML = `
-                <td class="py-2.5 px-3 text-center font-bold text-text-secondary">${idx + 1}</td>
+                <td class="py-2.5 px-2 text-center">
+                    <input type="checkbox" class="track-checkbox w-3.5 h-3.5 accent-primary cursor-pointer" data-chat-id="${track.chatId}" data-msg-id="${track.msgId}" data-name="${track.name}" onchange="onTrackCheckboxChange()">
+                </td>
+                <td class="py-2.5 px-2 text-center font-bold text-text-secondary">${idx + 1}</td>
                 <td class="py-2.5 px-3 font-bold text-text">
                     <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}')">
                         ${track.name}
@@ -820,9 +917,115 @@ function openAlbumTracklistModal(albumId, animate = true) {
 
 function closeAlbumTracklistModal() {
     currentViewAlbumId = null;
+    bulkSelectedTracks = [];
+    updateBulkToolbar();
     const modal = document.getElementById('album-tracklist-modal');
     modal.classList.add('opacity-0', 'pointer-events-none');
     modal.querySelector('.transform').classList.add('scale-95');
+}
+
+// ── Bulk Selection & Bulk Edit ────────────────────────────────────────────────
+function onTrackCheckboxChange() {
+    const checkboxes = document.querySelectorAll('#tracklist-modal-body .track-checkbox');
+    bulkSelectedTracks = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            bulkSelectedTracks.push({
+                chatId: cb.dataset.chatId,
+                msgId: cb.dataset.msgId,
+                name: cb.dataset.name
+            });
+        }
+    });
+    updateBulkToolbar();
+}
+
+function toggleSelectAllTracks(checked) {
+    const checkboxes = document.querySelectorAll('#tracklist-modal-body .track-checkbox');
+    checkboxes.forEach(cb => cb.checked = checked);
+    onTrackCheckboxChange();
+}
+
+function clearBulkSelection() {
+    document.getElementById('tracklist-select-all').checked = false;
+    toggleSelectAllTracks(false);
+}
+
+function updateBulkToolbar() {
+    const toolbar = document.getElementById('bulk-toolbar');
+    const countSpan = document.getElementById('bulk-selected-count');
+    if (bulkSelectedTracks.length > 0) {
+        toolbar.classList.remove('hidden');
+        countSpan.textContent = bulkSelectedTracks.length;
+    } else {
+        toolbar.classList.add('hidden');
+        countSpan.textContent = '0';
+    }
+}
+
+function openBulkEditModal() {
+    if (bulkSelectedTracks.length === 0) {
+        alertToast('Vui lòng chọn ít nhất 1 bài hát!');
+        return;
+    }
+
+    document.getElementById('bulk-edit-count').textContent = bulkSelectedTracks.length;
+    document.getElementById('bulk-edit-artist').value = '';
+    document.getElementById('bulk-edit-album').value = '';
+    document.getElementById('bulk-edit-cover').value = '';
+    document.getElementById('bulk-edit-cover-preview').src = '';
+    document.getElementById('bulk-edit-cover-preview').style.display = 'none';
+    document.getElementById('bulk-cover-search-results').classList.add('hidden');
+
+    const listEl = document.getElementById('bulk-edit-track-list');
+    listEl.innerHTML = bulkSelectedTracks.map((t, i) =>
+        `<div class="flex items-center gap-1"><span class="text-primary font-bold">${i + 1}.</span> ${t.name}</div>`
+    ).join('');
+
+    const modal = document.getElementById('bulk-edit-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeBulkEditModal() {
+    const modal = document.getElementById('bulk-edit-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+async function submitBulkEdit() {
+    const artist = document.getElementById('bulk-edit-artist').value.trim();
+    const album = document.getElementById('bulk-edit-album').value.trim();
+    const coverUrl = document.getElementById('bulk-edit-cover').value.trim();
+
+    if (!artist && !album && !coverUrl) {
+        alertToast('Vui lòng nhập ít nhất 1 trường (Ca Sĩ, Album hoặc Ảnh Bìa)!');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/music/tracks/bulk-edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tracks: bulkSelectedTracks.map(t => ({ chatId: t.chatId, msgId: t.msgId })),
+                artist,
+                album,
+                cover_url: coverUrl
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            closeBulkEditModal();
+            clearBulkSelection();
+            alertToast(data.message || `Đã cập nhật ${data.count} bài hát!`);
+            loadMusicData();
+        } else {
+            alertToast(data.message || 'Lỗi cập nhật hàng loạt');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
+    }
 }
 
 // Modal Scanner
@@ -1025,6 +1228,12 @@ async function searchOnlineCovers(type) {
         query = `${artist} ${album || name}`.trim() || name;
         resultsContainer = document.getElementById('track-cover-search-results');
         grid = document.getElementById('track-cover-grid');
+    } else if (type === 'bulk') {
+        const artist = document.getElementById('bulk-edit-artist').value.trim();
+        const album = document.getElementById('bulk-edit-album').value.trim();
+        query = `${artist} ${album}`.trim() || artist || album;
+        resultsContainer = document.getElementById('bulk-cover-search-results');
+        grid = document.getElementById('bulk-cover-grid');
     } else {
         const artist = document.getElementById('edit-album-artist').value.trim();
         const title = document.getElementById('edit-album-title').value.trim();
@@ -1112,6 +1321,12 @@ function selectCoverObj(type, coverObj) {
         document.getElementById('edit-track-cover').value = coverUrl;
         document.getElementById('edit-track-cover-preview').src = coverUrl;
         document.getElementById('track-cover-search-results').classList.add('hidden');
+    } else if (type === 'bulk') {
+        document.getElementById('bulk-edit-cover').value = coverUrl;
+        const p = document.getElementById('bulk-edit-cover-preview');
+        p.src = coverUrl;
+        p.style.display = 'block';
+        document.getElementById('bulk-cover-search-results').classList.add('hidden');
     } else {
         document.getElementById('edit-album-cover').value = coverUrl;
         document.getElementById('edit-album-cover-preview').src = coverUrl;

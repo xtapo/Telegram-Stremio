@@ -649,6 +649,87 @@ async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
+# ── 7b. Sửa Hàng Loạt Nhiều Bài Hát Cùng Lúc (Bulk Edit Tracks) ─────────────
+@router.post("/api/music/tracks/bulk-edit")
+async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth)):
+    """
+    Sửa ca sĩ, album, ảnh bìa cho nhiều bài hát cùng lúc.
+    Payload: { tracks: [{chatId, msgId}], artist, album, cover_url }
+    """
+    if not os.path.exists(LIBRARY_CACHE_FILE):
+        return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
+
+    track_ids = payload.get("tracks", [])
+    new_artist = payload.get("artist", "").strip()
+    new_album = payload.get("album", "").strip()
+    new_cover = payload.get("cover_url", "").strip()
+
+    if not track_ids:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Chưa chọn bài hát nào"})
+    if not new_artist and not new_album and not new_cover:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Chưa nhập thông tin cần sửa"})
+
+    # Tạo set lookup nhanh
+    id_set = set()
+    for tid in track_ids:
+        id_set.add((int(tid.get("chatId", 0)), int(tid.get("msgId", 0))))
+
+    try:
+        with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+            albums = json.load(f)
+
+        matched_tracks = []
+        for a in albums:
+            for t in a.get("tracks", []):
+                key = (int(t.get("chatId", 0)), int(t.get("msgId", 0)))
+                if key in id_set:
+                    if new_artist: t["artist"] = new_artist
+                    if new_cover: t["coverUrl"] = new_cover
+                    matched_tracks.append(t)
+
+        # Nếu đổi album: chuyển các bài hát sang Album mới
+        if new_album and matched_tracks:
+            # Xóa tracks cũ khỏi tất cả album
+            for a in albums:
+                a["tracks"] = [t for t in a.get("tracks", [])
+                               if (int(t.get("chatId", 0)), int(t.get("msgId", 0))) not in id_set]
+
+            # Tìm hoặc tạo album đích
+            dest_album = next((a for a in albums if a.get("title", "").upper() == new_album.upper()), None)
+            if not dest_album:
+                color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
+                dest_album = {
+                    "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', new_album.lower())[:30]}",
+                    "title": new_album.upper(),
+                    "artist": (new_artist or matched_tracks[0].get("artist", "Unknown")).upper(),
+                    "year": time.strftime("%Y"),
+                    "format": matched_tracks[0].get("format", "FLAC Hi-Res"),
+                    "totalSize": "",
+                    "publisher": f"{new_artist or 'Telegram'}",
+                    "coverUrl": new_cover or matched_tracks[0].get("coverUrl", ""),
+                    "glowColors": color_preset,
+                    "tracks": []
+                }
+                albums.append(dest_album)
+
+            dest_album["tracks"].extend(matched_tracks)
+
+        # Xóa album rỗng
+        albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
+
+        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(albums, f, ensure_ascii=False, indent=2)
+
+        return JSONResponse(content={
+            "status": "success",
+            "message": f"Đã cập nhật {len(matched_tracks)} bài hát thành công!",
+            "count": len(matched_tracks),
+            "albums": albums
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
 # ── 8. Tìm Kiếm Ảnh Bìa Album Trực Tuyến (Cover Art Search) ──────────────────
 @router.get("/api/music/search-covers")
 async def search_music_covers(query: str = Query(..., min_length=1), _: bool = Depends(require_auth)):
