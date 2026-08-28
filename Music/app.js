@@ -742,6 +742,7 @@ class XTAPOMusicApp {
     // --- Visual States & Vinyl Animations ---
     updatePlayStateVisuals(playing) {
         if (playing) {
+            this.hasStartedPlayback = true;
             this.playIcon.style.display = 'none';
             this.pauseIcon.style.display = 'block';
 
@@ -778,7 +779,9 @@ class XTAPOMusicApp {
         }
 
         // Vinyl Animation
-        this.vinylStage.classList.add('is-paused');
+        if (this.hasStartedPlayback) {
+            this.vinylStage.classList.add('is-paused');
+        }
         this.vinylStage.classList.remove('is-playing', 'is-active', 'is-spinning');
 
         // Tracklist Active Item
