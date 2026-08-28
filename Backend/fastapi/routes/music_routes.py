@@ -259,29 +259,97 @@ def detect_audio_quality_from_track_info(track: dict) -> tuple[str, str, int]:
 
 
 def detect_genre_from_track_info(track: dict) -> str:
-    name = track.get("name") or track.get("title") or track.get("file_name") or ""
-    album = track.get("album") or ""
-    caption = track.get("caption") or ""
-    combined = f"{name} {album} {caption}".lower()
-    
-    if any(k in combined for k in ["bolero", "trữ tình", "nhạc vàng", "sến"]):
-        return "Bolero"
-    elif any(k in combined for k in ["lofi", "chill"]):
-        return "Lofi"
-    elif any(k in combined for k in ["gym", "workout", "edm", "remix", "vinahouse", "nonstop", "dance"]):
-        return "EDM/Remix"
-    elif any(k in combined for k in ["acoustic", "cover", "guitar", "piano", "không lời", "instrumental"]):
-        return "Acoustic/Instrumental"
-    elif any(k in combined for k in ["rap", "hip hop", "hiphop"]):
-        return "Rap/Hip-Hop"
-    elif any(k in combined for k in ["jazz", "blues"]):
-        return "Jazz"
-    elif any(k in combined for k in ["rock", "metal"]):
-        return "Rock"
-    elif any(k in combined for k in ["pop", "ballad", "nhạc trẻ"]):
-        return "Pop/Ballad"
-    else:
-        return "Khác"
+    """
+    Tự động phân loại thể loại âm nhạc đa dạng và chính xác:
+    - Bolero / Trữ Tình (🎻)
+    - Pop / Ballad (💖)
+    - EDM / Remix / Vinahouse (⚡)
+    - Rap / Hip-Hop (🎤)
+    - R&B / Soul (🎷)
+    - Lofi / Chillout (☕)
+    - Acoustic / Instrumental (🎸)
+    - Rock / Metal / Indie (🤘)
+    - Jazz / Blues (🎺)
+    - Nhạc Phim / Anime / OST (🎬)
+    - Cổ Điển / Classical (🎼)
+    - Nhạc Đỏ / Cách Mạng (⭐)
+    - Country / Nhạc Đồng Quê (🌾)
+    - Latin / Reggae (🌴)
+    - Thiếu Nhi / Kids (🎈)
+    - Podcast / Sách Nói (🎙️)
+    """
+    raw_genre = str(track.get("genre") or "").strip().lower()
+    name = str(track.get("name") or track.get("title") or track.get("file_name") or "").lower()
+    artist = str(track.get("artist") or "").lower()
+    album = str(track.get("album") or "").lower()
+    caption = str(track.get("caption") or "").lower()
+    combined = f"{raw_genre} {name} {artist} {album} {caption}"
+
+    # 1. Nhạc Thiếu Nhi / Kids
+    if any(k in combined for k in ["thiếu nhi", "thieu nhi", "trẻ em", "mầm non", "nursery", "kids", "baby", "chú ếch con", "chị ong nâu"]):
+        return "Thiếu Nhi / Kids"
+
+    # 2. Podcast / Audio Book / Sách Nói
+    if any(k in combined for k in ["podcast", "audiobook", "sách nói", "sach noi", "truyện audio", "đọc truyện", "talkshow", "radio", "tâm sự"]):
+        return "Podcast / Sách Nói"
+
+    # 3. Bolero / Trữ Tình / Dân Ca
+    if any(k in combined for k in ["bolero", "trữ tình", "tru tinh", "nhạc vàng", "nhac vang", "sến", "tân cổ", "vọng cổ", "quê hương", "dân ca", "dan ca", "tiền chiến", "cải lương"]):
+        return "Bolero / Trữ Tình"
+
+    # 4. Nhạc Đỏ / Cách Mạng / Tiền Tuyến
+    if any(k in combined for k in ["nhạc đỏ", "nhac do", "cách mạng", "cach mang", "tiền tuyến", "quân đội", "hành khúc", "đoàn quân", "bác hồ", "bộ đội"]):
+        return "Nhạc Đỏ / Cách Mạng"
+
+    # 5. EDM / Remix / Vinahouse / Dance
+    if any(k in combined for k in ["vinahouse", "nonstop", "remix", "edm", "dance", "club mix", "dj ", "dj-", "house", "techno", "trance", "electro", "dubstep", "dnb", "drum and bass", "basshouse", "hardstyle", "gym", "workout", "bounce", "psytrance"]):
+        return "EDM / Remix"
+
+    # 6. Rap / Hip-Hop / Trap
+    if any(k in combined for k in ["rap", "hip hop", "hip-hop", "hiphop", "trap", "drill", "underground", "viet rap", "boombap", "freestyle", "cypher"]):
+        return "Rap / Hip-Hop"
+
+    # 7. R&B / Soul / Funk
+    if any(k in combined for k in ["r&b", "rnb", "soul", "neo-soul", "funk", "groove", "motown"]):
+        return "R&B / Soul"
+
+    # 8. Lofi / Chillout / Ambient
+    if any(k in combined for k in ["lofi", "lo-fi", "chill", "chillout", "sleep", "study", "ambient", "meditation", "thư giãn", "thu gian", "rain sound"]):
+        return "Lofi / Chill"
+
+    # 9. Acoustic / Instrumental / Không Lời
+    if any(k in combined for k in ["acoustic", "guitar", "piano", "không lời", "khong loi", "instrumental", "fingerstyle", "violin", "cello", "saxophone", "hòa tấu", "hoa tau", "độc tấu", "doc tau"]):
+        return "Acoustic / Instrumental"
+
+    # 10. Nhạc Phim / Anime / OST / Soundtrack
+    if any(k in combined for k in ["soundtrack", " ost", "ost ", "score", "anime", "cinematic", "nhạc phim", "nhac phim", "film score", "bgm", "theme song", "original soundtrack"]):
+        return "Nhạc Phim / OST"
+
+    # 11. Cổ Điển / Classical
+    if any(k in combined for k in ["classical", "cổ điển", "co dien", "symphony", "concerto", "sonata", "orchestra", "giao hưởng", "giao huong", "mozart", "beethoven", "chopin", "bach", "vivaldi", "tchaikovsky"]):
+        return "Cổ Điển / Classical"
+
+    # 12. Rock / Metal / Indie
+    if any(k in combined for k in ["rock", "metal", "hard rock", "punk", "alternative", "grunge", "heavy metal", "indie rock", "indie pop", "indie"]):
+        return "Rock / Indie"
+
+    # 13. Jazz / Blues
+    if any(k in combined for k in ["jazz", "blues", "smooth jazz", "bossa nova", "swing", "bebop", "fusion"]):
+        return "Jazz / Blues"
+
+    # 14. Country / Nhạc Đồng Quê
+    if any(k in combined for k in ["country", "folk", "bluegrass", "americana", "đồng quê", "dong que"]):
+        return "Country / Folk"
+
+    # 15. Latin / Reggae
+    if any(k in combined for k in ["latin", "reggaeton", "salsa", "bachata", "reggae", "dancehall", "flamenco", "tango", "cumbia"]):
+        return "Latin / Reggae"
+
+    # 16. Pop / Ballad / Nhạc Trẻ
+    if any(k in combined for k in ["pop", "ballad", "nhạc trẻ", "nhac tre", "synth-pop", "dance-pop", "k-pop", "kpop", "v-pop", "vpop", "c-pop", "cpop", "j-pop", "jpop"]):
+        return "Pop / Ballad"
+
+    return "Khác"
 
 
 def detect_country_from_track_info(track: dict) -> str:
@@ -739,9 +807,9 @@ async def get_music_albums():
                                 t["duration"] = "3:45"
                                 changed = True
 
-                        # Detect Genre
+                        # Detect & Auto-Upgrade Genre
                         detected_genre = detect_genre_from_track_info(t)
-                        if not t.get("genre") or t.get("genre") == "Khác":
+                        if not t.get("genre") or t.get("genre") == "Khác" or t.get("genre") != detected_genre:
                             t["genre"] = detected_genre
                             changed = True
 
@@ -799,7 +867,36 @@ async def get_music_albums():
         except Exception as e:
             LOGGER.error(f"[MUSIC] Failed to process library data: {e}")
 
-    return JSONResponse(content={"status": "empty", "source": "none", "albums": []})
+@router.post("/api/music/reclassify-genres")
+async def reclassify_library_genres():
+    """Tự động phân loại lại toàn bộ thể loại cho các bài hát đã có trong thư viện"""
+    data = await _db_load_library()
+    if not data:
+        return JSONResponse(content={"status": "empty", "message": "Thư viện trống"})
+
+    genre_counts = {}
+    updated_count = 0
+    total_tracks = 0
+
+    for alb in data:
+        for t in alb.get("tracks", []):
+            total_tracks += 1
+            t["album"] = alb.get("title", "")
+            new_genre = detect_genre_from_track_info(t)
+            if t.get("genre") != new_genre:
+                t["genre"] = new_genre
+                updated_count += 1
+            genre_counts[new_genre] = genre_counts.get(new_genre, 0) + 1
+
+    await _db_save_library(data)
+    LOGGER.info(f"[MUSIC GENRES] Đã phân loại lại {updated_count}/{total_tracks} bài hát theo 16 thể loại mới.")
+    return JSONResponse(content={
+        "status": "success",
+        "message": f"Đã phân loại lại {total_tracks} bài hát!",
+        "updated_tracks": updated_count,
+        "total_tracks": total_tracks,
+        "genre_breakdown": genre_counts
+    })
 
 
 # ── Direct M3U8 Playlist Stream Endpoints (VLC, PotPlayer, Foobar2000, Apple Music) ──
