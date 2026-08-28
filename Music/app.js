@@ -287,7 +287,39 @@ class XTAPOMusicApp {
         this.favModalCount = document.getElementById('favModalCount');
         this.btnFavPlayAll = document.getElementById('btnFavPlayAll');
         this.btnFavShuffle = document.getElementById('btnFavShuffle');
+        this.btnFavExportM3U8 = document.getElementById('btnFavExportM3U8');
+        this.btnFavDownloadZip = document.getElementById('btnFavDownloadZip');
         this.favSearchInput = document.getElementById('favSearchInput');
+
+        // Album & Drawer Export Elements
+        this.albumExportDropdown = document.getElementById('albumExportDropdown');
+        this.albumExportBtn = document.getElementById('albumExportBtn');
+        this.albumExportMenu = document.getElementById('albumExportMenu');
+        this.btnDownloadAlbumZip = document.getElementById('btnDownloadAlbumZip');
+        this.btnExportAlbumM3U8 = document.getElementById('btnExportAlbumM3U8');
+        this.btnExportAlbumPLS = document.getElementById('btnExportAlbumPLS');
+        this.btnDownloadAlbumBatch = document.getElementById('btnDownloadAlbumBatch');
+
+        this.drawerDownloadZipBtn = document.getElementById('drawerDownloadZipBtn');
+        this.drawerExportM3U8Btn = document.getElementById('drawerExportM3U8Btn');
+        this.drawerExportPLSBtn = document.getElementById('drawerExportPLSBtn');
+        this.drawerDownloadBatchBtn = document.getElementById('drawerDownloadBatchBtn');
+
+        // Spotlight Export Elements
+        this.btnSpotlightExportM3U8 = document.getElementById('btnSpotlightExportM3U8');
+        this.btnSpotlightDownloadZip = document.getElementById('btnSpotlightDownloadZip');
+
+        // Download Progress Modal Elements
+        this.downloadProgressModal = document.getElementById('downloadProgressModal');
+        this.dlModalTitle = document.getElementById('dlModalTitle');
+        this.dlModalSub = document.getElementById('dlModalSub');
+        this.dlCurrentFileName = document.getElementById('dlCurrentFileName');
+        this.dlPercentBadge = document.getElementById('dlPercentBadge');
+        this.dlProgressBar = document.getElementById('dlProgressBar');
+        this.dlStatsCount = document.getElementById('dlStatsCount');
+        this.dlStatsSpeed = document.getElementById('dlStatsSpeed');
+        this.dlCancelBtn = document.getElementById('dlCancelBtn');
+        this.activeDownloadAbortController = null;
 
         this.currentUser = null;
         this.favoriteTracks = [];
@@ -1736,11 +1768,130 @@ class XTAPOMusicApp {
             this.closeAddToPlaylistModal.addEventListener('click', () => this.closeModal(this.addToPlaylistModal));
         }
 
+        // Album Quick Export Dropdown
+        if (this.albumExportBtn && this.albumExportMenu) {
+            this.albumExportBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.albumExportMenu.classList.toggle('show');
+            });
+            document.addEventListener('click', (e) => {
+                if (this.albumExportMenu && !e.target.closest('#albumExportDropdown')) {
+                    this.albumExportMenu.classList.remove('show');
+                }
+            });
+        }
+
+        if (this.btnDownloadAlbumZip) {
+            this.btnDownloadAlbumZip.addEventListener('click', () => {
+                if (this.albumExportMenu) this.albumExportMenu.classList.remove('show');
+                const album = this.currentAlbum;
+                this.downloadZipPackage(album.tracks, album.title, album.coverUrl, album.title);
+            });
+        }
+        if (this.btnExportAlbumM3U8) {
+            this.btnExportAlbumM3U8.addEventListener('click', () => {
+                if (this.albumExportMenu) this.albumExportMenu.classList.remove('show');
+                const album = this.currentAlbum;
+                this.exportM3U8(album.title, album.tracks);
+            });
+        }
+        if (this.btnExportAlbumPLS) {
+            this.btnExportAlbumPLS.addEventListener('click', () => {
+                if (this.albumExportMenu) this.albumExportMenu.classList.remove('show');
+                const album = this.currentAlbum;
+                this.exportPLS(album.title, album.tracks);
+            });
+        }
+        if (this.btnDownloadAlbumBatch) {
+            this.btnDownloadAlbumBatch.addEventListener('click', () => {
+                if (this.albumExportMenu) this.albumExportMenu.classList.remove('show');
+                const album = this.currentAlbum;
+                this.downloadBatchTracks(album.tracks, album.title);
+            });
+        }
+
+        // Drawer Export & Download Toolbar Buttons
+        if (this.drawerDownloadZipBtn) {
+            this.drawerDownloadZipBtn.addEventListener('click', () => {
+                const album = this.currentAlbum;
+                this.downloadZipPackage(album.tracks, album.title, album.coverUrl, album.title);
+            });
+        }
+        if (this.drawerExportM3U8Btn) {
+            this.drawerExportM3U8Btn.addEventListener('click', () => {
+                const album = this.currentAlbum;
+                this.exportM3U8(album.title, album.tracks);
+            });
+        }
+        if (this.drawerExportPLSBtn) {
+            this.drawerExportPLSBtn.addEventListener('click', () => {
+                const album = this.currentAlbum;
+                this.exportPLS(album.title, album.tracks);
+            });
+        }
+        if (this.drawerDownloadBatchBtn) {
+            this.drawerDownloadBatchBtn.addEventListener('click', () => {
+                const album = this.currentAlbum;
+                this.downloadBatchTracks(album.tracks, album.title);
+            });
+        }
+
+        // Artist Spotlight Export & Download Buttons
+        if (this.btnSpotlightExportM3U8) {
+            this.btnSpotlightExportM3U8.addEventListener('click', () => {
+                const name = this.currentSpotlightArtist ? this.currentSpotlightArtist.name : 'Artist';
+                this.exportM3U8(`Tuyen_Tap_${name}`, this.currentSpotlightTracks || []);
+            });
+        }
+        if (this.btnSpotlightDownloadZip) {
+            this.btnSpotlightDownloadZip.addEventListener('click', () => {
+                const name = this.currentSpotlightArtist ? this.currentSpotlightArtist.name : 'Artist';
+                const avatar = (this.currentSpotlightArtist && this.currentSpotlightArtist.avatar) || '';
+                this.downloadZipPackage(this.currentSpotlightTracks || [], `Tuyen_Tap_${name}`, avatar, `Nghệ Sĩ: ${name}`);
+            });
+        }
+
+        // Favorites Export & Download Buttons
+        if (this.btnFavExportM3U8) {
+            this.btnFavExportM3U8.addEventListener('click', () => {
+                const favs = this.getFavoriteTracksList();
+                this.exportM3U8('Bai_Hat_Yeu_Thich', favs);
+            });
+        }
+        if (this.btnFavDownloadZip) {
+            this.btnFavDownloadZip.addEventListener('click', () => {
+                const favs = this.getFavoriteTracksList();
+                this.downloadZipPackage(favs, 'Bai_Hat_Yeu_Thich', '', 'Bài Hát Yêu Thích');
+            });
+        }
+
+        // Download Progress Modal Cancel Button
+        if (this.dlCancelBtn) {
+            this.dlCancelBtn.addEventListener('click', () => {
+                if (this.activeDownloadAbortController) {
+                    this.activeDownloadAbortController.abort();
+                    this.activeDownloadAbortController = null;
+                }
+                this.closeDownloadProgressModal();
+                this.showToast('Đã dừng tiến trình tải dữ liệu.');
+            });
+        }
+
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.downloadProgressModal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
-                    if (e.target === modal) this.closeModal(modal);
+                    if (e.target === modal) {
+                        if (modal === this.downloadProgressModal && this.activeDownloadAbortController) {
+                            if (confirm('Quá trình tải đang diễn ra. Bạn có chắc muốn hủy không?')) {
+                                this.activeDownloadAbortController.abort();
+                                this.activeDownloadAbortController = null;
+                                this.closeModal(modal);
+                            }
+                        } else {
+                            this.closeModal(modal);
+                        }
+                    }
                 });
             }
         });
@@ -1804,6 +1955,9 @@ class XTAPOMusicApp {
                 </div>
                 <div class="file-actions">
                     <button class="file-action-btn download-btn">Phát Ngay</button>
+                    <button class="file-dl-single-btn" title="Tải file bài hát này">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                    </button>
                 </div>
             `;
 
@@ -1813,6 +1967,14 @@ class XTAPOMusicApp {
                 this.metaDrawer.classList.remove('open');
                 this.showToast(`Đang phát: ${track.name}`);
             });
+
+            const dlBtn = row.querySelector('.file-dl-single-btn');
+            if (dlBtn) {
+                dlBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.downloadSingleTrack(track, album.artist);
+                });
+            }
 
             this.drawerFileList.appendChild(row);
         });
@@ -1963,9 +2125,20 @@ class XTAPOMusicApp {
                     </div>
                 </div>
                 <div class="playlist-card-actions">
-                    <button class="btn-play-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    <button class="pl-action-badge gold-badge btn-play-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Phát playlist">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                         <span>Phát</span>
+                    </button>
+                    <button class="pl-action-badge blue-badge btn-m3u8-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Xuất file playlist M3U8">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                        <span>.M3U8</span>
+                    </button>
+                    <button class="pl-action-badge btn-pls-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Xuất file playlist PLS">
+                        <span>.PLS</span>
+                    </button>
+                    <button class="pl-action-badge btn-zip-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Tải toàn bộ nhạc trong playlist (.ZIP)">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 10v-3h-4v-2h4V8l4 4-4 4z"/></svg>
+                        <span>Zip</span>
                     </button>
                     <button class="btn-delete-playlist" title="Xóa playlist này">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
@@ -1978,6 +2151,27 @@ class XTAPOMusicApp {
                 playBtn.addEventListener('click', () => {
                     this.playPlaylist(pl);
                     this.closeModal(this.playlistModal);
+                });
+            }
+
+            const m3u8Btn = item.querySelector('.btn-m3u8-playlist');
+            if (m3u8Btn && trackCount > 0) {
+                m3u8Btn.addEventListener('click', () => {
+                    this.exportM3U8(`Playlist_${pl.name}`, pl.tracks);
+                });
+            }
+
+            const plsBtn = item.querySelector('.btn-pls-playlist');
+            if (plsBtn && trackCount > 0) {
+                plsBtn.addEventListener('click', () => {
+                    this.exportPLS(`Playlist_${pl.name}`, pl.tracks);
+                });
+            }
+
+            const zipBtn = item.querySelector('.btn-zip-playlist');
+            if (zipBtn && trackCount > 0) {
+                zipBtn.addEventListener('click', () => {
+                    this.downloadZipPackage(pl.tracks, `Playlist_${pl.name}`, (pl.tracks[0] && pl.tracks[0].coverUrl) || '', `Playlist: ${pl.name}`);
                 });
             }
 
@@ -2535,6 +2729,380 @@ class XTAPOMusicApp {
 
             this.genreGrid.appendChild(card);
         });
+    }
+
+    // ==========================================================================
+    // EXPORT PLAYLIST (.M3U8 / .PLS) & ALBUM / BATCH DOWNLOAD SYSTEM
+    // ==========================================================================
+
+    getFavoriteTracksList() {
+        if (!this.favoriteTracks || this.favoriteTracks.length === 0) return [];
+        const allTracksMap = this.getAllLibraryTracks();
+        return this.favoriteTracks.map((fav, idx) => {
+            const key = `${String(fav.chat_id)}_${String(fav.msg_id)}`;
+            const libTrack = allTracksMap.get(key);
+            return {
+                id: idx + 1,
+                name: (libTrack && libTrack.name) || fav.title || `Bài hát ${fav.msg_id}`,
+                artist: (libTrack && libTrack.artist) || fav.artist || 'XTAPO Artist',
+                duration: (libTrack && libTrack.duration) || fav.duration || '03:30',
+                previewUrl: (libTrack && libTrack.previewUrl) || `/api/music/stream/${fav.chat_id}/${fav.msg_id}`,
+                coverUrl: (libTrack && libTrack.coverUrl) || fav.cover_url || '',
+                format: (libTrack && libTrack.format) || 'FLAC Hi-Res'
+            };
+        });
+    }
+
+    /**
+     * Xuất danh sách bài hát thành file .M3U8 chuẩn UTF-8
+     * Tương thích hoàn hảo với VLC, Foobar2000, PotPlayer, iTunes, Windows Media Player...
+     */
+    exportM3U8(title, tracks) {
+        if (!tracks || tracks.length === 0) {
+            this.showToast('Không có bài hát nào để xuất playlist!');
+            return;
+        }
+
+        const safeTitle = (title || 'XTAPO_Playlist').replace(/[\\/:*?"<>|]/g, '_');
+        let content = '#EXTM3U\n';
+        content += `#EXTENC:UTF-8\n`;
+        content += `#PLAYLIST:${title || 'XTAPO Playlist'}\n\n`;
+
+        tracks.forEach((t, idx) => {
+            let sec = -1;
+            if (typeof t.duration === 'number' && !isNaN(t.duration)) {
+                sec = Math.round(t.duration);
+            } else if (typeof t.duration === 'string' && t.duration.includes(':')) {
+                const parts = t.duration.split(':');
+                sec = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+            }
+
+            const artist = t.artist || (this.currentAlbum ? this.currentAlbum.artist : 'XTAPO Music');
+            const trackName = t.name || `Track ${idx + 1}`;
+            
+            let streamUrl = t.previewUrl || '';
+            if (streamUrl.startsWith('/')) {
+                streamUrl = window.location.origin + streamUrl;
+            }
+
+            content += `#EXTINF:${sec},${artist} - ${trackName}\n`;
+            content += `${streamUrl}\n\n`;
+        });
+
+        this.downloadBlob(content, `${safeTitle}.m3u8`, 'audio/x-mpegurl;charset=utf-8');
+        this.showToast(`Đã xuất file Playlist: ${safeTitle}.m3u8 (Mở bằng VLC, Foobar2000, PotPlayer)`);
+    }
+
+    /**
+     * Xuất danh sách bài hát thành file .PLS chuẩn
+     * Tương thích với Winamp, Foobar2000, AIMP, PotPlayer...
+     */
+    exportPLS(title, tracks) {
+        if (!tracks || tracks.length === 0) {
+            this.showToast('Không có bài hát nào để xuất playlist!');
+            return;
+        }
+
+        const safeTitle = (title || 'XTAPO_Playlist').replace(/[\\/:*?"<>|]/g, '_');
+        let content = '[playlist]\n';
+
+        tracks.forEach((t, idx) => {
+            const num = idx + 1;
+            let sec = -1;
+            if (typeof t.duration === 'number' && !isNaN(t.duration)) {
+                sec = Math.round(t.duration);
+            } else if (typeof t.duration === 'string' && t.duration.includes(':')) {
+                const parts = t.duration.split(':');
+                sec = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+            }
+
+            const artist = t.artist || (this.currentAlbum ? this.currentAlbum.artist : 'XTAPO Music');
+            const trackName = t.name || `Track ${num}`;
+
+            let streamUrl = t.previewUrl || '';
+            if (streamUrl.startsWith('/')) {
+                streamUrl = window.location.origin + streamUrl;
+            }
+
+            content += `File${num}=${streamUrl}\n`;
+            content += `Title${num}=${artist} - ${trackName}\n`;
+            content += `Length${num}=${sec}\n`;
+        });
+
+        content += `NumberOfEntries=${tracks.length}\n`;
+        content += `Version=2\n`;
+
+        this.downloadBlob(content, `${safeTitle}.pls`, 'audio/x-scpls;charset=utf-8');
+        this.showToast(`Đã xuất file Playlist: ${safeTitle}.pls (Mở bằng Foobar2000, Winamp)`);
+    }
+
+    /**
+     * Helper tạo và kích hoạt tải về File Blob
+     */
+    downloadBlob(content, filename, mimeType = 'text/plain') {
+        const blob = (content instanceof Blob) ? content : new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    /**
+     * Tải 1 bài hát trực tiếp về máy
+     */
+    async downloadSingleTrack(track, fallbackArtist = '') {
+        if (!track || !track.previewUrl) {
+            this.showToast('Không tìm thấy URL tải bài hát này!');
+            return;
+        }
+
+        const artist = track.artist || fallbackArtist || (this.currentAlbum ? this.currentAlbum.artist : '');
+        const title = track.name || 'Song';
+        const filename = `${artist ? artist + ' - ' : ''}${title}`.replace(/[\\/:*?"<>|]/g, '_') + '.mp3';
+
+        this.showToast(`Đang kết nối tải bài: ${title}...`);
+
+        try {
+            const res = await fetch(track.previewUrl);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            this.downloadBlob(blob, filename, blob.type || 'audio/mpeg');
+            this.showToast(`Đã tải xong: ${filename}`);
+        } catch (err) {
+            // Fallback tải trực tiếp từ thẻ a
+            const a = document.createElement('a');
+            a.href = track.previewUrl;
+            a.download = filename;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    }
+
+    /**
+     * Tải tuần tự nhiều bài hát (Batch Download)
+     */
+    async downloadBatchTracks(tracks, albumTitle = '') {
+        if (!tracks || tracks.length === 0) {
+            this.showToast('Không có bài hát nào để tải!');
+            return;
+        }
+
+        const total = tracks.length;
+        this.showToast(`Bắt đầu tải lần lượt ${total} bài hát...`);
+
+        for (let i = 0; i < total; i++) {
+            const t = tracks[i];
+            const artist = t.artist || (this.currentAlbum ? this.currentAlbum.artist : '');
+            const filename = `${String(i + 1).padStart(2, '0')}. ${artist ? artist + ' - ' : ''}${t.name}`.replace(/[\\/:*?"<>|]/g, '_') + '.mp3';
+            
+            try {
+                const a = document.createElement('a');
+                a.href = t.previewUrl;
+                a.download = filename;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            } catch (e) {
+                console.error('Batch download item error:', e);
+            }
+
+            if (i < total - 1) {
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+        }
+
+        this.showToast(`Đã gửi lệnh tải toàn bộ ${total} bài hát tới trình duyệt!`);
+    }
+
+    /**
+     * Đảm bảo thư viện JSZip được nạp thành công
+     */
+    async ensureJSZipLoaded() {
+        if (window.JSZip) return window.JSZip;
+
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+            script.onload = () => {
+                if (window.JSZip) resolve(window.JSZip);
+                else reject(new Error('JSZip load failed'));
+            };
+            script.onerror = () => reject(new Error('Không thể tải thư viện JSZip từ CDN'));
+            document.head.appendChild(script);
+        });
+    }
+
+    openDownloadProgressModal(title, sub) {
+        if (this.dlModalTitle) this.dlModalTitle.textContent = title || 'Đang Chuẩn Bị Tải...';
+        if (this.dlModalSub) this.dlModalSub.textContent = sub || 'Hệ thống đang tải trực tiếp file nhạc chất lượng cao';
+        this.updateDownloadProgress('Khởi động tiến trình...', 0, 'Bài 0 / 0', 'Đang nén dữ liệu...');
+        this.openModal(this.downloadProgressModal);
+    }
+
+    updateDownloadProgress(currentFile, percent, statsCount, statsSpeed) {
+        if (this.dlCurrentFileName) this.dlCurrentFileName.textContent = currentFile;
+        if (this.dlPercentBadge) this.dlPercentBadge.textContent = `${Math.round(percent)}%`;
+        if (this.dlProgressBar) this.dlProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+        if (this.dlStatsCount) this.dlStatsCount.textContent = statsCount;
+        if (this.dlStatsSpeed) this.dlStatsSpeed.textContent = statsSpeed;
+    }
+
+    closeDownloadProgressModal() {
+        this.closeModal(this.downloadProgressModal);
+    }
+
+    /**
+     * Tải toàn bộ Album / Danh sách bài hát nén thành file .ZIP
+     * Kèm theo Playlist (.M3U8 & .PLS) và Ảnh Bìa (Cover)
+     */
+    async downloadZipPackage(tracks, zipName = 'Album', coverUrl = '', title = '') {
+        if (!tracks || tracks.length === 0) {
+            this.showToast('Không có bài hát nào để tải trọn gói!');
+            return;
+        }
+
+        const safeZipName = (zipName || 'XTAPO_Music_Package').replace(/[\\/:*?"<>|]/g, '_');
+        this.activeDownloadAbortController = new AbortController();
+        const signal = this.activeDownloadAbortController.signal;
+
+        this.openDownloadProgressModal(
+            `Tải Toàn Bộ: ${title || zipName}`,
+            `Đang tải và đóng gói ${tracks.length} bài hát thành file .ZIP...`
+        );
+
+        try {
+            const JSZip = await this.ensureJSZipLoaded();
+            const zip = new JSZip();
+            const total = tracks.length;
+
+            // 1. Tạo file playlist M3U8 bên trong ZIP
+            let m3u8Content = '#EXTM3U\n#EXTENC:UTF-8\n';
+            m3u8Content += `#PLAYLIST:${title || zipName}\n\n`;
+
+            // 2. Tạo file playlist PLS bên trong ZIP
+            let plsContent = '[playlist]\n';
+
+            // 3. Tải tuần tự từng bài hát
+            for (let i = 0; i < total; i++) {
+                if (signal.aborted) {
+                    throw new Error('DOWNLOAD_ABORTED');
+                }
+
+                const t = tracks[i];
+                const artist = t.artist || (this.currentAlbum ? this.currentAlbum.artist : 'XTAPO Music');
+                const trackName = t.name || `Track ${i + 1}`;
+                const trackNum = String(i + 1).padStart(2, '0');
+                const audioFileName = `${trackNum}. ${artist ? artist + ' - ' : ''}${trackName}`.replace(/[\\/:*?"<>|]/g, '_') + '.mp3';
+
+                let sec = -1;
+                if (typeof t.duration === 'number' && !isNaN(t.duration)) {
+                    sec = Math.round(t.duration);
+                } else if (typeof t.duration === 'string' && t.duration.includes(':')) {
+                    const parts = t.duration.split(':');
+                    sec = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+                }
+
+                m3u8Content += `#EXTINF:${sec},${artist} - ${trackName}\n${audioFileName}\n\n`;
+                plsContent += `File${i + 1}=${audioFileName}\nTitle${i + 1}=${artist} - ${trackName}\nLength${i + 1}=${sec}\n`;
+
+                const percent = Math.round((i / (total + 1)) * 100);
+                this.updateDownloadProgress(
+                    `Đang tải: ${trackName}`,
+                    percent,
+                    `Bài ${i + 1} / ${total}`,
+                    `Đang nạp file audio lossless...`
+                );
+
+                if (t.previewUrl) {
+                    try {
+                        const fetchRes = await fetch(t.previewUrl, { signal });
+                        if (fetchRes.ok) {
+                            const buffer = await fetchRes.arrayBuffer();
+                            zip.file(audioFileName, buffer);
+                        } else {
+                            // Tạo file thông tin nếu link stream không fetch được từ client
+                            zip.file(`${audioFileName}.txt`, `Không thể tải dữ liệu âm thanh trực tiếp. Link stream: ${t.previewUrl}`);
+                        }
+                    } catch (fetchErr) {
+                        if (signal.aborted) throw new Error('DOWNLOAD_ABORTED');
+                        console.warn(`Lỗi khi tải bài hát ${trackName}:`, fetchErr);
+                    }
+                }
+            }
+
+            plsContent += `NumberOfEntries=${total}\nVersion=2\n`;
+
+            // Thêm playlist .m3u8 & .pls vào root của ZIP
+            zip.file(`00_Playlist_${safeZipName}.m3u8`, m3u8Content);
+            zip.file(`00_Playlist_${safeZipName}.pls`, plsContent);
+
+            // Tải ảnh Cover nếu có
+            if (coverUrl && !signal.aborted) {
+                try {
+                    const imgRes = await fetch(coverUrl, { signal });
+                    if (imgRes.ok) {
+                        const imgBuffer = await imgRes.arrayBuffer();
+                        zip.file('cover.jpg', imgBuffer);
+                    }
+                } catch (e) {
+                    console.warn('Lỗi khi nạp ảnh bìa album:', e);
+                }
+            }
+
+            if (signal.aborted) throw new Error('DOWNLOAD_ABORTED');
+
+            // 4. Bắt đầu nén file ZIP
+            this.updateDownloadProgress(
+                'Đang nén dữ liệu thành file .ZIP...',
+                95,
+                `Hoàn tất ${total} / ${total} bài`,
+                'Đang tối ưu nén tệp tin...'
+            );
+
+            const zipBlob = await zip.generateAsync(
+                { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } },
+                (metadata) => {
+                    if (!signal.aborted) {
+                        const compPercent = 90 + Math.round(metadata.percent * 0.1);
+                        this.updateDownloadProgress(
+                            `Đang đóng gói: ${metadata.currentFile || 'Tạo file ZIP...'}`,
+                            compPercent,
+                            `Đã nén ${Math.round(metadata.percent)}%`,
+                            'Chuẩn bị lưu tệp...'
+                        );
+                    }
+                }
+            );
+
+            if (signal.aborted) throw new Error('DOWNLOAD_ABORTED');
+
+            // 5. Tải file ZIP về máy
+            this.downloadBlob(zipBlob, `${safeZipName}.zip`, 'application/zip');
+            this.closeDownloadProgressModal();
+            this.showToast(`🎉 Tải về toàn bộ album "${zipName}" thành công!`);
+
+        } catch (err) {
+            this.closeDownloadProgressModal();
+            if (err.message === 'DOWNLOAD_ABORTED') {
+                this.showToast('Đã dừng quá trình tải xuống.');
+            } else {
+                console.error('Download Zip Error:', err);
+                this.showToast(`Lỗi khi tạo file ZIP: ${err.message || err}`);
+                // Fallback nếu zip thất bại: chuyển sang batch download
+                if (confirm('Không thể nén file ZIP do giới hạn bộ nhớ trình duyệt. Bạn có muốn chuyển sang tải từng bài về máy không?')) {
+                    this.downloadBatchTracks(tracks, zipName);
+                }
+            }
+        } finally {
+            this.activeDownloadAbortController = null;
+        }
     }
 }
 
