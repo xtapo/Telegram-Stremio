@@ -180,8 +180,9 @@ try:
     from Backend.fastapi.routes.music_auth import auth_router as music_auth_router
     app.include_router(music_auth_router)
     app.include_router(music_router)
-except Exception:
-    pass
+    LOGGER.info("[MUSIC] Successfully registered Music Player routes (/music, /api/music/*).")
+except Exception as e:
+    LOGGER.error(f"[MUSIC] Failed to load Music router: {e}", exc_info=True)
 
 
 #----- Public routes (no authentication)
