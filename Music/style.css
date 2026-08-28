@@ -390,15 +390,18 @@ html, body {
 /* Audio Visualizer Waveform */
 .visualizer-container {
     width: 100%;
-    max-width: 440px;
-    height: 36px;
-    margin-bottom: 22px;
-    background: rgba(0, 0, 0, 0.25);
-    border-radius: var(--radius-sm);
-    padding: 4px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    max-width: 100%;
+    height: 46px;
+    margin-bottom: 18px;
+    background: rgba(0, 0, 0, 0.32);
+    border-radius: var(--radius-md);
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-sizing: border-box;
     overflow: hidden;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 #visualizerCanvas {
@@ -1704,7 +1707,7 @@ html, body {
 /* ==========================================================================
    CAR INFOTAINMENT & SHORT LANDSCAPE SCREENS (MÀN HÌNH Ô TÔ / ANDROID AUTO / CARPLAY)
    ========================================================================== */
-@media (max-height: 760px) and (min-width: 650px), (max-width: 1200px) and (orientation: landscape) and (max-height: 820px) {
+@media (max-height: 600px) and (min-width: 600px), (max-width: 1024px) and (orientation: landscape) and (max-height: 620px) {
     :root {
         --header-height: 52px;
         --player-bar-height: 70px;
@@ -1795,9 +1798,9 @@ html, body {
     }
 
     .visualizer-container {
-        height: 20px;
-        margin-bottom: 6px;
-        max-width: 360px;
+        height: 32px;
+        margin-bottom: 8px;
+        max-width: 100%;
     }
 
     .tracklist-container {

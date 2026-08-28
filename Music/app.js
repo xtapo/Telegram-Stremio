@@ -1527,15 +1527,17 @@ class XTAPOMusicApp {
     // --- Visualizer Waveform Animation ---
     setupVisualizer() {
         const ctx = this.canvasCtx;
-        const numBars = 32;
 
         const resizeCanvas = () => {
             if (this.canvas) {
+                const dpr = window.devicePixelRatio || 1;
                 const rect = this.canvas.getBoundingClientRect();
-                const width = Math.floor(rect.width) || 300;
-                const height = Math.floor(rect.height) || 36;
-                if (this.canvas.width !== width) this.canvas.width = width;
-                if (this.canvas.height !== height) this.canvas.height = height;
+                const cssWidth = Math.floor(rect.width) || 400;
+                const cssHeight = Math.floor(rect.height) || 46;
+
+                this.canvas.width = Math.floor(cssWidth * dpr);
+                this.canvas.height = Math.floor(cssHeight * dpr);
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             }
         };
 
@@ -1543,30 +1545,53 @@ class XTAPOMusicApp {
         resizeCanvas();
 
         const draw = () => {
-            const width = this.canvas.width || 300;
-            const height = this.canvas.height || 36;
+            if (!this.canvas) return;
+            const rect = this.canvas.getBoundingClientRect();
+            const width = Math.floor(rect.width) || 400;
+            const height = Math.floor(rect.height) || 46;
+
             ctx.clearRect(0, 0, width, height);
 
-            const gap = 2;
-            const barWidth = Math.max(2, (width - (numBars - 1) * gap) / numBars);
+            const gap = 3;
+            const targetBarWidth = 5;
+            const numBars = Math.max(16, Math.floor((width + gap) / (targetBarWidth + gap)));
+            const actualBarWidth = Math.max(2.5, (width - (numBars - 1) * gap) / numBars);
+            const radius = Math.min(3, actualBarWidth / 2);
+
+            const now = Date.now() * 0.003;
 
             for (let i = 0; i < numBars; i++) {
-                let barHeight = 4;
+                let barHeight = 6;
                 if (this.isPlaying) {
-                    const time = Date.now() * 0.005;
-                    const noise = Math.sin(i * 0.4 + time) * Math.cos(i * 0.2 - time * 0.8);
-                    barHeight = Math.max(4, Math.abs(noise) * (height - 6) + Math.random() * 6);
+                    const wave1 = Math.sin(i * 0.28 + now * 1.8);
+                    const wave2 = Math.cos(i * 0.15 - now * 2.2);
+                    const wave3 = Math.sin((i / numBars) * Math.PI) * 1.2; // center harmonic swell
+                    const combined = (Math.abs(wave1 * 0.6 + wave2 * 0.4) * wave3);
+                    const dynamicMax = height - 8;
+                    barHeight = Math.max(6, Math.min(dynamicMax, combined * dynamicMax + Math.sin(now * 4 + i) * 4 + 6));
+                } else {
+                    const idleWave = Math.sin(i * 0.2 + now * 0.5) * 0.5 + 0.5;
+                    barHeight = Math.max(4, idleWave * 10 + 4);
                 }
 
-                const x = i * (barWidth + gap);
-                const y = height - barHeight;
+                const x = i * (actualBarWidth + gap);
+                const y = (height - barHeight) / 2; // Center vertically for luxurious symmetric or bottom-aligned waveform
 
                 const grad = ctx.createLinearGradient(0, height, 0, 0);
                 grad.addColorStop(0, '#fcbf47');
-                grad.addColorStop(1, '#ff6dc4');
+                grad.addColorStop(0.5, '#ff6dc4');
+                grad.addColorStop(1, '#38bdf8');
 
                 ctx.fillStyle = grad;
-                ctx.fillRect(x, y, barWidth, barHeight);
+
+                // Draw rounded pill bar
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') {
+                    ctx.roundRect(x, y, actualBarWidth, barHeight, radius);
+                } else {
+                    ctx.rect(x, y, actualBarWidth, barHeight);
+                }
+                ctx.fill();
             }
 
             this.visualizerAnimationId = requestAnimationFrame(draw);
