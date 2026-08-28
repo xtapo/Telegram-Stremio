@@ -95,27 +95,37 @@
         </div>
     </div>
 
-    <!-- View Mode Switch Tabs -->
-    <div class="flex items-center justify-between mb-4">
-        <div class="inline-flex p-1 bg-black/20 rounded-xl border border-hairline">
+    <!-- View Mode Switch Tabs & Controls -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div class="inline-flex p-1 bg-black/20 rounded-xl border border-hairline overflow-x-auto max-w-full">
             <button id="tab-albums-btn" onclick="switchTab('albums')" 
-                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow">
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow whitespace-nowrap">
                 <i class="fa-solid fa-layer-group mr-1"></i> Danh Sách Albums
             </button>
             <button id="tab-tracks-btn" onclick="switchTab('tracks')" 
-                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text whitespace-nowrap">
                 <i class="fa-solid fa-list-ol mr-1"></i> Toàn Bộ Bài Hát
             </button>
             <button id="tab-artists-btn" onclick="switchTab('artists')" 
-                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text whitespace-nowrap">
                 <i class="fa-solid fa-microphone-lines mr-1"></i> Quản Lý Ca Sĩ
             </button>
             <button id="tab-users-btn" onclick="switchTab('users')" 
-                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text whitespace-nowrap">
                 <i class="fa-solid fa-users mr-1"></i> Quản Lý Users
             </button>
         </div>
-        <span class="text-xs text-text-secondary" id="items-count-indicator">Đang hiển thị...</span>
+
+        <div class="flex items-center gap-3 self-end sm:self-auto">
+            <!-- Sort Selector -->
+            <div id="sort-container" class="flex items-center gap-1.5 text-xs">
+                <span class="text-text-secondary font-medium"><i class="fa-solid fa-arrow-down-wide-short text-primary mr-1"></i>Sắp xếp:</span>
+                <select id="sort-select" onchange="handleSortChange(this.value)" class="bg-surface border border-hairline text-text rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-primary text-xs font-semibold cursor-pointer">
+                    <!-- Dynamic options injected by JS -->
+                </select>
+            </div>
+            <span class="text-xs text-text-secondary whitespace-nowrap" id="items-count-indicator">Đang hiển thị...</span>
+        </div>
     </div>
 
     <!-- Content Area: Album Grid -->
@@ -128,14 +138,14 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
-                    <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
-                        <th class="py-3.5 px-4 w-12 text-center">#</th>
-                        <th class="py-3.5 px-4">Bài Hát</th>
-                        <th class="py-3.5 px-4">Ca Sĩ</th>
-                        <th class="py-3.5 px-4">Album</th>
-                        <th class="py-3.5 px-4">Định Dạng</th>
-                        <th class="py-3.5 px-4">Thời Lượng</th>
-                        <th class="py-3.5 px-4">Dung Lượng</th>
+                    <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase select-none">
+                        <th class="py-3.5 px-4 w-12 text-center cursor-pointer hover:text-text transition" onclick="sortTracksBy('default')" title="Thứ tự mặc định"># <span id="sort-icon-default"></span></th>
+                        <th class="py-3.5 px-4 cursor-pointer hover:text-text transition" onclick="sortTracksBy('name')" title="Sắp xếp theo tên bài hát">Bài Hát <span id="sort-icon-name" class="ml-1 text-[10px]"><i class="fa-solid fa-sort opacity-40"></i></span></th>
+                        <th class="py-3.5 px-4 cursor-pointer hover:text-text transition" onclick="sortTracksBy('artist')" title="Sắp xếp theo ca sĩ">Ca Sĩ <span id="sort-icon-artist" class="ml-1 text-[10px]"><i class="fa-solid fa-sort opacity-40"></i></span></th>
+                        <th class="py-3.5 px-4 cursor-pointer hover:text-text transition" onclick="sortTracksBy('album')" title="Sắp xếp theo album">Album <span id="sort-icon-album" class="ml-1 text-[10px]"><i class="fa-solid fa-sort opacity-40"></i></span></th>
+                        <th class="py-3.5 px-4 cursor-pointer hover:text-text transition" onclick="sortTracksBy('format')" title="Sắp xếp theo định dạng">Định Dạng <span id="sort-icon-format" class="ml-1 text-[10px]"><i class="fa-solid fa-sort opacity-40"></i></span></th>
+                        <th class="py-3.5 px-4 cursor-pointer hover:text-text transition" onclick="sortTracksBy('duration')" title="Sắp xếp theo thời lượng">Thời Lượng <span id="sort-icon-duration" class="ml-1 text-[10px]"><i class="fa-solid fa-sort opacity-40"></i></span></th>
+                        <th class="py-3.5 px-4 cursor-pointer hover:text-text transition" onclick="sortTracksBy('size')" title="Sắp xếp theo dung lượng">Dung Lượng <span id="sort-icon-size" class="ml-1 text-[10px]"><i class="fa-solid fa-sort opacity-40"></i></span></th>
                         <th class="py-3.5 px-4 text-right">Thao Tác</th>
                     </tr>
                 </thead>
@@ -1218,6 +1228,7 @@ async function loadMusicData(showToastAlert = false) {
             globalAlbums = [];
         }
 
+        updateSortDropdownUI();
         renderStats();
         renderCurrentView();
 
@@ -1295,11 +1306,186 @@ function renderCurrentView() {
     }
 }
 
-// ── Pagination State ──────────────────────────────────────────────────────────
+// ── Pagination & Sorting State ──────────────────────────────────────────────
 let currentAlbumsPage = 1;
 let albumsPerPage = 24;
 let currentTracksPage = 1;
 let tracksPerPage = 50;
+let albumsSortBy = 'default';
+let tracksSortBy = 'default';
+
+function parseSizeToBytes(sizeStr) {
+    if (!sizeStr || typeof sizeStr !== 'string') return 0;
+    const str = sizeStr.trim().toUpperCase();
+    const val = parseFloat(str) || 0;
+    if (str.includes('GB')) return val * 1024 * 1024 * 1024;
+    if (str.includes('MB')) return val * 1024 * 1024;
+    if (str.includes('KB')) return val * 1024;
+    return val;
+}
+
+function parseDurationToSeconds(durStr) {
+    if (!durStr || typeof durStr !== 'string') return 0;
+    const parts = durStr.trim().split(':').map(p => parseInt(p, 10) || 0);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] || 0;
+}
+
+function sortAlbumsList(albums) {
+    const list = [...albums];
+    switch (albumsSortBy) {
+        case 'title_asc':
+            return list.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'vi', { sensitivity: 'base' }));
+        case 'title_desc':
+            return list.sort((a, b) => (b.title || '').localeCompare(a.title || '', 'vi', { sensitivity: 'base' }));
+        case 'artist_asc':
+            return list.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'vi', { sensitivity: 'base' }));
+        case 'artist_desc':
+            return list.sort((a, b) => (b.artist || '').localeCompare(a.artist || '', 'vi', { sensitivity: 'base' }));
+        case 'tracks_desc':
+            return list.sort((a, b) => (b.tracks ? b.tracks.length : 0) - (a.tracks ? a.tracks.length : 0));
+        case 'tracks_asc':
+            return list.sort((a, b) => (a.tracks ? a.tracks.length : 0) - (b.tracks ? b.tracks.length : 0));
+        case 'year_desc':
+            return list.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+        case 'year_asc':
+            return list.sort((a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0));
+        case 'size_desc':
+            return list.sort((a, b) => parseSizeToBytes(b.totalSize) - parseSizeToBytes(a.totalSize));
+        case 'size_asc':
+            return list.sort((a, b) => parseSizeToBytes(a.totalSize) - parseSizeToBytes(b.totalSize));
+        default:
+            return list;
+    }
+}
+
+function sortTracksList(tracks) {
+    const list = [...tracks];
+    switch (tracksSortBy) {
+        case 'name_asc':
+            return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi', { sensitivity: 'base' }));
+        case 'name_desc':
+            return list.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'vi', { sensitivity: 'base' }));
+        case 'artist_asc':
+            return list.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'vi', { sensitivity: 'base' }));
+        case 'artist_desc':
+            return list.sort((a, b) => (b.artist || '').localeCompare(a.artist || '', 'vi', { sensitivity: 'base' }));
+        case 'album_asc':
+            return list.sort((a, b) => (a.albumName || '').localeCompare(b.albumName || '', 'vi', { sensitivity: 'base' }));
+        case 'album_desc':
+            return list.sort((a, b) => (b.albumName || '').localeCompare(a.albumName || '', 'vi', { sensitivity: 'base' }));
+        case 'duration_desc':
+            return list.sort((a, b) => parseDurationToSeconds(b.duration) - parseDurationToSeconds(a.duration));
+        case 'duration_asc':
+            return list.sort((a, b) => parseDurationToSeconds(a.duration) - parseDurationToSeconds(b.duration));
+        case 'size_desc':
+            return list.sort((a, b) => parseSizeToBytes(b.size) - parseSizeToBytes(a.size));
+        case 'size_asc':
+            return list.sort((a, b) => parseSizeToBytes(a.size) - parseSizeToBytes(b.size));
+        case 'format_desc':
+            return list.sort((a, b) => (b.format || b.albumFormat || '').localeCompare(a.format || a.albumFormat || ''));
+        default:
+            return list;
+    }
+}
+
+function updateSortDropdownUI() {
+    const sortContainer = document.getElementById('sort-container');
+    const sortSelect = document.getElementById('sort-select');
+    if (!sortContainer || !sortSelect) return;
+
+    if (currentActiveTab === 'artists' || currentActiveTab === 'users') {
+        sortContainer.classList.add('hidden');
+        return;
+    }
+
+    sortContainer.classList.remove('hidden');
+
+    if (currentActiveTab === 'albums') {
+        const options = [
+            { val: 'default', text: 'Mặc định' },
+            { val: 'title_asc', text: 'Tên Album (A - Z)' },
+            { val: 'title_desc', text: 'Tên Album (Z - A)' },
+            { val: 'artist_asc', text: 'Tên Ca Sĩ (A - Z)' },
+            { val: 'artist_desc', text: 'Tên Ca Sĩ (Z - A)' },
+            { val: 'tracks_desc', text: 'Số bài (Nhiều → Ít)' },
+            { val: 'tracks_asc', text: 'Số bài (Ít → Nhiều)' },
+            { val: 'year_desc', text: 'Năm phát hành (Mới nhất)' },
+            { val: 'year_asc', text: 'Năm phát hành (Cũ nhất)' },
+            { val: 'size_desc', text: 'Dung lượng (Lớn → Nhỏ)' },
+            { val: 'size_asc', text: 'Dung lượng (Nhỏ → Lớn)' },
+        ];
+        sortSelect.innerHTML = options.map(o => `<option value="${o.val}" ${o.val === albumsSortBy ? 'selected' : ''}>${o.text}</option>`).join('');
+    } else if (currentActiveTab === 'tracks') {
+        const options = [
+            { val: 'default', text: 'Mặc định' },
+            { val: 'name_asc', text: 'Tên Bài Hát (A - Z)' },
+            { val: 'name_desc', text: 'Tên Bài Hát (Z - A)' },
+            { val: 'artist_asc', text: 'Ca Sĩ (A - Z)' },
+            { val: 'artist_desc', text: 'Ca Sĩ (Z - A)' },
+            { val: 'album_asc', text: 'Album (A - Z)' },
+            { val: 'album_desc', text: 'Album (Z - A)' },
+            { val: 'duration_desc', text: 'Thời lượng (Dài → Ngắn)' },
+            { val: 'duration_asc', text: 'Thời lượng (Ngắn → Dài)' },
+            { val: 'size_desc', text: 'Dung lượng (Lớn → Nhỏ)' },
+            { val: 'size_asc', text: 'Dung lượng (Nhỏ → Lớn)' },
+            { val: 'format_desc', text: 'Định dạng / Chất lượng' },
+        ];
+        sortSelect.innerHTML = options.map(o => `<option value="${o.val}" ${o.val === tracksSortBy ? 'selected' : ''}>${o.text}</option>`).join('');
+    }
+}
+
+function handleSortChange(val) {
+    if (currentActiveTab === 'albums') {
+        albumsSortBy = val;
+        currentAlbumsPage = 1;
+        renderAlbumsGrid((document.getElementById('music-search')?.value || '').toLowerCase().trim());
+    } else if (currentActiveTab === 'tracks') {
+        tracksSortBy = val;
+        currentTracksPage = 1;
+        updateTrackHeaderSortIcons();
+        renderTracksTable((document.getElementById('music-search')?.value || '').toLowerCase().trim());
+    }
+}
+
+function sortTracksBy(column) {
+    if (column === 'default') {
+        tracksSortBy = 'default';
+    } else if (column === 'name') {
+        tracksSortBy = tracksSortBy === 'name_asc' ? 'name_desc' : 'name_asc';
+    } else if (column === 'artist') {
+        tracksSortBy = tracksSortBy === 'artist_asc' ? 'artist_desc' : 'artist_asc';
+    } else if (column === 'album') {
+        tracksSortBy = tracksSortBy === 'album_asc' ? 'album_desc' : 'album_asc';
+    } else if (column === 'duration') {
+        tracksSortBy = tracksSortBy === 'duration_desc' ? 'duration_asc' : 'duration_desc';
+    } else if (column === 'size') {
+        tracksSortBy = tracksSortBy === 'size_desc' ? 'size_asc' : 'size_desc';
+    } else if (column === 'format') {
+        tracksSortBy = tracksSortBy === 'format_desc' ? 'default' : 'format_desc';
+    }
+
+    currentTracksPage = 1;
+    updateSortDropdownUI();
+    updateTrackHeaderSortIcons();
+    renderTracksTable((document.getElementById('music-search')?.value || '').toLowerCase().trim());
+}
+
+function updateTrackHeaderSortIcons() {
+    const cols = ['name', 'artist', 'album', 'format', 'duration', 'size'];
+    cols.forEach(c => {
+        const el = document.getElementById(`sort-icon-${c}`);
+        if (!el) return;
+        if (tracksSortBy === `${c}_asc`) {
+            el.innerHTML = '<i class="fa-solid fa-sort-up text-primary"></i>';
+        } else if (tracksSortBy === `${c}_desc`) {
+            el.innerHTML = '<i class="fa-solid fa-sort-down text-primary"></i>';
+        } else {
+            el.innerHTML = '<i class="fa-solid fa-sort opacity-40"></i>';
+        }
+    });
+}
 
 function changeMusicPageSize(newSize) {
     const size = parseInt(newSize, 10);
@@ -1453,7 +1639,8 @@ function renderAlbumsGrid(query = '') {
         (a.tracks && a.tracks.some(t => t.name.toLowerCase().includes(query)))
     );
 
-    const total = filtered.length;
+    const sorted = sortAlbumsList(filtered);
+    const total = sorted.length;
     const totalPages = Math.max(1, Math.ceil(total / albumsPerPage));
     if (currentAlbumsPage > totalPages) currentAlbumsPage = totalPages;
     if (currentAlbumsPage < 1) currentAlbumsPage = 1;
@@ -1467,7 +1654,7 @@ function renderAlbumsGrid(query = '') {
     }
 
     const startIndex = (currentAlbumsPage - 1) * albumsPerPage;
-    const pageItems = filtered.slice(startIndex, startIndex + albumsPerPage);
+    const pageItems = sorted.slice(startIndex, startIndex + albumsPerPage);
 
     pageItems.forEach(album => {
         const card = document.createElement('div');
@@ -1537,7 +1724,8 @@ function renderTracksTable(query = '') {
         (t.albumName && t.albumName.toLowerCase().includes(query))
     );
 
-    const total = filtered.length;
+    const sorted = sortTracksList(filtered);
+    const total = sorted.length;
     const totalPages = Math.max(1, Math.ceil(total / tracksPerPage));
     if (currentTracksPage > totalPages) currentTracksPage = totalPages;
     if (currentTracksPage < 1) currentTracksPage = 1;
@@ -1551,7 +1739,7 @@ function renderTracksTable(query = '') {
     }
 
     const startIndex = (currentTracksPage - 1) * tracksPerPage;
-    const pageItems = filtered.slice(startIndex, startIndex + tracksPerPage);
+    const pageItems = sorted.slice(startIndex, startIndex + tracksPerPage);
 
     pageItems.forEach((track, idx) => {
         const globalIdx = startIndex + idx + 1;
@@ -1612,21 +1800,24 @@ function switchTab(tab) {
     const artistsBtn = document.getElementById('tab-artists-btn');
     const usersBtn = document.getElementById('tab-users-btn');
     const pagEl = document.getElementById('music-pagination');
+    const sortContainer = document.getElementById('sort-container');
 
-    albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
-    tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
-    if(artistsBtn) artistsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
-    if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text whitespace-nowrap';
+    tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text whitespace-nowrap';
+    if(artistsBtn) artistsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text whitespace-nowrap';
+    if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text whitespace-nowrap';
 
     if (tab === 'albums') {
-        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow whitespace-nowrap';
     } else if (tab === 'tracks') {
-        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow whitespace-nowrap';
     } else if (tab === 'artists') {
-        if(artistsBtn) artistsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        if(artistsBtn) artistsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow whitespace-nowrap';
     } else if (tab === 'users') {
-        if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+        if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow whitespace-nowrap';
     }
+
+    updateSortDropdownUI();
 
     if (tab === 'artists') {
         document.getElementById('albums-view-container').classList.add('hidden');
@@ -1634,6 +1825,7 @@ function switchTab(tab) {
         document.getElementById('users-view-container').classList.add('hidden');
         document.getElementById('empty-state').classList.add('hidden');
         if (pagEl) pagEl.classList.add('hidden');
+        if (sortContainer) sortContainer.classList.add('hidden');
         document.getElementById('artists-view-container').classList.remove('hidden');
         document.getElementById('items-count-indicator').textContent = 'Đang quản lý Ca Sĩ';
         fetchArtistsData();
@@ -1643,12 +1835,14 @@ function switchTab(tab) {
         document.getElementById('artists-view-container').classList.add('hidden');
         document.getElementById('empty-state').classList.add('hidden');
         if (pagEl) pagEl.classList.add('hidden');
+        if (sortContainer) sortContainer.classList.add('hidden');
         document.getElementById('users-view-container').classList.remove('hidden');
         document.getElementById('items-count-indicator').textContent = 'Đang quản lý Users';
         fetchMusicUsers();
     } else {
         document.getElementById('artists-view-container').classList.add('hidden');
         document.getElementById('users-view-container').classList.add('hidden');
+        if (tab === 'tracks') updateTrackHeaderSortIcons();
         renderCurrentView();
     }
 }
