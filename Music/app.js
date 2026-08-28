@@ -13,6 +13,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 96kHz",
         totalSize: "1.18 GB",
         publisher: "Republic Records / UMG",
+        isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
             glow1: "radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)",
@@ -44,6 +45,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 192kHz",
         totalSize: "1.45 GB",
         publisher: "Mercury Nashville / UMG",
+        isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
             glow1: "radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)",
@@ -72,6 +74,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 96kHz",
         totalSize: "1.32 GB",
         publisher: "Republic Records",
+        isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
             glow1: "radial-gradient(circle, #38bdf8 0%, #0284c7 60%, transparent 80%)",
@@ -95,6 +98,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 88.2kHz",
         totalSize: "1.65 GB",
         publisher: "Columbia Records / Daft Life",
+        isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
             glow1: "radial-gradient(circle, #eab308 0%, #a16207 60%, transparent 80%)",
@@ -251,6 +255,31 @@ class XTAPOMusicApp {
         this.closeGenreModal = document.getElementById('closeGenreModal');
         this.genreGrid = document.getElementById('genreGrid');
 
+        // Auth & User Profile
+        this.userProfileBtn = document.getElementById('userProfileBtn');
+        this.userAvatarImg = document.getElementById('userAvatarImg');
+        this.userDisplayName = document.getElementById('userDisplayName');
+        
+        this.authModal = document.getElementById('authModal');
+        this.closeAuthModal = document.getElementById('closeAuthModal');
+        this.tabLogin = document.getElementById('tabLogin');
+        this.tabRegister = document.getElementById('tabRegister');
+        this.loginForm = document.getElementById('loginForm');
+        this.registerForm = document.getElementById('registerForm');
+        
+        this.loginSubmitBtn = document.getElementById('loginSubmitBtn');
+        this.regSubmitBtn = document.getElementById('regSubmitBtn');
+        this.loginUsername = document.getElementById('loginUsername');
+        this.loginPassword = document.getElementById('loginPassword');
+        this.regUsername = document.getElementById('regUsername');
+        this.regDisplayName = document.getElementById('regDisplayName');
+        this.regPassword = document.getElementById('regPassword');
+
+        this.favoriteBtn = document.getElementById('favoriteBtn');
+
+        this.currentUser = null;
+        this.favoriteTracks = [];
+
         // Init
         this.init();
     }
@@ -259,15 +288,219 @@ class XTAPOMusicApp {
         this.setupAudioEvents();
         this.setupControlEvents();
         this.setupModalEvents();
+        this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
         this.loadAlbum(0, 0, false);
         this.renderAlbumGrid();
         this.setupKeyboardShortcuts();
         
-        // Tự động kiểm tra thư viện Telegram từ Backend
+        await this.fetchUserProfile();
         await this.fetchTelegramAlbums();
     }
+
+    // --- Authentication & User State ---
+    async fetchUserProfile() {
+        try {
+            const res = await fetch('/api/music/auth/profile');
+            const data = await res.json();
+            if (data.status === 'authenticated' && data.user) {
+                this.currentUser = data.user;
+                this.updateAuthUI(true);
+                await this.fetchUserFavorites();
+                await this.loadPlaylists(); // Will now fetch user playlists
+            } else {
+                this.currentUser = null;
+                this.updateAuthUI(false);
+            }
+        } catch (e) {
+            console.error("Lỗi lấy thông tin user:", e);
+        }
+    }
+
+    updateAuthUI(isLoggedIn) {
+        if (isLoggedIn && this.currentUser) {
+            this.userAvatarImg.src = this.currentUser.avatar_url;
+            this.userDisplayName.textContent = this.currentUser.display_name || this.currentUser.username;
+        } else {
+            this.userAvatarImg.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=Guest";
+            this.userDisplayName.textContent = "Đăng nhập";
+            this.favoriteTracks = [];
+            this.updateFavoriteBtnState();
+        }
+    }
+
+    setupAuthEvents() {
+        if (this.userProfileBtn) {
+            this.userProfileBtn.addEventListener('click', () => {
+                if (this.currentUser) {
+                    if (confirm("Bạn có muốn đăng xuất không?")) {
+                        this.logoutUser();
+                    }
+                } else {
+                    this.authModal.classList.add('active');
+                }
+            });
+        }
+        
+        if (this.closeAuthModal) {
+            this.closeAuthModal.addEventListener('click', () => {
+                this.authModal.classList.remove('active');
+            });
+        }
+        
+        if (this.tabLogin && this.tabRegister) {
+            this.tabLogin.addEventListener('click', () => {
+                this.tabLogin.classList.add('active');
+                this.tabRegister.classList.remove('active');
+                this.loginForm.style.display = 'block';
+                this.registerForm.style.display = 'none';
+            });
+            this.tabRegister.addEventListener('click', () => {
+                this.tabRegister.classList.add('active');
+                this.tabLogin.classList.remove('active');
+                this.registerForm.style.display = 'block';
+                this.loginForm.style.display = 'none';
+            });
+        }
+        
+        if (this.loginSubmitBtn) {
+            this.loginSubmitBtn.addEventListener('click', () => this.loginUser());
+        }
+        
+        if (this.regSubmitBtn) {
+            this.regSubmitBtn.addEventListener('click', () => this.registerUser());
+        }
+        
+        if (this.favoriteBtn) {
+            this.favoriteBtn.addEventListener('click', () => this.toggleFavorite());
+        }
+    }
+
+    async loginUser() {
+        const username = this.loginUsername.value;
+        const password = this.loginPassword.value;
+        if (!username || !password) return this.showToast("Vui lòng nhập đầy đủ username và password.");
+        
+        try {
+            const res = await fetch('/api/music/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.showToast("Đăng nhập thành công!");
+                this.authModal.classList.remove('active');
+                this.loginUsername.value = '';
+                this.loginPassword.value = '';
+                await this.fetchUserProfile();
+            } else {
+                this.showToast(data.message || "Đăng nhập thất bại.");
+            }
+        } catch (e) {
+            this.showToast("Lỗi kết nối.");
+        }
+    }
+
+    async registerUser() {
+        const username = this.regUsername.value;
+        const display_name = this.regDisplayName.value;
+        const password = this.regPassword.value;
+        if (!username || !password) return this.showToast("Vui lòng nhập đủ thông tin.");
+        
+        try {
+            const res = await fetch('/api/music/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, display_name })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.showToast("Đăng ký thành công!");
+                this.authModal.classList.remove('active');
+                this.regUsername.value = '';
+                this.regPassword.value = '';
+                this.regDisplayName.value = '';
+                await this.fetchUserProfile();
+            } else {
+                this.showToast(data.message || "Đăng ký thất bại.");
+            }
+        } catch (e) {
+            this.showToast("Lỗi kết nối.");
+        }
+    }
+
+    async logoutUser() {
+        try {
+            await fetch('/api/music/auth/logout', { method: 'POST' });
+            this.showToast("Đã đăng xuất.");
+            this.currentUser = null;
+            this.playlists = [];
+            this.updateAuthUI(false);
+            if (this.playlistGrid) this.playlistGrid.innerHTML = '';
+        } catch (e) { }
+    }
+
+    async fetchUserFavorites() {
+        try {
+            const res = await fetch('/api/music/user/favorites');
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.favoriteTracks = data.favorites;
+                this.updateFavoriteBtnState();
+            }
+        } catch (e) {}
+    }
+
+    updateFavoriteBtnState() {
+        if (!this.favoriteBtn) return;
+        const track = this.currentTrack;
+        if (!track || !track.meta || !track.meta.chat_id || !track.meta.msg_id) {
+            this.favoriteBtn.style.color = 'var(--text-muted)';
+            return;
+        }
+        const isFav = this.favoriteTracks.some(f => String(f.chat_id) === String(track.meta.chat_id) && String(f.msg_id) === String(track.meta.msg_id));
+        if (isFav) {
+            this.favoriteBtn.style.color = '#ef4444'; // Red
+            this.favoriteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+        } else {
+            this.favoriteBtn.style.color = 'var(--text-muted)';
+            this.favoriteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+        }
+    }
+
+    async toggleFavorite() {
+        if (!this.currentUser) {
+            this.authModal.classList.add('active');
+            return this.showToast("Vui lòng đăng nhập để sử dụng tính năng yêu thích.");
+        }
+        
+        const track = this.currentTrack;
+        if (!track || !track.meta || !track.meta.chat_id || !track.meta.msg_id) return;
+        
+        try {
+            const res = await fetch('/api/music/user/favorites/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: track.meta.chat_id, msg_id: track.meta.msg_id })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                if (data.is_favorite) {
+                    this.favoriteTracks.push({ chat_id: track.meta.chat_id, msg_id: track.meta.msg_id });
+                } else {
+                    this.favoriteTracks = this.favoriteTracks.filter(f => !(String(f.chat_id) === String(track.meta.chat_id) && String(f.msg_id) === String(track.meta.msg_id)));
+                }
+                this.updateFavoriteBtnState();
+            } else {
+                this.showToast(data.message || "Lỗi cập nhật yêu thích");
+            }
+        } catch (e) {
+            this.showToast("Lỗi mạng khi cập nhật yêu thích");
+        }
+    }
+
 
     // --- Current Album & Track Getters ---
     get currentAlbum() {
@@ -631,6 +864,14 @@ class XTAPOMusicApp {
 
     // --- Audio Engine & Synth Fallback ---
     play() {
+        const album = this.currentAlbum;
+        if (album && !album.isDemo && !this.currentUser) {
+            this.authModal.classList.add('active');
+            this.showToast("Vui lòng đăng nhập để nghe nhạc ngoài bản Demo (Guest).");
+            this.pause();
+            return;
+        }
+
         this.isPlaying = true;
         this.updatePlayStateVisuals(true);
         this.updateMediaSession();
@@ -1349,7 +1590,7 @@ class XTAPOMusicApp {
             </div>
         `;
         try {
-            const res = await fetch('/api/music/playlists');
+            const res = await fetch('/api/music/user/playlists');
             const data = await res.json();
             if (data && data.status === 'success') {
                 this.playlists = data.playlists || [];
@@ -1429,7 +1670,7 @@ class XTAPOMusicApp {
         }
 
         try {
-            const res = await fetch('/api/music/playlists', {
+            const res = await fetch('/api/music/user/playlists', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
@@ -1449,7 +1690,7 @@ class XTAPOMusicApp {
 
     async deletePlaylist(playlistId) {
         try {
-            const res = await fetch(`/api/music/playlists/${playlistId}`, {
+            const res = await fetch(`/api/music/user/playlists/${playlistId}`, {
                 method: 'DELETE'
             });
             const data = await res.json();
@@ -1506,7 +1747,7 @@ class XTAPOMusicApp {
         }
 
         try {
-            const res = await fetch('/api/music/playlists');
+            const res = await fetch('/api/music/user/playlists');
             const data = await res.json();
             if (data && data.status === 'success') {
                 this.playlists = data.playlists || [];
@@ -1587,7 +1828,7 @@ class XTAPOMusicApp {
         }
 
         try {
-            const res = await fetch(`/api/music/playlists/${playlistId}`, {
+            const res = await fetch(`/api/music/user/playlists/${playlistId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tracks: newTracks })

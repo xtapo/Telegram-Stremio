@@ -177,6 +177,8 @@ try:
     if os.path.exists("Music"):
         app.mount("/Music", StaticFiles(directory="Music"), name="music_static")
     from Backend.fastapi.routes.music_routes import router as music_router
+    from Backend.fastapi.routes.music_auth import auth_router as music_auth_router
+    app.include_router(music_auth_router)
     app.include_router(music_router)
 except Exception:
     pass

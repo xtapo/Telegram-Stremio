@@ -715,67 +715,8 @@ async def delete_music_channel(chat_id: str, _: bool = Depends(require_auth)):
     return {"status": "success", "message": "Đã xóa kênh khỏi danh sách quản lý."}
 
 
-# ── 3.5 Quản lý Playlist (Custom Playlists) ───────────────────────────────────
-@router.get("/api/music/playlists")
-async def get_music_playlists():
-    saved = await _db_load_playlists()
-    return {"status": "success", "playlists": saved}
-
-@router.post("/api/music/playlists")
-async def create_music_playlist(payload: dict):
-    name = payload.get("name", "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Vui lòng cung cấp tên Playlist.")
-    
-    saved = await _db_load_playlists()
-    # Check duplicate name
-    for p in saved:
-        if p.get("name", "").lower() == name.lower():
-            return {"status": "error", "message": "Playlist đã tồn tại."}
-            
-    new_playlist = {
-        "id": secrets.token_hex(8),
-        "name": name,
-        "tracks": [],
-        "created_at": time.time()
-    }
-    saved.append(new_playlist)
-    await _db_save_playlists(saved)
-    return {"status": "success", "message": f"Đã tạo playlist '{name}'.", "playlist": new_playlist}
-
-@router.put("/api/music/playlists/{playlist_id}")
-async def update_music_playlist(playlist_id: str, payload: dict):
-    saved = await _db_load_playlists()
-    tracks = payload.get("tracks")
-    name = payload.get("name")
-    
-    target = None
-    for p in saved:
-        if str(p.get("id")) == playlist_id:
-            target = p
-            break
-            
-    if not target:
-        raise HTTPException(status_code=404, detail="Không tìm thấy playlist.")
-        
-    if tracks is not None:
-        if not isinstance(tracks, list):
-            raise HTTPException(status_code=400, detail="tracks phải là một mảng.")
-        target["tracks"] = tracks
-        
-    if name is not None:
-        target["name"] = name.strip()
-        
-    await _db_save_playlists(saved)
-    return {"status": "success", "message": "Đã cập nhật playlist.", "playlist": target}
-
-@router.delete("/api/music/playlists/{playlist_id}")
-async def delete_music_playlist(playlist_id: str):
-    saved = await _db_load_playlists()
-    new_list = [p for p in saved if str(p.get("id")) != playlist_id]
-    await _db_save_playlists(new_list)
-    return {"status": "success", "message": "Đã xóa playlist."}
-
+# ── 3.5 Quản lý Playlist (Bị thay thế bởi Playlist Cá Nhân theo User) ─────────
+# Các route playlist đã được chuyển sang music_auth.py
 
 # ── 4. Bộ Quét Kênh Bất Đồng Bộ (Background Music Scanner) ────────────────────
 class MusicScanManager:
