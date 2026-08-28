@@ -1283,17 +1283,6 @@ class XTAPOMusicApp {
 
             this.searchResults.appendChild(el);
         });
-    }m;">${item.track.duration}</span>
-            `;
-
-            el.addEventListener('click', () => {
-                this.loadAlbum(item.albumIdx, item.trackIdx, true);
-                this.closeModal(this.searchModal);
-                this.showToast(`Äang phÃ¡t: ${item.track.name}`);
-            });
-
-            this.searchResults.appendChild(el);
-        });
     }
 
     // --- Keyboard Shortcuts ---
