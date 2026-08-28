@@ -1533,6 +1533,10 @@ class XTAPOMusicApp {
             playPromise.then(() => {
                 this.synthesizerActive = false;
             }).catch(error => {
+                // Bỏ qua nếu là AbortError do người dùng bấm chuyển bài nhanh hoặc load bài mới
+                if (error.name === 'AbortError' || (error.message && error.message.includes('interrupted'))) {
+                    return;
+                }
                 // If remote audio is blocked by CORS or offline, fallback to built-in musical synthesized audio
                 console.log("Using built-in synthesized audio playback:", error.message);
                 this.startAudioSynth();

@@ -77,7 +77,7 @@ def _seed_from_env() -> Dict[str, Any]:
         "global_search_channels":       [],
         "http_proxy_url":               Telegram.HTTP_PROXY_URL,
         "show_proxy_and_non_proxy_both": Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH,
-        "multi_tokens":                 [],
+        "multi_tokens":                 list(Telegram.MULTI_TOKENS),
         "extra_databases":              list(Telegram.DATABASE[2:]) if len(Telegram.DATABASE) > 2 else [],
     })
     return seed
