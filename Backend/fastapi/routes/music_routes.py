@@ -2958,28 +2958,48 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
 _lyrics_memory_cache: Dict[str, dict] = {}
 _LYRICS_CACHE_TTL = 86400 * 7  # 7 days
 
+def _split_artist_title(raw_text: str):
+    """Tách Tên Ca Sĩ - Tên Bài Hát từ chuỗi tổng hợp (vd: Sơn Tùng - Chúng Ta Của Hiện Tại)"""
+    if not raw_text:
+        return "", ""
+    t = raw_text.strip()
+    t = re.sub(r'^\s*\d+[\s\.\-_]+', '', t)
+    t = re.sub(r'\.(flac|mp3|m4a|wav|aac|ogg)$', '', t, flags=re.IGNORECASE)
+    t = re.sub(r'\[.*?\]', '', t)
+    t = re.sub(r'\((?:official|music|video|audio|lyrics|remaster|remastered|version|deluxe|bonus|expanded|edition|karaoke|beat|instrumental|hd|4k|live).*?\)', '', t, flags=re.IGNORECASE)
+    
+    # Thử tách theo " - " hoặc " – " hoặc " — "
+    for sep in (' - ', ' – ', ' — ', ' // '):
+        if sep in t:
+            parts = t.split(sep, 1)
+            p1, p2 = parts[0].strip(), parts[1].strip()
+            if p1 and p2:
+                return p1, p2
+    return "", t.strip()
+
 def _clean_track_title_for_lyrics(title: str) -> str:
     """Làm sạch tên bài hát để tăng tỷ lệ tìm kiếm chính xác trên LRCLIB"""
     if not title:
         return ""
-    # Bỏ số thứ tự đầu bài hát (vd: 01. , 1 - , 12_ )
-    t = re.sub(r'^\s*\d+[\s\.\-_]+', '', title)
-    # Bỏ đuôi định dạng file nếu có
+    p_artist, p_title = _split_artist_title(title)
+    t = p_title if p_title else title
+    t = re.sub(r'^\s*\d+[\s\.\-_]+', '', t)
     t = re.sub(r'\.(flac|mp3|m4a|wav|aac|ogg)$', '', t, flags=re.IGNORECASE)
-    # Bỏ các tag trong ngoặc vuông [FLAC 24bit], [Official Music Video]
     t = re.sub(r'\[.*?\]', '', t)
-    # Bỏ các nhãn phụ trong ngoặc tròn như (Official Video), (Lyrics), (Remastered 2024), (feat. XYZ)
     t = re.sub(r'\((?:official|music|video|audio|lyrics|remaster|remastered|version|deluxe|bonus|expanded|edition|karaoke|beat|instrumental|hd|4k|live).*?\)', '', t, flags=re.IGNORECASE)
-    # Chuẩn hóa khoảng trắng
     t = re.sub(r'\s+', ' ', t).strip()
     return t
 
-def _clean_artist_name_for_lyrics(artist: str) -> str:
-    if not artist or artist.lower() in ("unknown", "various artists", "xtapo music", "chưa rõ", "none"):
-        return ""
-    a = re.sub(r'\[.*?\]', '', artist)
-    a = re.sub(r'\s+', ' ', a).strip()
-    return a
+def _clean_artist_name_for_lyrics(artist: str, raw_title: str = "") -> str:
+    if artist and artist.lower() not in ("unknown", "various artists", "xtapo music", "chưa rõ", "none"):
+        a = re.sub(r'\[.*?\]', '', artist)
+        a = re.sub(r'\s+', ' ', a).strip()
+        return a
+    # Thử lấy artist từ raw_title nếu raw_title có dạng "Artist - Title"
+    p_artist, _ = _split_artist_title(raw_title)
+    if p_artist and p_artist.lower() not in ("unknown", "various artists", "xtapo music", "chưa rõ", "none"):
+        return p_artist
+    return ""
 
 @router.get("/api/music/lyrics")
 async def get_realtime_lyrics(
@@ -2994,7 +3014,7 @@ async def get_realtime_lyrics(
     Tự động thử nhiều chiến lược: Exact Match -> Search Cleaned Title -> Fuzzy Search.
     """
     cleaned_track = _clean_track_title_for_lyrics(track_name)
-    cleaned_artist = _clean_artist_name_for_lyrics(artist_name or "")
+    cleaned_artist = _clean_artist_name_for_lyrics(artist_name or "", track_name)
     
     cache_key = f"{cleaned_track.lower()}__{cleaned_artist.lower()}"
     
@@ -3031,24 +3051,43 @@ async def get_realtime_lyrics(
         "User-Agent": "XTAPO-Music-Player/2.0 (https://github.com/xtapo/Telegram-Stremio)"
     }
     
-    # 3. Chiến lược A: Thử LRCLIB /api/get (Exact Match)
-    async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-        # A1: Với thông tin ban đầu
+    async with httpx.AsyncClient(timeout=9.0, follow_redirects=True) as client:
+        # A1: Thử /api/get exact match (with duration)
+        if duration and duration > 0:
+            try:
+                get_params = {"track_name": cleaned_track, "duration": int(duration)}
+                if cleaned_artist: get_params["artist_name"] = cleaned_artist
+                if album_name and album_name.strip(): get_params["album_name"] = album_name.strip()
+                resp = await client.get("https://lrclib.net/api/get", params=get_params, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("syncedLyrics"):
+                        result = {
+                            "status": "success",
+                            "id": data.get("id"),
+                            "track_name": data.get("trackName") or cleaned_track,
+                            "artist_name": data.get("artistName") or cleaned_artist,
+                            "album_name": data.get("albumName") or album_name,
+                            "duration": data.get("duration"),
+                            "synced_lyrics": data.get("syncedLyrics") or "",
+                            "plain_lyrics": data.get("plainLyrics") or "",
+                            "instrumental": data.get("instrumental", False),
+                            "source": "lrclib_exact"
+                        }
+                        _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
+                        return JSONResponse(content=result)
+            except Exception as e:
+                LOGGER.debug(f"[LRCLIB Exact Duration] Note: {e}")
+
+        # A2: Thử /api/get exact match (without duration)
         try:
             get_params = {"track_name": cleaned_track}
-            if cleaned_artist:
-                get_params["artist_name"] = cleaned_artist
-            if album_name and album_name.strip():
-                get_params["album_name"] = album_name.strip()
-            if duration and duration > 0:
-                get_params["duration"] = int(duration)
-                
+            if cleaned_artist: get_params["artist_name"] = cleaned_artist
+            if album_name and album_name.strip(): get_params["album_name"] = album_name.strip()
             resp = await client.get("https://lrclib.net/api/get", params=get_params, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
-                synced = data.get("syncedLyrics")
-                plain = data.get("plainLyrics")
-                if synced or plain:
+                if data.get("syncedLyrics") or data.get("plainLyrics"):
                     result = {
                         "status": "success",
                         "id": data.get("id"),
@@ -3056,74 +3095,94 @@ async def get_realtime_lyrics(
                         "artist_name": data.get("artistName") or cleaned_artist,
                         "album_name": data.get("albumName") or album_name,
                         "duration": data.get("duration"),
-                        "synced_lyrics": synced or "",
-                        "plain_lyrics": plain or "",
+                        "synced_lyrics": data.get("syncedLyrics") or "",
+                        "plain_lyrics": data.get("plainLyrics") or "",
                         "instrumental": data.get("instrumental", False),
-                        "source": "lrclib_exact"
+                        "source": "lrclib_exact_nodur"
                     }
                     _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
                     return JSONResponse(content=result)
         except Exception as e:
-            LOGGER.debug(f"[LRCLIB Exact] Note: {e}")
+            LOGGER.debug(f"[LRCLIB Exact NoDur] Note: {e}")
 
-        # Chiến lược B: Thử LRCLIB /api/search (Search Query)
-        try:
-            query_str = f"{cleaned_track} {cleaned_artist}".strip()
-            search_params = {"q": query_str}
-            resp = await client.get("https://lrclib.net/api/search", params=search_params, headers=headers)
-            if resp.status_code == 200:
-                items = resp.json()
-                if isinstance(items, list) and len(items) > 0:
-                    # Ưu tiên mục có syncedLyrics trước
-                    best_match = None
-                    for it in items:
-                        if it.get("syncedLyrics"):
-                            best_match = it
-                            break
-                    if not best_match:
-                        best_match = items[0]
-                    
-                    result = {
-                        "status": "success",
-                        "id": best_match.get("id"),
-                        "track_name": best_match.get("trackName") or cleaned_track,
-                        "artist_name": best_match.get("artistName") or cleaned_artist,
-                        "album_name": best_match.get("albumName") or album_name,
-                        "duration": best_match.get("duration"),
-                        "synced_lyrics": best_match.get("syncedLyrics") or "",
-                        "plain_lyrics": best_match.get("plainLyrics") or "",
-                        "instrumental": best_match.get("instrumental", False),
-                        "source": "lrclib_search"
-                    }
-                    _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
-                    return JSONResponse(content=result)
-        except Exception as e:
-            LOGGER.debug(f"[LRCLIB Search] Note: {e}")
-
-        # Chiến lược C: Thử chỉ tìm bằng tên bài hát
+        # B: Thu thập kết quả từ nhiều truy vấn tìm kiếm
+        search_queries = []
         if cleaned_artist:
+            search_queries.append(f"{cleaned_track} {cleaned_artist}")
+            search_queries.append(f"{cleaned_artist} {cleaned_track}")
+        search_queries.append(cleaned_track)
+
+        collected_items = []
+        for q_str in search_queries:
             try:
-                resp = await client.get("https://lrclib.net/api/search", params={"track_name": cleaned_track}, headers=headers)
+                resp = await client.get("https://lrclib.net/api/search", params={"q": q_str}, headers=headers)
                 if resp.status_code == 200:
                     items = resp.json()
                     if isinstance(items, list) and len(items) > 0:
-                        best_match = next((it for it in items if it.get("syncedLyrics")), items[0])
-                        result = {
-                            "status": "success",
-                            "id": best_match.get("id"),
-                            "track_name": best_match.get("trackName") or cleaned_track,
-                            "artist_name": best_match.get("artistName") or "",
-                            "album_name": best_match.get("albumName") or "",
-                            "duration": best_match.get("duration"),
-                            "synced_lyrics": best_match.get("syncedLyrics") or "",
-                            "plain_lyrics": best_match.get("plainLyrics") or "",
-                            "instrumental": best_match.get("instrumental", False),
-                            "source": "lrclib_fallback"
-                        }
-                        _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
-                        return JSONResponse(content=result)
+                        collected_items.extend(items)
+                        # Nếu đã có ít nhất 1 item có syncedLyrics, không cần search thêm
+                        if any(it.get("syncedLyrics") for it in items):
+                            break
             except Exception as e:
-                LOGGER.debug(f"[LRCLIB Fallback] Note: {e}")
+                LOGGER.debug(f"[LRCLIB Search '{q_str}'] Note: {e}")
+
+        if collected_items:
+            # Chấm điểm và xếp hạng kết quả tốt nhất
+            def score_item(item):
+                s = 0
+                has_synced = bool(item.get("syncedLyrics"))
+                if has_synced:
+                    s += 1000  # Ưu tiên tuyệt đối lời có đồng bộ
+                
+                # Khớp tên bài hát
+                i_name = (item.get("trackName") or "").lower()
+                if i_name == cleaned_track.lower():
+                    s += 300
+                elif cleaned_track.lower() in i_name or i_name in cleaned_track.lower():
+                    s += 150
+                
+                # Khớp tên ca sĩ
+                if cleaned_artist:
+                    i_art = (item.get("artistName") or "").lower()
+                    if i_art == cleaned_artist.lower():
+                        s += 250
+                    elif cleaned_artist.lower() in i_art or i_art in cleaned_artist.lower():
+                        s += 100
+                
+                # Khớp thời lượng (gần nhất)
+                if duration and duration > 0 and item.get("duration"):
+                    diff = abs(item["duration"] - duration)
+                    if diff <= 3:
+                        s += 200
+                    elif diff <= 8:
+                        s += 100
+                    elif diff <= 20:
+                        s += 40
+                    else:
+                        s -= min(100, int(diff * 2))
+                return s
+
+            collected_items.sort(key=score_item, reverse=True)
+            best_match = collected_items[0]
+
+            synced = best_match.get("syncedLyrics") or ""
+            plain = best_match.get("plainLyrics") or ""
+
+            if synced or plain:
+                result = {
+                    "status": "success",
+                    "id": best_match.get("id"),
+                    "track_name": best_match.get("trackName") or cleaned_track,
+                    "artist_name": best_match.get("artistName") or cleaned_artist,
+                    "album_name": best_match.get("albumName") or album_name,
+                    "duration": best_match.get("duration"),
+                    "synced_lyrics": synced,
+                    "plain_lyrics": plain,
+                    "instrumental": best_match.get("instrumental", False),
+                    "source": "lrclib_ranked_search"
+                }
+                _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
+                return JSONResponse(content=result)
 
     # Không tìm thấy lời bài hát
     not_found_res = {

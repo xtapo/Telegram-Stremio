@@ -408,6 +408,7 @@ class XTAPOMusicApp {
         this.lyricsSearchTrackInput = document.getElementById('lyricsSearchTrackInput');
         this.lyricsSearchArtistInput = document.getElementById('lyricsSearchArtistInput');
         this.btnLyricsOnlineSearch = document.getElementById('btnLyricsOnlineSearch');
+        this.lyricsSearchResults = document.getElementById('lyricsSearchResults');
         this.lyricsFileInput = document.getElementById('lyricsFileInput');
         this.btnResetToOriginalLyrics = document.getElementById('btnResetToOriginalLyrics');
         this.btnClearLyrics = document.getElementById('btnClearLyrics');
@@ -430,6 +431,7 @@ class XTAPOMusicApp {
         this.isUserScrollingKaraokeLyrics = false;
         this.heroScrollResumeTimeout = null;
         this.karaokeScrollResumeTimeout = null;
+        this._lyricsSyncRafId = null;
 
         this.currentUser = null;
         this.favoriteTracks = [];
@@ -1504,6 +1506,7 @@ class XTAPOMusicApp {
         this.isPlaying = true;
         this.updatePlayStateVisuals(true);
         this.updateMediaSession();
+        this.startLyricsSyncLoop();
 
         const playPromise = this.audio.play();
         if (playPromise !== undefined) {
@@ -1519,6 +1522,7 @@ class XTAPOMusicApp {
 
     pause() {
         this.isPlaying = false;
+        this.stopLyricsSyncLoop();
         this.audio.pause();
         this.stopAudioSynth();
         this.updatePlayStateVisuals(false);
@@ -4193,25 +4197,69 @@ class XTAPOMusicApp {
         }
     }
 
+    startLyricsSyncLoop() {
+        if (this._lyricsSyncRafId) cancelAnimationFrame(this._lyricsSyncRafId);
+        const loop = () => {
+            if (this.isPlaying) {
+                const curTime = this.synthesizerActive ? this.synthTime : (this.audio.currentTime || 0);
+                this.syncLyricsTime(curTime);
+                this._lyricsSyncRafId = requestAnimationFrame(loop);
+            }
+        };
+        this._lyricsSyncRafId = requestAnimationFrame(loop);
+    }
+
+    stopLyricsSyncLoop() {
+        if (this._lyricsSyncRafId) {
+            cancelAnimationFrame(this._lyricsSyncRafId);
+            this._lyricsSyncRafId = null;
+        }
+    }
+
+    splitArtistTitle(raw) {
+        if (!raw) return { artist: '', title: '' };
+        let t = raw.trim();
+        t = t.replace(/^\s*\d+[\s\.\-_]+/, '');
+        t = t.replace(/\.(flac|mp3|m4a|wav|aac|ogg)$/i, '');
+        t = t.replace(/\[.*?\]/g, '');
+        t = t.replace(/\((?:official|music|video|audio|lyrics|remaster|remastered|version|deluxe|bonus|expanded|edition|karaoke|beat|instrumental|hd|4k|live).*?\)/gi, '');
+        
+        for (const sep of [' - ', ' – ', ' — ', ' // ']) {
+            if (t.includes(sep)) {
+                const parts = t.split(sep);
+                if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+                    return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim() };
+                }
+            }
+        }
+        return { artist: '', title: t.trim() };
+    }
+
     cleanTrackTitleForLyrics(title) {
         if (!title) return "";
-        let t = title.replace(/^\s*\d+[\s\.\-_]+/, ''); // 01. 
+        const parsed = this.splitArtistTitle(title);
+        let t = parsed.title || title;
+        t = t.replace(/^\s*\d+[\s\.\-_]+/, ''); // 01. 
         t = t.replace(/\.(flac|mp3|m4a|wav|aac|ogg)$/i, '');
         t = t.replace(/\[.*?\]/g, ''); // [FLAC]
         t = t.replace(/\((?:official|music|video|audio|lyrics|remaster|remastered|version|deluxe|bonus|expanded|edition|karaoke|beat|instrumental|hd|4k|live).*?\)/gi, '');
         return t.replace(/\s+/g, ' ').trim();
     }
 
-    cleanArtistForLyrics(artist) {
-        if (!artist || ['unknown', 'various artists', 'xtapo music', 'chưa rõ', 'none'].includes(artist.toLowerCase().trim())) {
-            return "";
+    cleanArtistForLyrics(artist, rawTitle = "") {
+        if (artist && !['unknown', 'various artists', 'xtapo music', 'chưa rõ', 'none'].includes(artist.toLowerCase().trim())) {
+            return artist.replace(/\[.*?\]/g, '').replace(/\s+/g, ' ').trim();
         }
-        return artist.replace(/\[.*?\]/g, '').replace(/\s+/g, ' ').trim();
+        const parsed = this.splitArtistTitle(rawTitle);
+        if (parsed.artist && !['unknown', 'various artists', 'xtapo music', 'chưa rõ', 'none'].includes(parsed.artist.toLowerCase().trim())) {
+            return parsed.artist;
+        }
+        return "";
     }
 
     getTrackLyricsCacheKey(track, album) {
         const cleanTitle = this.cleanTrackTitleForLyrics(track.name || '');
-        const cleanArtist = this.cleanArtistForLyrics(track.artist || (album && album.artist) || '');
+        const cleanArtist = this.cleanArtistForLyrics(track.artist || (album && album.artist) || '', track.name || '');
         return `${cleanTitle.toLowerCase()}__${cleanArtist.toLowerCase()}`;
     }
 
@@ -4219,7 +4267,7 @@ class XTAPOMusicApp {
     async fetchTrackLyrics(track, album, forceRefresh = false) {
         if (!track) return;
         const cleanTitle = this.cleanTrackTitleForLyrics(track.name || '');
-        const cleanArtist = this.cleanArtistForLyrics(track.artist || (album && album.artist) || '');
+        const cleanArtist = this.cleanArtistForLyrics(track.artist || (album && album.artist) || '', track.name || '');
         const cacheKey = this.getTrackLyricsCacheKey(track, album);
 
         // Load saved sync offset
@@ -4242,7 +4290,7 @@ class XTAPOMusicApp {
             if (this.karaokeStatusText) this.karaokeStatusText.textContent = `Đang đồng bộ lời bài hát "${cleanTitle}"...`;
         }
         if (this.karaokeLinesList) this.karaokeLinesList.innerHTML = '';
-        if (this.heroLyricsTitle) this.heroLyricsTitle.textContent = `${cleanTitle} - ${cleanArtist || 'XTAPO Music'}`;
+        if (this.heroLyricsTitle) this.heroLyricsTitle.textContent = `${cleanTitle} ${cleanArtist ? '- ' + cleanArtist : ''}`;
 
         // 2. Check Custom LocalStorage Lyrics First
         const customLrc = localStorage.getItem(`xtapo_custom_lrc_${cacheKey}`);
@@ -4424,7 +4472,7 @@ class XTAPOMusicApp {
                     const mins = parseInt(match[1], 10) || 0;
                     const secs = parseInt(match[2], 10) || 0;
                     const msRaw = match[3] || '0';
-                    const ms = msRaw.length === 2 ? parseInt(msRaw, 10) * 10 : parseInt(msRaw, 10);
+                    const ms = msRaw.length === 2 ? parseInt(msRaw, 10) * 10 : (msRaw.length === 1 ? parseInt(msRaw, 10) * 100 : parseInt(msRaw, 10));
                     const totalSecs = mins * 60 + secs + ms / 1000 + globalOffsetMs / 1000;
                     lines.push({
                         time: Math.max(0, totalSecs),
@@ -4441,25 +4489,9 @@ class XTAPOMusicApp {
         }
 
         if (hasTimestamps) {
-            // Sort lines by time ascending
+            // Sort lines by time ascending strictly
             lines.sort((a, b) => a.time - b.time);
-
-            // Tự động chèn điểm dạo nhạc (Instrumental Interlude) nếu có khoảng lặng > 6s giữa 2 câu
-            const enrichedLines = [];
-            for (let i = 0; i < lines.length; i++) {
-                enrichedLines.push(lines[i]);
-                if (i < lines.length - 1) {
-                    const gap = lines[i + 1].time - lines[i].time;
-                    if (gap >= 6.5) {
-                        enrichedLines.push({
-                            time: lines[i].time + 2.5,
-                            text: '♪ ♫ ♪ ♫ (Dạo Nhạc) ♫ ♪ ♫ ♪',
-                            isInstrumental: true
-                        });
-                    }
-                }
-            }
-            return { lines: enrichedLines, isPlain: false };
+            return { lines, isPlain: false };
         } else {
             // Plain lyrics without timestamps: format as readable lines
             const plainLines = rawLines.map((l, idx) => ({ time: idx * 4, text: l.trim() })).filter(l => l.text);
@@ -4480,7 +4512,7 @@ class XTAPOMusicApp {
             this.heroLyricsLines.innerHTML = '';
             lines.forEach((line, idx) => {
                 const el = document.createElement('div');
-                el.className = `lyrics-line ${line.isInstrumental ? 'instrumental' : ''}`;
+                el.className = 'lyrics-line';
                 el.dataset.index = idx;
                 el.dataset.time = line.time;
                 el.textContent = line.text;
@@ -4498,7 +4530,7 @@ class XTAPOMusicApp {
             this.karaokeLinesList.innerHTML = '';
             lines.forEach((line, idx) => {
                 const el = document.createElement('div');
-                el.className = `karaoke-line ${line.isInstrumental ? 'instrumental' : ''}`;
+                el.className = 'karaoke-line';
                 el.dataset.index = idx;
                 el.dataset.time = line.time;
                 el.textContent = line.text;
@@ -4522,10 +4554,10 @@ class XTAPOMusicApp {
         const lines = this.currentLyrics.lines;
         const calibratedTime = currentTime + this.lyricsOffset;
 
-        // Binary search or linear lookup for active line
+        // Find active line with precision
         let activeIdx = -1;
         for (let i = 0; i < lines.length; i++) {
-            if (lines[i].time <= calibratedTime + 0.15) {
+            if (lines[i].time <= calibratedTime + 0.05) {
                 activeIdx = i;
             } else {
                 break;
@@ -4710,19 +4742,60 @@ class XTAPOMusicApp {
             this.btnLyricsOnlineSearch.innerHTML = `<span>Đang tìm...</span>`;
         }
 
+        if (this.lyricsSearchResults) {
+            this.lyricsSearchResults.style.display = 'block';
+            this.lyricsSearchResults.innerHTML = '<div style="padding: 10px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">Đang tìm kiếm trên LRCLIB...</div>';
+        }
+
         try {
             const queryStr = encodeURIComponent(`${trackQuery} ${artistQuery}`.trim());
             const res = await fetch(`https://lrclib.net/api/search?q=${queryStr}`);
             if (res.ok) {
                 const items = await res.json();
                 if (Array.isArray(items) && items.length > 0) {
+                    if (this.lyricsSearchResults) {
+                        this.lyricsSearchResults.innerHTML = `
+                            <div style="font-size: 0.75rem; color: var(--accent-gold); font-weight: 700; margin-bottom: 6px; padding: 2px 6px;">
+                                TÌM THẤY ${items.length} PHIÊN BẢN (NHẤP ĐỂ CHỌN):
+                            </div>
+                        `;
+                        items.forEach((it, idx) => {
+                            const isSynced = Boolean(it.syncedLyrics);
+                            const dur = it.duration ? this.formatTime(it.duration) : '--:--';
+                            const itemEl = document.createElement('div');
+                            itemEl.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; margin-bottom: 4px; border-radius: 6px; background: rgba(255,255,255,0.04); cursor: pointer; transition: all 0.2s ease;';
+                            itemEl.innerHTML = `
+                                <div style="display: flex; flex-direction: column; overflow: hidden; margin-right: 8px;">
+                                    <span style="font-weight: 600; color: #fff; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(it.trackName || trackQuery)}</span>
+                                    <span style="font-size: 0.74rem; color: var(--text-muted);">${this.escapeHtml(it.artistName || 'Artist')} • ${this.escapeHtml(it.albumName || 'Album')} (${dur})</span>
+                                </div>
+                                <span style="padding: 2px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; background: ${isSynced ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.08)'}; color: ${isSynced ? '#34d399' : 'rgba(255,255,255,0.5)'};">
+                                    ${isSynced ? '⚡ SYNCED' : 'PLAIN'}
+                                </span>
+                            `;
+                            itemEl.addEventListener('mouseenter', () => itemEl.style.background = 'rgba(245,158,11,0.15)');
+                            itemEl.addEventListener('mouseleave', () => itemEl.style.background = 'rgba(255,255,255,0.04)');
+                            itemEl.addEventListener('click', () => {
+                                const lrc = it.syncedLyrics || it.plainLyrics || '';
+                                if (this.lyricsRawTextarea && lrc) {
+                                    this.lyricsRawTextarea.value = lrc;
+                                    this.showToast(`Đã chọn: "${it.trackName}" (${isSynced ? 'Có đồng bộ' : 'Lời thô'})`);
+                                }
+                            });
+                            this.lyricsSearchResults.appendChild(itemEl);
+                        });
+                    }
+
+                    // Tự động nạp kết quả tốt nhất đầu tiên vào textarea
                     const best = items.find(it => it.syncedLyrics) || items[0];
                     const lrc = best.syncedLyrics || best.plainLyrics || '';
                     if (this.lyricsRawTextarea && lrc) {
                         this.lyricsRawTextarea.value = lrc;
-                        this.showToast(`Tìm thấy lời bài hát: "${best.trackName || trackQuery}" (${best.syncedLyrics ? 'Có đồng bộ' : 'Lời thô'})`);
                     }
                 } else {
+                    if (this.lyricsSearchResults) {
+                        this.lyricsSearchResults.innerHTML = `<div style="padding: 10px; font-size: 0.8rem; color: #f87171; text-align: center;">Không tìm thấy kết quả nào trên LRCLIB cho "${this.escapeHtml(trackQuery)}"</div>`;
+                    }
                     this.showToast(`Không tìm thấy kết quả nào trên LRCLIB cho "${trackQuery}"`);
                 }
             } else {
