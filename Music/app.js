@@ -13,6 +13,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 96kHz",
         totalSize: "1.18 GB",
         publisher: "Republic Records / UMG",
+        country: "Âu Mỹ",
         isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
@@ -20,21 +21,21 @@ const ALBUMS_DATABASE = [
             glow2: "radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%)"
         },
         tracks: [
-            { id: 1, name: "Any Man of Mine (Little Miss Twain Edition)", duration: "4:07", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "82.4 MB" },
-            { id: 2, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "79.1 MB" },
-            { id: 3, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "77.8 MB" },
-            { id: 4, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "70.5 MB" },
-            { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "94.2 MB" },
-            { id: 6, name: "Whose Bed Have Your Boots Been Under?", duration: "4:25", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "88.3 MB" },
-            { id: 7, name: "I'm Gonna Getcha Good!", duration: "4:29", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "89.6 MB" },
-            { id: 8, name: "Up! (Red Album Version)", duration: "2:52", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "57.3 MB" },
-            { id: 9, name: "Forever and for Always", duration: "4:47", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "95.5 MB" },
-            { id: 10, name: "Don't Be Stupid (You Know I Love You)", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "71.6 MB" },
-            { id: 11, name: "Party for Two (ft. Billy Currington)", duration: "3:31", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "70.2 MB" },
-            { id: 12, name: "Giddy Up!", duration: "2:42", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "54.1 MB" },
-            { id: 13, name: "Life's About to Get Good", duration: "3:40", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3", size: "73.3 MB" },
-            { id: 14, name: "No One Needs to Know", duration: "3:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3", size: "61.2 MB" },
-            { id: 15, name: "You've Got a Way (Notting Hill Mix)", duration: "3:24", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3", size: "68.0 MB" }
+            { id: 1, name: "Any Man of Mine (Little Miss Twain Edition)", duration: "4:07", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "82.4 MB", country: "Âu Mỹ" },
+            { id: 2, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "79.1 MB", country: "Âu Mỹ" },
+            { id: 3, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "77.8 MB", country: "Âu Mỹ" },
+            { id: 4, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "70.5 MB", country: "Âu Mỹ" },
+            { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "94.2 MB", country: "Âu Mỹ" },
+            { id: 6, name: "Whose Bed Have Your Boots Been Under?", duration: "4:25", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "88.3 MB", country: "Âu Mỹ" },
+            { id: 7, name: "I'm Gonna Getcha Good!", duration: "4:29", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "89.6 MB", country: "Âu Mỹ" },
+            { id: 8, name: "Up! (Red Album Version)", duration: "2:52", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "57.3 MB", country: "Âu Mỹ" },
+            { id: 9, name: "Forever and for Always", duration: "4:47", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "95.5 MB", country: "Âu Mỹ" },
+            { id: 10, name: "Don't Be Stupid (You Know I Love You)", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "71.6 MB", country: "Âu Mỹ" },
+            { id: 11, name: "Party for Two (ft. Billy Currington)", duration: "3:31", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "70.2 MB", country: "Âu Mỹ" },
+            { id: 12, name: "Giddy Up!", duration: "2:42", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "54.1 MB", country: "Âu Mỹ" },
+            { id: 13, name: "Life's About to Get Good", duration: "3:40", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3", size: "73.3 MB", country: "Âu Mỹ" },
+            { id: 14, name: "No One Needs to Know", duration: "3:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3", size: "61.2 MB", country: "Âu Mỹ" },
+            { id: 15, name: "You've Got a Way (Notting Hill Mix)", duration: "3:24", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3", size: "68.0 MB", country: "Âu Mỹ" }
         ]
     },
     {
@@ -45,6 +46,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 192kHz",
         totalSize: "1.45 GB",
         publisher: "Mercury Nashville / UMG",
+        country: "Âu Mỹ",
         isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
@@ -52,18 +54,18 @@ const ALBUMS_DATABASE = [
             glow2: "radial-gradient(circle, #f59e0b 0%, #c2410c 60%, transparent 80%)"
         },
         tracks: [
-            { id: 1, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "85.2 MB" },
-            { id: 2, name: "I'm Holdin' On to Love (To Save My Life)", duration: "3:30", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "76.4 MB" },
-            { id: 3, name: "Love Gets Me Every Time", duration: "3:33", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "77.5 MB" },
-            { id: 4, name: "Don't Be Stupid", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "78.2 MB" },
-            { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "102.1 MB" },
-            { id: 6, name: "Come On Over", duration: "2:55", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "64.3 MB" },
-            { id: 7, name: "When", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "79.8 MB" },
-            { id: 8, name: "Whatever You Do! Don't!", duration: "3:49", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "83.5 MB" },
-            { id: 9, name: "If You Wanna Touch Her, Ask!", duration: "4:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "89.0 MB" },
-            { id: 10, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "77.0 MB" },
-            { id: 11, name: "Honey, I'm Home", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "79.9 MB" },
-            { id: 12, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "87.1 MB" }
+            { id: 1, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "85.2 MB", country: "Âu Mỹ" },
+            { id: 2, name: "I'm Holdin' On to Love (To Save My Life)", duration: "3:30", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "76.4 MB", country: "Âu Mỹ" },
+            { id: 3, name: "Love Gets Me Every Time", duration: "3:33", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "77.5 MB", country: "Âu Mỹ" },
+            { id: 4, name: "Don't Be Stupid", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "78.2 MB", country: "Âu Mỹ" },
+            { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "102.1 MB", country: "Âu Mỹ" },
+            { id: 6, name: "Come On Over", duration: "2:55", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "64.3 MB", country: "Âu Mỹ" },
+            { id: 7, name: "When", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "79.8 MB", country: "Âu Mỹ" },
+            { id: 8, name: "Whatever You Do! Don't!", duration: "3:49", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "83.5 MB", country: "Âu Mỹ" },
+            { id: 9, name: "If You Wanna Touch Her, Ask!", duration: "4:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "89.0 MB", country: "Âu Mỹ" },
+            { id: 10, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "77.0 MB", country: "Âu Mỹ" },
+            { id: 11, name: "Honey, I'm Home", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "79.9 MB", country: "Âu Mỹ" },
+            { id: 12, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "87.1 MB", country: "Âu Mỹ" }
         ]
     },
     {
@@ -74,6 +76,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 96kHz",
         totalSize: "1.32 GB",
         publisher: "Republic Records",
+        country: "Âu Mỹ",
         isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
@@ -81,13 +84,13 @@ const ALBUMS_DATABASE = [
             glow2: "radial-gradient(circle, #f472b6 0%, #db2777 60%, transparent 80%)"
         },
         tracks: [
-            { id: 1, name: "Welcome to New York (Taylor's Version)", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "75.4 MB" },
-            { id: 2, name: "Blank Space (Taylor's Version)", duration: "3:51", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "82.3 MB" },
-            { id: 3, name: "Style (Taylor's Version)", duration: "3:51", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "82.1 MB" },
-            { id: 4, name: "Out of the Woods (Taylor's Version)", duration: "3:55", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "83.6 MB" },
-            { id: 5, name: "Shake It Off (Taylor's Version)", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "78.0 MB" },
-            { id: 6, name: "Wildest Dreams (Taylor's Version)", duration: "3:40", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "78.5 MB" },
-            { id: 7, name: "Bad Blood (Taylor's Version)", duration: "3:31", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "75.0 MB" }
+            { id: 1, name: "Welcome to New York (Taylor's Version)", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "75.4 MB", country: "Âu Mỹ" },
+            { id: 2, name: "Blank Space (Taylor's Version)", duration: "3:51", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "82.3 MB", country: "Âu Mỹ" },
+            { id: 3, name: "Style (Taylor's Version)", duration: "3:51", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "82.1 MB", country: "Âu Mỹ" },
+            { id: 4, name: "Out of the Woods (Taylor's Version)", duration: "3:55", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "83.6 MB", country: "Âu Mỹ" },
+            { id: 5, name: "Shake It Off (Taylor's Version)", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "78.0 MB", country: "Âu Mỹ" },
+            { id: 6, name: "Wildest Dreams (Taylor's Version)", duration: "3:40", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "78.5 MB", country: "Âu Mỹ" },
+            { id: 7, name: "Bad Blood (Taylor's Version)", duration: "3:31", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "75.0 MB", country: "Âu Mỹ" }
         ]
     },
     {
@@ -98,6 +101,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 88.2kHz",
         totalSize: "1.65 GB",
         publisher: "Columbia Records / Daft Life",
+        country: "Âu Mỹ",
         isDemo: true,
         coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
@@ -105,11 +109,11 @@ const ALBUMS_DATABASE = [
             glow2: "radial-gradient(circle, #6366f1 0%, #3730a3 60%, transparent 80%)"
         },
         tracks: [
-            { id: 1, name: "Give Life Back to Music", duration: "4:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "98.2 MB" },
-            { id: 2, name: "Giorgio by Moroder", duration: "9:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "192.4 MB" },
-            { id: 3, name: "Instant Crush (ft. Julian Casablancas)", duration: "5:37", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "119.5 MB" },
-            { id: 4, name: "Lose Yourself to Dance (ft. Pharrell Williams)", duration: "5:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "125.1 MB" },
-            { id: 5, name: "Get Lucky (ft. Pharrell Williams)", duration: "6:09", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "131.0 MB" }
+            { id: 1, name: "Give Life Back to Music", duration: "4:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "98.2 MB", country: "Âu Mỹ" },
+            { id: 2, name: "Giorgio by Moroder", duration: "9:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "192.4 MB", country: "Âu Mỹ" },
+            { id: 3, name: "Instant Crush (ft. Julian Casablancas)", duration: "5:37", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "119.5 MB", country: "Âu Mỹ" },
+            { id: 4, name: "Lose Yourself to Dance (ft. Pharrell Williams)", duration: "5:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "125.1 MB", country: "Âu Mỹ" },
+            { id: 5, name: "Get Lucky (ft. Pharrell Williams)", duration: "6:09", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "131.0 MB", country: "Âu Mỹ" }
         ]
     }
 ];
@@ -245,8 +249,9 @@ class XTAPOMusicApp {
         this.navAlbums = document.getElementById('navAlbums');
         this.navArtists = document.getElementById('navArtists');
         this.navGenres = document.getElementById('navGenres');
+        this.navCountries = document.getElementById('navCountries');
 
-        // Artists & Genres Modals
+        // Artists, Genres & Countries Modals
         this.artistModal = document.getElementById('artistModal');
         this.artistListView = document.getElementById('artistListView');
         this.artistProfileView = document.getElementById('artistProfileView');
@@ -259,6 +264,10 @@ class XTAPOMusicApp {
         this.genreModal = document.getElementById('genreModal');
         this.closeGenreModal = document.getElementById('closeGenreModal');
         this.genreGrid = document.getElementById('genreGrid');
+
+        this.countryModal = document.getElementById('countryModal');
+        this.closeCountryModal = document.getElementById('closeCountryModal');
+        this.countryGrid = document.getElementById('countryGrid');
 
         // Auth & User Profile
         this.userProfileBtn = document.getElementById('userProfileBtn');
@@ -1797,6 +1806,18 @@ class XTAPOMusicApp {
             this.closeGenreModal.addEventListener('click', () => this.closeModal(this.genreModal));
         }
 
+        if (this.navCountries && this.countryModal) {
+            this.navCountries.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navCountries);
+                this.renderCountryGrid();
+                this.openModal(this.countryModal);
+            });
+        }
+        if (this.closeCountryModal && this.countryModal) {
+            this.closeCountryModal.addEventListener('click', () => this.closeModal(this.countryModal));
+        }
+
         // Favorites Modal Events
         if (this.navFavorites && this.favoritesModal) {
             this.navFavorites.addEventListener('click', (e) => {
@@ -1833,6 +1854,7 @@ class XTAPOMusicApp {
             { id: 'mobileNavAlbums', action: () => this.openModal(this.albumModal) },
             { id: 'mobileNavArtists', action: () => { this.renderArtistGrid(); this.openModal(this.artistModal); } },
             { id: 'mobileNavGenres', action: () => { this.renderGenreGrid(); this.openModal(this.genreModal); } },
+            { id: 'mobileNavCountries', action: () => { this.renderCountryGrid(); this.openModal(this.countryModal); } },
             { id: 'mobileNavPlaylists', action: () => { this.loadPlaylists(); this.openModal(this.playlistModal); } },
             { id: 'mobileNavFavorites', action: () => this.openFavoritesModal() },
         ];
@@ -2039,7 +2061,7 @@ class XTAPOMusicApp {
         }
 
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.downloadProgressModal, this.m3u8Modal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.downloadProgressModal, this.m3u8Modal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -2215,6 +2237,7 @@ class XTAPOMusicApp {
                 this.closeModal(this.addToPlaylistModal);
                 this.closeModal(this.artistModal);
                 this.closeModal(this.genreModal);
+                this.closeModal(this.countryModal);
                 this.metaDrawer.classList.remove('open');
                 this.closeMobileDrawer();
             }
@@ -2894,6 +2917,272 @@ class XTAPOMusicApp {
 
             this.genreGrid.appendChild(card);
         });
+    }
+
+    detectCountryFromTrack(track) {
+        if (track.country && track.country.trim()) return track.country.trim();
+        const name = track.name || track.title || '';
+        const artist = track.artist || '';
+        const album = track.album || track.albumName || '';
+        const raw = `${name} ${artist} ${album}`;
+        const low = raw.toLowerCase();
+
+        // 1. Tiếng Việt
+        if (/[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]/.test(raw)) {
+            return 'Việt Nam';
+        }
+        const vnKws = ['v-pop', 'vpop', 'nhạc việt', 'nhac viet', 'bolero', 'trữ tình', 'nhạc vàng', 'rap việt', 'lời việt', 'nhạc trẻ', 'sơn tùng', 'đen vâu', 'mỹ tâm', 'hồ ngọc hà', 'đan trường', 'trịnh công sơn', 'lệ quyên', 'vũ.', 'chillies', 'ngọt', 'mono', 'hieuthuhai', 'erik', 'đức phúc', 'jack 97', 'soobin', 'b ray', 'karik', 'justatee', 'min', 'amee', 'phan mạnh quỳnh'];
+        if (vnKws.some(k => low.includes(k))) return 'Việt Nam';
+
+        // 2. Hàn Quốc
+        if (/[\uac00-\ud7a3\u1100-\u11ff\u3130-\u318f]/.test(raw)) return 'Hàn Quốc';
+        const krKws = ['k-pop', 'kpop', 'korean', 'ost hàn', 'bts', 'blackpink', 'iu', 'exo', 'twice', 'newjeans', 'stray kids', 'bigbang', 'snsd', 'girls\' generation', 'red velvet', 'seventeen', 'ive', 'aespa', 'taeyeon', 'psy', 'g-dragon', 'nct', 'enhypen', 'txt', 'itzy', 'lesserafim', 'le sserafim', 'shinee', 'super junior', 'mamamoo', 'ateez', 'got7', 'gfriend', 'stayc', 'treasure', 'nmixx', 'day6', 'akmu', 'baekhyun', 'jungkook', 'jimin', 'zico', 'crush', 'dean'];
+        if (krKws.some(k => low.includes(k))) return 'Hàn Quốc';
+
+        // 3. Nhật Bản
+        if (/[\u3040-\u309f\u30a0-\u30ff]/.test(raw)) return 'Nhật Bản';
+        const jpKws = ['j-pop', 'jpop', 'anime', 'japanese', 'utada hikaru', 'yoasobi', 'kenshi yonezu', 'aimer', 'radwimps', 'one ok rock', 'official hige dandism', 'x japan', 'milet', 'ayumi hamasaki', 'namie amuro', 'king gnu', 'ado', 'eve', 'vocaloid', 'hatsune miku', 'flow', 'sawano hiroyuki', 'joe hisaishi'];
+        if (jpKws.some(k => low.includes(k))) return 'Nhật Bản';
+
+        // 4. Hoa Ngữ
+        if (/[\u4e00-\u9fff]/.test(raw)) return 'Hoa Ngữ';
+        const cnKws = ['c-pop', 'cpop', 'mandopop', 'cantopop', 'nhạc hoa', 'nhạc trung', 'lời hoa', 'jay chou', 'châu kiệt luân', 'vương phi', 'faye wong', 'lâm tuấn kiệt', 'jj lin', 'đặng tử kỳ', 'g.e.m', 'lý vinh hạo', 'tiêu chiến', 'vương nhất bác', 'trương học hữu', 'lưu đức hoa', 'quách phú thành', 'lê minh', 'trần dịch tấn', 'châu thâm', 'zhou shen', 'phượng hoàng truyền kỳ'];
+        if (cnKws.some(k => low.includes(k))) return 'Hoa Ngữ';
+
+        // 5. Âu Mỹ (US-UK)
+        const usKws = ['us-uk', 'usuk', 'taylor swift', 'shania twain', 'daft punk', 'the weeknd', 'bruno mars', 'adele', 'ed sheeran', 'ariana grande', 'justin bieber', 'drake', 'eminem', 'coldplay', 'maroon 5', 'billie eilish', 'dua lipa', 'beyonce', 'michael jackson', 'queen', 'beatles', 'post malone', 'lady gaga', 'rihanna', 'katy perry', 'shawn mendes', 'charlie puth', 'selena gomez', 'camila cabello', 'imagine dragons', 'linkin park', 'avicii', 'alan walker', 'marshmello', 'chainsmokers', 'david guetta', 'calvin harris', 'sia', 'sam smith', 'harry styles', 'one direction', 'avril lavigne', 'britney spears', 'celine dion', 'whitney houston', 'mariah carey', 'madonna', 'elton john', 'bon jovi', 'twenty one pilots', 'republic records'];
+        if (usKws.some(k => low.includes(k))) return 'Âu Mỹ';
+
+        return 'Âu Mỹ';
+    }
+
+    renderCountryGrid() {
+        if (!this.countryGrid) return;
+        this.countryGrid.innerHTML = '';
+
+        const countryMeta = {
+            'Việt Nam': {
+                flag: '🇻🇳',
+                code: 'VN',
+                sub: 'V-Pop, Bolero, Rap Việt, Acoustic',
+                gradient: 'linear-gradient(135deg, rgba(239, 68, 68, 0.28), rgba(185, 28, 28, 0.12))',
+                glow1: 'radial-gradient(circle, #ef4444 0%, #b91c1c 60%, transparent 80%)',
+                glow2: 'radial-gradient(circle, #f59e0b 0%, #d97706 60%, transparent 80%)',
+                defaultCover: 'https://images.unsplash.com/photo-1528127269322-539801943592?q=80&w=1000&auto=format&fit=crop'
+            },
+            'Âu Mỹ': {
+                flag: '🇺🇸',
+                code: 'US-UK',
+                sub: 'Pop, Rock, Country, R&B, EDM, Hip-Hop',
+                gradient: 'linear-gradient(135deg, rgba(2, 132, 199, 0.28), rgba(30, 58, 138, 0.12))',
+                glow1: 'radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)',
+                glow2: 'radial-gradient(circle, #ef4444 0%, #b91c1c 60%, transparent 80%)',
+                defaultCover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
+            },
+            'Hàn Quốc': {
+                flag: '🇰🇷',
+                code: 'K-POP',
+                sub: 'K-Pop, K-Drama OST, Korean Indie',
+                gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.28), rgba(147, 51, 234, 0.12))',
+                glow1: 'radial-gradient(circle, #ec4899 0%, #be185d 60%, transparent 80%)',
+                glow2: 'radial-gradient(circle, #8b5cf6 0%, #6d28d9 60%, transparent 80%)',
+                defaultCover: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?q=80&w=1000&auto=format&fit=crop'
+            },
+            'Hoa Ngữ': {
+                flag: '🇨🇳',
+                code: 'C-POP',
+                sub: 'Mandopop, Cantopop, Nhạc Hoa, C-Rock',
+                gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(180, 83, 9, 0.12))',
+                glow1: 'radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)',
+                glow2: 'radial-gradient(circle, #dc2626 0%, #991b1b 60%, transparent 80%)',
+                defaultCover: 'https://images.unsplash.com/photo-1508807526345-15e9b5f4eaff?q=80&w=1000&auto=format&fit=crop'
+            },
+            'Nhật Bản': {
+                flag: '🇯🇵',
+                code: 'J-POP',
+                sub: 'J-Pop, Anime OST, City Pop, J-Rock',
+                gradient: 'linear-gradient(135deg, rgba(244, 63, 94, 0.28), rgba(244, 114, 182, 0.12))',
+                glow1: 'radial-gradient(circle, #f43f5e 0%, #e11d48 60%, transparent 80%)',
+                glow2: 'radial-gradient(circle, #fb7185 0%, #f43f5e 60%, transparent 80%)',
+                defaultCover: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=1000&auto=format&fit=crop'
+            },
+            'Quốc Tế': {
+                flag: '🌍',
+                code: 'GLOBAL',
+                sub: 'Latin, Châu Âu, Nhạc Không Lời & Khác',
+                gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.28), rgba(13, 148, 136, 0.12))',
+                glow1: 'radial-gradient(circle, #10b981 0%, #047857 60%, transparent 80%)',
+                glow2: 'radial-gradient(circle, #06b6d4 0%, #0e7490 60%, transparent 80%)',
+                defaultCover: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?q=80&w=1000&auto=format&fit=crop'
+            }
+        };
+
+        // Aggregate tracks by country
+        const countryMap = new Map();
+        Object.keys(countryMeta).forEach(cName => {
+            countryMap.set(cName, {
+                country: cName,
+                tracks: [],
+                artists: new Set(),
+                albums: new Set(),
+                coverUrl: countryMeta[cName].defaultCover
+            });
+        });
+
+        this.albums.forEach(album => {
+            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
+            (album.tracks || []).forEach(track => {
+                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const key = countryMeta[c] ? c : 'Quốc Tế';
+                const entry = countryMap.get(key);
+                if (entry) {
+                    if (!entry.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                        entry.tracks.push(track);
+                        if (track.artist) entry.artists.add(track.artist.trim());
+                        entry.albums.add(album.title);
+                        if (track.coverUrl && !entry.coverUrl.startsWith('http')) {
+                            entry.coverUrl = track.coverUrl;
+                        }
+                    }
+                }
+            });
+        });
+
+        // Convert to array and prioritize countries with songs, followed by predefined order
+        const predefinedOrder = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản', 'Quốc Tế'];
+        const countryList = predefinedOrder.map(cName => countryMap.get(cName)).filter(Boolean);
+
+        countryList.forEach(cObj => {
+            const meta = countryMeta[cObj.country] || countryMeta['Quốc Tế'];
+            const trackCount = cObj.tracks.length;
+            const artistCount = cObj.artists.size;
+
+            const card = document.createElement('div');
+            card.className = `country-card-item ${trackCount === 0 ? 'empty-country' : ''}`;
+            card.style.background = meta.gradient;
+            card.innerHTML = `
+                <div class="country-card-header">
+                    <div class="country-flag-badge">${meta.flag}</div>
+                    <span class="country-code-tag">${meta.code}</span>
+                </div>
+                <div class="country-card-body">
+                    <h3 class="country-name">${this.escapeHtml(cObj.country)}</h3>
+                    <p class="country-sub">${meta.sub}</p>
+                </div>
+                <div class="country-card-stats">
+                    <span><b>${trackCount}</b> bài hát</span>
+                    <span>•</span>
+                    <span><b>${artistCount}</b> nghệ sĩ</span>
+                </div>
+                <div class="country-card-actions">
+                    <button class="country-play-btn" ${trackCount === 0 ? 'disabled' : ''} title="Phát nhạc ${cObj.country}">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <span>Phát Toàn Bộ</span>
+                    </button>
+                    <button class="country-action-btn btn-export-m3u8" ${trackCount === 0 ? 'disabled' : ''} title="Xuất playlist .M3U8 quốc gia">
+                        .M3U8
+                    </button>
+                    <button class="country-action-btn btn-download-zip" ${trackCount === 0 ? 'disabled' : ''} title="Tải toàn bộ nhạc dạng .ZIP">
+                        .ZIP
+                    </button>
+                </div>
+            `;
+
+            // Click entire card to play if tracks exist
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('.country-action-btn') || e.target.closest('.country-play-btn')) return;
+                if (trackCount > 0) {
+                    this.closeModal(this.countryModal);
+                    this.playCountryQueue(cObj, false);
+                } else {
+                    this.showToast(`Chưa có bài hát nào thuộc khu vực "${cObj.country}" trong thư viện.`);
+                }
+            });
+
+            // Play button click
+            const playBtn = card.querySelector('.country-play-btn');
+            if (playBtn) {
+                playBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (trackCount > 0) {
+                        this.closeModal(this.countryModal);
+                        this.playCountryQueue(cObj, false);
+                    }
+                });
+            }
+
+            // Export M3U8 button
+            const m3u8Btn = card.querySelector('.btn-export-m3u8');
+            if (m3u8Btn) {
+                m3u8Btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (trackCount > 0) {
+                        this.exportM3U8(`Nhac_${meta.code}_${cObj.country}`, cObj.tracks);
+                    }
+                });
+            }
+
+            // Download ZIP button
+            const zipBtn = card.querySelector('.btn-download-zip');
+            if (zipBtn) {
+                zipBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (trackCount > 0) {
+                        this.downloadZipPackage(cObj.tracks, `Tuyen_Tap_Nhac_${meta.code}`, cObj.coverUrl, `Tuyển Tập Nhạc ${cObj.country}`);
+                    }
+                });
+            }
+
+            this.countryGrid.appendChild(card);
+        });
+    }
+
+    playCountryQueue(cObj, isShuffle = false) {
+        if (!cObj.tracks || cObj.tracks.length === 0) {
+            this.showToast(`Không có bài hát nào của ${cObj.country} để phát!`);
+            return;
+        }
+
+        let tracks = [...cObj.tracks];
+        if (isShuffle && tracks.length > 1) {
+            for (let i = tracks.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+            }
+        }
+
+        const meta = {
+            'Việt Nam': { flag: '🇻🇳', glow1: 'radial-gradient(circle, #ef4444 0%, #b91c1c 60%, transparent 80%)', glow2: 'radial-gradient(circle, #f59e0b 0%, #d97706 60%, transparent 80%)', cover: 'https://images.unsplash.com/photo-1528127269322-539801943592?q=80&w=1000&auto=format&fit=crop' },
+            'Âu Mỹ': { flag: '🇺🇸', glow1: 'radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)', glow2: 'radial-gradient(circle, #ef4444 0%, #b91c1c 60%, transparent 80%)', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop' },
+            'Hàn Quốc': { flag: '🇰🇷', glow1: 'radial-gradient(circle, #ec4899 0%, #be185d 60%, transparent 80%)', glow2: 'radial-gradient(circle, #8b5cf6 0%, #6d28d9 60%, transparent 80%)', cover: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?q=80&w=1000&auto=format&fit=crop' },
+            'Hoa Ngữ': { flag: '🇨🇳', glow1: 'radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)', glow2: 'radial-gradient(circle, #dc2626 0%, #991b1b 60%, transparent 80%)', cover: 'https://images.unsplash.com/photo-1508807526345-15e9b5f4eaff?q=80&w=1000&auto=format&fit=crop' },
+            'Nhật Bản': { flag: '🇯🇵', glow1: 'radial-gradient(circle, #f43f5e 0%, #e11d48 60%, transparent 80%)', glow2: 'radial-gradient(circle, #fb7185 0%, #f43f5e 60%, transparent 80%)', cover: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=1000&auto=format&fit=crop' },
+            'Quốc Tế': { flag: '🌍', glow1: 'radial-gradient(circle, #10b981 0%, #047857 60%, transparent 80%)', glow2: 'radial-gradient(circle, #06b6d4 0%, #0e7490 60%, transparent 80%)', cover: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?q=80&w=1000&auto=format&fit=crop' }
+        }[cObj.country] || { flag: '🗺️', glow1: 'radial-gradient(circle, #6366f1 0%, #312e81 60%, transparent 80%)', glow2: 'radial-gradient(circle, #eab308 0%, #a16207 60%, transparent 80%)', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop' };
+
+        const countryAlbum = {
+            id: `country-${encodeURIComponent(cObj.country)}`,
+            title: `Nhạc ${cObj.country} ${meta.flag}`,
+            artist: `Tuyển Tập ${cObj.country}`,
+            country: cObj.country,
+            coverUrl: cObj.coverUrl || meta.cover,
+            format: 'FLAC Hi-Res Lossless',
+            year: new Date().getFullYear().toString(),
+            publisher: `Country Collection • ${cObj.country}`,
+            glowColors: { glow1: meta.glow1, glow2: meta.glow2 },
+            tracks: tracks
+        };
+
+        const existingIdx = this.albums.findIndex(a => a.id === countryAlbum.id);
+        if (existingIdx !== -1) {
+            this.albums[existingIdx] = countryAlbum;
+            this.loadAlbum(existingIdx, 0, true);
+        } else {
+            this.albums.unshift(countryAlbum);
+            this.loadAlbum(0, 0, true);
+        }
+        this.renderAlbumGrid();
+        this.showToast(`Đang phát tuyển tập nhạc "${cObj.country}" (${tracks.length} bài hát)`);
     }
 
     // ==========================================================================

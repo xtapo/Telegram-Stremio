@@ -283,6 +283,105 @@ def detect_genre_from_track_info(track: dict) -> str:
         return "Khác"
 
 
+def detect_country_from_track_info(track: dict) -> str:
+    """
+    Tự động nhận diện Quốc gia / Khu vực của bài hát:
+    - Việt Nam (🇻🇳)
+    - Âu Mỹ (US-UK) (🇺🇸)
+    - Hàn Quốc (K-Pop) (🇰🇷)
+    - Hoa Ngữ (C-Pop) (🇨🇳)
+    - Nhật Bản (J-Pop) (🇯🇵)
+    - Quốc Tế / Khác (🌍)
+    """
+    name = track.get("name") or track.get("title") or track.get("file_name") or ""
+    artist = track.get("artist") or ""
+    album = track.get("album") or ""
+    caption = track.get("caption") or ""
+    combined = f"{name} {artist} {album} {caption}".lower()
+    raw_combined = f"{name} {artist} {album} {caption}"
+
+    # 1. Nhận diện Tiếng Việt / V-Pop
+    vn_regex = re.compile(r'[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]')
+    if vn_regex.search(raw_combined):
+        return "Việt Nam"
+    
+    vn_keywords = [
+        "v-pop", "vpop", "nhạc việt", "nhac viet", "bolero", "trữ tình", "tru tinh", "nhạc vàng", "nhac vang",
+        "rap việt", "rap viet", "lời việt", "loi viet", "nhạc trẻ", "nhac tre", "sơn tùng", "sontung", "m-tp",
+        "mtp", "den vau", "đen vâu", "b ray", "karik", "justatee", "soobin", "hieuthuhai", "mono", "erik",
+        "đức phúc", "duc phuc", "mỹ tâm", "my tam", "hồ ngọc hà", "ho ngoc ha", "đan trường", "dan truong",
+        "trịnh công sơn", "trinh cong son", "lệ quyên", "le quyen", "quang dũng", "bằng kiều", "như quỳnh",
+        "min", "amee", "phương ly", "văn mai hương", "hòa minzy", "hoa minzy", "trung quân", "thùy chi",
+        "phan mạnh quỳnh", "jack 97", "j97", "chilles", "chillies", "ngọt", "vũ.", "hoàng dũng"
+    ]
+    if any(k in combined for k in vn_keywords):
+        return "Việt Nam"
+
+    # 2. Nhận diện Hàn Quốc / K-Pop (Hangul & K-Pop artists)
+    korean_regex = re.compile(r'[\uac00-\ud7a3\u1100-\u11ff\u3130-\u318f]')
+    if korean_regex.search(raw_combined):
+        return "Hàn Quốc"
+
+    kr_keywords = [
+        "k-pop", "kpop", "korean", "hangul", "ost hàn", "kdrama", "bts", "blackpink", "iu", "exo", "twice",
+        "newjeans", "stray kids", "bigbang", "snsd", "girls' generation", "red velvet", "seventeen", "ive",
+        "aespa", "taeyeon", "psy", "g-dragon", "nct", "enhypen", "tomorrow x together", "txt", "itzy",
+        "lesserafim", "le sserafim", "shinee", "super junior", "monsta x", "mamamoo", "ateez", "got7",
+        "gfriend", "stayc", "treasure", "nmixx", "day6", "akmu", "bol4", "baekhyun", "jungkook", "jimin",
+        "v (bts)", "rose", "jennie", "lisa", "jisoo", "chungha", "sunmi", "hyuna", "heize",
+        "davichi", "paul kim", "zico", "crush", "dean"
+    ]
+    if any(k in combined for k in kr_keywords):
+        return "Hàn Quốc"
+
+    # 3. Nhận diện Nhật Bản / J-Pop (Hiragana, Katakana & J-Pop artists)
+    jp_regex = re.compile(r'[\u3040-\u309f\u30a0-\u30ff]')
+    if jp_regex.search(raw_combined):
+        return "Nhật Bản"
+
+    jp_keywords = [
+        "j-pop", "jpop", "anime", "japanese", "utada hikaru", "yoasobi", "kenshi yonezu", "lisa (jp)",
+        "aimer", "radwimps", "one ok rock", "official hige dandism", "x japan", "milet", "ayumi hamasaki",
+        "namie amuro", "kana nishino", "king gnu", "ado", "eve", "vocaloid", "hatsune miku", "flow",
+        "asian kung-fu generation", "spyair", "babymetal", "garnidelia", "sawano hiroyuki", "joe hisaishi"
+    ]
+    if any(k in combined for k in jp_keywords):
+        return "Nhật Bản"
+
+    # 4. Nhận diện Hoa Ngữ / C-Pop (Hanzi & Chinese artists)
+    cn_regex = re.compile(r'[\u4e00-\u9fff]')
+    if cn_regex.search(raw_combined):
+        return "Hoa Ngữ"
+
+    cn_keywords = [
+        "c-pop", "cpop", "mandopop", "cantopop", "nhạc hoa", "nhac hoa", "nhạc trung", "nhac trung",
+        "lời hoa", "jay chou", "châu kiệt luân", "vương phi", "faye wong", "lâm tuấn kiệt", "jj lin",
+        "đặng tử kỳ", "g.e.m", "g.e.m.", "lý vinh hạo", "tiêu chiến", "vương nhất bác", "tiêu kính đằng",
+        "trương học hữu", "lưu đức hoa", "quách phú thành", "lê minh", "trần dịch tấn", "eason chan",
+        "châu thâm", "zhou shen", "phượng hoàng truyền kỳ", "uông tô lang", "uông phong", "hoa thần vũ"
+    ]
+    if any(k in combined for k in cn_keywords):
+        return "Hoa Ngữ"
+
+    # 5. Nhận diện Âu Mỹ (US-UK)
+    usuk_keywords = [
+        "us-uk", "usuk", "taylor swift", "shania twain", "daft punk", "the weeknd", "bruno mars", "adele",
+        "ed sheeran", "ariana grande", "justin bieber", "drake", "eminem", "coldplay", "maroon 5",
+        "billie eilish", "dua lipa", "beyonce", "michael jackson", "queen", "beatles", "the beatles",
+        "post malone", "lady gaga", "rihanna", "katy perry", "shawn mendes", "charlie puth", "selena gomez",
+        "camila cabello", "imagine dragons", "linkin park", "avicii", "alan walker", "marshmello",
+        "chainsmokers", "david guetta", "calvin harris", "sia", "sam smith", "harry styles", "one direction",
+        "avril lavigne", "britney spears", "celine dion", "whitney houston", "mariah carey", "madonna",
+        "elton john", "bon jovi", "guns n' roses", "ac/dc", "metallica", "nirvana", "green day",
+        "twenty one pilots", "republic records", "columbia records", "mercury records", "interscope"
+    ]
+    if any(k in combined for k in usuk_keywords):
+        return "Âu Mỹ"
+
+    # 6. Fallback Quốc Tế / Khác
+    return "Âu Mỹ" if any(k in combined for k in ["flac", "edition", "version", "feat", "ft.", "deluxe", "remaster"]) else "Quốc Tế"
+
+
 def _normalize_str(s: str) -> str:
     if not s:
         return ""
@@ -617,6 +716,12 @@ async def get_music_albums():
                             t["genre"] = detected_genre
                             changed = True
 
+                        # Detect Country
+                        detected_country = detect_country_from_track_info(t)
+                        if not t.get("country") or t.get("country") in ["Quốc Tế", ""]:
+                            t["country"] = detected_country
+                            changed = True
+
                         current_fmt = t.get("format", "")
                         if not current_fmt or current_fmt in ["FLAC Hi-Res", "MP3 Master", "Hi-Res", "AUDIO Hi-Res", "AUDIO Master"]:
                             fmt, tier, br = detect_audio_quality_from_track_info(t)
@@ -636,6 +741,12 @@ async def get_music_albums():
                 if track_formats and (not alb.get("format") or alb.get("format") in ["FLAC Hi-Res", "MP3 Master", "Hi-Res"]):
                     hires_fmt = next((f for f in track_formats if "Hi-Res" in f or "24-Bit" in f or "DSD" in f), track_formats[0])
                     alb["format"] = hires_fmt
+                    changed = True
+
+                # Determine Album Country
+                if not alb.get("country"):
+                    album_country = detect_country_from_track_info({"name": alb.get("title", ""), "artist": alb.get("artist", ""), "album": alb.get("title", "")})
+                    alb["country"] = album_country
                     changed = True
 
             if changed:
@@ -1627,7 +1738,9 @@ class MusicScanManager:
                     "previewUrl": tr["stream_url"],
                     "chatId": tr["chat_id"],
                     "msgId": tr["msg_id"],
-                    "coverUrl": tr["cover_url"]
+                    "coverUrl": tr["cover_url"],
+                    "genre": tr.get("genre") or detect_genre_from_track_info(tr),
+                    "country": tr.get("country") or detect_country_from_track_info(tr)
                 })
 
             final_albums = list(albums_dict.values())
@@ -1642,6 +1755,10 @@ class MusicScanManager:
                 elif alb_tracks:
                     alb["format"] = alb_tracks[0]["format"]
                     alb["qualityTier"] = alb_tracks[0].get("qualityTier", "lossless")
+                
+                # Assign country to album
+                alb["country"] = detect_country_from_track_info({"name": alb.get("title", ""), "artist": alb.get("artist", ""), "album": alb.get("title", "")})
+
                 for t in alb["tracks"]:
                     if "/api/music/cover/" in t.get("coverUrl", ""):
                         alb["coverUrl"] = t["coverUrl"]
