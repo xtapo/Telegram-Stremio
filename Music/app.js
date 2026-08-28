@@ -382,6 +382,12 @@ class XTAPOMusicApp {
         await this.fetchUserProfile();
         await this.fetchTelegramAlbums();
         await this.fetchArtistMetadata();
+
+        // Mặc định khi tải trang: Tự động mở danh sách bài hát yêu thích nếu user có bài hát yêu thích
+        if (this.currentUser && this.favoriteTracks && this.favoriteTracks.length > 0) {
+            this.playFavoritesQueue(0, false, false);
+            if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+        }
     }
 
     // --- Authentication & User State ---
@@ -480,6 +486,10 @@ class XTAPOMusicApp {
                 this.loginPassword.value = '';
                 await this.fetchUserProfile();
                 await this.fetchTelegramAlbums();
+                if (this.favoriteTracks && this.favoriteTracks.length > 0) {
+                    this.playFavoritesQueue(0, false, false);
+                    if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+                }
             } else {
                 this.showToast(data.message || "Đăng nhập thất bại.");
             }
@@ -765,7 +775,7 @@ class XTAPOMusicApp {
         }
     }
 
-    playFavoritesQueue(startIndex = 0, isShuffle = false) {
+    playFavoritesQueue(startIndex = 0, isShuffle = false, autoPlay = true) {
         if (!this.favoriteTracks || this.favoriteTracks.length === 0) {
             return this.showToast("Danh sách yêu thích đang trống.");
         }
@@ -809,13 +819,15 @@ class XTAPOMusicApp {
         const existingIdx = this.albums.findIndex(a => a.id === favAlbum.id);
         if (existingIdx !== -1) {
             this.albums[existingIdx] = favAlbum;
-            this.loadAlbum(existingIdx, startIndex, true);
+            this.loadAlbum(existingIdx, startIndex, autoPlay);
         } else {
             this.albums.unshift(favAlbum);
-            this.loadAlbum(0, startIndex, true);
+            this.loadAlbum(0, startIndex, autoPlay);
         }
         this.renderAlbumGrid();
-        this.showToast(`Đang phát Tuyển Tập Yêu Thích (${tracks.length} bài hát) ❤️`);
+        if (autoPlay) {
+            this.showToast(`Đang phát Tuyển Tập Yêu Thích (${tracks.length} bài hát) ❤️`);
+        }
     }
 
     // --- Current Album & Track Getters ---
@@ -2289,6 +2301,12 @@ class XTAPOMusicApp {
 
     closeModal(modal) {
         if (modal) modal.classList.remove('open');
+    }
+
+    setActiveNavLink(activeLink) {
+        const links = document.querySelectorAll('.nav-link');
+        links.forEach(l => l.classList.remove('active'));
+        if (activeLink) activeLink.classList.add('active');
     }
 
     closeMobileDrawer() {
