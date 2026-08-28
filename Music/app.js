@@ -1527,69 +1527,81 @@ class XTAPOMusicApp {
     // --- Visualizer Waveform Animation ---
     setupVisualizer() {
         const ctx = this.canvasCtx;
+        if (!this.canvas || !ctx) return;
+
+        const numBars = 36;
+        let dpr = window.devicePixelRatio || 1;
 
         const resizeCanvas = () => {
             if (this.canvas) {
-                const dpr = window.devicePixelRatio || 1;
                 const rect = this.canvas.getBoundingClientRect();
-                const cssWidth = Math.floor(rect.width) || 400;
-                const cssHeight = Math.floor(rect.height) || 46;
-
+                dpr = window.devicePixelRatio || 1;
+                const cssWidth = Math.floor(rect.width) || 380;
+                const cssHeight = Math.floor(rect.height) || 36;
+                
                 this.canvas.width = Math.floor(cssWidth * dpr);
                 this.canvas.height = Math.floor(cssHeight * dpr);
-                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             }
         };
 
         window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        setTimeout(resizeCanvas, 100);
 
         const draw = () => {
-            if (!this.canvas) return;
-            const rect = this.canvas.getBoundingClientRect();
-            const width = Math.floor(rect.width) || 400;
-            const height = Math.floor(rect.height) || 46;
+            if (!this.canvas || !ctx) return;
+            const w = this.canvas.width;
+            const h = this.canvas.height;
+            if (w === 0 || h === 0) {
+                this.visualizerAnimationId = requestAnimationFrame(draw);
+                return;
+            }
 
-            ctx.clearRect(0, 0, width, height);
+            ctx.clearRect(0, 0, w, h);
 
-            const gap = 3;
-            const targetBarWidth = 5;
-            const numBars = Math.max(16, Math.floor((width + gap) / (targetBarWidth + gap)));
-            const actualBarWidth = Math.max(2.5, (width - (numBars - 1) * gap) / numBars);
-            const radius = Math.min(3, actualBarWidth / 2);
+            const gap = 3 * dpr;
+            const totalGaps = (numBars - 1) * gap;
+            const barWidth = Math.max(3 * dpr, (w - totalGaps) / numBars);
+            const radius = Math.min(barWidth / 2, 4 * dpr);
 
-            const now = Date.now() * 0.003;
+            const time = Date.now() * 0.004;
 
             for (let i = 0; i < numBars; i++) {
-                let barHeight = 6;
+                let barHeight;
                 if (this.isPlaying) {
-                    const wave1 = Math.sin(i * 0.28 + now * 1.8);
-                    const wave2 = Math.cos(i * 0.15 - now * 2.2);
-                    const wave3 = Math.sin((i / numBars) * Math.PI) * 1.2; // center harmonic swell
-                    const combined = (Math.abs(wave1 * 0.6 + wave2 * 0.4) * wave3);
-                    const dynamicMax = height - 8;
-                    barHeight = Math.max(6, Math.min(dynamicMax, combined * dynamicMax + Math.sin(now * 4 + i) * 4 + 6));
+                    // Sóng âm thanh đa tần sống động (Bass ở đầu, Mid ở giữa, Treble ở cuối)
+                    const harmonic1 = Math.sin(i * 0.35 + time * 1.5);
+                    const harmonic2 = Math.cos(i * 0.22 - time * 2.1);
+                    const harmonic3 = Math.sin(i * 0.7 + time * 3.0) * 0.4;
+                    const combined = Math.abs(harmonic1 * 0.5 + harmonic2 * 0.35 + harmonic3);
+                    const minH = 6 * dpr;
+                    const maxH = h - (4 * dpr);
+                    barHeight = Math.max(minH, Math.min(maxH, combined * maxH + (Math.sin(time * 5 + i) * 2 * dpr)));
                 } else {
-                    const idleWave = Math.sin(i * 0.2 + now * 0.5) * 0.5 + 0.5;
-                    barHeight = Math.max(4, idleWave * 10 + 4);
+                    // Trạng thái nghỉ: Sóng thở nhẹ nhàng êm ái
+                    const idle = Math.sin(i * 0.25 + time * 0.5) * 0.5 + 0.5;
+                    barHeight = (5 + idle * 6) * dpr;
                 }
 
-                const x = i * (actualBarWidth + gap);
-                const y = (height - barHeight) / 2; // Center vertically for luxurious symmetric or bottom-aligned waveform
+                const x = i * (barWidth + gap);
+                const y = h - barHeight;
 
-                const grad = ctx.createLinearGradient(0, height, 0, 0);
-                grad.addColorStop(0, '#fcbf47');
-                grad.addColorStop(0.5, '#ff6dc4');
-                grad.addColorStop(1, '#38bdf8');
+                const grad = ctx.createLinearGradient(0, h, 0, 0);
+                if (this.isPlaying) {
+                    grad.addColorStop(0, '#f59e0b');
+                    grad.addColorStop(0.45, '#fcbf47');
+                    grad.addColorStop(0.8, '#ff6dc4');
+                    grad.addColorStop(1, '#38bdf8');
+                } else {
+                    grad.addColorStop(0, 'rgba(252, 191, 71, 0.4)');
+                    grad.addColorStop(1, 'rgba(255, 109, 196, 0.3)');
+                }
 
                 ctx.fillStyle = grad;
-
-                // Draw rounded pill bar
                 ctx.beginPath();
-                if (typeof ctx.roundRect === 'function') {
-                    ctx.roundRect(x, y, actualBarWidth, barHeight, radius);
+                if (ctx.roundRect) {
+                    ctx.roundRect(x, y, barWidth, barHeight, [radius, radius, 1, 1]);
                 } else {
-                    ctx.rect(x, y, actualBarWidth, barHeight);
+                    ctx.rect(x, y, barWidth, barHeight);
                 }
                 ctx.fill();
             }
