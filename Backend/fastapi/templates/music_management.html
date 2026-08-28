@@ -106,6 +106,10 @@
                     class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
                 <i class="fa-solid fa-list-ol mr-1"></i> Toàn Bộ Bài Hát
             </button>
+            <button id="tab-artists-btn" onclick="switchTab('artists')" 
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
+                <i class="fa-solid fa-microphone-lines mr-1"></i> Quản Lý Ca Sĩ
+            </button>
             <button id="tab-users-btn" onclick="switchTab('users')" 
                     class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
                 <i class="fa-solid fa-users mr-1"></i> Quản Lý Users
@@ -139,6 +143,79 @@
                     <!-- Tracks rows injected by JS -->
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Content Area: Artists Management -->
+    <div id="artists-view-container" class="space-y-4 mb-8 hidden">
+        <!-- Stats Cards Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+                <div>
+                    <span class="text-xs font-bold uppercase text-text-secondary">Tổng Ca Sĩ</span>
+                    <h3 id="artists-stat-total" class="text-2xl font-black text-text mt-0.5">0</h3>
+                </div>
+                <div class="w-11 h-11 rounded-xl bg-primary/15 text-primary flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-microphone-lines"></i>
+                </div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+                <div>
+                    <span class="text-xs font-bold uppercase text-emerald-400">Đã Có Ảnh Chân Dung HD</span>
+                    <h3 id="artists-stat-custom" class="text-2xl font-black text-emerald-400 mt-0.5">0</h3>
+                </div>
+                <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+                <div>
+                    <span class="text-xs font-bold uppercase text-amber-400">Dùng Ảnh Mặc Định / Album</span>
+                    <h3 id="artists-stat-default" class="text-2xl font-black text-amber-400 mt-0.5">0</h3>
+                </div>
+                <div class="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-image"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Artists Toolbar -->
+        <div class="glass-panel rounded-2xl p-3.5 border border-hairline flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="relative w-full sm:w-80">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary text-xs"></i>
+                <input type="text" id="artists-search-input" oninput="filterArtistsList(this.value)"
+                       placeholder="Tìm kiếm ca sĩ, nghệ sĩ..." 
+                       class="w-full pl-9 pr-4 py-2 rounded-xl bg-surface border border-hairline text-text placeholder-text-secondary text-xs focus:outline-none focus:border-primary transition">
+            </div>
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button onclick="fetchArtistsData()" class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center gap-1.5" title="Làm mới">
+                    <i class="fa-solid fa-rotate-right"></i> Làm Mới
+                </button>
+                <button id="btn-bulk-fetch-artists" onclick="bulkAutoFetchArtists()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-black shadow-lg shadow-amber-500/20 hover:brightness-110 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Tự Động Tải Ảnh Toàn Bộ Ca Sĩ
+                </button>
+            </div>
+        </div>
+
+        <!-- Artists Table -->
+        <div class="glass-panel rounded-3xl overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
+                            <th class="py-3.5 px-4 w-16 text-center">Chân Dung</th>
+                            <th class="py-3.5 px-4">Tên Ca Sĩ / Nghệ Sĩ</th>
+                            <th class="py-3.5 px-4">Thể Loại</th>
+                            <th class="py-3.5 px-4 text-center">Trong Thư Viện</th>
+                            <th class="py-3.5 px-4 text-center">Trạng Thái Ảnh</th>
+                            <th class="py-3.5 px-4 text-right">Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="artists-table-body" class="divide-y divide-hairline">
+                        <!-- Artists rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -980,6 +1057,107 @@
     </div>
 </div>
 
+<!-- Modal 9: Chọn Ảnh Chân Dung Ca Sĩ Online (Artist Image Picker) -->
+<div id="artist-image-picker-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text" id="picker-artist-title">Tìm Ảnh Ca Sĩ Online</h3>
+                    <p class="text-xs text-text-secondary">Dữ liệu ảnh chân dung HD từ Deezer & Apple Music</p>
+                </div>
+            </div>
+            <button onclick="closeArtistImagePicker()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex items-center gap-2 my-4 shrink-0">
+            <input type="text" id="picker-search-query" placeholder="Nhập tên ca sĩ để tìm lại..." 
+                   class="flex-1 px-4 py-2 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary">
+            <button onclick="performArtistImageSearch()" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow hover:brightness-110 flex items-center gap-1.5">
+                <i class="fa-solid fa-magnifying-glass"></i> Tìm Lại
+            </button>
+        </div>
+
+        <div id="picker-results-grid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 p-1">
+            <!-- Results rendered here -->
+        </div>
+
+        <div class="flex items-center justify-between pt-4 border-t border-hairline shrink-0 mt-3">
+            <span class="text-xs text-text-secondary">💡 Nhấn vào một ảnh chân dung để áp dụng ngay</span>
+            <button onclick="closeArtistImagePicker()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 10: Sửa Thông Tin Ca Sĩ (Edit Artist Modal) -->
+<div id="edit-artist-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-microphone-lines"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Sửa Thông Tin Nghệ Sĩ</h3>
+                    <p class="text-xs text-text-secondary" id="edit-artist-modal-subtitle">Chỉnh sửa ảnh đại diện, banner & thể loại</p>
+                </div>
+            </div>
+            <button onclick="closeEditArtistModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form onsubmit="submitEditArtist(event)" class="space-y-3.5">
+            <input type="hidden" id="edit-artist-original-name">
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Ca Sĩ / Nghệ Sĩ</label>
+                <input type="text" id="edit-artist-name" required
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition">
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">URL Ảnh Chân Dung (Avatar HD)</label>
+                    <button type="button" onclick="openArtistImagePicker(document.getElementById('edit-artist-name').value)" class="text-[11px] font-bold text-primary hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-magnifying-glass"></i> Tìm Ảnh Online
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <img id="edit-artist-avatar-preview" src="" 
+                         class="w-11 h-11 rounded-full border border-hairline bg-black/20 shrink-0 object-cover" alt="Avatar">
+                    <input type="text" id="edit-artist-avatar" oninput="document.getElementById('edit-artist-avatar-preview').src = this.value"
+                           class="flex-1 px-3 py-2 rounded-xl bg-background text-text border border-border text-xs" placeholder="https://...">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Thể Loại (cách nhau bởi dấu phẩy)</label>
+                <input type="text" id="edit-artist-genres" placeholder="Ví dụ: Bolero, Trữ Tình, Nhạc Xưa"
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tiểu Sử / Giới Thiệu Ngắn (Bio)</label>
+                <textarea id="edit-artist-bio" rows="3" placeholder="Đôi nét về sự nghiệp, giải thưởng của nghệ sĩ..."
+                          class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
+                <button type="button" onclick="closeEditArtistModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> Lưu Thông Tin
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 let globalAlbums = [];
 let currentActiveTab = 'albums';
@@ -1239,28 +1417,42 @@ function switchTab(tab) {
     currentActiveTab = tab;
     const albumsBtn = document.getElementById('tab-albums-btn');
     const tracksBtn = document.getElementById('tab-tracks-btn');
+    const artistsBtn = document.getElementById('tab-artists-btn');
     const usersBtn = document.getElementById('tab-users-btn');
 
     albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
     tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    if(artistsBtn) artistsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
     if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
 
     if (tab === 'albums') {
         albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
     } else if (tab === 'tracks') {
         tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
+    } else if (tab === 'artists') {
+        if(artistsBtn) artistsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
     } else if (tab === 'users') {
         if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
     }
 
-    if (tab === 'users') {
+    if (tab === 'artists') {
         document.getElementById('albums-view-container').classList.add('hidden');
         document.getElementById('tracks-view-container').classList.add('hidden');
+        document.getElementById('users-view-container').classList.add('hidden');
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('artists-view-container').classList.remove('hidden');
+        document.getElementById('items-count-indicator').textContent = 'Đang quản lý Ca Sĩ';
+        fetchArtistsData();
+    } else if (tab === 'users') {
+        document.getElementById('albums-view-container').classList.add('hidden');
+        document.getElementById('tracks-view-container').classList.add('hidden');
+        document.getElementById('artists-view-container').classList.add('hidden');
         document.getElementById('empty-state').classList.add('hidden');
         document.getElementById('users-view-container').classList.remove('hidden');
         document.getElementById('items-count-indicator').textContent = 'Đang quản lý Users';
         fetchMusicUsers();
     } else {
+        document.getElementById('artists-view-container').classList.add('hidden');
         document.getElementById('users-view-container').classList.add('hidden');
         renderCurrentView();
     }
@@ -2234,6 +2426,300 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ── Artist Management Functions ────────────────────────────────────────────────
+let globalArtists = [];
+let currentPickingArtistName = '';
+
+async function fetchArtistsData() {
+    try {
+        const res = await fetch('/api/music/artists');
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            globalArtists = data.artists || [];
+
+            // Cập nhật thống kê
+            const total = globalArtists.length;
+            const custom = globalArtists.filter(a => a.has_custom_avatar).length;
+            const defCount = total - custom;
+
+            const statTotal = document.getElementById('artists-stat-total');
+            const statCustom = document.getElementById('artists-stat-custom');
+            const statDefault = document.getElementById('artists-stat-default');
+
+            if (statTotal) statTotal.textContent = total;
+            if (statCustom) statCustom.textContent = custom;
+            if (statDefault) statDefault.textContent = defCount;
+
+            const searchInput = document.getElementById('artists-search-input');
+            const query = searchInput ? searchInput.value.trim() : '';
+            filterArtistsList(query);
+        } else {
+            alertToast(data.message || 'Lỗi tải danh sách ca sĩ');
+        }
+    } catch (e) {
+        console.error(e);
+        alertToast('Lỗi kết nối khi tải danh sách ca sĩ');
+    }
+}
+
+function filterArtistsList(query) {
+    if (!query) {
+        renderArtistsTable(globalArtists);
+        return;
+    }
+    const q = query.toLowerCase();
+    const filtered = globalArtists.filter(a => 
+        (a.name && a.name.toLowerCase().includes(q)) ||
+        (a.genres && a.genres.some(g => g.toLowerCase().includes(q)))
+    );
+    renderArtistsTable(filtered);
+}
+
+function renderArtistsTable(artists) {
+    const tbody = document.getElementById('artists-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (artists.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-text-secondary text-xs"><i class="fa-solid fa-microphone-slash text-2xl mb-2 block opacity-40"></i>Không tìm thấy ca sĩ nào</td></tr>';
+        return;
+    }
+
+    artists.forEach(art => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-surface-2 transition group';
+
+        const hasCustom = art.has_custom_avatar;
+        const statusBadge = hasCustom
+            ? '<span class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-[9px]"></i> Ảnh Chân Dung HD</span>'
+            : '<span class="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation text-[9px]"></i> Ảnh Mặc Định</span>';
+
+        const genresBadges = (art.genres && art.genres.length > 0)
+            ? art.genres.slice(0, 3).map(g => `<span class="px-2 py-0.5 rounded-lg bg-surface text-text-secondary text-[10px] font-medium border border-hairline">${g}</span>`).join(' ')
+            : '<span class="text-text-secondary/50 text-xs italic">Chưa phân loại</span>';
+
+        tr.innerHTML = `
+            <td class="py-3.5 px-4 text-center">
+                <div class="relative w-11 h-11 mx-auto group/avatar cursor-pointer" onclick="openArtistImagePicker('${art.name.replace(/'/g, "\\'")}')">
+                    <img src="${art.avatar_url}" class="w-11 h-11 rounded-full object-cover border border-hairline bg-black/20 shadow" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                    <div class="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover/avatar:opacity-100 transition flex items-center justify-center text-white text-[10px]">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </div>
+                </div>
+            </td>
+            <td class="py-3.5 px-4 font-bold text-text">
+                <div class="text-sm">${art.name}</div>
+                ${art.fans_count ? `<div class="text-[10px] text-text-secondary font-normal"><i class="fa-solid fa-heart text-red-400 mr-1"></i>${art.fans_count.toLocaleString()} người theo dõi (Deezer)</div>` : ''}
+            </td>
+            <td class="py-3.5 px-4">
+                <div class="flex items-center gap-1 flex-wrap">${genresBadges}</div>
+            </td>
+            <td class="py-3.5 px-4 text-center">
+                <div class="inline-flex items-center gap-1.5 text-xs">
+                    <span class="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-bold border border-primary/20" title="Số Albums">
+                        <i class="fa-solid fa-compact-disc mr-0.5 text-[10px]"></i> ${art.albums_count || 0} Albums
+                    </span>
+                    <span class="px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-400 font-bold border border-cyan-500/20" title="Số Bài Hát">
+                        <i class="fa-solid fa-music mr-0.5 text-[10px]"></i> ${art.tracks_count || 0} Bài
+                    </span>
+                </div>
+            </td>
+            <td class="py-3.5 px-4 text-center">
+                ${statusBadge}
+            </td>
+            <td class="py-3.5 px-4 text-right">
+                <div class="inline-flex items-center gap-1">
+                    <button onclick="openArtistImagePicker('${art.name.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center gap-1" title="Tìm ảnh chân dung online">
+                        <i class="fa-solid fa-magnifying-glass text-[10px]"></i> Tìm Ảnh
+                    </button>
+                    <button onclick="openEditArtistModal('${art.name.replace(/'/g, "\\'")}')" class="w-8 h-8 rounded-lg bg-surface hover:bg-surface-2 text-text inline-flex items-center justify-center transition" title="Sửa thông tin">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// --- Artist Image Picker Modal Logic ---
+function openArtistImagePicker(artistName) {
+    currentPickingArtistName = artistName || '';
+    const modal = document.getElementById('artist-image-picker-modal');
+    document.getElementById('picker-artist-title').textContent = `Tìm Ảnh: ${currentPickingArtistName}`;
+    document.getElementById('picker-search-query').value = currentPickingArtistName;
+
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+
+    performArtistImageSearch();
+}
+
+function closeArtistImagePicker() {
+    const modal = document.getElementById('artist-image-picker-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+async function performArtistImageSearch() {
+    const query = document.getElementById('picker-search-query').value.trim() || currentPickingArtistName;
+    if (!query) return;
+
+    const grid = document.getElementById('picker-results-grid');
+    grid.innerHTML = '<div class="col-span-full py-10 text-center text-xs text-text-secondary"><i class="fa-solid fa-spinner animate-spin mr-1.5 text-primary text-base block mb-2"></i>Đang tìm ảnh chân dung HD từ Deezer & Apple Music...</div>';
+
+    try {
+        const res = await fetch(`/api/music/artist/search-online?name=${encodeURIComponent(query)}`);
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success' && data.results && data.results.length > 0) {
+            grid.innerHTML = '';
+            const validPics = data.results.filter(r => r.avatar_url);
+
+            if (validPics.length === 0) {
+                grid.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-text-secondary">Không tìm thấy ảnh chân dung nào phù hợp. Bạn có thể thử tìm với từ khóa khác hoặc nhập URL thủ công.</div>';
+                return;
+            }
+
+            validPics.forEach(pic => {
+                const card = document.createElement('div');
+                card.className = 'group relative rounded-2xl overflow-hidden aspect-square border border-hairline hover:border-primary transition transform hover:scale-105 bg-black/40 shadow cursor-pointer';
+                card.innerHTML = `
+                    <img src="${pic.avatar_url}" class="w-full h-full object-cover" alt="${pic.name}">
+                    <div class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center p-2 text-center gap-1.5">
+                        <span class="text-xs font-black text-white truncate max-w-full">${pic.name}</span>
+                        <span class="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">${pic.source || 'Online HD'}</span>
+                        <button class="mt-1 px-3 py-1 rounded-full bg-primary text-white text-[11px] font-bold shadow hover:brightness-110">
+                            <i class="fa-solid fa-check mr-1"></i> Chọn Ảnh Này
+                        </button>
+                    </div>
+                `;
+                card.onclick = () => selectArtistImage(pic.avatar_url, pic.banner_url || pic.avatar_url);
+                grid.appendChild(card);
+            });
+        } else {
+            grid.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-text-secondary">Không tìm thấy kết quả nào. Hãy thử tìm theo tên chính xác.</div>';
+        }
+    } catch (e) {
+        grid.innerHTML = `<div class="col-span-full py-8 text-center text-xs text-red-400">Lỗi kết nối: ${e.message}</div>`;
+    }
+}
+
+async function selectArtistImage(imageUrl, bannerUrl) {
+    if (!currentPickingArtistName) return;
+
+    try {
+        const res = await fetch('/api/music/artist/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: currentPickingArtistName,
+                avatar_url: imageUrl,
+                banner_url: bannerUrl || imageUrl
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast(`Đã cập nhật ảnh chân dung cho "${currentPickingArtistName}"!`);
+            closeArtistImagePicker();
+            fetchArtistsData();
+
+            // Nếu modal edit artist đang mở thì update luôn preview
+            const editAvatarInput = document.getElementById('edit-artist-avatar');
+            const editAvatarPrev = document.getElementById('edit-artist-avatar-preview');
+            if (editAvatarInput && editAvatarPrev) {
+                editAvatarInput.value = imageUrl;
+                editAvatarPrev.src = imageUrl;
+            }
+        } else {
+            alertToast(data.message || 'Lỗi cập nhật ảnh');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
+    }
+}
+
+// --- Edit Artist Modal Logic ---
+function openEditArtistModal(artistName) {
+    const art = globalArtists.find(a => a.name === artistName);
+    if (!art) return;
+
+    document.getElementById('edit-artist-original-name').value = art.name;
+    document.getElementById('edit-artist-name').value = art.name;
+    document.getElementById('edit-artist-avatar').value = art.avatar_url || '';
+    document.getElementById('edit-artist-avatar-preview').src = art.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
+    document.getElementById('edit-artist-genres').value = (art.genres || []).join(', ');
+    document.getElementById('edit-artist-bio').value = art.bio || '';
+    document.getElementById('edit-artist-modal-subtitle').textContent = `Chỉnh sửa ca sĩ: ${art.name}`;
+
+    const modal = document.getElementById('edit-artist-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeEditArtistModal() {
+    const modal = document.getElementById('edit-artist-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+async function submitEditArtist(e) {
+    e.preventDefault();
+    const name = document.getElementById('edit-artist-name').value.trim();
+    const avatar_url = document.getElementById('edit-artist-avatar').value.trim();
+    const genresStr = document.getElementById('edit-artist-genres').value.trim();
+    const bio = document.getElementById('edit-artist-bio').value.trim();
+
+    const genres = genresStr ? genresStr.split(',').map(g => g.trim()).filter(Boolean) : [];
+
+    try {
+        const res = await fetch('/api/music/artist/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, avatar_url, genres, bio })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            closeEditArtistModal();
+            alertToast('Đã cập nhật thông tin ca sĩ thành công!');
+            fetchArtistsData();
+        } else {
+            alertToast(data.message || 'Lỗi cập nhật');
+        }
+    } catch (err) {
+        alertToast('Lỗi kết nối: ' + err.message);
+    }
+}
+
+// --- Bulk Auto-Fetch Artists Images ---
+async function bulkAutoFetchArtists() {
+    if (!confirm('Bạn có muốn tự động tìm và tải ảnh chân dung HD từ Deezer & Apple Music cho toàn bộ ca sĩ chưa có ảnh trong thư viện không?')) return;
+
+    const btn = document.getElementById('btn-bulk-fetch-artists');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Đang tự động tìm ảnh HD...';
+    }
+
+    try {
+        const res = await fetch('/api/music/artists/auto-fetch', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast(data.message || `Đã cập nhật ${data.count} ảnh ca sĩ thành công!`);
+            fetchArtistsData();
+        } else {
+            alertToast(data.message || 'Lỗi tải ảnh ca sĩ');
+        }
+    } catch (e) {
+        alertToast('Lỗi mạng khi tải ảnh ca sĩ: ' + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Tự Động Tải Ảnh Toàn Bộ Ca Sĩ';
+        }
+    }
+}
 
 // ── User Management Functions ──────────────────────────────────────────────────
 let globalMusicUsers = [];

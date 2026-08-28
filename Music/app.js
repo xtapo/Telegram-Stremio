@@ -248,8 +248,13 @@ class XTAPOMusicApp {
 
         // Artists & Genres Modals
         this.artistModal = document.getElementById('artistModal');
+        this.artistListView = document.getElementById('artistListView');
+        this.artistProfileView = document.getElementById('artistProfileView');
+        this.btnBackToArtistList = document.getElementById('btnBackToArtistList');
+        this.artistSearchInput = document.getElementById('artistSearchInput');
         this.closeArtistModal = document.getElementById('closeArtistModal');
         this.artistGrid = document.getElementById('artistGrid');
+        this.artistCacheMap = new Map();
 
         this.genreModal = document.getElementById('genreModal');
         this.closeGenreModal = document.getElementById('closeGenreModal');
@@ -297,6 +302,7 @@ class XTAPOMusicApp {
         
         await this.fetchUserProfile();
         await this.fetchTelegramAlbums();
+        await this.fetchArtistMetadata();
     }
 
     // --- Authentication & User State ---
@@ -537,6 +543,24 @@ class XTAPOMusicApp {
         } catch (err) {
             // Đang mở file tĩnh hoặc backend chưa kết nối
             console.log('[XTAPO MUSIC] Backend API offline or file mode, using local database.');
+        }
+    }
+
+    async fetchArtistMetadata() {
+        try {
+            const res = await fetch('/api/music/artists');
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.status === 'success' && data.artists) {
+                    data.artists.forEach(a => {
+                        if (a && a.name) {
+                            this.artistCacheMap.set(a.name.toLowerCase().trim(), a);
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.log('[Artist Metadata] API offline or static mode');
         }
     }
 
@@ -1340,12 +1364,21 @@ class XTAPOMusicApp {
             this.navArtists.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.setActiveNavLink(this.navArtists);
+                this.showArtistListView();
                 this.renderArtistGrid();
                 this.openModal(this.artistModal);
             });
         }
         if (this.closeArtistModal && this.artistModal) {
             this.closeArtistModal.addEventListener('click', () => this.closeModal(this.artistModal));
+        }
+        if (this.btnBackToArtistList) {
+            this.btnBackToArtistList.addEventListener('click', () => this.showArtistListView());
+        }
+        if (this.artistSearchInput) {
+            this.artistSearchInput.addEventListener('input', (e) => {
+                this.renderArtistGrid(e.target.value.trim());
+            });
         }
 
         if (this.navGenres && this.genreModal) {
@@ -1867,7 +1900,14 @@ class XTAPOMusicApp {
         }
     }
 
-    renderArtistGrid() {
+    showArtistListView() {
+        if (this.artistListView && this.artistProfileView) {
+            this.artistListView.style.display = 'flex';
+            this.artistProfileView.style.display = 'none';
+        }
+    }
+
+    renderArtistGrid(searchQuery = '') {
         if (!this.artistGrid) return;
         this.artistGrid.innerHTML = '';
 
@@ -1877,16 +1917,28 @@ class XTAPOMusicApp {
             const albArtist = (album.artist || 'Unknown Artist').trim();
             (album.tracks || []).forEach(track => {
                 const trackArtist = (track.artist || albArtist || 'Unknown Artist').trim();
+                if (!trackArtist || trackArtist.toLowerCase() === 'unknown') return;
+
                 if (!artistMap.has(trackArtist)) {
+                    // Check cached metadata
+                    const cached = this.artistCacheMap.get(trackArtist.toLowerCase().trim());
+                    const avatarUrl = (cached && cached.avatar_url) ? cached.avatar_url : (track.coverUrl || album.coverUrl);
+                    const bannerUrl = (cached && cached.banner_url) ? cached.banner_url : avatarUrl;
+                    const bio = cached ? (cached.bio || '') : '';
+                    const genres = cached ? (cached.genres || []) : (track.genre ? [track.genre] : []);
+
                     artistMap.set(trackArtist, {
                         name: trackArtist,
-                        coverUrl: track.coverUrl || album.coverUrl,
-                        albums: new Set([album.title]),
+                        coverUrl: avatarUrl,
+                        bannerUrl: bannerUrl,
+                        bio: bio,
+                        genres: genres,
+                        albums: new Map([[album.id || album.title, album]]),
                         tracks: [track]
                     });
                 } else {
                     const existing = artistMap.get(trackArtist);
-                    existing.albums.add(album.title);
+                    existing.albums.set(album.id || album.title, album);
                     if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
                         existing.tracks.push(track);
                     }
@@ -1899,7 +1951,12 @@ class XTAPOMusicApp {
             return;
         }
 
-        const sortedArtists = Array.from(artistMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
+        let sortedArtists = Array.from(artistMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            sortedArtists = sortedArtists.filter(a => a.name.toLowerCase().includes(q));
+        }
 
         sortedArtists.forEach(art => {
             const card = document.createElement('div');
@@ -1913,33 +1970,166 @@ class XTAPOMusicApp {
             `;
 
             card.addEventListener('click', () => {
-                this.closeModal(this.artistModal);
-                const artistAlbum = {
-                    id: `artist-${encodeURIComponent(art.name)}`,
-                    title: `Tuyển Tập: ${art.name}`,
-                    artist: art.name,
-                    coverUrl: art.coverUrl,
-                    format: 'FLAC Hi-Res Lossless',
-                    year: new Date().getFullYear().toString(),
-                    publisher: 'Artist Spotlight Collection',
-                    glowColors: { glow1: 'radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)', glow2: 'radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%)' },
-                    tracks: art.tracks
-                };
-
-                const existingIdx = this.albums.findIndex(a => a.id === artistAlbum.id);
-                if (existingIdx !== -1) {
-                    this.albums[existingIdx] = artistAlbum;
-                    this.loadAlbum(existingIdx, 0, true);
-                } else {
-                    this.albums.unshift(artistAlbum);
-                    this.loadAlbum(0, 0, true);
-                }
-                this.renderAlbumGrid();
-                this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${art.tracks.length} bài)`);
+                this.openArtistSpotlight(art);
             });
 
             this.artistGrid.appendChild(card);
         });
+    }
+
+    openArtistSpotlight(art) {
+        if (!this.artistProfileView || !this.artistListView) return;
+
+        this.artistListView.style.display = 'none';
+        this.artistProfileView.style.display = 'flex';
+
+        // Update Hero Info
+        const backdropEl = document.getElementById('artistHeroBackdrop');
+        if (backdropEl) backdropEl.style.backgroundImage = `url('${art.bannerUrl || art.coverUrl}')`;
+        
+        const avatarEl = document.getElementById('spotlightArtistAvatar');
+        if (avatarEl) avatarEl.src = art.coverUrl;
+
+        const nameEl = document.getElementById('spotlightArtistName');
+        if (nameEl) nameEl.textContent = art.name;
+
+        const trackCountEl = document.getElementById('spotlightTrackCount');
+        if (trackCountEl) trackCountEl.textContent = `${art.tracks.length} bài hát`;
+
+        const albumCountEl = document.getElementById('spotlightAlbumCount');
+        if (albumCountEl) albumCountEl.textContent = `${art.albums.size} albums`;
+
+        // Genres tags
+        const genresEl = document.getElementById('spotlightArtistGenres');
+        if (genresEl) {
+            genresEl.innerHTML = (art.genres && art.genres.length > 0)
+                ? art.genres.map(g => `<span class="badge-tag" style="background: rgba(255,255,255,0.1); font-size: 0.75rem;">${this.escapeHtml(g)}</span>`).join('')
+                : '';
+        }
+
+        // Bio section
+        const bioSection = document.getElementById('spotlightBioSection');
+        const bioText = document.getElementById('spotlightBioText');
+        if (bioSection && bioText) {
+            if (art.bio && art.bio.trim()) {
+                bioSection.style.display = 'block';
+                bioText.textContent = art.bio;
+            } else {
+                bioSection.style.display = 'none';
+            }
+        }
+
+        // Albums Grid
+        const albumsGrid = document.getElementById('spotlightAlbumsGrid');
+        if (albumsGrid) {
+            albumsGrid.innerHTML = '';
+            Array.from(art.albums.values()).forEach(album => {
+                const albCard = document.createElement('div');
+                albCard.style.cssText = 'background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: 12px; padding: 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;';
+                albCard.innerHTML = `
+                    <img src="${album.coverUrl}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover;" alt="Album Cover">
+                    <div style="min-width: 0; flex: 1;">
+                        <div style="font-weight: 700; font-size: 0.8rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(album.title)}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">${album.tracks ? album.tracks.length : 0} bài • ${album.year || '2026'}</div>
+                    </div>
+                `;
+                albCard.onmouseover = () => albCard.style.background = 'rgba(255,255,255,0.08)';
+                albCard.onmouseout = () => albCard.style.background = 'rgba(255,255,255,0.04)';
+                albCard.onclick = () => {
+                    this.closeModal(this.artistModal);
+                    const idx = this.albums.findIndex(a => a.id === album.id || a.title === album.title);
+                    if (idx !== -1) {
+                        this.loadAlbum(idx, 0, true);
+                    }
+                };
+                albumsGrid.appendChild(albCard);
+            });
+        }
+
+        // Tracks List
+        const tracksListEl = document.getElementById('spotlightTracksList');
+        if (tracksListEl) {
+            tracksListEl.innerHTML = '';
+            art.tracks.forEach((track, idx) => {
+                const trItem = document.createElement('div');
+                trItem.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s; cursor: pointer;';
+                trItem.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); width: 20px; text-align: center;">${idx + 1}</span>
+                        <img src="${track.coverUrl || art.coverUrl}" style="width: 36px; height: 36px; border-radius: 8px; object-fit: cover;" alt="Cover">
+                        <div style="min-width: 0;">
+                            <div style="font-size: 0.85rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.name)}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">${track.albumName || 'Single'}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">${track.duration || ''}</span>
+                        <button class="nav-btn icon-btn" style="width: 30px; height: 30px; border-radius: 50%; background: var(--color-primary); color: #fff; display: flex; align-items: center; justify-content: center;" title="Phát bài này">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        </button>
+                    </div>
+                `;
+                trItem.onmouseover = () => trItem.style.background = 'rgba(255,255,255,0.06)';
+                trItem.onmouseout = () => trItem.style.background = 'rgba(255,255,255,0.02)';
+                
+                trItem.onclick = () => {
+                    this.closeModal(this.artistModal);
+                    this.playArtistQueue(art, idx, false);
+                };
+
+                tracksListEl.appendChild(trItem);
+            });
+        }
+
+        // Play All & Shuffle Buttons
+        const playAllBtn = document.getElementById('btnSpotlightPlayAll');
+        if (playAllBtn) {
+            playAllBtn.onclick = () => {
+                this.closeModal(this.artistModal);
+                this.playArtistQueue(art, 0, false);
+            };
+        }
+
+        const shuffleBtn = document.getElementById('btnSpotlightShuffle');
+        if (shuffleBtn) {
+            shuffleBtn.onclick = () => {
+                this.closeModal(this.artistModal);
+                this.playArtistQueue(art, 0, true);
+            };
+        }
+    }
+
+    playArtistQueue(art, startIndex = 0, isShuffle = false) {
+        let tracks = [...art.tracks];
+        if (isShuffle && tracks.length > 1) {
+            for (let i = tracks.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+            }
+        }
+
+        const artistAlbum = {
+            id: `artist-${encodeURIComponent(art.name)}`,
+            title: `Tuyển Tập: ${art.name}`,
+            artist: art.name,
+            coverUrl: art.coverUrl,
+            format: 'FLAC Hi-Res Lossless',
+            year: new Date().getFullYear().toString(),
+            publisher: 'Artist Spotlight Collection',
+            glowColors: { glow1: 'radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)', glow2: 'radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%)' },
+            tracks: tracks
+        };
+
+        const existingIdx = this.albums.findIndex(a => a.id === artistAlbum.id);
+        if (existingIdx !== -1) {
+            this.albums[existingIdx] = artistAlbum;
+            this.loadAlbum(existingIdx, startIndex, true);
+        } else {
+            this.albums.unshift(artistAlbum);
+            this.loadAlbum(0, startIndex, true);
+        }
+        this.renderAlbumGrid();
+        this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${tracks.length} bài)`);
     }
 
     renderGenreGrid() {

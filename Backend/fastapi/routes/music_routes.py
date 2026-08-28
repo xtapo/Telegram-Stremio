@@ -2050,3 +2050,237 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
     except Exception as e:
         LOGGER.error(f"[SHAZAM API] Lỗi: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+# ── 9. Quản Lý Thông Tin & Ảnh Nghệ Sĩ (Artist Metadata & Images) ────────────
+
+async def _search_artist_online_helper(name: str):
+    """
+    Tìm kiếm thông tin & ảnh chân dung nghệ sĩ từ Deezer và Apple Music / iTunes
+    """
+    import httpx
+    import urllib.parse
+
+    results = []
+    seen_urls = set()
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        return results
+
+    # 1. Deezer Artist Search (Cung cấp ảnh chân dung nghệ sĩ HD)
+    try:
+        url = f"https://api.deezer.com/search/artist?q={urllib.parse.quote(cleaned_name)}&limit=6"
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                for art in data.get("data", []):
+                    art_name = art.get("name", "")
+                    pic_xl = art.get("picture_xl") or art.get("picture_big") or art.get("picture_medium")
+                    if pic_xl and pic_xl not in seen_urls:
+                        seen_urls.add(pic_xl)
+                        results.append({
+                            "name": art_name,
+                            "avatar_url": pic_xl,
+                            "banner_url": art.get("picture_xl") or pic_xl,
+                            "preview_url": art.get("picture_medium", pic_xl),
+                            "fans_count": art.get("nb_fan", 0),
+                            "nb_album": art.get("nb_album", 0),
+                            "source": "Deezer"
+                        })
+    except Exception as e:
+        LOGGER.warning(f"[ARTIST SEARCH] Deezer search error for '{cleaned_name}': {e}")
+
+    # 2. Apple Music / iTunes (Tìm thêm ảnh bìa/album liên quan)
+    try:
+        url = f"https://itunes.apple.com/search?term={urllib.parse.quote(cleaned_name)}&entity=musicArtist&limit=4"
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data.get("results", []):
+                    results.append({
+                        "name": item.get("artistName", ""),
+                        "primary_genre": item.get("primaryGenreName", ""),
+                        "source": "Apple Music"
+                    })
+    except Exception as e:
+        LOGGER.warning(f"[ARTIST SEARCH] iTunes artist error for '{cleaned_name}': {e}")
+
+    return results
+
+
+@router.get("/api/music/artists")
+async def get_all_artists():
+    """
+    Lấy danh sách tất cả ca sĩ được trích xuất từ thư viện nhạc kèm ảnh và metadata
+    """
+    try:
+        albums = await _db_load_library()
+        artist_map = {}
+        
+        # 1. Thu thập ca sĩ từ albums và tracks
+        for a in albums:
+            alb_artist = (a.get("artist") or "Unknown Artist").strip()
+            alb_title = a.get("title", "")
+            for t in a.get("tracks", []):
+                t_artist = (t.get("artist") or alb_artist or "Unknown Artist").strip()
+                if not t_artist:
+                    continue
+                if t_artist not in artist_map:
+                    artist_map[t_artist] = {
+                        "name": t_artist,
+                        "tracks_count": 0,
+                        "albums": set(),
+                        "genres": set(),
+                        "sample_track_cover": t.get("coverUrl") or a.get("coverUrl", "")
+                    }
+                artist_map[t_artist]["tracks_count"] += 1
+                if alb_title:
+                    artist_map[t_artist]["albums"].add(alb_title)
+                if t.get("genre"):
+                    artist_map[t_artist]["genres"].add(t.get("genre").strip())
+
+        # 2. Lấy metadata đã cache từ MongoDB collection `music_artists`
+        coll = db.dbs["tracking"]["music_artists"]
+        cached_cursor = coll.find()
+        cached_map = {}
+        async for doc in cached_cursor:
+            cached_map[doc["_id"]] = doc
+
+        # 3. Tổng hợp kết quả
+        artists_list = []
+        for name, data in artist_map.items():
+            slug = name.lower().strip()
+            cached = cached_map.get(slug) or cached_map.get(name)
+            
+            avatar_url = (cached.get("avatar_url") if cached else "") or data["sample_track_cover"] or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
+            banner_url = (cached.get("banner_url") if cached else "") or avatar_url
+            bio = cached.get("bio", "") if cached else ""
+            genres = list(set(list(data["genres"]) + (cached.get("genres", []) if cached else [])))
+
+            artists_list.append({
+                "name": name,
+                "avatar_url": avatar_url,
+                "banner_url": banner_url,
+                "bio": bio,
+                "genres": genres,
+                "fans_count": cached.get("fans_count", 0) if cached else 0,
+                "has_custom_avatar": bool(cached and cached.get("avatar_url")),
+                "tracks_count": data["tracks_count"],
+                "albums_count": len(data["albums"]),
+                "albums_list": list(data["albums"])
+            })
+
+        artists_list.sort(key=lambda x: x["tracks_count"], reverse=True)
+        return JSONResponse(content={"status": "success", "count": len(artists_list), "artists": artists_list})
+    except Exception as e:
+        LOGGER.error(f"[GET ARTISTS] Lỗi: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@router.get("/api/music/artist/search-online")
+async def search_artist_online(name: str = Query(..., min_length=1), _: bool = Depends(require_auth)):
+    """
+    Tìm kiếm ảnh chân dung và profile ca sĩ từ Deezer / Apple Music
+    """
+    try:
+        results = await _search_artist_online_helper(name)
+        return JSONResponse(content={"status": "success", "count": len(results), "results": results})
+    except Exception as e:
+        LOGGER.error(f"[SEARCH ARTIST ONLINE] Lỗi: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@router.post("/api/music/artist/update")
+async def update_artist_metadata(payload: dict, _: bool = Depends(require_auth)):
+    """
+    Admin cập nhật thông tin và ảnh đại diện cho ca sĩ
+    """
+    name = payload.get("name", "").strip()
+    avatar_url = payload.get("avatar_url", "").strip()
+    banner_url = payload.get("banner_url", "").strip()
+    bio = payload.get("bio", "").strip()
+    genres = payload.get("genres", [])
+
+    if not name:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Tên ca sĩ là bắt buộc."})
+
+    try:
+        coll = db.dbs["tracking"]["music_artists"]
+        slug = name.lower().strip()
+        
+        update_data = {
+            "name": name,
+            "avatar_url": avatar_url,
+            "banner_url": banner_url or avatar_url,
+            "bio": bio,
+            "genres": genres if isinstance(genres, list) else [],
+            "updated_at": time.time()
+        }
+        
+        await coll.update_one({"_id": slug}, {"$set": update_data}, upsert=True)
+        return JSONResponse(content={"status": "success", "message": f"Đã cập nhật thông tin ca sĩ '{name}' thành công."})
+    except Exception as e:
+        LOGGER.error(f"[UPDATE ARTIST] Lỗi: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@router.post("/api/music/artists/auto-fetch")
+async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
+    """
+    Tiến trình quét ngầm tự động tìm & lưu ảnh chân dung HD cho toàn bộ ca sĩ trong thư viện
+    """
+    try:
+        albums = await _db_load_library()
+        artists_to_search = set()
+        
+        for a in albums:
+            if a.get("artist"):
+                artists_to_search.add(a["artist"].strip())
+            for t in a.get("tracks", []):
+                if t.get("artist"):
+                    artists_to_search.add(t["artist"].strip())
+
+        coll = db.dbs["tracking"]["music_artists"]
+        updated_count = 0
+        
+        for art_name in artists_to_search:
+            if not art_name or art_name.lower() in ["unknown", "unknown artist", "va", "various artists"]:
+                continue
+                
+            slug = art_name.lower().strip()
+            existing = await coll.find_one({"_id": slug})
+            if existing and existing.get("avatar_url"):
+                continue  # Đã có ảnh tùy chỉnh/cache
+                
+            # Tìm ảnh từ Deezer
+            matches = await _search_artist_online_helper(art_name)
+            if matches:
+                # Chọn kết quả tốt nhất có avatar_url
+                best_match = next((m for m in matches if m.get("avatar_url")), None)
+                if best_match:
+                    doc = {
+                        "name": art_name,
+                        "avatar_url": best_match["avatar_url"],
+                        "banner_url": best_match.get("banner_url", best_match["avatar_url"]),
+                        "fans_count": best_match.get("fans_count", 0),
+                        "source": best_match.get("source", "Deezer"),
+                        "updated_at": time.time()
+                    }
+                    await coll.update_one({"_id": slug}, {"$set": doc}, upsert=True)
+                    updated_count += 1
+            
+            # Nghỉ nhẹ 100ms tránh rate-limit
+            import asyncio
+            await asyncio.sleep(0.1)
+
+        return JSONResponse(content={
+            "status": "success", 
+            "count": updated_count, 
+            "message": f"Đã tự động tải và cập nhật ảnh chân dung HD cho {updated_count} ca sĩ!"
+        })
+    except Exception as e:
+        LOGGER.error(f"[AUTO FETCH ARTISTS] Lỗi: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
