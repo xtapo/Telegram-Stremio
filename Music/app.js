@@ -321,6 +321,18 @@ class XTAPOMusicApp {
         this.dlCancelBtn = document.getElementById('dlCancelBtn');
         this.activeDownloadAbortController = null;
 
+        // M3U8 Stream Link & Share Modal Elements
+        this.m3u8Modal = document.getElementById('m3u8Modal');
+        this.closeM3u8Modal = document.getElementById('closeM3u8Modal');
+        this.m3u8ModalTitle = document.getElementById('m3u8ModalTitle');
+        this.m3u8DirectUrlInput = document.getElementById('m3u8DirectUrlInput');
+        this.m3u8CopyBtn = document.getElementById('m3u8CopyBtn');
+        this.m3u8CopyText = document.getElementById('m3u8CopyText');
+        this.m3u8OpenDirectBtn = document.getElementById('m3u8OpenDirectBtn');
+        this.m3u8DownloadFileBtn = document.getElementById('m3u8DownloadFileBtn');
+        this.m3u8DownloadPlsBtn = document.getElementById('m3u8DownloadPlsBtn');
+        this.currentM3U8Context = null;
+
         this.currentUser = null;
         this.favoriteTracks = [];
 
@@ -1792,7 +1804,12 @@ class XTAPOMusicApp {
             this.btnExportAlbumM3U8.addEventListener('click', () => {
                 if (this.albumExportMenu) this.albumExportMenu.classList.remove('show');
                 const album = this.currentAlbum;
-                this.exportM3U8(album.title, album.tracks);
+                const albId = album.id || album.title;
+                this.openM3U8ShareModal({
+                    title: album.title,
+                    urlPath: `/api/music/playlist/album/${encodeURIComponent(albId)}.m3u8`,
+                    tracks: album.tracks
+                });
             });
         }
         if (this.btnExportAlbumPLS) {
@@ -1820,7 +1837,12 @@ class XTAPOMusicApp {
         if (this.drawerExportM3U8Btn) {
             this.drawerExportM3U8Btn.addEventListener('click', () => {
                 const album = this.currentAlbum;
-                this.exportM3U8(album.title, album.tracks);
+                const albId = album.id || album.title;
+                this.openM3U8ShareModal({
+                    title: album.title,
+                    urlPath: `/api/music/playlist/album/${encodeURIComponent(albId)}.m3u8`,
+                    tracks: album.tracks
+                });
             });
         }
         if (this.drawerExportPLSBtn) {
@@ -1840,7 +1862,11 @@ class XTAPOMusicApp {
         if (this.btnSpotlightExportM3U8) {
             this.btnSpotlightExportM3U8.addEventListener('click', () => {
                 const name = this.currentSpotlightArtist ? this.currentSpotlightArtist.name : 'Artist';
-                this.exportM3U8(`Tuyen_Tap_${name}`, this.currentSpotlightTracks || []);
+                this.openM3U8ShareModal({
+                    title: `Tuyển Tập: ${name}`,
+                    urlPath: `/api/music/playlist/artist/${encodeURIComponent(name)}.m3u8`,
+                    tracks: this.currentSpotlightTracks || []
+                });
             });
         }
         if (this.btnSpotlightDownloadZip) {
@@ -1855,13 +1881,59 @@ class XTAPOMusicApp {
         if (this.btnFavExportM3U8) {
             this.btnFavExportM3U8.addEventListener('click', () => {
                 const favs = this.getFavoriteTracksList();
-                this.exportM3U8('Bai_Hat_Yeu_Thich', favs);
+                this.openM3U8ShareModal({
+                    title: 'Bài Hát Yêu Thích',
+                    urlPath: `/api/music/playlist/user/favorites.m3u8`,
+                    tracks: favs
+                });
             });
         }
         if (this.btnFavDownloadZip) {
             this.btnFavDownloadZip.addEventListener('click', () => {
                 const favs = this.getFavoriteTracksList();
                 this.downloadZipPackage(favs, 'Bai_Hat_Yeu_Thich', '', 'Bài Hát Yêu Thích');
+            });
+        }
+
+        // M3U8 Share Modal Events
+        if (this.closeM3u8Modal && this.m3u8Modal) {
+            this.closeM3u8Modal.addEventListener('click', () => this.closeModal(this.m3u8Modal));
+        }
+        if (this.m3u8CopyBtn && this.m3u8DirectUrlInput) {
+            this.m3u8CopyBtn.addEventListener('click', () => {
+                const url = this.m3u8DirectUrlInput.value;
+                if (!url) return;
+                navigator.clipboard.writeText(url).then(() => {
+                    if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Đã Copy! ✅';
+                    this.showToast('Đã copy đường dẫn stream M3U8 vào clipboard!');
+                    setTimeout(() => {
+                        if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Sao Chép Link';
+                    }, 2500);
+                }).catch(() => {
+                    this.m3u8DirectUrlInput.select();
+                    document.execCommand('copy');
+                    this.showToast('Đã copy đường link!');
+                });
+            });
+        }
+        if (this.m3u8OpenDirectBtn && this.m3u8DirectUrlInput) {
+            this.m3u8OpenDirectBtn.addEventListener('click', () => {
+                const url = this.m3u8DirectUrlInput.value;
+                if (url) window.open(url, '_blank');
+            });
+        }
+        if (this.m3u8DownloadFileBtn) {
+            this.m3u8DownloadFileBtn.addEventListener('click', () => {
+                if (this.currentM3U8Context) {
+                    this.exportM3U8(this.currentM3U8Context.title, this.currentM3U8Context.tracks);
+                }
+            });
+        }
+        if (this.m3u8DownloadPlsBtn) {
+            this.m3u8DownloadPlsBtn.addEventListener('click', () => {
+                if (this.currentM3U8Context) {
+                    this.exportPLS(this.currentM3U8Context.title, this.currentM3U8Context.tracks);
+                }
             });
         }
 
@@ -1878,7 +1950,7 @@ class XTAPOMusicApp {
         }
 
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.downloadProgressModal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.downloadProgressModal, this.m3u8Modal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -2157,7 +2229,11 @@ class XTAPOMusicApp {
             const m3u8Btn = item.querySelector('.btn-m3u8-playlist');
             if (m3u8Btn && trackCount > 0) {
                 m3u8Btn.addEventListener('click', () => {
-                    this.exportM3U8(`Playlist_${pl.name}`, pl.tracks);
+                    this.openM3U8ShareModal({
+                        title: `Playlist: ${pl.name}`,
+                        urlPath: `/api/music/playlist/user/playlist/${encodeURIComponent(pl.id)}.m3u8`,
+                        tracks: pl.tracks
+                    });
                 });
             }
 
@@ -3103,6 +3179,34 @@ class XTAPOMusicApp {
         } finally {
             this.activeDownloadAbortController = null;
         }
+    }
+
+    /**
+     * Mở Modal Chia Sẻ & Lấy Link Stream M3U8 Trực Tiếp
+     */
+    openM3U8ShareModal({ title, urlPath, tracks }) {
+        if (!tracks || tracks.length === 0) {
+            this.showToast('Không có bài hát nào trong playlist/album này!');
+            return;
+        }
+
+        const fullUrl = window.location.origin + (urlPath.startsWith('/') ? urlPath : `/${urlPath}`);
+        this.currentM3U8Context = { title, url: fullUrl, tracks };
+
+        if (this.m3u8ModalTitle) this.m3u8ModalTitle.textContent = `Stream M3U8: ${title}`;
+        if (this.m3u8DirectUrlInput) this.m3u8DirectUrlInput.value = fullUrl;
+        if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Sao Chép Link';
+
+        // Tự động sao chép link stream vào clipboard
+        navigator.clipboard.writeText(fullUrl).then(() => {
+            if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Đã Copy! ✅';
+            this.showToast(`Đã copy link stream M3U8: ${title}`);
+            setTimeout(() => {
+                if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Sao Chép Link';
+            }, 2500);
+        }).catch(() => {});
+
+        this.openModal(this.m3u8Modal);
     }
 }
 

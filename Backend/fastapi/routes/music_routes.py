@@ -647,6 +647,185 @@ async def get_music_albums():
     return JSONResponse(content={"status": "empty", "source": "none", "albums": []})
 
 
+# ── Direct M3U8 Playlist Stream Endpoints (VLC, PotPlayer, Foobar2000, Apple Music) ──
+
+def _build_m3u8_content(title: str, tracks: list, base_url: str) -> str:
+    lines = ["#EXTM3U", "#EXTENC:UTF-8", f"#PLAYLIST:{title}\n"]
+    for idx, t in enumerate(tracks):
+        dur_str = str(t.get("duration", "0"))
+        sec = -1
+        if dur_str.isdigit():
+            sec = int(dur_str)
+        elif ":" in dur_str:
+            parts = dur_str.split(":")
+            if len(parts) == 2:
+                sec = (int(parts[0]) if parts[0].isdigit() else 0) * 60 + (int(parts[1]) if parts[1].isdigit() else 0)
+            elif len(parts) == 3:
+                sec = (int(parts[0]) if parts[0].isdigit() else 0) * 3600 + (int(parts[1]) if parts[1].isdigit() else 0) * 60 + (int(parts[2]) if parts[2].isdigit() else 0)
+
+        name = t.get("name") or t.get("title") or f"Track {idx + 1}"
+        artist = t.get("artist") or "XTAPO Music"
+        chat_id = t.get("chat_id") or t.get("chatId")
+        msg_id = t.get("msg_id") or t.get("msgId")
+        preview_url = t.get("previewUrl") or t.get("url") or ""
+
+        if chat_id and msg_id:
+            stream_url = f"{base_url}/api/music/stream/{chat_id}/{msg_id}"
+        elif preview_url:
+            if preview_url.startswith("/"):
+                stream_url = f"{base_url}{preview_url}"
+            else:
+                stream_url = preview_url
+        else:
+            continue
+
+        lines.append(f"#EXTINF:{sec},{artist} - {name}")
+        lines.append(stream_url)
+        lines.append("")
+    return "\n".join(lines)
+
+
+@router.get("/api/music/playlist/album/{album_id}.m3u8")
+@router.get("/api/music/playlist/album/{album_id}")
+async def stream_album_m3u8(request: Request, album_id: str):
+    """Trả về file playlist .m3u8 trực tiếp của Album để mở trên VLC, PotPlayer, Foobar2000..."""
+    base_url = str(request.base_url).rstrip("/")
+    data = await _db_load_library()
+    if not data:
+        raise HTTPException(status_code=404, detail="Library is empty")
+
+    target_album = None
+    decoded_id = unquote(album_id).strip().lower()
+
+    for alb in data:
+        curr_id = str(alb.get("id", "")).strip().lower()
+        curr_title = str(alb.get("title", "")).strip().lower()
+        if curr_id == decoded_id or curr_title == decoded_id:
+            target_album = alb
+            break
+
+    if not target_album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    title = target_album.get("title", "Album")
+    tracks = target_album.get("tracks", [])
+    m3u8_text = _build_m3u8_content(title, tracks, base_url)
+
+    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
+    return PlainResponse(
+        content=m3u8_text,
+        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Cache-Control": "public, max-age=300",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+@router.get("/api/music/playlist/all.m3u8")
+@router.get("/api/music/playlist/all")
+async def stream_all_music_m3u8(request: Request):
+    """Trả về file playlist .m3u8 toàn bộ kho nhạc thư viện"""
+    base_url = str(request.base_url).rstrip("/")
+    data = await _db_load_library()
+    if not data:
+        raise HTTPException(status_code=404, detail="Library is empty")
+
+    all_tracks = []
+    for alb in data:
+        for t in alb.get("tracks", []):
+            if not t.get("artist"):
+                t["artist"] = alb.get("artist", "")
+            all_tracks.append(t)
+
+    m3u8_text = _build_m3u8_content("XTAPO_All_Music_Library", all_tracks, base_url)
+    return PlainResponse(
+        content=m3u8_text,
+        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": 'inline; filename="XTAPO_All_Music_Library.m3u8"',
+            "Cache-Control": "public, max-age=300",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+@router.get("/api/music/playlist/artist/{artist_name}.m3u8")
+@router.get("/api/music/playlist/artist/{artist_name}")
+async def stream_artist_m3u8(request: Request, artist_name: str):
+    """Trả về playlist .m3u8 cho ca sĩ/nghệ sĩ cụ thể"""
+    base_url = str(request.base_url).rstrip("/")
+    data = await _db_load_library()
+    if not data:
+        raise HTTPException(status_code=404, detail="Library is empty")
+
+    decoded_artist = unquote(artist_name).strip().lower()
+    artist_tracks = []
+    display_artist = unquote(artist_name).strip()
+
+    for alb in data:
+        alb_artist = alb.get("artist", "")
+        for t in alb.get("tracks", []):
+            track_artist = t.get("artist") or alb_artist
+            if decoded_artist in track_artist.lower():
+                display_artist = track_artist
+                artist_tracks.append(t)
+
+    if not artist_tracks:
+        raise HTTPException(status_code=404, detail=f"No tracks found for artist: {artist_name}")
+
+    m3u8_text = _build_m3u8_content(f"Artist_{display_artist}", artist_tracks, base_url)
+    safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Artist_{display_artist}")
+    return PlainResponse(
+        content=m3u8_text,
+        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Cache-Control": "public, max-age=300",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+@router.get("/api/music/playlist/genre/{genre_name}.m3u8")
+@router.get("/api/music/playlist/genre/{genre_name}")
+async def stream_genre_m3u8(request: Request, genre_name: str):
+    """Trả về playlist .m3u8 theo thể loại"""
+    base_url = str(request.base_url).rstrip("/")
+    data = await _db_load_library()
+    if not data:
+        raise HTTPException(status_code=404, detail="Library is empty")
+
+    decoded_genre = unquote(genre_name).strip().lower()
+    genre_tracks = []
+    display_genre = unquote(genre_name).strip()
+
+    for alb in data:
+        alb_artist = alb.get("artist", "")
+        for t in alb.get("tracks", []):
+            if not t.get("artist"):
+                t["artist"] = alb_artist
+            track_genre = str(t.get("genre", "")).lower()
+            if decoded_genre in track_genre or (decoded_genre == "khác" and not track_genre):
+                genre_tracks.append(t)
+
+    if not genre_tracks:
+        raise HTTPException(status_code=404, detail=f"No tracks found for genre: {genre_name}")
+
+    m3u8_text = _build_m3u8_content(f"Genre_{display_genre}", genre_tracks, base_url)
+    safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{display_genre}")
+    return PlainResponse(
+        content=m3u8_text,
+        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Cache-Control": "public, max-age=300",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
 # ── 3. Quản lý Danh Sách Kênh Nhạc (Channel Management) ───────────────────────
 @router.get("/api/music/channels")
 async def get_music_channels(_: bool = Depends(require_auth)):

@@ -778,6 +778,77 @@
         </div>
     </div>
 
+    <!-- M3U8 Stream Link & Share Modal -->
+    <div class="modal-overlay" id="m3u8Modal">
+        <div class="modal-card m3u8-share-modal-card">
+            <div class="modal-header" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); display: flex; align-items: center; justify-content: center; color: #38bdf8; font-size: 1.2rem;">
+                        📡
+                    </div>
+                    <div>
+                        <h3 id="m3u8ModalTitle" style="margin: 0; font-size: 1.15rem; font-weight: 700;">Đường Dẫn Stream Playlist (.M3U8)</h3>
+                        <p style="margin: 2px 0 0; font-size: 0.8rem; color: var(--text-muted);">Mở trực tiếp trên VLC, PotPlayer, Foobar2000, Infuse, Kodi...</p>
+                    </div>
+                </div>
+                <button class="modal-close" id="closeM3u8Modal">&times;</button>
+            </div>
+
+            <div class="m3u8-modal-body">
+                <!-- Direct Stream URL Box -->
+                <div class="m3u8-url-wrap">
+                    <label class="m3u8-url-label">🔗 ĐƯỜNG DẪN STREAM URL TRỰC TIẾP:</label>
+                    <div class="m3u8-url-input-group">
+                        <input type="text" id="m3u8DirectUrlInput" readonly value="https://..." class="m3u8-url-input">
+                        <button class="m3u8-copy-btn" id="m3u8CopyBtn">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                            <span id="m3u8CopyText">Sao Chép Link</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Action Shortcut Buttons -->
+                <div class="m3u8-action-buttons">
+                    <button class="m3u8-btn-link" id="m3u8OpenDirectBtn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                        <span>Mở Trực Tiếp Trình Duyệt</span>
+                    </button>
+                    <button class="m3u8-btn-link" id="m3u8DownloadFileBtn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                        <span>Tải File .M3U8</span>
+                    </button>
+                    <button class="m3u8-btn-link" id="m3u8DownloadPlsBtn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                        <span>Tải File .PLS</span>
+                    </button>
+                </div>
+
+                <!-- Guide Steps -->
+                <div class="m3u8-guide-card">
+                    <div class="m3u8-guide-header">💡 HƯỚNG DẪN MỞ BẰNG CÁC TRÌNH PHÁT NHẠC:</div>
+                    <div class="m3u8-guide-list">
+                        <div class="m3u8-guide-item">
+                            <span class="guide-tag vlc-tag">VLC Media Player</span>
+                            <span>Nhấn <code>Ctrl + N</code> (hoặc Media ➔ Open Network Stream) ➔ Dán link ➔ Nhấn <b>Play</b></span>
+                        </div>
+                        <div class="m3u8-guide-item">
+                            <span class="guide-tag pot-tag">PotPlayer</span>
+                            <span>Nhấn <code>Ctrl + U</code> (Mở liên kết) ➔ Dán link URL ➔ Nhấn <b>OK</b></span>
+                        </div>
+                        <div class="m3u8-guide-item">
+                            <span class="guide-tag foo-tag">Foobar2000</span>
+                            <span>Vào <code>File ➔ Add Location...</code> (hoặc Ctrl+U) ➔ Dán link ➔ Nhấn <b>OK</b></span>
+                        </div>
+                        <div class="m3u8-guide-item">
+                            <span class="guide-tag apple-tag">Infuse / Apple</span>
+                            <span>Thêm link vào URL Stream / WebDAV / IPTV Playlist để đồng bộ nghe mọi nơi</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div class="toast-container" id="toastContainer"></div>
 

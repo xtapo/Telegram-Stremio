@@ -1,7 +1,8 @@
+import re
 import time
 import secrets
 from fastapi import APIRouter, Request, HTTPException, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response as PlainResponse
 from Backend import db
 from Backend.helper.passwords import hash_password, verify_password
 from Backend.fastapi.security.credentials import require_auth
@@ -234,6 +235,116 @@ async def delete_user_playlist(playlist_id: str, user_id: str = Depends(require_
         return {"status": "success", "message": "Đã xóa playlist."}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@auth_router.get("/api/music/playlist/user/playlist/{playlist_id}.m3u8")
+@auth_router.get("/api/music/playlist/user/playlist/{playlist_id}")
+async def stream_user_playlist_m3u8(request: Request, playlist_id: str):
+    """Xuất đường dẫn URL stream M3U8 trực tiếp cho Playlist cá nhân để mở bằng VLC, PotPlayer..."""
+    base_url = str(request.base_url).rstrip("/")
+    coll = db.dbs["tracking"]["music_user_data"]
+    
+    # Tìm playlist trong tất cả user data
+    doc = await coll.find_one({"playlists.id": playlist_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    playlists = doc.get("playlists", [])
+    target = next((p for p in playlists if p.get("id") == playlist_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    title = target.get("name", "Playlist")
+    tracks = target.get("tracks", [])
+    
+    lines = ["#EXTM3U", "#EXTENC:UTF-8", f"#PLAYLIST:{title}\n"]
+    for idx, t in enumerate(tracks):
+        dur_str = str(t.get("duration", "0"))
+        sec = -1
+        if dur_str.isdigit():
+            sec = int(dur_str)
+        elif ":" in dur_str:
+            parts = dur_str.split(":")
+            if len(parts) == 2:
+                sec = (int(parts[0]) if parts[0].isdigit() else 0) * 60 + (int(parts[1]) if parts[1].isdigit() else 0)
+
+        name = t.get("name") or t.get("title") or f"Track {idx + 1}"
+        artist = t.get("artist") or "XTAPO Music"
+        chat_id = t.get("chat_id") or t.get("chatId")
+        msg_id = t.get("msg_id") or t.get("msgId")
+        preview_url = t.get("previewUrl") or t.get("url") or ""
+
+        if chat_id and msg_id:
+            stream_url = f"{base_url}/api/music/stream/{chat_id}/{msg_id}"
+        elif preview_url:
+            if preview_url.startswith("/"):
+                stream_url = f"{base_url}{preview_url}"
+            else:
+                stream_url = preview_url
+        else:
+            continue
+
+        lines.append(f"#EXTINF:{sec},{artist} - {name}")
+        lines.append(stream_url)
+        lines.append("")
+
+    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
+    return PlainResponse(
+        content="\n".join(lines),
+        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Cache-Control": "public, max-age=120",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+@auth_router.get("/api/music/playlist/user/favorites.m3u8")
+@auth_router.get("/api/music/playlist/user/favorites")
+async def stream_user_favorites_m3u8(request: Request, user_id: str = None, username: str = None):
+    """Xuất đường dẫn URL stream M3U8 cho danh sách Bài Hát Yêu Thích"""
+    base_url = str(request.base_url).rstrip("/")
+    coll = db.dbs["tracking"]["music_user_data"]
+    
+    # Xác định user_id qua param hoặc session
+    target_uid = user_id or request.session.get("music_user_id")
+    if not target_uid and username:
+        user_coll = db.dbs["tracking"]["music_users"]
+        u = await user_coll.find_one({"username": {"$regex": f"^{username}$", "$options": "i"}})
+        if u:
+            target_uid = u["_id"]
+
+    if not target_uid:
+        # Nếu không có user_id, lấy danh sách đầu tiên hoặc báo lỗi
+        doc = await coll.find_one({"favorites.0": {"$exists": True}})
+    else:
+        doc = await coll.find_one({"_id": target_uid})
+
+    favorites = doc.get("favorites", []) if doc else []
+    if not favorites:
+        raise HTTPException(status_code=404, detail="No favorites found")
+
+    lines = ["#EXTM3U", "#EXTENC:UTF-8", "#PLAYLIST:XTAPO_Favorite_Tracks\n"]
+    for idx, f in enumerate(favorites):
+        name = f.get("title") or f"Favorite Track {idx + 1}"
+        artist = f.get("artist") or "XTAPO Music"
+        cid = f.get("chat_id")
+        mid = f.get("msg_id")
+        stream_url = f"{base_url}/api/music/stream/{cid}/{mid}"
+        lines.append(f"#EXTINF:210,{artist} - {name}")
+        lines.append(stream_url)
+        lines.append("")
+
+    return PlainResponse(
+        content="\n".join(lines),
+        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": 'inline; filename="XTAPO_Favorite_Tracks.m3u8"',
+            "Cache-Control": "public, max-age=120",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
 
 
 # ── Quản Lý Users (Dành cho Admin) ─────────────────────────────────────────
