@@ -1322,9 +1322,31 @@ class XTAPOMusicApp {
         });
 
         this.audio.addEventListener('loadedmetadata', () => {
-            if (this.audio.duration) {
-                this.timeTotal.textContent = this.formatTime(this.audio.duration);
+            if (this.audio.duration && !isNaN(this.audio.duration)) {
+                const formatted = this.formatTime(this.audio.duration);
+                this.timeTotal.textContent = formatted;
+                if (this.currentTrack) {
+                    this.currentTrack.duration = formatted;
+                }
+                const activeDurationEl = this.tracklistEl.querySelector('.track-item.active .track-duration');
+                if (activeDurationEl) {
+                    activeDurationEl.textContent = formatted;
+                }
                 this.updateMediaSession();
+            }
+        });
+
+        this.audio.addEventListener('durationchange', () => {
+            if (this.audio.duration && !isNaN(this.audio.duration)) {
+                const formatted = this.formatTime(this.audio.duration);
+                this.timeTotal.textContent = formatted;
+                if (this.currentTrack) {
+                    this.currentTrack.duration = formatted;
+                }
+                const activeDurationEl = this.tracklistEl.querySelector('.track-item.active .track-duration');
+                if (activeDurationEl) {
+                    activeDurationEl.textContent = formatted;
+                }
             }
         });
 

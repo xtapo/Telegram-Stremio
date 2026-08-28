@@ -595,6 +595,21 @@ async def get_music_albums():
                     for t in tracks:
                         t["album"] = alb.get("title", "")
                         
+                        # Auto-fix missing duration
+                        cur_dur = t.get("duration", "")
+                        if not cur_dur or cur_dur in ["--:--", "0:00", ""]:
+                            sz_str = t.get("size", "")
+                            sz_bytes = _parse_size_str(sz_str)
+                            fmt = t.get("format", "FLAC")
+                            if sz_bytes > 0:
+                                est_kbps = 900 if ("FLAC" in fmt or "24-Bit" in fmt or "DSD" in fmt or "WAV" in fmt) else 320
+                                est_sec = max(45, int(sz_bytes / (est_kbps * 125)))
+                                t["duration"] = _format_duration(est_sec)
+                                changed = True
+                            else:
+                                t["duration"] = "3:45"
+                                changed = True
+
                         # Detect Genre
                         detected_genre = detect_genre_from_track_info(t)
                         if not t.get("genre") or t.get("genre") == "Khác":
@@ -1041,6 +1056,21 @@ class MusicScanManager:
                         raw_album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
                         duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
                         file_size_bytes = getattr(media, "file_size", 0) or 0
+
+                        # Dò DocumentAttributeAudio nếu file gửi dạng Document
+                        if not duration_sec and getattr(msg, "document", None):
+                            for attr in getattr(msg.document, "attributes", []) or []:
+                                if hasattr(attr, "duration") and attr.duration:
+                                    duration_sec = int(attr.duration)
+                                if hasattr(attr, "performer") and attr.performer and not raw_artist:
+                                    raw_artist = attr.performer
+                                if hasattr(attr, "title") and attr.title and not raw_title:
+                                    raw_title = attr.title
+
+                        # Ước lượng thời lượng nếu file audio không có metadata duration
+                        if not duration_sec and file_size_bytes > 0:
+                            est_kbps = 900 if ("flac" in f_name.lower() or "wav" in f_name.lower()) else 320
+                            duration_sec = max(45, int(file_size_bytes / (est_kbps * 125)))
 
                         p_art, p_tit, p_alb = parse_artist_and_title(raw_title, raw_artist, raw_album, f_name, caption_text)
 
