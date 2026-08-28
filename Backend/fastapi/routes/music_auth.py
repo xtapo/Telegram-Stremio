@@ -288,12 +288,11 @@ async def stream_user_playlist_m3u8(request: Request, playlist_id: str):
         lines.append(stream_url)
         lines.append("")
 
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
     return PlainResponse(
         content="\n".join(lines),
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        media_type="audio/x-mpegurl; charset=utf-8",
         headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Content-Disposition": _safe_content_disposition(title, ".m3u8"),
             "Cache-Control": "public, max-age=120",
             "Access-Control-Allow-Origin": "*"
         }
@@ -304,7 +303,8 @@ async def stream_user_playlist_m3u8(request: Request, playlist_id: str):
 @auth_router.get("/api/music/playlist/user/favorites")
 async def stream_user_favorites_m3u8(request: Request, user_id: str = None, username: str = None):
     """Xuất đường dẫn URL stream M3U8 cho danh sách Bài Hát Yêu Thích"""
-    base_url = str(request.base_url).rstrip("/")
+    from Backend.fastapi.routes.music_routes import _safe_content_disposition, _get_request_base_url
+    base_url = _get_request_base_url(request)
     coll = db.dbs["tracking"]["music_user_data"]
     
     # Xác định user_id qua param hoặc session
@@ -338,9 +338,9 @@ async def stream_user_favorites_m3u8(request: Request, user_id: str = None, user
 
     return PlainResponse(
         content="\n".join(lines),
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        media_type="audio/x-mpegurl; charset=utf-8",
         headers={
-            "Content-Disposition": 'inline; filename="XTAPO_Favorite_Tracks.m3u8"',
+            "Content-Disposition": _safe_content_disposition("XTAPO_Favorite_Tracks", ".m3u8"),
             "Cache-Control": "public, max-age=120",
             "Access-Control-Allow-Origin": "*"
         }

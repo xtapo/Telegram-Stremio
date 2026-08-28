@@ -6,6 +6,7 @@ import os
 import re
 import secrets
 import time
+import unicodedata
 from typing import Dict, List, Optional
 from urllib.parse import quote, unquote
 
@@ -710,6 +711,19 @@ def _get_request_base_url(request: Request) -> str:
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
     return f"{proto}://{host}".rstrip("/")
 
+def _safe_content_disposition(title: str, ext: str = ".m3u8") -> str:
+    """Tạo Content-Disposition header an toàn, tương thích chuẩn ASCII và UTF-8 RFC 5987 (tránh lỗi latin-1 encoding)"""
+    normalized = unicodedata.normalize('NFKD', title).encode('ascii', 'ignore').decode('ascii')
+    clean_ascii = re.sub(r'[^a-zA-Z0-9_\-.]', '_', normalized).strip('_') or "playlist"
+    ascii_fname = f"{clean_ascii}{ext}"
+
+    clean_full = re.sub(r'[\\/:*?"<>|]', '_', title).strip() or "playlist"
+    full_fname = f"{clean_full}{ext}"
+    utf8_fname = quote(full_fname)
+
+    return f'inline; filename="{ascii_fname}"; filename*=UTF-8\'\'{utf8_fname}'
+
+
 def _build_m3u8_content(title: str, tracks: list, base_url: str) -> str:
     lines = ["#EXTM3U", "#EXTENC:UTF-8", f"#PLAYLIST:{title}\n"]
     for idx, t in enumerate(tracks):
@@ -792,13 +806,12 @@ async def get_shared_playlist_m3u8(request: Request, share_id: str):
     title = item.get("title", "Shared Playlist")
     tracks = item.get("tracks", [])
     m3u8_text = _build_m3u8_content(title, tracks, base_url)
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
 
     return PlainResponse(
         content=m3u8_text,
         media_type="audio/x-mpegurl; charset=utf-8",
         headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Content-Disposition": _safe_content_disposition(title, ".m3u8"),
             "Cache-Control": "public, max-age=3600",
             "Access-Control-Allow-Origin": "*"
         }
@@ -864,12 +877,11 @@ async def stream_album_m3u8(request: Request, album_id: str):
                     genre_tracks.append(t)
         if genre_tracks:
             m3u8_text = _build_m3u8_content(f"Genre_{decoded_id}", genre_tracks, base_url)
-            safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{decoded_id}")
             return PlainResponse(
                 content=m3u8_text,
                 media_type="audio/x-mpegurl; charset=utf-8",
                 headers={
-                    "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+                    "Content-Disposition": _safe_content_disposition(f"Genre_{decoded_id}", ".m3u8"),
                     "Cache-Control": "public, max-age=300",
                     "Access-Control-Allow-Origin": "*"
                 }
@@ -882,12 +894,11 @@ async def stream_album_m3u8(request: Request, album_id: str):
     tracks = target_album.get("tracks", [])
     m3u8_text = _build_m3u8_content(title, tracks, base_url)
 
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
     return PlainResponse(
         content=m3u8_text,
         media_type="audio/x-mpegurl; charset=utf-8",
         headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Content-Disposition": _safe_content_disposition(title, ".m3u8"),
             "Cache-Control": "public, max-age=300",
             "Access-Control-Allow-Origin": "*"
         }
@@ -914,7 +925,7 @@ async def stream_all_music_m3u8(request: Request):
         content=m3u8_text,
         media_type="audio/x-mpegurl; charset=utf-8",
         headers={
-            "Content-Disposition": 'inline; filename="XTAPO_All_Music_Library.m3u8"',
+            "Content-Disposition": _safe_content_disposition("XTAPO_All_Music_Library", ".m3u8"),
             "Cache-Control": "public, max-age=300",
             "Access-Control-Allow-Origin": "*"
         }
@@ -953,12 +964,11 @@ async def stream_artist_m3u8(request: Request, artist_name: str):
         raise HTTPException(status_code=404, detail=f"No tracks found for artist: {artist_name}")
 
     m3u8_text = _build_m3u8_content(f"Artist_{display_artist}", artist_tracks, base_url)
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Artist_{display_artist}")
     return PlainResponse(
         content=m3u8_text,
         media_type="audio/x-mpegurl; charset=utf-8",
         headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Content-Disposition": _safe_content_disposition(f"Artist_{display_artist}", ".m3u8"),
             "Cache-Control": "public, max-age=300",
             "Access-Control-Allow-Origin": "*"
         }
@@ -1007,12 +1017,11 @@ async def stream_genre_m3u8(request: Request, genre_name: str):
         raise HTTPException(status_code=404, detail=f"No tracks found for genre: {genre_name}")
 
     m3u8_text = _build_m3u8_content(f"Genre_{display_genre}", genre_tracks, base_url)
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{display_genre}")
     return PlainResponse(
         content=m3u8_text,
         media_type="audio/x-mpegurl; charset=utf-8",
         headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Content-Disposition": _safe_content_disposition(f"Genre_{display_genre}", ".m3u8"),
             "Cache-Control": "public, max-age=300",
             "Access-Control-Allow-Origin": "*"
         }
