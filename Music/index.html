@@ -170,29 +170,9 @@
                     </div>
                 </section>
 
-                <!-- Right Column: Vinyl Disc & Album Cover Jacket & Synced Lyrics Stage -->
+                <!-- Right Column: Vinyl Disc & Album Cover Jacket -->
                 <section class="kmusic-cover-col">
-                    <!-- Column View Switcher (Vinyl vs Lyrics) -->
-                    <div class="cover-view-toggle-bar">
-                        <button class="cover-view-tab active" id="tabVinylView" title="Xem đĩa than Vinyl tương tác">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"></circle>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                            <span>ĐĨA THAN VINYL</span>
-                        </button>
-                        <button class="cover-view-tab" id="tabLyricsView" title="Xem lời bài hát chạy chữ thời gian thực (Synced Lyrics)">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                <line x1="12" y1="19" x2="12" y2="22"></line>
-                            </svg>
-                            <span>LỜI BÀI HÁT</span>
-                            <span class="lyrics-live-badge" id="lyricsStatusBadge">LIVE</span>
-                        </button>
-                    </div>
-
-                    <!-- 1. Vinyl Record Stage -->
+                    <!-- Vinyl Record Stage -->
                     <div class="vinyl-stage" id="vinylStage">
                         <!-- Vinyl Record Disc -->
                         <div class="vinyl-disc" id="vinylDisc">
@@ -209,44 +189,6 @@
                             <img src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop" id="albumCoverImg" alt="Album Cover" class="cover-image">
                             <div class="sleeve-sheen"></div>
                             <div class="sleeve-spine"></div>
-                        </div>
-                    </div>
-
-                    <!-- 2. Real-time Synced Lyrics Hero Stage -->
-                    <div class="hero-lyrics-stage" id="heroLyricsStage" style="display: none;">
-                        <div class="lyrics-panel-header">
-                            <div class="lyrics-header-info">
-                                <span class="lyrics-header-tag" id="heroLyricsSourceTag">LRCLIB SYNCED</span>
-                                <div class="lyrics-header-title" id="heroLyricsTitle">Đang tìm lời bài hát...</div>
-                            </div>
-                            <div class="lyrics-header-actions">
-                                <button class="lyrics-action-btn" id="btnOffsetMinus" title="Chỉnh lời nhanh hơn (-0.5s)">-0.5s</button>
-                                <button class="lyrics-action-btn" id="btnOffsetPlus" title="Chỉnh lời chậm hơn (+0.5s)">+0.5s</button>
-                                <button class="lyrics-action-btn" id="btnOpenLyricsEditor" title="Chỉnh sửa / Dán file .LRC thủ công">
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                                    <span>Sửa .LRC</span>
-                                </button>
-                                <button class="lyrics-action-btn highlight-btn" id="btnOpenKaraokeModal" title="Mở chế độ Karaoke toàn màn hình">
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-                                    <span>Toàn màn hình</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Scrollable Real-time Lyrics Body -->
-                        <div class="lyrics-scroll-container" id="heroLyricsScroll">
-                            <div class="lyrics-placeholder" id="heroLyricsPlaceholder">
-                                <div class="lyrics-spinner"></div>
-                                <span>Đang kết nối API LRCLIB & đồng bộ lời...</span>
-                            </div>
-                            <div class="lyrics-lines-wrapper" id="heroLyricsLines">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-
-                        <div class="lyrics-panel-footer">
-                            <span class="lyrics-hint">💡 Nhấp vào bất kỳ dòng nào để tua nhạc đến đúng giây đó</span>
-                            <span class="lyrics-offset-indicator" id="heroLyricsOffset">Offset: 0.0s</span>
                         </div>
                     </div>
                 </section>

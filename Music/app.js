@@ -3976,29 +3976,14 @@ class XTAPOMusicApp {
     // =========================================================================
 
     setupLyricsEvents() {
-        // 1. Cover Column Switcher (Vinyl vs Lyrics)
-        if (this.tabVinylView) {
-            this.tabVinylView.addEventListener('click', () => this.switchCoverView('vinyl'));
-        }
-        if (this.tabLyricsView) {
-            this.tabLyricsView.addEventListener('click', () => this.switchCoverView('lyrics'));
-        }
-
-        // 2. Bottom Player Bar Lyrics Button
+        // 1. Bottom Player Bar Lyrics Button (Mở Modal Lời Nhạc Karaoke Toàn Màn Hình)
         if (this.lyricsToggleBtn) {
             this.lyricsToggleBtn.addEventListener('click', () => {
-                if (window.innerWidth <= 768) {
-                    // Mobile: mở ngay Karaoke Fullscreen View
-                    this.openKaraokeModal();
-                } else {
-                    // Desktop: chuyển đổi qua lại giữa Vinyl và Lyrics
-                    const targetView = this.activeHeroView === 'lyrics' ? 'vinyl' : 'lyrics';
-                    this.switchCoverView(targetView);
-                }
+                this.openKaraokeModal();
             });
         }
 
-        // 3. Full-screen Karaoke Modal Events
+        // 2. Full-screen Karaoke Modal Events
         if (this.btnOpenKaraokeModal) {
             this.btnOpenKaraokeModal.addEventListener('click', () => this.openKaraokeModal());
         }
