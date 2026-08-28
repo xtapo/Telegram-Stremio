@@ -1173,6 +1173,33 @@ class XTAPOMusicApp {
     }
 
     // --- Audio Engine & Synth Fallback ---
+    initWebAudioAnalyser() {
+        if (this.analyser) return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            if (!this.audioContext) {
+                this.audioContext = new AudioCtx();
+            }
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume().catch(() => {});
+            }
+            this.analyser = this.audioContext.createAnalyser();
+            this.analyser.fftSize = 128; // 64 frequency bins
+            this.analyser.smoothingTimeConstant = 0.8;
+            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+
+            if (!this.audioSourceNode && this.audio) {
+                this.audioSourceNode = this.audioContext.createMediaElementSource(this.audio);
+                this.audioSourceNode.connect(this.analyser);
+                this.analyser.connect(this.audioContext.destination);
+                console.log('[XTAPO Visualizer] Đã kết nối Web Audio Analyser thời gian thực thành công!');
+            }
+        } catch (err) {
+            console.warn('[XTAPO Visualizer] MediaElementSource note:', err);
+        }
+    }
+
     play() {
         const album = this.currentAlbum;
         if (album && !album.isDemo && !this.currentUser) {
@@ -1180,6 +1207,12 @@ class XTAPOMusicApp {
             this.showToast("Vui lòng đăng nhập để nghe nhạc ngoài bản Demo (Guest).");
             this.pause();
             return;
+        }
+
+        // Khởi động Web Audio API Analyser thật khi người dùng phát nhạc
+        this.initWebAudioAnalyser();
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => {});
         }
 
         this.isPlaying = true;
@@ -1565,17 +1598,38 @@ class XTAPOMusicApp {
 
             const time = Date.now() * 0.004;
 
+            let hasRealSignal = false;
+            if (this.analyser && this.dataArray && this.isPlaying) {
+                this.analyser.getByteFrequencyData(this.dataArray);
+                for (let j = 0; j < Math.min(12, this.dataArray.length); j++) {
+                    if (this.dataArray[j] > 0) {
+                        hasRealSignal = true;
+                        break;
+                    }
+                }
+            }
+
             for (let i = 0; i < numBars; i++) {
                 let barHeight;
                 if (this.isPlaying) {
-                    // Sóng âm thanh đa tần sống động (Bass ở đầu, Mid ở giữa, Treble ở cuối)
-                    const harmonic1 = Math.sin(i * 0.35 + time * 1.5);
-                    const harmonic2 = Math.cos(i * 0.22 - time * 2.1);
-                    const harmonic3 = Math.sin(i * 0.7 + time * 3.0) * 0.4;
-                    const combined = Math.abs(harmonic1 * 0.5 + harmonic2 * 0.35 + harmonic3);
-                    const minH = 6 * dpr;
-                    const maxH = h - (4 * dpr);
-                    barHeight = Math.max(minH, Math.min(maxH, combined * maxH + (Math.sin(time * 5 + i) * 2 * dpr)));
+                    if (hasRealSignal) {
+                        // LẤY TẦN SỐ ÂM THANH THỰC TẾ 100% CỦA BÀI HÁT ĐANG PHÁT
+                        const freqIdx = Math.min(this.dataArray.length - 1, Math.floor((i / numBars) * (this.dataArray.length * 0.85)));
+                        const freqVal = this.dataArray[freqIdx] || 0; // 0..255
+                        const percent = freqVal / 255;
+                        const minH = 6 * dpr;
+                        const maxH = h - (4 * dpr);
+                        barHeight = Math.max(minH, minH + (percent * (maxH - minH)));
+                    } else {
+                        // Sóng âm thanh đa tần sống động (Bass ở đầu, Mid ở giữa, Treble ở cuối)
+                        const harmonic1 = Math.sin(i * 0.35 + time * 1.5);
+                        const harmonic2 = Math.cos(i * 0.22 - time * 2.1);
+                        const harmonic3 = Math.sin(i * 0.7 + time * 3.0) * 0.4;
+                        const combined = Math.abs(harmonic1 * 0.5 + harmonic2 * 0.35 + harmonic3);
+                        const minH = 6 * dpr;
+                        const maxH = h - (4 * dpr);
+                        barHeight = Math.max(minH, Math.min(maxH, combined * maxH + (Math.sin(time * 5 + i) * 2 * dpr)));
+                    }
                 } else {
                     // Trạng thái nghỉ: Sóng thở nhẹ nhàng êm ái
                     const idle = Math.sin(i * 0.25 + time * 0.5) * 0.5 + 0.5;
