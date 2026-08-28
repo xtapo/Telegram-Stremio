@@ -124,7 +124,7 @@
     </div>
 
     <!-- Content Area: Track Table -->
-    <div id="tracks-view-container" class="glass-panel rounded-3xl overflow-hidden mb-8 hidden">
+    <div id="tracks-view-container" class="glass-panel rounded-3xl overflow-hidden mb-6 hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
@@ -143,6 +143,21 @@
                     <!-- Tracks rows injected by JS -->
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Pagination Controls for Albums & Tracks -->
+    <div id="music-pagination" class="glass-panel rounded-2xl p-4 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs hidden">
+        <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+            <span id="music-pagination-info" class="text-text-secondary font-medium"></span>
+            <div class="flex items-center gap-2">
+                <span class="text-text-secondary whitespace-nowrap">Mỗi trang:</span>
+                <select id="music-page-size-select" onchange="changeMusicPageSize(this.value)" class="bg-surface border border-hairline text-text rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-primary text-xs font-semibold cursor-pointer">
+                </select>
+            </div>
+        </div>
+        <div class="flex items-center gap-1.5 flex-wrap justify-center overflow-x-auto max-w-full py-1" id="music-pagination-pages">
+            <!-- Dynamic page buttons injected by JS -->
         </div>
     </div>
 
@@ -1280,6 +1295,153 @@ function renderCurrentView() {
     }
 }
 
+// ── Pagination State ──────────────────────────────────────────────────────────
+let currentAlbumsPage = 1;
+let albumsPerPage = 24;
+let currentTracksPage = 1;
+let tracksPerPage = 50;
+
+function changeMusicPageSize(newSize) {
+    const size = parseInt(newSize, 10);
+    if (isNaN(size) || size <= 0) return;
+
+    if (currentActiveTab === 'albums') {
+        albumsPerPage = size;
+        currentAlbumsPage = 1;
+        renderCurrentView();
+    } else if (currentActiveTab === 'tracks') {
+        tracksPerPage = size;
+        currentTracksPage = 1;
+        renderCurrentView();
+    }
+}
+
+function goToMusicPage(type, page) {
+    if (type === 'albums') {
+        currentAlbumsPage = page;
+        renderCurrentView();
+        document.getElementById('albums-view-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (type === 'tracks') {
+        currentTracksPage = page;
+        renderCurrentView();
+        document.getElementById('tracks-view-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function renderMusicPagination(type, currentPage, totalPages, totalItems, pageSize) {
+    const pagEl = document.getElementById('music-pagination');
+    const infoEl = document.getElementById('music-pagination-info');
+    const selectEl = document.getElementById('music-page-size-select');
+    const pagesEl = document.getElementById('music-pagination-pages');
+
+    if (!pagEl) return;
+
+    if (totalItems === 0) {
+        pagEl.classList.add('hidden');
+        return;
+    }
+
+    pagEl.classList.remove('hidden');
+
+    const startItem = (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+    const itemLabel = type === 'albums' ? 'Albums' : 'Bài hát';
+
+    if (infoEl) {
+        infoEl.innerHTML = `Hiển thị <span class="text-text font-bold">${startItem.toLocaleString()} - ${endItem.toLocaleString()}</span> trong tổng số <span class="text-primary font-bold">${totalItems.toLocaleString()}</span> ${itemLabel}`;
+    }
+
+    if (selectEl) {
+        const options = type === 'albums' ? [12, 24, 48, 96] : [25, 50, 100, 200];
+        selectEl.innerHTML = options.map(opt => `<option value="${opt}" ${opt === pageSize ? 'selected' : ''}>${opt} / trang</option>`).join('');
+    }
+
+    if (pagesEl) {
+        if (totalPages <= 1) {
+            pagesEl.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+        const isFirstDisabled = currentPage <= 1;
+        html += `
+            <button onclick="goToMusicPage('${type}', 1)" ${isFirstDisabled ? 'disabled' : ''}
+                    class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs transition border ${isFirstDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang đầu">
+                <i class="fa-solid fa-angles-left text-[10px]"></i>
+            </button>
+            <button onclick="goToMusicPage('${type}', ${currentPage - 1})" ${isFirstDisabled ? 'disabled' : ''}
+                    class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs transition border ${isFirstDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang trước">
+                <i class="fa-solid fa-chevron-left text-[10px]"></i>
+            </button>
+        `;
+
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(totalPages, currentPage + 2);
+
+        if (startPage > 1) {
+            html += `
+                <button onclick="goToMusicPage('${type}', 1)"
+                        class="min-w-[32px] h-8 px-2 rounded-xl flex items-center justify-center font-bold text-xs transition border glass-panel hover:bg-surface-2 text-text border-hairline">
+                    1
+                </button>
+            `;
+            if (startPage > 2) {
+                html += `<span class="px-1 text-text-secondary text-xs">...</span>`;
+            }
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            const isActive = i === currentPage;
+            html += `
+                <button onclick="goToMusicPage('${type}', ${i})"
+                        class="min-w-[32px] h-8 px-2 rounded-xl flex items-center justify-center font-bold text-xs transition border ${isActive ? 'bg-primary text-white border-primary shadow-md shadow-primary/30' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}">
+                    ${i}
+                </button>
+            `;
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                html += `<span class="px-1 text-text-secondary text-xs">...</span>`;
+            }
+            html += `
+                <button onclick="goToMusicPage('${type}', ${totalPages})"
+                        class="min-w-[32px] h-8 px-2 rounded-xl flex items-center justify-center font-bold text-xs transition border glass-panel hover:bg-surface-2 text-text border-hairline">
+                    ${totalPages}
+                </button>
+            `;
+        }
+
+        const isLastDisabled = currentPage >= totalPages;
+        html += `
+            <button onclick="goToMusicPage('${type}', ${currentPage + 1})" ${isLastDisabled ? 'disabled' : ''}
+                    class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs transition border ${isLastDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang sau">
+                <i class="fa-solid fa-chevron-right text-[10px]"></i>
+            </button>
+            <button onclick="goToMusicPage('${type}', ${totalPages})" ${isLastDisabled ? 'disabled' : ''}
+                    class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs transition border ${isLastDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang cuối">
+                <i class="fa-solid fa-angles-right text-[10px]"></i>
+            </button>
+        `;
+
+        if (totalPages > 5) {
+            html += `
+                <div class="flex items-center gap-1 ml-2 pl-2 border-l border-hairline">
+                    <input type="number" min="1" max="${totalPages}" placeholder="${currentPage}" id="jump-to-page-input"
+                           onkeydown="if(event.key==='Enter'){const p=parseInt(this.value);if(p>=1&&p<=${totalPages}){goToMusicPage('${type}',p);}}"
+                           class="w-12 h-8 rounded-xl bg-surface border border-hairline text-center text-xs text-text focus:outline-none focus:border-primary">
+                    <button onclick="const el=document.getElementById('jump-to-page-input');const p=parseInt(el.value);if(p>=1&&p<=${totalPages}){goToMusicPage('${type}',p);}"
+                            class="h-8 px-2.5 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-semibold border border-hairline transition">
+                        Đến
+                    </button>
+                </div>
+            `;
+        }
+
+        pagesEl.innerHTML = html;
+    }
+}
+
 function renderAlbumsGrid(query = '') {
     const container = document.getElementById('albums-view-container');
     container.innerHTML = '';
@@ -1291,14 +1453,23 @@ function renderAlbumsGrid(query = '') {
         (a.tracks && a.tracks.some(t => t.name.toLowerCase().includes(query)))
     );
 
-    document.getElementById('items-count-indicator').textContent = `Hiển thị ${filtered.length} / ${globalAlbums.length} Albums`;
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / albumsPerPage));
+    if (currentAlbumsPage > totalPages) currentAlbumsPage = totalPages;
+    if (currentAlbumsPage < 1) currentAlbumsPage = 1;
 
-    if (filtered.length === 0) {
+    document.getElementById('items-count-indicator').textContent = `Hiển thị ${total} / ${globalAlbums.length} Albums`;
+
+    if (total === 0) {
         container.innerHTML = `<div class="col-span-full py-12 text-center text-text-secondary">Không tìm thấy album nào phù hợp từ khóa "${query}".</div>`;
+        renderMusicPagination('albums', 1, 0, 0, albumsPerPage);
         return;
     }
 
-    filtered.forEach(album => {
+    const startIndex = (currentAlbumsPage - 1) * albumsPerPage;
+    const pageItems = filtered.slice(startIndex, startIndex + albumsPerPage);
+
+    pageItems.forEach(album => {
         const card = document.createElement('div');
         card.className = 'glass-panel rounded-2xl p-4 flex flex-col justify-between hover:border-primary/50 transition group';
         
@@ -1342,6 +1513,8 @@ function renderAlbumsGrid(query = '') {
 
         container.appendChild(card);
     });
+
+    renderMusicPagination('albums', currentAlbumsPage, totalPages, total, albumsPerPage);
 }
 
 function renderTracksTable(query = '') {
@@ -1364,19 +1537,29 @@ function renderTracksTable(query = '') {
         (t.albumName && t.albumName.toLowerCase().includes(query))
     );
 
-    document.getElementById('items-count-indicator').textContent = `Hiển thị ${filtered.length} / ${allTracks.length} Bài hát`;
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / tracksPerPage));
+    if (currentTracksPage > totalPages) currentTracksPage = totalPages;
+    if (currentTracksPage < 1) currentTracksPage = 1;
 
-    if (filtered.length === 0) {
+    document.getElementById('items-count-indicator').textContent = `Hiển thị ${total} / ${allTracks.length} Bài hát`;
+
+    if (total === 0) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-text-secondary">Không tìm thấy bài hát nào.</td></tr>`;
+        renderMusicPagination('tracks', 1, 0, 0, tracksPerPage);
         return;
     }
 
-    filtered.forEach((track, idx) => {
+    const startIndex = (currentTracksPage - 1) * tracksPerPage;
+    const pageItems = filtered.slice(startIndex, startIndex + tracksPerPage);
+
+    pageItems.forEach((track, idx) => {
+        const globalIdx = startIndex + idx + 1;
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-surface/50 transition group';
         
         tr.innerHTML = `
-            <td class="py-3 px-4 text-center text-text-secondary text-xs">${idx + 1}</td>
+            <td class="py-3 px-4 text-center text-text-secondary text-xs">${globalIdx}</td>
             <td class="py-3 px-4">
                 <div class="flex items-center gap-3">
                     <img src="${track.coverUrl || track.albumCover}" class="w-8 h-8 rounded-lg object-cover" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
@@ -1412,9 +1595,13 @@ function renderTracksTable(query = '') {
 
         tbody.appendChild(tr);
     });
+
+    renderMusicPagination('tracks', currentTracksPage, totalPages, total, tracksPerPage);
 }
 
 function filterMusicList(val) {
+    currentAlbumsPage = 1;
+    currentTracksPage = 1;
     renderCurrentView();
 }
 
@@ -1424,6 +1611,7 @@ function switchTab(tab) {
     const tracksBtn = document.getElementById('tab-tracks-btn');
     const artistsBtn = document.getElementById('tab-artists-btn');
     const usersBtn = document.getElementById('tab-users-btn');
+    const pagEl = document.getElementById('music-pagination');
 
     albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
     tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
@@ -1445,6 +1633,7 @@ function switchTab(tab) {
         document.getElementById('tracks-view-container').classList.add('hidden');
         document.getElementById('users-view-container').classList.add('hidden');
         document.getElementById('empty-state').classList.add('hidden');
+        if (pagEl) pagEl.classList.add('hidden');
         document.getElementById('artists-view-container').classList.remove('hidden');
         document.getElementById('items-count-indicator').textContent = 'Đang quản lý Ca Sĩ';
         fetchArtistsData();
@@ -1453,6 +1642,7 @@ function switchTab(tab) {
         document.getElementById('tracks-view-container').classList.add('hidden');
         document.getElementById('artists-view-container').classList.add('hidden');
         document.getElementById('empty-state').classList.add('hidden');
+        if (pagEl) pagEl.classList.add('hidden');
         document.getElementById('users-view-container').classList.remove('hidden');
         document.getElementById('items-count-indicator').textContent = 'Đang quản lý Users';
         fetchMusicUsers();
