@@ -435,45 +435,29 @@
         </div>
     </div>
 
-    <!-- Auth Modal (Login/Register) -->
+    <!-- Auth Modal (Login Only) -->
     <div class="modal-overlay" id="authModal">
-        <div class="modal-container" style="max-width: 400px;">
+        <div class="modal-container" style="max-width: 380px;">
             <div class="modal-header">
-                <h3 id="authModalTitle">Đăng nhập</h3>
+                <h3 id="authModalTitle">Đăng Nhập Tài Khoản</h3>
                 <button class="modal-close" id="closeAuthModal">&times;</button>
             </div>
             <div class="modal-body" style="padding: 24px;">
-                <div class="auth-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <button class="auth-tab active" id="tabLogin" style="flex: 1; padding: 10px; background: rgba(255,255,255,0.1); border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">Đăng nhập</button>
-                    <button class="auth-tab" id="tabRegister" style="flex: 1; padding: 10px; background: transparent; border: none; border-radius: 8px; color: var(--text-muted); cursor: pointer; font-weight: 600;">Đăng ký</button>
-                </div>
-                
                 <div id="loginForm">
                     <div class="tg-field-group">
                         <label>Tên đăng nhập</label>
-                        <input type="text" id="loginUsername" class="tg-text-input" placeholder="Nhập username" autocomplete="username">
+                        <input type="text" id="loginUsername" class="tg-text-input" placeholder="Nhập username..." autocomplete="username">
                     </div>
-                    <div class="tg-field-group">
+                    <div class="tg-field-group" style="margin-top: 14px;">
                         <label>Mật khẩu</label>
-                        <input type="password" id="loginPassword" class="tg-text-input" placeholder="Nhập mật khẩu" autocomplete="current-password">
+                        <input type="password" id="loginPassword" class="tg-text-input" placeholder="Nhập mật khẩu..." autocomplete="current-password">
                     </div>
-                    <button class="tg-scan-submit-btn" id="loginSubmitBtn" style="width: 100%; margin-top: 10px; justify-content: center;">Đăng Nhập</button>
-                </div>
-
-                <div id="registerForm" style="display: none;">
-                    <div class="tg-field-group">
-                        <label>Tên đăng nhập</label>
-                        <input type="text" id="regUsername" class="tg-text-input" placeholder="Tối thiểu 3 ký tự" autocomplete="off">
-                    </div>
-                    <div class="tg-field-group">
-                        <label>Tên hiển thị (Tùy chọn)</label>
-                        <input type="text" id="regDisplayName" class="tg-text-input" placeholder="Ví dụ: Quang Trần" autocomplete="off">
-                    </div>
-                    <div class="tg-field-group">
-                        <label>Mật khẩu</label>
-                        <input type="password" id="regPassword" class="tg-text-input" placeholder="Tối thiểu 6 ký tự" autocomplete="new-password">
-                    </div>
-                    <button class="tg-scan-submit-btn" id="regSubmitBtn" style="width: 100%; margin-top: 10px; justify-content: center; background: linear-gradient(135deg, #10b981 0%, #047857 100%);">Đăng Ký Tài Khoản</button>
+                    <button class="tg-scan-submit-btn" id="loginSubmitBtn" style="width: 100%; margin-top: 18px; justify-content: center;">
+                        Đăng Nhập
+                    </button>
+                    <p style="text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 16px; line-height: 1.5;">
+                        <i class="fa-solid fa-lock" style="margin-right: 4px;"></i> Hệ thống không mở đăng ký tự do.<br>Vui lòng liên hệ <b>Quản trị viên</b> để được cấp tài khoản.
+                    </p>
                 </div>
             </div>
         </div>

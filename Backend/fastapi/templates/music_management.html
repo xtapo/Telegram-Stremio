@@ -143,22 +143,76 @@
     </div>
 
     <!-- Content Area: Users Management -->
-    <div id="users-view-container" class="glass-panel rounded-3xl overflow-hidden mb-8 hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
-                        <th class="py-3.5 px-4 w-16 text-center">Avatar</th>
-                        <th class="py-3.5 px-4">Username</th>
-                        <th class="py-3.5 px-4">Tên Hiển Thị</th>
-                        <th class="py-3.5 px-4">Ngày Tạo</th>
-                        <th class="py-3.5 px-4 text-right">Thao Tác</th>
-                    </tr>
-                </thead>
-                <tbody id="users-table-body" class="divide-y divide-hairline">
-                    <!-- Users rows injected by JS -->
-                </tbody>
-            </table>
+    <div id="users-view-container" class="space-y-4 mb-8 hidden">
+        <!-- Stats Cards Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+                <div>
+                    <span class="text-xs font-bold uppercase text-text-secondary">Tổng Người Dùng</span>
+                    <h3 id="users-stat-total" class="text-2xl font-black text-text mt-0.5">0</h3>
+                </div>
+                <div class="w-11 h-11 rounded-xl bg-primary/15 text-primary flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+                <div>
+                    <span class="text-xs font-bold uppercase text-emerald-400">Đang Hoạt Động</span>
+                    <h3 id="users-stat-active" class="text-2xl font-black text-emerald-400 mt-0.5">0</h3>
+                </div>
+                <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-user-check"></i>
+                </div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+                <div>
+                    <span class="text-xs font-bold uppercase text-red-400">Đang Bị Khóa</span>
+                    <h3 id="users-stat-banned" class="text-2xl font-black text-red-400 mt-0.5">0</h3>
+                </div>
+                <div class="w-11 h-11 rounded-xl bg-red-500/15 text-red-400 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-user-slash"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Toolbar -->
+        <div class="glass-panel rounded-2xl p-3.5 border border-hairline flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="relative w-full sm:w-80">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary text-xs"></i>
+                <input type="text" id="users-search-input" oninput="filterUsersList(this.value)"
+                       placeholder="Tìm kiếm username, tên hiển thị..." 
+                       class="w-full pl-9 pr-4 py-2 rounded-xl bg-surface border border-hairline text-text placeholder-text-secondary text-xs focus:outline-none focus:border-primary transition">
+            </div>
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button onclick="fetchMusicUsers()" class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center gap-1.5" title="Làm mới">
+                    <i class="fa-solid fa-rotate-right"></i> Làm Mới
+                </button>
+                <button onclick="openAddUserModal()" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-plus"></i> Thêm Người Dùng
+                </button>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="glass-panel rounded-3xl overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
+                            <th class="py-3.5 px-4 w-16 text-center">Avatar</th>
+                            <th class="py-3.5 px-4">Tài Khoản</th>
+                            <th class="py-3.5 px-4">Tên Hiển Thị</th>
+                            <th class="py-3.5 px-4 text-center">Dữ Liệu Cá Nhân</th>
+                            <th class="py-3.5 px-4 text-center">Trạng Thái</th>
+                            <th class="py-3.5 px-4">Ngày Tạo</th>
+                            <th class="py-3.5 px-4 text-right">Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body" class="divide-y divide-hairline">
+                        <!-- Users rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -745,6 +799,183 @@
             <button id="lightbox-select-btn" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-1.5">
                 <i class="fa-solid fa-check"></i> Chọn Ảnh Này & Tự Điền Năm
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 6: Thêm User Mới (Add User Modal) -->
+<div id="add-user-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Thêm Người Dùng Mới</h3>
+                    <p class="text-xs text-text-secondary">Tạo tài khoản người dùng Music cá nhân</p>
+                </div>
+            </div>
+            <button onclick="closeAddUserModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form onsubmit="submitAddUser(event)" class="space-y-3.5">
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Đăng Nhập (Username) *</label>
+                <input type="text" id="add-user-username" required placeholder="Ví dụ: quang123"
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Hiển Thị (Display Name)</label>
+                <input type="text" id="add-user-displayname" placeholder="Ví dụ: Quang Nguyễn"
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Mật Khẩu *</label>
+                <input type="password" id="add-user-password" required minlength="6" placeholder="Tối thiểu 6 ký tự"
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition">
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">Avatar URL</label>
+                    <button type="button" onclick="randomAddUserAvatar()" class="text-[11px] font-bold text-primary hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-dice"></i> Đổi Ngẫu Nhiên
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <img id="add-user-avatar-preview" src="https://api.dicebear.com/7.x/avataaars/svg?seed=newuser" 
+                         class="w-10 h-10 rounded-full border border-hairline bg-black/20 shrink-0" alt="Avatar">
+                    <input type="text" id="add-user-avatar" oninput="document.getElementById('add-user-avatar-preview').src = this.value"
+                           placeholder="https://..." class="flex-1 px-3 py-2 rounded-xl bg-background text-text border border-border text-xs">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
+                <button type="button" onclick="closeAddUserModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> Tạo Người Dùng
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal 7: Sửa Người Dùng & Đổi Mật Khẩu (Edit User Modal) -->
+<div id="edit-user-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all">
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-user-pen"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Sửa Thông Tin User</h3>
+                    <p class="text-xs text-text-secondary" id="edit-user-modal-subtitle">Cập nhật thông tin & đổi mật khẩu</p>
+                </div>
+            </div>
+            <button onclick="closeEditUserModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form onsubmit="submitEditUser(event)" class="space-y-3.5">
+            <input type="hidden" id="edit-user-id">
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tài Khoản (Username)</label>
+                <input type="text" id="edit-user-username" disabled
+                       class="w-full px-4 py-2 rounded-xl bg-surface/50 text-text-secondary border border-hairline text-xs cursor-not-allowed">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Hiển Thị</label>
+                <input type="text" id="edit-user-displayname"
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">
+                    Đổi Mật Khẩu Mới <span class="text-text-secondary font-normal">(để trống nếu giữ nguyên)</span>
+                </label>
+                <input type="password" id="edit-user-password" minlength="6" placeholder="Nhập mật khẩu mới nếu muốn đổi..."
+                       class="w-full px-4 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Avatar URL</label>
+                <div class="flex items-center gap-3">
+                    <img id="edit-user-avatar-preview" src="" 
+                         class="w-10 h-10 rounded-full border border-hairline bg-black/20 shrink-0" alt="Avatar">
+                    <input type="text" id="edit-user-avatar" oninput="document.getElementById('edit-user-avatar-preview').src = this.value"
+                           class="flex-1 px-3 py-2 rounded-xl bg-background text-text border border-border text-xs">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-hairline">
+                <button type="button" onclick="closeEditUserModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Hủy</button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> Lưu Thay Đổi
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal 8: Xem Chi Tiết Dữ Liệu User (User Details Modal) -->
+<div id="user-details-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] flex flex-col">
+        <!-- Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-hairline shrink-0">
+            <div class="flex items-center gap-3.5">
+                <img id="detail-user-avatar" src="" class="w-12 h-12 rounded-full border border-hairline bg-black/20 object-cover">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h3 id="detail-user-displayname" class="text-base font-extrabold text-text">Tên User</h3>
+                        <span id="detail-user-status-badge"></span>
+                    </div>
+                    <p id="detail-user-username" class="text-xs text-text-secondary">@username • ID: usr_xxx</p>
+                </div>
+            </div>
+            <button onclick="closeUserDetailsModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Body: Playlists & Favorites -->
+        <div class="flex-1 overflow-y-auto py-4 space-y-5">
+            <!-- Playlists Section -->
+            <div>
+                <div class="flex items-center justify-between mb-2.5">
+                    <h4 class="text-xs font-bold uppercase text-text-secondary flex items-center gap-1.5">
+                        <i class="fa-solid fa-list text-primary"></i> Danh Sách Playlists (<span id="detail-playlists-count">0</span>)
+                    </h4>
+                </div>
+                <div id="detail-playlists-container" class="space-y-2">
+                    <!-- Playlists rendered here -->
+                </div>
+            </div>
+
+            <!-- Favorites Section -->
+            <div>
+                <div class="flex items-center justify-between mb-2.5">
+                    <h4 class="text-xs font-bold uppercase text-text-secondary flex items-center gap-1.5">
+                        <i class="fa-solid fa-heart text-red-400"></i> Bài Hát Yêu Thích (<span id="detail-favorites-count">0</span>)
+                    </h4>
+                </div>
+                <div id="detail-favorites-container" class="space-y-2">
+                    <!-- Favorites rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-end pt-3 border-t border-hairline shrink-0">
+            <button onclick="closeUserDetailsModal()" class="px-5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition">Đóng</button>
         </div>
     </div>
 </div>
@@ -2005,12 +2236,31 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── User Management Functions ──────────────────────────────────────────────────
+let globalMusicUsers = [];
+
 async function fetchMusicUsers() {
     try {
         const res = await fetch('/api/music/admin/users');
         const data = await res.json();
         if (res.ok && data.status === 'success') {
-            renderUsersTable(data.users || []);
+            globalMusicUsers = data.users || [];
+            
+            // Cập nhật thống kê
+            const total = globalMusicUsers.length;
+            const active = globalMusicUsers.filter(u => u.is_active !== false).length;
+            const banned = total - active;
+
+            const statTotalEl = document.getElementById('users-stat-total');
+            const statActiveEl = document.getElementById('users-stat-active');
+            const statBannedEl = document.getElementById('users-stat-banned');
+
+            if (statTotalEl) statTotalEl.textContent = total;
+            if (statActiveEl) statActiveEl.textContent = active;
+            if (statBannedEl) statBannedEl.textContent = banned;
+
+            const searchInput = document.getElementById('users-search-input');
+            const currentFilter = searchInput ? searchInput.value.trim() : '';
+            filterUsersList(currentFilter);
         } else {
             alertToast(data.message || 'Lỗi tải danh sách người dùng');
         }
@@ -2020,12 +2270,27 @@ async function fetchMusicUsers() {
     }
 }
 
+function filterUsersList(query) {
+    if (!query) {
+        renderUsersTable(globalMusicUsers);
+        return;
+    }
+    const q = query.toLowerCase();
+    const filtered = globalMusicUsers.filter(u => 
+        (u.username && u.username.toLowerCase().includes(q)) || 
+        (u.display_name && u.display_name.toLowerCase().includes(q)) ||
+        (u._id && u._id.toLowerCase().includes(q))
+    );
+    renderUsersTable(filtered);
+}
+
 function renderUsersTable(users) {
     const tbody = document.getElementById('users-table-body');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     if (users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-text-secondary">Chưa có người dùng nào đăng ký</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="py-10 text-center text-text-secondary text-xs"><i class="fa-solid fa-user-slash text-2xl mb-2 block opacity-40"></i>Không tìm thấy người dùng nào</td></tr>';
         return;
     }
 
@@ -2033,44 +2298,325 @@ function renderUsersTable(users) {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-surface-2 transition group';
         
-        const date = new Date(u.created_at * 1000).toLocaleDateString('vi-VN');
-        
+        const date = new Date(u.created_at * 1000).toLocaleDateString('vi-VN', {
+            year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+
+        const isActive = u.is_active !== false;
+        const statusBadge = isActive 
+            ? '<span class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-[9px]"></i> Hoạt Động</span>'
+            : '<span class="px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/25 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-ban text-[9px]"></i> Bị Khóa</span>';
+
+        const toggleStatusBtn = isActive
+            ? `<button onclick="toggleUserStatus('${u._id}')" class="w-8 h-8 rounded-lg bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-black inline-flex items-center justify-center transition" title="Khóa tài khoản này">
+                    <i class="fa-solid fa-lock text-xs"></i>
+               </button>`
+            : `<button onclick="toggleUserStatus('${u._id}')" class="w-8 h-8 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-black inline-flex items-center justify-center transition" title="Mở khóa tài khoản">
+                    <i class="fa-solid fa-lock-open text-xs"></i>
+               </button>`;
+
         tr.innerHTML = `
             <td class="py-3.5 px-4 text-center">
-                <img src="${u.avatar_url}" class="w-10 h-10 rounded-full mx-auto bg-black/20">
+                <img src="${u.avatar_url}" class="w-10 h-10 rounded-full mx-auto bg-black/20 border border-hairline object-cover" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}'">
             </td>
-            <td class="py-3.5 px-4 font-bold text-text">
-                ${u.username}
+            <td class="py-3.5 px-4">
+                <div class="font-bold text-text">${u.username}</div>
+                <div class="text-[10px] text-text-secondary font-mono">${u._id}</div>
             </td>
-            <td class="py-3.5 px-4 text-text-secondary">
-                ${u.display_name}
+            <td class="py-3.5 px-4 text-text font-medium">
+                ${u.display_name || u.username}
             </td>
-            <td class="py-3.5 px-4 text-text-secondary">
+            <td class="py-3.5 px-4 text-center">
+                <div class="inline-flex items-center gap-1.5 text-xs">
+                    <span class="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-bold border border-primary/20" title="Số Playlists">
+                        <i class="fa-solid fa-list mr-0.5 text-[10px]"></i> ${u.playlists_count || 0}
+                    </span>
+                    <span class="px-2 py-0.5 rounded-lg bg-red-500/10 text-red-400 font-bold border border-red-500/20" title="Số Bài Hát Yêu Thích">
+                        <i class="fa-solid fa-heart mr-0.5 text-[10px]"></i> ${u.favorites_count || 0}
+                    </span>
+                </div>
+            </td>
+            <td class="py-3.5 px-4 text-center">
+                ${statusBadge}
+            </td>
+            <td class="py-3.5 px-4 text-xs text-text-secondary">
                 ${date}
             </td>
             <td class="py-3.5 px-4 text-right">
-                <button onclick="deleteMusicUser('${u._id}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white inline-flex items-center justify-center transition" title="Xóa người dùng">
-                    <i class="fa-solid fa-trash-can text-[10px]"></i>
-                </button>
+                <div class="inline-flex items-center gap-1">
+                    <button onclick="openUserDetailsModal('${u._id}')" class="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white inline-flex items-center justify-center transition" title="Xem chi tiết dữ liệu (Playlists, Favorites)">
+                        <i class="fa-solid fa-eye text-xs"></i>
+                    </button>
+                    <button onclick="openEditUserModal('${u._id}')" class="w-8 h-8 rounded-lg bg-surface hover:bg-surface-2 text-text inline-flex items-center justify-center transition" title="Sửa thông tin / Đổi mật khẩu">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    ${toggleStatusBtn}
+                    <button onclick="deleteMusicUser('${u._id}', '${u.username}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white inline-flex items-center justify-center transition" title="Xóa người dùng">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                </div>
             </td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-async function deleteMusicUser(userId) {
-    if (!confirm('Bạn có chắc chắn muốn xóa người dùng này cùng toàn bộ dữ liệu (playlists, favorites) của họ không?')) return;
+// --- Add User Modal Logic ---
+function openAddUserModal() {
+    const modal = document.getElementById('add-user-modal');
+    document.getElementById('add-user-username').value = '';
+    document.getElementById('add-user-displayname').value = '';
+    document.getElementById('add-user-password').value = '';
+    
+    const seed = 'user_' + Math.random().toString(36).substring(2, 7);
+    const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+    document.getElementById('add-user-avatar').value = defaultAvatar;
+    document.getElementById('add-user-avatar-preview').src = defaultAvatar;
+
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeAddUserModal() {
+    const modal = document.getElementById('add-user-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+function randomAddUserAvatar() {
+    const seed = 'user_' + Math.random().toString(36).substring(2, 8);
+    const url = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+    document.getElementById('add-user-avatar').value = url;
+    document.getElementById('add-user-avatar-preview').src = url;
+}
+
+async function submitAddUser(e) {
+    e.preventDefault();
+    const username = document.getElementById('add-user-username').value.trim();
+    const display_name = document.getElementById('add-user-displayname').value.trim();
+    const password = document.getElementById('add-user-password').value;
+    const avatar_url = document.getElementById('add-user-avatar').value.trim();
+
+    if (!username || !password) {
+        alertToast('Vui lòng nhập đầy đủ Username và Mật khẩu!');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/music/admin/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, display_name, password, avatar_url })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            closeAddUserModal();
+            alertToast('Tạo người dùng mới thành công!');
+            fetchMusicUsers();
+        } else {
+            alertToast(data.message || 'Lỗi tạo người dùng');
+        }
+    } catch (err) {
+        alertToast('Lỗi kết nối: ' + err.message);
+    }
+}
+
+// --- Edit User Modal Logic ---
+function openEditUserModal(userId) {
+    const user = globalMusicUsers.find(u => u._id === userId);
+    if (!user) return;
+
+    document.getElementById('edit-user-id').value = user._id;
+    document.getElementById('edit-user-username').value = user.username;
+    document.getElementById('edit-user-displayname').value = user.display_name || user.username;
+    document.getElementById('edit-user-password').value = '';
+    document.getElementById('edit-user-avatar').value = user.avatar_url || '';
+    document.getElementById('edit-user-avatar-preview').src = user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
+    document.getElementById('edit-user-modal-subtitle').textContent = `Cập nhật tài khoản: @${user.username}`;
+
+    const modal = document.getElementById('edit-user-modal');
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+}
+
+function closeEditUserModal() {
+    const modal = document.getElementById('edit-user-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+async function submitEditUser(e) {
+    e.preventDefault();
+    const userId = document.getElementById('edit-user-id').value;
+    const display_name = document.getElementById('edit-user-displayname').value.trim();
+    const password = document.getElementById('edit-user-password').value;
+    const avatar_url = document.getElementById('edit-user-avatar').value.trim();
+
+    const payload = { display_name, avatar_url };
+    if (password) payload.password = password;
+
+    try {
+        const res = await fetch(`/api/music/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            closeEditUserModal();
+            alertToast('Đã lưu thông tin người dùng thành công!');
+            fetchMusicUsers();
+        } else {
+            alertToast(data.message || 'Lỗi cập nhật');
+        }
+    } catch (err) {
+        alertToast('Lỗi kết nối: ' + err.message);
+    }
+}
+
+// --- Toggle User Status (Lock/Unlock) ---
+async function toggleUserStatus(userId) {
+    const user = globalMusicUsers.find(u => u._id === userId);
+    const actionName = (user && user.is_active !== false) ? 'khóa' : 'mở khóa';
+    if (!confirm(`Bạn có chắc chắn muốn ${actionName} tài khoản @${user ? user.username : userId} không?`)) return;
+
+    try {
+        const res = await fetch(`/api/music/admin/users/${userId}/toggle-status`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast(data.message);
+            fetchMusicUsers();
+        } else {
+            alertToast(data.message || 'Lỗi đổi trạng thái');
+        }
+    } catch (err) {
+        alertToast('Lỗi kết nối: ' + err.message);
+    }
+}
+
+// --- User Details Modal Logic ---
+async function openUserDetailsModal(userId) {
+    const modal = document.getElementById('user-details-modal');
+    
+    // Clear and show loading
+    document.getElementById('detail-user-displayname').textContent = 'Đang tải...';
+    document.getElementById('detail-user-username').textContent = '';
+    document.getElementById('detail-user-avatar').src = '';
+    document.getElementById('detail-user-status-badge').innerHTML = '';
+    document.getElementById('detail-playlists-count').textContent = '0';
+    document.getElementById('detail-favorites-count').textContent = '0';
+    document.getElementById('detail-playlists-container').innerHTML = '<div class="text-xs text-text-secondary py-4 text-center"><i class="fa-solid fa-spinner animate-spin mr-1"></i> Đang tải dữ liệu...</div>';
+    document.getElementById('detail-favorites-container').innerHTML = '';
+
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+
+    try {
+        const res = await fetch(`/api/music/admin/users/${userId}/details`);
+        const result = await res.json();
+
+        if (res.ok && result.status === 'success') {
+            const user = result.user;
+            const data = result.data;
+
+            document.getElementById('detail-user-displayname').textContent = user.display_name || user.username;
+            document.getElementById('detail-user-username').textContent = `@${user.username} • ID: ${user._id}`;
+            document.getElementById('detail-user-avatar').src = user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
+            
+            const isActive = user.is_active !== false;
+            document.getElementById('detail-user-status-badge').innerHTML = isActive
+                ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[10px] font-bold">Hoạt Động</span>'
+                : '<span class="px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/25 text-[10px] font-bold">Đang Bị Khóa</span>';
+
+            // Render Playlists
+            const playlists = data.playlists || [];
+            document.getElementById('detail-playlists-count').textContent = playlists.length;
+            const plContainer = document.getElementById('detail-playlists-container');
+            
+            if (playlists.length === 0) {
+                plContainer.innerHTML = '<div class="text-xs text-text-secondary py-3 px-4 rounded-xl bg-surface/50 text-center">Người dùng chưa tạo playlist nào.</div>';
+            } else {
+                plContainer.innerHTML = playlists.map((pl, idx) => {
+                    const plDate = pl.created_at ? new Date(pl.created_at * 1000).toLocaleDateString('vi-VN') : '';
+                    return `
+                        <div class="p-3 rounded-2xl bg-surface border border-hairline flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                    ${idx + 1}
+                                </div>
+                                <div class="min-w-0">
+                                    <h5 class="text-xs font-bold text-text truncate">${pl.name}</h5>
+                                    <p class="text-[10px] text-text-secondary">${pl.tracks ? pl.tracks.length : 0} bài hát • Tạo lúc ${plDate}</p>
+                                </div>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-bold border border-primary/20 shrink-0">
+                                ${pl.tracks ? pl.tracks.length : 0} Tracks
+                            </span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Render Favorites
+            const favorites = data.favorites || [];
+            document.getElementById('detail-favorites-count').textContent = favorites.length;
+            const favContainer = document.getElementById('detail-favorites-container');
+
+            if (favorites.length === 0) {
+                favContainer.innerHTML = '<div class="text-xs text-text-secondary py-3 px-4 rounded-xl bg-surface/50 text-center">Người dùng chưa yêu thích bài hát nào.</div>';
+            } else {
+                favContainer.innerHTML = `
+                    <div class="p-3 rounded-2xl bg-surface border border-hairline">
+                        <div class="flex items-center justify-between text-xs text-text mb-2">
+                            <span class="font-bold">Tổng số mục yêu thích:</span>
+                            <span class="font-black text-red-400">${favorites.length} bài hát</span>
+                        </div>
+                        <div class="max-h-40 overflow-y-auto space-y-1 pr-1 text-xs">
+                            ${favorites.map((f, i) => {
+                                const fDate = f.added_at ? new Date(f.added_at * 1000).toLocaleDateString('vi-VN') : '';
+                                return `
+                                    <div class="flex items-center justify-between py-1.5 px-2.5 rounded-lg bg-black/20 text-text-secondary text-[11px]">
+                                        <span>#${i + 1} • Chat: ${f.chat_id}, Msg: ${f.msg_id}</span>
+                                        <span class="text-[10px] text-text-secondary/70">${fDate}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            alertToast(result.message || 'Lỗi tải chi tiết người dùng');
+            closeUserDetailsModal();
+        }
+    } catch (err) {
+        alertToast('Lỗi kết nối: ' + err.message);
+        closeUserDetailsModal();
+    }
+}
+
+function closeUserDetailsModal() {
+    const modal = document.getElementById('user-details-modal');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+// --- Delete User Logic ---
+async function deleteMusicUser(userId, username = '') {
+    const displayName = username ? `@${username}` : userId;
+    if (!confirm(`CẢNH BÁO: Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản ${displayName} cùng toàn bộ dữ liệu (playlists, favorites, lịch sử) của người này không?`)) return;
+    
     try {
         const res = await fetch('/api/music/admin/users/' + userId, { method: 'DELETE' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
-            alertToast('Đã xóa người dùng thành công');
+            alertToast('Đã xóa người dùng thành công!');
             fetchMusicUsers();
         } else {
             alertToast(data.message || 'Lỗi xóa người dùng');
         }
     } catch (e) {
-        alertToast('Lỗi mạng');
+        alertToast('Lỗi mạng: ' + e.message);
     }
 }
 </script>
