@@ -407,6 +407,7 @@ class XTAPOMusicApp {
         this.closeLyricsEditorModal = document.getElementById('closeLyricsEditorModal');
         this.lyricsSearchTrackInput = document.getElementById('lyricsSearchTrackInput');
         this.lyricsSearchArtistInput = document.getElementById('lyricsSearchArtistInput');
+        this.lyricsSearchProviderSelect = document.getElementById('lyricsSearchProviderSelect');
         this.btnLyricsOnlineSearch = document.getElementById('btnLyricsOnlineSearch');
         this.lyricsSearchResults = document.getElementById('lyricsSearchResults');
         this.lyricsFileInput = document.getElementById('lyricsFileInput');
@@ -4079,9 +4080,19 @@ class XTAPOMusicApp {
             });
         }
 
-        // Online LRCLIB Manual Search from Editor
+        // Online Multi-Provider Manual Search from Editor
         if (this.btnLyricsOnlineSearch) {
             this.btnLyricsOnlineSearch.addEventListener('click', () => this.handleManualOnlineLyricsSearch());
+        }
+        if (this.lyricsSearchTrackInput) {
+            this.lyricsSearchTrackInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.handleManualOnlineLyricsSearch();
+            });
+        }
+        if (this.lyricsSearchArtistInput) {
+            this.lyricsSearchArtistInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.handleManualOnlineLyricsSearch();
+            });
         }
 
         // Editor Offset Buttons
@@ -4718,6 +4729,7 @@ class XTAPOMusicApp {
     async handleManualOnlineLyricsSearch() {
         const trackQuery = this.lyricsSearchTrackInput ? this.lyricsSearchTrackInput.value.trim() : '';
         const artistQuery = this.lyricsSearchArtistInput ? this.lyricsSearchArtistInput.value.trim() : '';
+        const provider = this.lyricsSearchProviderSelect ? this.lyricsSearchProviderSelect.value : 'all';
 
         if (!trackQuery) {
             this.showToast('Vui lòng nhập tên bài hát cần tìm!');
@@ -4726,76 +4738,100 @@ class XTAPOMusicApp {
 
         if (this.btnLyricsOnlineSearch) {
             this.btnLyricsOnlineSearch.disabled = true;
-            this.btnLyricsOnlineSearch.innerHTML = `<span>Đang tìm...</span>`;
+            this.btnLyricsOnlineSearch.innerHTML = `<span>Đang quét dữ liệu...</span>`;
         }
 
         if (this.lyricsSearchResults) {
             this.lyricsSearchResults.style.display = 'block';
-            this.lyricsSearchResults.innerHTML = '<div style="padding: 10px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">Đang tìm kiếm trên LRCLIB...</div>';
+            this.lyricsSearchResults.innerHTML = `
+                <div style="padding: 14px; font-size: 0.82rem; color: var(--text-muted); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <div class="lyrics-spinner" style="width: 22px; height: 22px;"></div>
+                    <span>Đang tìm kiếm trên LRCLIB & Netease 163...</span>
+                </div>
+            `;
         }
 
         try {
-            const queryStr = encodeURIComponent(`${trackQuery} ${artistQuery}`.trim());
-            const res = await fetch(`https://lrclib.net/api/search?q=${queryStr}`);
+            const params = new URLSearchParams({
+                track_name: trackQuery,
+                artist_name: artistQuery,
+                provider: provider
+            });
+
+            const res = await fetch(`/api/music/lyrics/search?${params.toString()}`);
             if (res.ok) {
-                const items = await res.json();
-                if (Array.isArray(items) && items.length > 0) {
+                const data = await res.json();
+                const items = data.items || [];
+                if (items.length > 0) {
                     if (this.lyricsSearchResults) {
                         this.lyricsSearchResults.innerHTML = `
-                            <div style="font-size: 0.75rem; color: var(--accent-gold); font-weight: 700; margin-bottom: 6px; padding: 2px 6px;">
-                                TÌM THẤY ${items.length} PHIÊN BẢN (NHẤP ĐỂ CHỌN):
+                            <div style="font-size: 0.75rem; color: var(--accent-gold); font-weight: 700; margin-bottom: 6px; padding: 2px 6px; display: flex; justify-content: space-between; align-items: center;">
+                                <span>TÌM THẤY ${items.length} PHIÊN BẢN (NHẤP ĐỂ NẠP LỜI):</span>
+                                <span style="font-size: 0.68rem; color: var(--text-muted); font-weight: normal;">Đa Nguồn LRCLIB / Netease</span>
                             </div>
                         `;
-                        items.forEach((it, idx) => {
-                            const isSynced = Boolean(it.syncedLyrics);
+                        items.forEach((it) => {
+                            const isSynced = Boolean(it.is_synced);
                             const dur = it.duration ? this.formatTime(it.duration) : '--:--';
+                            const sourceTag = it.source || 'Online';
+                            const isNetease = sourceTag.includes('Netease');
                             const itemEl = document.createElement('div');
-                            itemEl.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; margin-bottom: 4px; border-radius: 6px; background: rgba(255,255,255,0.04); cursor: pointer; transition: all 0.2s ease;';
+                            itemEl.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; margin-bottom: 5px; border-radius: 8px; background: rgba(255,255,255,0.04); cursor: pointer; transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.05);';
                             itemEl.innerHTML = `
                                 <div style="display: flex; flex-direction: column; overflow: hidden; margin-right: 8px;">
-                                    <span style="font-weight: 600; color: #fff; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(it.trackName || trackQuery)}</span>
-                                    <span style="font-size: 0.74rem; color: var(--text-muted);">${this.escapeHtml(it.artistName || 'Artist')} • ${this.escapeHtml(it.albumName || 'Album')} (${dur})</span>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span style="font-weight: 700; color: #fff; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(it.track_name || trackQuery)}</span>
+                                        <span style="font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: ${isNetease ? 'rgba(239,68,68,0.2)' : 'rgba(56,189,248,0.2)'}; color: ${isNetease ? '#f87171' : '#38bdf8'}; font-weight: 700;">${this.escapeHtml(sourceTag)}</span>
+                                    </div>
+                                    <span style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">${this.escapeHtml(it.artist_name || 'Nghệ sĩ')} • ${this.escapeHtml(it.album_name || '')} (${dur})</span>
                                 </div>
-                                <span style="padding: 2px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; background: ${isSynced ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.08)'}; color: ${isSynced ? '#34d399' : 'rgba(255,255,255,0.5)'};">
-                                    ${isSynced ? '⚡ SYNCED' : 'PLAIN'}
+                                <span style="padding: 3px 9px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; background: ${isSynced ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.08)'}; color: ${isSynced ? '#34d399' : 'rgba(255,255,255,0.5)'}; white-space: nowrap;">
+                                    ${isSynced ? '⚡ ĐỒNG BỘ' : 'LỜI THÔ'}
                                 </span>
                             `;
-                            itemEl.addEventListener('mouseenter', () => itemEl.style.background = 'rgba(245,158,11,0.15)');
-                            itemEl.addEventListener('mouseleave', () => itemEl.style.background = 'rgba(255,255,255,0.04)');
+                            itemEl.addEventListener('mouseenter', () => {
+                                itemEl.style.background = 'rgba(252,191,71,0.14)';
+                                itemEl.style.borderColor = 'rgba(252,191,71,0.3)';
+                            });
+                            itemEl.addEventListener('mouseleave', () => {
+                                itemEl.style.background = 'rgba(255,255,255,0.04)';
+                                itemEl.style.borderColor = 'rgba(255,255,255,0.05)';
+                            });
                             itemEl.addEventListener('click', () => {
-                                const lrc = it.syncedLyrics || it.plainLyrics || '';
+                                const lrc = it.synced_lyrics || it.plain_lyrics || '';
                                 if (this.lyricsRawTextarea && lrc) {
                                     this.lyricsRawTextarea.value = lrc;
-                                    this.showToast(`Đã chọn: "${it.trackName}" (${isSynced ? 'Có đồng bộ' : 'Lời thô'})`);
+                                    this.showToast(`Đã nạp lời: "${it.track_name}" (${sourceTag})`);
                                 }
                             });
                             this.lyricsSearchResults.appendChild(itemEl);
                         });
                     }
 
-                    // Tự động nạp kết quả tốt nhất đầu tiên vào textarea
-                    const best = items.find(it => it.syncedLyrics) || items[0];
-                    const lrc = best.syncedLyrics || best.plainLyrics || '';
+                    // Tự động nạp kết quả đầu tiên có đồng bộ vào textarea
+                    const best = items.find(it => it.is_synced) || items[0];
+                    const lrc = best.synced_lyrics || best.plain_lyrics || '';
                     if (this.lyricsRawTextarea && lrc) {
                         this.lyricsRawTextarea.value = lrc;
+                        this.showToast(`Đã tìm thấy ${items.length} bản lời. Đã nạp bản tốt nhất từ ${best.source}!`);
                     }
                 } else {
                     if (this.lyricsSearchResults) {
-                        this.lyricsSearchResults.innerHTML = `<div style="padding: 10px; font-size: 0.8rem; color: #f87171; text-align: center;">Không tìm thấy kết quả nào trên LRCLIB cho "${this.escapeHtml(trackQuery)}"</div>`;
+                        this.lyricsSearchResults.innerHTML = `<div style="padding: 12px; font-size: 0.82rem; color: #f87171; text-align: center;">Không tìm thấy kết quả nào cho "${this.escapeHtml(trackQuery)}" trên nguồn đã chọn.</div>`;
                     }
-                    this.showToast(`Không tìm thấy kết quả nào trên LRCLIB cho "${trackQuery}"`);
+                    this.showToast(`Không tìm thấy kết quả nào cho "${trackQuery}"`);
                 }
             } else {
-                this.showToast('Lỗi kết nối tới cơ sở dữ liệu LRCLIB');
+                this.showToast('Lỗi kết nối tới máy chủ tìm kiếm lời');
             }
         } catch (e) {
-            this.showToast('Lỗi kết nối tới máy chủ LRCLIB');
+            this.showToast('Lỗi khi tìm kiếm lời bài hát trực tuyến');
         } finally {
             if (this.btnLyricsOnlineSearch) {
                 this.btnLyricsOnlineSearch.disabled = false;
                 this.btnLyricsOnlineSearch.innerHTML = `
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <span>Tìm Trên LRCLIB</span>
+                    <span>Tìm Lời Nhạc</span>
                 `;
             }
         }

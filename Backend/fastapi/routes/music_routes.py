@@ -3265,6 +3265,98 @@ async def get_realtime_lyrics(
     return JSONResponse(status_code=404, content=not_found_res)
 
 
+@router.get("/api/music/lyrics/search")
+async def search_lyrics_multi_source(
+    track_name: str = Query(..., description="Tên bài hát cần tìm"),
+    artist_name: Optional[str] = Query(None, description="Tên ca sĩ"),
+    provider: Optional[str] = Query("all", description="Nguồn: all | lrclib | netease")
+):
+    """Tìm kiếm lời bài hát trực tuyến từ đa nguồn (LRCLIB Quốc Tế + Netease 163 V-Pop/Châu Á)"""
+    cleaned_track = _clean_track_title_for_lyrics(track_name)
+    cleaned_artist = _clean_artist_name_for_lyrics(artist_name or "", track_name)
+    results = []
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    }
+
+    async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+        # 1. Tìm trên LRCLIB
+        if provider in ("all", "lrclib"):
+            try:
+                q_str = f"{cleaned_track} {cleaned_artist}".strip()
+                resp = await client.get("https://lrclib.net/api/search", params={"q": q_str}, headers=headers)
+                if resp.status_code == 200:
+                    items = resp.json()
+                    if isinstance(items, list):
+                        for it in items[:6]:
+                            synced = it.get("syncedLyrics") or ""
+                            plain = it.get("plainLyrics") or ""
+                            if synced or plain:
+                                results.append({
+                                    "id": f"lrclib_{it.get('id')}",
+                                    "track_name": it.get("trackName") or cleaned_track,
+                                    "artist_name": it.get("artistName") or "",
+                                    "album_name": it.get("albumName") or "",
+                                    "duration": it.get("duration"),
+                                    "is_synced": bool(synced),
+                                    "synced_lyrics": synced,
+                                    "plain_lyrics": plain,
+                                    "source": "LRCLIB Quốc Tế"
+                                })
+            except Exception as e:
+                LOGGER.debug(f"[Search LRCLIB] Error: {e}")
+
+        # 2. Tìm trên Netease 163 Cloud Music (Cực mạnh cho Nhạc Việt & Châu Á)
+        if provider in ("all", "netease"):
+            try:
+                n_query = f"{cleaned_track} {cleaned_artist}".strip()
+                n_headers = headers.copy()
+                n_headers["Referer"] = "https://music.163.com/"
+                n_resp = await client.post(
+                    "https://music.163.com/api/cloudsearch/pc",
+                    data={"s": n_query, "type": 1, "limit": 6},
+                    headers=n_headers
+                )
+                if n_resp.status_code == 200:
+                    n_data = n_resp.json()
+                    songs = n_data.get("result", {}).get("songs", [])
+                    for song in songs:
+                        sid = song.get("id")
+                        if not sid:
+                            continue
+                        r_l = await client.get(
+                            "https://music.163.com/api/song/lyric",
+                            params={"os": "pc", "id": sid, "lv": -1, "kv": -1, "tv": -1},
+                            headers=n_headers
+                        )
+                        if r_l.status_code == 200:
+                            l_json = r_l.json()
+                            raw_lrc = l_json.get("lrc", {}).get("lyric", "").strip()
+                            if raw_lrc:
+                                has_synced = bool(re.search(r'\[\d{1,2}:\d{1,2}', raw_lrc))
+                                ar_name = ""
+                                if song.get("ar") and isinstance(song["ar"], list) and len(song["ar"]) > 0:
+                                    ar_name = song["ar"][0].get("name", "")
+                                results.append({
+                                    "id": f"netease_{sid}",
+                                    "track_name": song.get("name") or cleaned_track,
+                                    "artist_name": ar_name or cleaned_artist,
+                                    "album_name": (song.get("al") or {}).get("name") or "",
+                                    "duration": int(song.get("dt", 0) / 1000) if song.get("dt") else None,
+                                    "is_synced": has_synced,
+                                    "synced_lyrics": raw_lrc if has_synced else "",
+                                    "plain_lyrics": "" if has_synced else raw_lrc,
+                                    "source": "Netease 163"
+                                })
+            except Exception as e:
+                LOGGER.debug(f"[Search Netease] Error: {e}")
+
+    # Ưu tiên mục có synced lyrics lên đầu
+    results.sort(key=lambda x: (1 if x["is_synced"] else 0), reverse=True)
+    return JSONResponse(content={"status": "success", "count": len(results), "items": results})
+
+
 @router.post("/api/music/lyrics/save")
 async def save_custom_lyrics(
     request: Request,

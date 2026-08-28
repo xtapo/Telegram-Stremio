@@ -981,28 +981,33 @@
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-size: 1.4rem;">🎤</span>
                     <div>
-                        <h3 style="margin: 0; font-size: 1.15rem;">Chỉnh Sửa & Dán File Lời Bài Hát (.LRC)</h3>
-                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Tự do tùy chỉnh, tải file .lrc hoặc tìm kiếm lời trên LRCLIB</p>
+                        <h3 style="margin: 0; font-size: 1.15rem;">Tìm Kiếm, Chỉnh Sửa & Dán Lời Bài Hát (.LRC)</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Tìm kiếm trực tuyến từ LRCLIB & Netease 163, hoặc tự do tải file .lrc</p>
                     </div>
                 </div>
                 <button class="modal-close" id="closeLyricsEditorModal">&times;</button>
             </div>
 
             <div class="lyrics-editor-body">
-                <!-- Search on LRCLIB manually -->
-                <div class="lyrics-editor-search-box">
-                    <div style="display: flex; gap: 8px; flex: 1;">
-                        <input type="text" id="lyricsSearchTrackInput" placeholder="Tên bài hát..." style="flex: 1; padding: 8px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
-                        <input type="text" id="lyricsSearchArtistInput" placeholder="Ca sĩ (không bắt buộc)..." style="flex: 1; padding: 8px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
+                <!-- Search on Multiple Online Providers -->
+                <div class="lyrics-editor-search-box" style="flex-direction: column; gap: 8px;">
+                    <div style="display: flex; gap: 8px; width: 100%;">
+                        <input type="text" id="lyricsSearchTrackInput" placeholder="Tên bài hát (vd: Chúng Ta Của Hiện Tại, Blank Space...)" style="flex: 2; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
+                        <input type="text" id="lyricsSearchArtistInput" placeholder="Ca sĩ (không bắt buộc)..." style="flex: 1.2; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
+                        <select id="lyricsSearchProviderSelect" style="padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: #fff; font-size: 0.8rem; outline: none; cursor: pointer;">
+                            <option value="all" style="background: #181b22; color: #fff;">🌐 Tất Cả Nguồn (LRCLIB + Netease)</option>
+                            <option value="netease" style="background: #181b22; color: #fff;">🇻🇳 Netease 163 (V-Pop & Châu Á)</option>
+                            <option value="lrclib" style="background: #181b22; color: #fff;">🌍 LRCLIB (Quốc Tế / US-UK)</option>
+                        </select>
+                        <button id="btnLyricsOnlineSearch" class="primary-btn" style="padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <span>Tìm Lời Nhạc</span>
+                        </button>
                     </div>
-                    <button id="btnLyricsOnlineSearch" class="nav-btn action-badge-btn" style="padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        <span>Tìm Trên LRCLIB</span>
-                    </button>
                 </div>
 
                 <!-- Online Search Results Dropdown List -->
-                <div id="lyricsSearchResults" style="display: none; max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 12px; padding: 6px;"></div>
+                <div id="lyricsSearchResults" style="display: none; max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.45); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 12px; padding: 6px;"></div>
 
                 <!-- File Import & Action Toolbar -->
                 <div class="lyrics-editor-toolbar">
