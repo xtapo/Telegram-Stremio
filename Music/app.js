@@ -142,6 +142,8 @@ class XTAPOMusicApp {
         this.albumTitle = document.getElementById('albumTitle');
         this.artistName = document.getElementById('artistName');
         this.albumYearTag = document.getElementById('albumYearTag');
+        this.badgeAudioQuality = document.getElementById('badgeAudioQuality');
+        this.badgeAudioSpecs = document.getElementById('badgeAudioSpecs');
         this.trackCountLabel = document.getElementById('trackCountLabel');
         this.totalDurationLabel = document.getElementById('totalDurationLabel');
         this.albumCompany = document.getElementById('albumCompany');
@@ -933,6 +935,83 @@ class XTAPOMusicApp {
         }
     }
 
+    detectYearFromTrack(track) {
+        if (!track) return '2024';
+        if (track.year && /^\d{4}$/.test(String(track.year).trim()) && String(track.year).trim() !== '2026') {
+            return String(track.year).trim();
+        }
+        const name = track.name || track.title || '';
+        const album = track.album || track.albumName || '';
+        const raw = `${name} ${album}`;
+        const m = raw.match(/\b(19\d{2}|20[0-2]\d)\b/);
+        if (m) return m[1];
+        return track.year && String(track.year).trim() !== '2026' ? String(track.year).trim() : '2024';
+    }
+
+    updateAudioBadges(track, album) {
+        if (!this.badgeAudioQuality && !this.badgeAudioSpecs && !this.albumYearTag) return;
+
+        track = track || (album && album.tracks && album.tracks[0]) || {};
+        album = album || this.currentAlbum || {};
+
+        const fmt = (track.format || album.format || 'FLAC Hi-Res Lossless').toUpperCase();
+        const tier = (track.qualityTier || album.qualityTier || 'lossless').toLowerCase();
+        const bitrate = track.bitrate || album.bitrate || '';
+
+        // 1. Badge Quality Category
+        if (this.badgeAudioQuality) {
+            if (tier === 'hi-res' || fmt.includes('HI-RES') || fmt.includes('24-BIT') || fmt.includes('32-BIT') || fmt.includes('DSD') || fmt.includes('96KHZ') || fmt.includes('192KHZ')) {
+                this.badgeAudioQuality.textContent = 'HI-RES AUDIO';
+                this.badgeAudioQuality.className = 'badge-tag accent-tag';
+            } else if (fmt.includes('FLAC') || fmt.includes('LOSSLESS') || fmt.includes('ALAC') || fmt.includes('WAV')) {
+                this.badgeAudioQuality.textContent = 'LOSSLESS';
+                this.badgeAudioQuality.className = 'badge-tag accent-tag';
+            } else if (fmt.includes('MP3')) {
+                this.badgeAudioQuality.textContent = 'MP3 AUDIO';
+                this.badgeAudioQuality.className = 'badge-tag';
+            } else if (fmt.includes('AAC') || fmt.includes('M4A')) {
+                this.badgeAudioQuality.textContent = 'AAC AUDIO';
+                this.badgeAudioQuality.className = 'badge-tag';
+            } else {
+                this.badgeAudioQuality.textContent = 'HQ AUDIO';
+                this.badgeAudioQuality.className = 'badge-tag';
+            }
+        }
+
+        // 2. Badge Technical Specs
+        if (this.badgeAudioSpecs) {
+            if (fmt.includes('24-BIT') || fmt.includes('96KHZ') || fmt.includes('192KHZ')) {
+                if (fmt.includes('96KHZ')) {
+                    this.badgeAudioSpecs.textContent = '24-BIT / 96kHz';
+                } else if (fmt.includes('192KHZ')) {
+                    this.badgeAudioSpecs.textContent = '24-BIT / 192kHz';
+                } else if (fmt.includes('48KHZ')) {
+                    this.badgeAudioSpecs.textContent = '24-BIT / 48kHz';
+                } else {
+                    this.badgeAudioSpecs.textContent = '24-BIT / 96kHz';
+                }
+            } else if (fmt.includes('320') || (bitrate && parseInt(bitrate, 10) >= 300)) {
+                this.badgeAudioSpecs.textContent = '320 KBPS / 44.1kHz';
+            } else if (fmt.includes('256') || (bitrate && parseInt(bitrate, 10) >= 240)) {
+                this.badgeAudioSpecs.textContent = '256 KBPS / 44.1kHz';
+            } else if (fmt.includes('128') || (bitrate && parseInt(bitrate, 10) <= 160 && parseInt(bitrate, 10) > 0)) {
+                this.badgeAudioSpecs.textContent = `${bitrate || 128} KBPS / 44.1kHz`;
+            } else if (fmt.includes('16-BIT') || fmt.includes('FLAC') || fmt.includes('LOSSLESS')) {
+                this.badgeAudioSpecs.textContent = '16-BIT / 44.1kHz';
+            } else if (bitrate) {
+                this.badgeAudioSpecs.textContent = `~${bitrate} KBPS`;
+            } else {
+                this.badgeAudioSpecs.textContent = '16-BIT / 44.1kHz';
+            }
+        }
+
+        // 3. Badge Year
+        if (this.albumYearTag) {
+            const year = this.detectYearFromTrack(track) || this.detectYearFromTrack({ name: album.title }) || album.year || '2024';
+            this.albumYearTag.textContent = year;
+        }
+    }
+
     // --- Load Album & Track ---
     loadAlbum(albumIndex, trackIndex = 0, autoPlay = true) {
         this.currentAlbumIndex = albumIndex;
@@ -941,9 +1020,12 @@ class XTAPOMusicApp {
         // Update Text Info
         this.albumTitle.textContent = album.title;
         this.artistName.textContent = album.artist;
-        this.albumYearTag.textContent = album.year;
         this.albumCompany.textContent = album.publisher;
         this.trackCountLabel.textContent = `${album.tracks.length} Songs`;
+
+        // Update Badges
+        const currentTrackObj = (album.tracks && album.tracks[trackIndex]) || album.tracks[0];
+        this.updateAudioBadges(currentTrackObj, album);
 
         // Calculate total album duration
         let totalSec = 0;
@@ -1103,6 +1185,9 @@ class XTAPOMusicApp {
         this.timeTotal.textContent = track.duration || '--:--';
         this.timeCurrent.textContent = "0:00";
         this.updateProgress(0);
+
+        // Cập nhật thẻ Badge chất lượng & năm phát hành thực tế
+        this.updateAudioBadges(track, album);
 
         // Cập nhật MediaSession cho màn hình khóa iPhone (iOS), Android và Desktop
         this.updateMediaSession();

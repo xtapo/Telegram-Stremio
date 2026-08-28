@@ -382,6 +382,34 @@ def detect_country_from_track_info(track: dict) -> str:
     return "Âu Mỹ" if any(k in combined for k in ["flac", "edition", "version", "feat", "ft.", "deluxe", "remaster"]) else "Quốc Tế"
 
 
+def detect_year_from_track_info(track: dict) -> str:
+    """
+    Tự động nhận diện năm phát hành từ thông tin bài hát / tên file / caption.
+    """
+    y = track.get("year")
+    if y:
+        y_str = str(y).strip()
+        m = re.search(r'\b(19\d{2}|20[0-2]\d)\b', y_str)
+        if m:
+            return m.group(1)
+
+    name = track.get("name") or track.get("title") or track.get("file_name") or ""
+    album = track.get("album") or ""
+    caption = track.get("caption") or ""
+    combined = f"{name} {album} {caption}"
+
+    # Search for (2021) or [2021] or 2021 in text
+    m = re.search(r'[\(\[\s\-_](19\d{2}|20[0-2]\d)[\)\]\s\-_]', combined)
+    if m:
+        return m.group(1)
+
+    m = re.search(r'\b(19\d{2}|20[0-2]\d)\b', combined)
+    if m:
+        return m.group(1)
+
+    return "2024"
+
+
 def _normalize_str(s: str) -> str:
     if not s:
         return ""
@@ -722,6 +750,11 @@ async def get_music_albums():
                             t["country"] = detected_country
                             changed = True
 
+                        # Detect Year
+                        if not t.get("year") or str(t.get("year")) in ["2026", ""]:
+                            t["year"] = detect_year_from_track_info(t)
+                            changed = True
+
                         current_fmt = t.get("format", "")
                         if not current_fmt or current_fmt in ["FLAC Hi-Res", "MP3 Master", "Hi-Res", "AUDIO Hi-Res", "AUDIO Master"]:
                             fmt, tier, br = detect_audio_quality_from_track_info(t)
@@ -747,6 +780,15 @@ async def get_music_albums():
                 if not alb.get("country"):
                     album_country = detect_country_from_track_info({"name": alb.get("title", ""), "artist": alb.get("artist", ""), "album": alb.get("title", "")})
                     alb["country"] = album_country
+                    changed = True
+
+                # Determine Album Year
+                if not alb.get("year") or str(alb.get("year")) in ["2026", ""]:
+                    track_years = [t.get("year") for t in alb.get("tracks", []) if t.get("year") and str(t.get("year")) not in ["2026", ""]]
+                    if track_years:
+                        alb["year"] = track_years[0]
+                    else:
+                        alb["year"] = detect_year_from_track_info({"name": alb.get("title", ""), "artist": alb.get("artist", ""), "album": alb.get("title", "")})
                     changed = True
 
             if changed:
