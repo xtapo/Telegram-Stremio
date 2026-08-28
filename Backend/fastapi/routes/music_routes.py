@@ -9,6 +9,7 @@ import time
 import unicodedata
 from typing import Dict, List, Optional
 from urllib.parse import quote, unquote
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -2948,4 +2949,255 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
     except Exception as e:
         LOGGER.error(f"[AUTO FETCH ARTISTS] Lỗi: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+# ==============================================================================
+# REAL-TIME SYNCED LYRICS (LRCLIB & CUSTOM LRC ENGINE)
+# ==============================================================================
+
+_lyrics_memory_cache: Dict[str, dict] = {}
+_LYRICS_CACHE_TTL = 86400 * 7  # 7 days
+
+def _clean_track_title_for_lyrics(title: str) -> str:
+    """Làm sạch tên bài hát để tăng tỷ lệ tìm kiếm chính xác trên LRCLIB"""
+    if not title:
+        return ""
+    # Bỏ số thứ tự đầu bài hát (vd: 01. , 1 - , 12_ )
+    t = re.sub(r'^\s*\d+[\s\.\-_]+', '', title)
+    # Bỏ đuôi định dạng file nếu có
+    t = re.sub(r'\.(flac|mp3|m4a|wav|aac|ogg)$', '', t, flags=re.IGNORECASE)
+    # Bỏ các tag trong ngoặc vuông [FLAC 24bit], [Official Music Video]
+    t = re.sub(r'\[.*?\]', '', t)
+    # Bỏ các nhãn phụ trong ngoặc tròn như (Official Video), (Lyrics), (Remastered 2024), (feat. XYZ)
+    t = re.sub(r'\((?:official|music|video|audio|lyrics|remaster|remastered|version|deluxe|bonus|expanded|edition|karaoke|beat|instrumental|hd|4k|live).*?\)', '', t, flags=re.IGNORECASE)
+    # Chuẩn hóa khoảng trắng
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
+
+def _clean_artist_name_for_lyrics(artist: str) -> str:
+    if not artist or artist.lower() in ("unknown", "various artists", "xtapo music", "chưa rõ", "none"):
+        return ""
+    a = re.sub(r'\[.*?\]', '', artist)
+    a = re.sub(r'\s+', ' ', a).strip()
+    return a
+
+@router.get("/api/music/lyrics")
+async def get_realtime_lyrics(
+    track_name: str = Query(..., description="Tên bài hát"),
+    artist_name: Optional[str] = Query(None, description="Tên ca sĩ / nghệ sĩ"),
+    album_name: Optional[str] = Query(None, description="Tên album"),
+    duration: Optional[float] = Query(None, description="Thời lượng tính bằng giây"),
+    force_refresh: Optional[bool] = Query(False, description="Bỏ qua cache")
+):
+    """
+    Lấy lời bài hát đồng bộ từng giây (Synced Lyrics .LRC) từ LRCLIB.
+    Tự động thử nhiều chiến lược: Exact Match -> Search Cleaned Title -> Fuzzy Search.
+    """
+    cleaned_track = _clean_track_title_for_lyrics(track_name)
+    cleaned_artist = _clean_artist_name_for_lyrics(artist_name or "")
+    
+    cache_key = f"{cleaned_track.lower()}__{cleaned_artist.lower()}"
+    
+    # 1. Kiểm tra cache RAM
+    if not force_refresh and cache_key in _lyrics_memory_cache:
+        cached_entry = _lyrics_memory_cache[cache_key]
+        if time.time() - cached_entry.get("_cached_at", 0) < _LYRICS_CACHE_TTL:
+            return JSONResponse(content=cached_entry["data"])
+    
+    # 2. Kiểm tra Database MongoDB nếu đã lưu tùy chỉnh
+    if db is not None and not force_refresh:
+        try:
+            coll = db.get_collection("music_custom_lyrics")
+            if coll is not None:
+                doc = await coll.find_one({"_id": cache_key})
+                if doc:
+                    doc_data = {
+                        "status": "success",
+                        "id": doc.get("id", 0),
+                        "track_name": doc.get("track_name", cleaned_track),
+                        "artist_name": doc.get("artist_name", cleaned_artist),
+                        "synced_lyrics": doc.get("synced_lyrics", ""),
+                        "plain_lyrics": doc.get("plain_lyrics", ""),
+                        "instrumental": doc.get("instrumental", False),
+                        "is_custom": True,
+                        "source": "custom_db"
+                    }
+                    _lyrics_memory_cache[cache_key] = {"data": doc_data, "_cached_at": time.time()}
+                    return JSONResponse(content=doc_data)
+        except Exception as e:
+            LOGGER.debug(f"[Lyrics DB Check] Note: {e}")
+
+    headers = {
+        "User-Agent": "XTAPO-Music-Player/2.0 (https://github.com/xtapo/Telegram-Stremio)"
+    }
+    
+    # 3. Chiến lược A: Thử LRCLIB /api/get (Exact Match)
+    async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+        # A1: Với thông tin ban đầu
+        try:
+            get_params = {"track_name": cleaned_track}
+            if cleaned_artist:
+                get_params["artist_name"] = cleaned_artist
+            if album_name and album_name.strip():
+                get_params["album_name"] = album_name.strip()
+            if duration and duration > 0:
+                get_params["duration"] = int(duration)
+                
+            resp = await client.get("https://lrclib.net/api/get", params=get_params, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                synced = data.get("syncedLyrics")
+                plain = data.get("plainLyrics")
+                if synced or plain:
+                    result = {
+                        "status": "success",
+                        "id": data.get("id"),
+                        "track_name": data.get("trackName") or cleaned_track,
+                        "artist_name": data.get("artistName") or cleaned_artist,
+                        "album_name": data.get("albumName") or album_name,
+                        "duration": data.get("duration"),
+                        "synced_lyrics": synced or "",
+                        "plain_lyrics": plain or "",
+                        "instrumental": data.get("instrumental", False),
+                        "source": "lrclib_exact"
+                    }
+                    _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
+                    return JSONResponse(content=result)
+        except Exception as e:
+            LOGGER.debug(f"[LRCLIB Exact] Note: {e}")
+
+        # Chiến lược B: Thử LRCLIB /api/search (Search Query)
+        try:
+            query_str = f"{cleaned_track} {cleaned_artist}".strip()
+            search_params = {"q": query_str}
+            resp = await client.get("https://lrclib.net/api/search", params=search_params, headers=headers)
+            if resp.status_code == 200:
+                items = resp.json()
+                if isinstance(items, list) and len(items) > 0:
+                    # Ưu tiên mục có syncedLyrics trước
+                    best_match = None
+                    for it in items:
+                        if it.get("syncedLyrics"):
+                            best_match = it
+                            break
+                    if not best_match:
+                        best_match = items[0]
+                    
+                    result = {
+                        "status": "success",
+                        "id": best_match.get("id"),
+                        "track_name": best_match.get("trackName") or cleaned_track,
+                        "artist_name": best_match.get("artistName") or cleaned_artist,
+                        "album_name": best_match.get("albumName") or album_name,
+                        "duration": best_match.get("duration"),
+                        "synced_lyrics": best_match.get("syncedLyrics") or "",
+                        "plain_lyrics": best_match.get("plainLyrics") or "",
+                        "instrumental": best_match.get("instrumental", False),
+                        "source": "lrclib_search"
+                    }
+                    _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
+                    return JSONResponse(content=result)
+        except Exception as e:
+            LOGGER.debug(f"[LRCLIB Search] Note: {e}")
+
+        # Chiến lược C: Thử chỉ tìm bằng tên bài hát
+        if cleaned_artist:
+            try:
+                resp = await client.get("https://lrclib.net/api/search", params={"track_name": cleaned_track}, headers=headers)
+                if resp.status_code == 200:
+                    items = resp.json()
+                    if isinstance(items, list) and len(items) > 0:
+                        best_match = next((it for it in items if it.get("syncedLyrics")), items[0])
+                        result = {
+                            "status": "success",
+                            "id": best_match.get("id"),
+                            "track_name": best_match.get("trackName") or cleaned_track,
+                            "artist_name": best_match.get("artistName") or "",
+                            "album_name": best_match.get("albumName") or "",
+                            "duration": best_match.get("duration"),
+                            "synced_lyrics": best_match.get("syncedLyrics") or "",
+                            "plain_lyrics": best_match.get("plainLyrics") or "",
+                            "instrumental": best_match.get("instrumental", False),
+                            "source": "lrclib_fallback"
+                        }
+                        _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
+                        return JSONResponse(content=result)
+            except Exception as e:
+                LOGGER.debug(f"[LRCLIB Fallback] Note: {e}")
+
+    # Không tìm thấy lời bài hát
+    not_found_res = {
+        "status": "not_found",
+        "track_name": cleaned_track,
+        "artist_name": cleaned_artist,
+        "synced_lyrics": "",
+        "plain_lyrics": "",
+        "message": f"Chưa có sẵn lời bài hát cho '{cleaned_track}'. Bạn có thể dán file .lrc thủ công!"
+    }
+    _lyrics_memory_cache[cache_key] = {"data": not_found_res, "_cached_at": time.time()}
+    return JSONResponse(status_code=404, content=not_found_res)
+
+
+@router.post("/api/music/lyrics/save")
+async def save_custom_lyrics(
+    request: Request,
+    user: Optional[dict] = Depends(get_current_user)
+):
+    """Lưu lời bài hát do người dùng chỉnh sửa hoặc dán file .lrc thủ công"""
+    try:
+        data = await request.json()
+        track_name = data.get("track_name", "").strip()
+        artist_name = data.get("artist_name", "").strip()
+        synced_lyrics = data.get("synced_lyrics", "").strip()
+        plain_lyrics = data.get("plain_lyrics", "").strip()
+        
+        if not track_name:
+            raise HTTPException(status_code=400, detail="Thiếu tên bài hát")
+            
+        cleaned_track = _clean_track_title_for_lyrics(track_name)
+        cleaned_artist = _clean_artist_name_for_lyrics(artist_name)
+        cache_key = f"{cleaned_track.lower()}__{cleaned_artist.lower()}"
+        
+        doc_data = {
+            "status": "success",
+            "track_name": cleaned_track,
+            "artist_name": cleaned_artist,
+            "synced_lyrics": synced_lyrics,
+            "plain_lyrics": plain_lyrics,
+            "instrumental": data.get("instrumental", False),
+            "is_custom": True,
+            "source": "custom_saved"
+        }
+        
+        # Cập nhật cache RAM
+        _lyrics_memory_cache[cache_key] = {"data": doc_data, "_cached_at": time.time()}
+        
+        # Cập nhật Database nếu có
+        if db is not None:
+            coll = db.get_collection("music_custom_lyrics")
+            if coll is not None:
+                await coll.update_one(
+                    {"_id": cache_key},
+                    {"$set": {
+                        "track_name": cleaned_track,
+                        "artist_name": cleaned_artist,
+                        "synced_lyrics": synced_lyrics,
+                        "plain_lyrics": plain_lyrics,
+                        "updated_by": user.get("username") if user else "anonymous",
+                        "updated_at": time.time()
+                    }},
+                    upsert=True
+                )
+                
+        return JSONResponse(content={
+            "status": "success", 
+            "message": "Đã lưu lời bài hát .lrc thành công!",
+            "data": doc_data
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        LOGGER.error(f"[SAVE LYRICS] Lỗi: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
 

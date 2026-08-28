@@ -361,6 +361,76 @@ class XTAPOMusicApp {
         this.m3u8DownloadPlsBtn = document.getElementById('m3u8DownloadPlsBtn');
         this.currentM3U8Context = null;
 
+        // Real-time Synced Lyrics Elements & State
+        this.tabVinylView = document.getElementById('tabVinylView');
+        this.tabLyricsView = document.getElementById('tabLyricsView');
+        this.heroLyricsStage = document.getElementById('heroLyricsStage');
+        this.heroLyricsSourceTag = document.getElementById('heroLyricsSourceTag');
+        this.heroLyricsTitle = document.getElementById('heroLyricsTitle');
+        this.heroLyricsScroll = document.getElementById('heroLyricsScroll');
+        this.heroLyricsLines = document.getElementById('heroLyricsLines');
+        this.heroLyricsPlaceholder = document.getElementById('heroLyricsPlaceholder');
+        this.heroLyricsOffset = document.getElementById('heroLyricsOffset');
+        this.lyricsStatusBadge = document.getElementById('lyricsStatusBadge');
+        this.btnOffsetMinus = document.getElementById('btnOffsetMinus');
+        this.btnOffsetPlus = document.getElementById('btnOffsetPlus');
+        this.btnOpenLyricsEditor = document.getElementById('btnOpenLyricsEditor');
+        this.btnOpenKaraokeModal = document.getElementById('btnOpenKaraokeModal');
+        this.lyricsToggleBtn = document.getElementById('lyricsToggleBtn');
+
+        // Karaoke Fullscreen Modal Elements
+        this.lyricsModal = document.getElementById('lyricsModal');
+        this.closeLyricsModal = document.getElementById('closeLyricsModal');
+        this.karaokeBackdrop = document.getElementById('karaokeBackdrop');
+        this.karaokeTrackTitle = document.getElementById('karaokeTrackTitle');
+        this.karaokeArtistName = document.getElementById('karaokeArtistName');
+        this.karaokeLyricsScroll = document.getElementById('karaokeLyricsScroll');
+        this.karaokeLinesList = document.getElementById('karaokeLinesList');
+        this.karaokePlaceholder = document.getElementById('karaokePlaceholder');
+        this.karaokeStatusText = document.getElementById('karaokeStatusText');
+        this.karaokeOffsetMinus = document.getElementById('karaokeOffsetMinus');
+        this.karaokeOffsetPlus = document.getElementById('karaokeOffsetPlus');
+        this.karaokeOffsetLabel = document.getElementById('karaokeOffsetLabel');
+        this.karaokeEditBtn = document.getElementById('karaokeEditBtn');
+        this.karaokeTimeCurrent = document.getElementById('karaokeTimeCurrent');
+        this.karaokeTimeTotal = document.getElementById('karaokeTimeTotal');
+        this.karaokeProgressTrack = document.getElementById('karaokeProgressTrack');
+        this.karaokeProgressFill = document.getElementById('karaokeProgressFill');
+        this.karaokePrevBtn = document.getElementById('karaokePrevBtn');
+        this.karaokePlayBtn = document.getElementById('karaokePlayBtn');
+        this.karaokeNextBtn = document.getElementById('karaokeNextBtn');
+        this.karaokePlayIcon = document.getElementById('karaokePlayIcon');
+        this.karaokePauseIcon = document.getElementById('karaokePauseIcon');
+
+        // Lyrics Editor Modal Elements
+        this.lyricsEditorModal = document.getElementById('lyricsEditorModal');
+        this.closeLyricsEditorModal = document.getElementById('closeLyricsEditorModal');
+        this.lyricsSearchTrackInput = document.getElementById('lyricsSearchTrackInput');
+        this.lyricsSearchArtistInput = document.getElementById('lyricsSearchArtistInput');
+        this.btnLyricsOnlineSearch = document.getElementById('btnLyricsOnlineSearch');
+        this.lyricsFileInput = document.getElementById('lyricsFileInput');
+        this.btnResetToOriginalLyrics = document.getElementById('btnResetToOriginalLyrics');
+        this.btnClearLyrics = document.getElementById('btnClearLyrics');
+        this.lyricsRawTextarea = document.getElementById('lyricsRawTextarea');
+        this.editorOffsetMinus = document.getElementById('editorOffsetMinus');
+        this.editorOffsetMinusSmall = document.getElementById('editorOffsetMinusSmall');
+        this.editorOffsetValue = document.getElementById('editorOffsetValue');
+        this.editorOffsetPlusSmall = document.getElementById('editorOffsetPlusSmall');
+        this.editorOffsetPlus = document.getElementById('editorOffsetPlus');
+        this.editorOffsetReset = document.getElementById('editorOffsetReset');
+        this.btnCancelLyricsEditor = document.getElementById('btnCancelLyricsEditor');
+        this.btnSaveLyricsEditor = document.getElementById('btnSaveLyricsEditor');
+
+        // Lyrics Internal State
+        this.activeHeroView = 'vinyl'; // 'vinyl' | 'lyrics'
+        this.currentLyrics = null;
+        this.currentLyricIndex = -1;
+        this.lyricsOffset = 0; // seconds (+: delay, -: early)
+        this.isUserScrollingHeroLyrics = false;
+        this.isUserScrollingKaraokeLyrics = false;
+        this.heroScrollResumeTimeout = null;
+        this.karaokeScrollResumeTimeout = null;
+
         this.currentUser = null;
         this.favoriteTracks = [];
 
@@ -372,6 +442,7 @@ class XTAPOMusicApp {
         this.setupAudioEvents();
         this.setupControlEvents();
         this.setupModalEvents();
+        this.setupLyricsEvents();
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
@@ -1226,6 +1297,15 @@ class XTAPOMusicApp {
         // Cập nhật trạng thái nút Yêu thích
         this.updateFavoriteBtnState();
 
+        // Cập nhật Lời bài hát thời gian thực (Real-time Synced Lyrics)
+        this.fetchTrackLyrics(track, album);
+        if (this.karaokeTrackTitle) this.karaokeTrackTitle.textContent = track.name || 'Unknown Track';
+        if (this.karaokeArtistName) this.karaokeArtistName.textContent = artistName;
+        if (this.karaokeBackdrop) this.karaokeBackdrop.style.backgroundImage = `url("${trackCover}")`;
+        if (this.karaokeTimeTotal) this.karaokeTimeTotal.textContent = track.duration || '--:--';
+        if (this.karaokeTimeCurrent) this.karaokeTimeCurrent.textContent = "0:00";
+        if (this.karaokeProgressFill) this.karaokeProgressFill.style.width = '0%';
+
         // Update Active Tracklist Item
         const items = this.tracklistEl.querySelectorAll('.track-item');
         items.forEach((item, idx) => {
@@ -1519,6 +1599,7 @@ class XTAPOMusicApp {
                 const percent = (this.synthTime / this.synthDuration) * 100;
                 this.updateProgress(percent);
                 this.timeCurrent.textContent = this.formatTime(this.synthTime);
+                this.syncLyricsTime(this.synthTime);
             }
         }, 500);
     }
@@ -1535,6 +1616,11 @@ class XTAPOMusicApp {
             this.hasStartedPlayback = true;
             this.playIcon.style.display = 'none';
             this.pauseIcon.style.display = 'block';
+
+            if (this.karaokePlayIcon && this.karaokePauseIcon) {
+                this.karaokePlayIcon.style.display = 'none';
+                this.karaokePauseIcon.style.display = 'block';
+            }
 
             // Mobile Sleeve button icon
             if (this.mobileSleevePlayBtn) {
@@ -1561,6 +1647,11 @@ class XTAPOMusicApp {
     pauseVisuals() {
         this.playIcon.style.display = 'block';
         this.pauseIcon.style.display = 'none';
+
+        if (this.karaokePlayIcon && this.karaokePauseIcon) {
+            this.karaokePlayIcon.style.display = 'block';
+            this.karaokePauseIcon.style.display = 'none';
+        }
 
         // Mobile Sleeve button icon
         if (this.mobileSleevePlayBtn) {
@@ -1591,6 +1682,7 @@ class XTAPOMusicApp {
                 const percent = (this.audio.currentTime / this.audio.duration) * 100;
                 this.updateProgress(percent);
                 this.timeCurrent.textContent = this.formatTime(this.audio.currentTime);
+                this.syncLyricsTime(this.audio.currentTime);
 
                 if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
                     try {
@@ -2470,6 +2562,8 @@ class XTAPOMusicApp {
                 this.closeModal(this.genreModal);
                 this.closeModal(this.countryModal);
                 this.closeModal(this.tracklistModal);
+                this.closeModal(this.lyricsModal);
+                this.closeModal(this.lyricsEditorModal);
                 this.metaDrawer.classList.remove('open');
                 this.closeMobileDrawer();
             }
@@ -3872,10 +3966,795 @@ class XTAPOMusicApp {
 
         this.showToast(`Đã copy link stream M3U8: ${title}`);
     }
+
+    // =========================================================================
+    // REAL-TIME SYNCED LYRICS & KARAOKE ENGINE (LRCLIB + CUSTOM LRC)
+    // =========================================================================
+
+    setupLyricsEvents() {
+        // 1. Cover Column Switcher (Vinyl vs Lyrics)
+        if (this.tabVinylView) {
+            this.tabVinylView.addEventListener('click', () => this.switchCoverView('vinyl'));
+        }
+        if (this.tabLyricsView) {
+            this.tabLyricsView.addEventListener('click', () => this.switchCoverView('lyrics'));
+        }
+
+        // 2. Bottom Player Bar Lyrics Button
+        if (this.lyricsToggleBtn) {
+            this.lyricsToggleBtn.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    // Mobile: mở ngay Karaoke Fullscreen View
+                    this.openKaraokeModal();
+                } else {
+                    // Desktop: chuyển đổi qua lại giữa Vinyl và Lyrics
+                    const targetView = this.activeHeroView === 'lyrics' ? 'vinyl' : 'lyrics';
+                    this.switchCoverView(targetView);
+                }
+            });
+        }
+
+        // 3. Full-screen Karaoke Modal Events
+        if (this.btnOpenKaraokeModal) {
+            this.btnOpenKaraokeModal.addEventListener('click', () => this.openKaraokeModal());
+        }
+        if (this.closeLyricsModal) {
+            this.closeLyricsModal.addEventListener('click', () => this.closeKaraokeModal());
+        }
+
+        // Karaoke Offset Controls
+        if (this.karaokeOffsetMinus) {
+            this.karaokeOffsetMinus.addEventListener('click', () => this.adjustLyricsOffset(-0.5));
+        }
+        if (this.karaokeOffsetPlus) {
+            this.karaokeOffsetPlus.addEventListener('click', () => this.adjustLyricsOffset(0.5));
+        }
+        if (this.btnOffsetMinus) {
+            this.btnOffsetMinus.addEventListener('click', () => this.adjustLyricsOffset(-0.5));
+        }
+        if (this.btnOffsetPlus) {
+            this.btnOffsetPlus.addEventListener('click', () => this.adjustLyricsOffset(0.5));
+        }
+
+        // Karaoke Modal Playback Controls
+        if (this.karaokePlayBtn) {
+            this.karaokePlayBtn.addEventListener('click', () => this.togglePlay());
+        }
+        if (this.karaokePrevBtn) {
+            this.karaokePrevBtn.addEventListener('click', () => this.prevTrack());
+        }
+        if (this.karaokeNextBtn) {
+            this.karaokeNextBtn.addEventListener('click', () => this.nextTrack());
+        }
+        if (this.karaokeProgressTrack) {
+            this.karaokeProgressTrack.addEventListener('click', (e) => {
+                const rect = this.karaokeProgressTrack.getBoundingClientRect();
+                const clickPos = (e.clientX - rect.left) / rect.width;
+                const targetPercent = Math.max(0, Math.min(1, clickPos));
+                if (this.synthesizerActive) {
+                    this.synthTime = targetPercent * this.synthDuration;
+                    this.updateProgress(targetPercent * 100);
+                } else if (this.audio.duration) {
+                    this.seekTo(targetPercent * this.audio.duration);
+                }
+            });
+        }
+
+        // 4. Lyrics Editor Modal Events
+        const openEditorHandler = () => this.openLyricsEditorModal();
+        if (this.btnOpenLyricsEditor) this.btnOpenLyricsEditor.addEventListener('click', openEditorHandler);
+        if (this.karaokeEditBtn) this.karaokeEditBtn.addEventListener('click', openEditorHandler);
+        if (this.closeLyricsEditorModal) this.closeLyricsEditorModal.addEventListener('click', () => this.closeModal(this.lyricsEditorModal));
+        if (this.btnCancelLyricsEditor) this.btnCancelLyricsEditor.addEventListener('click', () => this.closeModal(this.lyricsEditorModal));
+        if (this.btnSaveLyricsEditor) this.btnSaveLyricsEditor.addEventListener('click', () => this.saveCustomLyricsFromEditor());
+
+        // File Import (.lrc, .txt)
+        if (this.lyricsFileInput) {
+            this.lyricsFileInput.addEventListener('change', (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    if (this.lyricsRawTextarea) {
+                        this.lyricsRawTextarea.value = evt.target.result;
+                        this.showToast(`Đã đọc nội dung file: ${file.name}`);
+                    }
+                };
+                reader.readAsText(file);
+                // Reset input to allow re-selection
+                e.target.value = '';
+            });
+        }
+
+        // Editor Toolbar (Reset & Clear)
+        if (this.btnClearLyrics) {
+            this.btnClearLyrics.addEventListener('click', () => {
+                if (this.lyricsRawTextarea) this.lyricsRawTextarea.value = '';
+            });
+        }
+        if (this.btnResetToOriginalLyrics) {
+            this.btnResetToOriginalLyrics.addEventListener('click', async () => {
+                const track = this.currentTrack;
+                const album = this.currentAlbum;
+                if (!track) return;
+                const cacheKey = this.getTrackLyricsCacheKey(track, album);
+                localStorage.removeItem(`xtapo_custom_lrc_${cacheKey}`);
+                this.lyricsOffset = 0;
+                localStorage.removeItem(`xtapo_offset_${cacheKey}`);
+                this.updateOffsetUI();
+                await this.fetchTrackLyrics(track, album, true);
+                if (this.lyricsRawTextarea && this.currentLyrics) {
+                    this.lyricsRawTextarea.value = this.currentLyrics.rawLrc || this.currentLyrics.rawPlain || '';
+                }
+                this.showToast('Đã khôi phục lời bài hát gốc từ LRCLIB!');
+            });
+        }
+
+        // Online LRCLIB Manual Search from Editor
+        if (this.btnLyricsOnlineSearch) {
+            this.btnLyricsOnlineSearch.addEventListener('click', () => this.handleManualOnlineLyricsSearch());
+        }
+
+        // Editor Offset Buttons
+        if (this.editorOffsetMinus) this.editorOffsetMinus.addEventListener('click', () => this.adjustLyricsOffset(-0.5));
+        if (this.editorOffsetMinusSmall) this.editorOffsetMinusSmall.addEventListener('click', () => this.adjustLyricsOffset(-0.1));
+        if (this.editorOffsetPlusSmall) this.editorOffsetPlusSmall.addEventListener('click', () => this.adjustLyricsOffset(0.1));
+        if (this.editorOffsetPlus) this.editorOffsetPlus.addEventListener('click', () => this.adjustLyricsOffset(0.5));
+        if (this.editorOffsetReset) this.editorOffsetReset.addEventListener('click', () => {
+            this.lyricsOffset = 0;
+            this.updateOffsetUI();
+            const track = this.currentTrack;
+            const album = this.currentAlbum;
+            if (track) {
+                const cacheKey = this.getTrackLyricsCacheKey(track, album);
+                localStorage.removeItem(`xtapo_offset_${cacheKey}`);
+            }
+        });
+
+        // 5. Intelligent User Scroll Detection (pauses auto-scroll on manual scroll and resumes after 3.5s)
+        const setupScrollInactivityListener = (container, isUserScrollingFlagName, timeoutPropName) => {
+            if (!container) return;
+            const handleUserScroll = () => {
+                this[isUserScrollingFlagName] = true;
+                clearTimeout(this[timeoutPropName]);
+                this[timeoutPropName] = setTimeout(() => {
+                    this[isUserScrollingFlagName] = false;
+                }, 3500);
+            };
+            container.addEventListener('wheel', handleUserScroll, { passive: true });
+            container.addEventListener('touchstart', handleUserScroll, { passive: true });
+            container.addEventListener('touchmove', handleUserScroll, { passive: true });
+        };
+
+        setupScrollInactivityListener(this.heroLyricsScroll, 'isUserScrollingHeroLyrics', 'heroScrollResumeTimeout');
+        setupScrollInactivityListener(this.karaokeLyricsScroll, 'isUserScrollingKaraokeLyrics', 'karaokeScrollResumeTimeout');
+    }
+
+    switchCoverView(view = 'vinyl') {
+        this.activeHeroView = view;
+        if (view === 'lyrics') {
+            if (this.vinylStage) this.vinylStage.style.display = 'none';
+            if (this.heroLyricsStage) this.heroLyricsStage.style.display = 'flex';
+            if (this.tabVinylView) this.tabVinylView.classList.remove('active');
+            if (this.tabLyricsView) this.tabLyricsView.classList.add('active');
+            if (this.lyricsToggleBtn) this.lyricsToggleBtn.classList.add('active');
+            // Cuộn ngay vào dòng hiện tại
+            this.scrollLyricsToActiveLine(true);
+        } else {
+            if (this.vinylStage) this.vinylStage.style.display = 'flex';
+            if (this.heroLyricsStage) this.heroLyricsStage.style.display = 'none';
+            if (this.tabVinylView) this.tabVinylView.classList.add('active');
+            if (this.tabLyricsView) this.tabLyricsView.classList.remove('active');
+            if (this.lyricsToggleBtn) this.lyricsToggleBtn.classList.remove('active');
+        }
+    }
+
+    openKaraokeModal() {
+        if (this.lyricsModal) {
+            const track = this.currentTrack;
+            const album = this.currentAlbum;
+            if (track) {
+                if (this.karaokeTrackTitle) this.karaokeTrackTitle.textContent = track.name;
+                if (this.karaokeArtistName) this.karaokeArtistName.textContent = track.artist || album.artist || 'XTAPO Music';
+                const trackCover = track.coverUrl || album.coverUrl;
+                if (this.karaokeBackdrop) this.karaokeBackdrop.style.backgroundImage = `url("${trackCover}")`;
+            }
+            this.openModal(this.lyricsModal);
+            setTimeout(() => this.scrollLyricsToActiveLine(true), 150);
+        }
+    }
+
+    closeKaraokeModal() {
+        if (this.lyricsModal) {
+            this.closeModal(this.lyricsModal);
+        }
+    }
+
+    openLyricsEditorModal() {
+        const track = this.currentTrack;
+        const album = this.currentAlbum;
+        if (this.lyricsSearchTrackInput && track) {
+            this.lyricsSearchTrackInput.value = this.cleanTrackTitleForLyrics(track.name);
+        }
+        if (this.lyricsSearchArtistInput && (track || album)) {
+            this.lyricsSearchArtistInput.value = this.cleanArtistForLyrics((track && track.artist) || (album && album.artist) || '');
+        }
+        if (this.lyricsRawTextarea) {
+            if (this.currentLyrics && (this.currentLyrics.rawLrc || this.currentLyrics.rawPlain)) {
+                this.lyricsRawTextarea.value = this.currentLyrics.rawLrc || this.currentLyrics.rawPlain || '';
+            } else {
+                this.lyricsRawTextarea.value = '';
+            }
+        }
+        this.updateOffsetUI();
+        if (this.lyricsEditorModal) {
+            this.openModal(this.lyricsEditorModal);
+            if (this.lyricsRawTextarea) setTimeout(() => this.lyricsRawTextarea.focus(), 120);
+        }
+    }
+
+    cleanTrackTitleForLyrics(title) {
+        if (!title) return "";
+        let t = title.replace(/^\s*\d+[\s\.\-_]+/, ''); // 01. 
+        t = t.replace(/\.(flac|mp3|m4a|wav|aac|ogg)$/i, '');
+        t = t.replace(/\[.*?\]/g, ''); // [FLAC]
+        t = t.replace(/\((?:official|music|video|audio|lyrics|remaster|remastered|version|deluxe|bonus|expanded|edition|karaoke|beat|instrumental|hd|4k|live).*?\)/gi, '');
+        return t.replace(/\s+/g, ' ').trim();
+    }
+
+    cleanArtistForLyrics(artist) {
+        if (!artist || ['unknown', 'various artists', 'xtapo music', 'chưa rõ', 'none'].includes(artist.toLowerCase().trim())) {
+            return "";
+        }
+        return artist.replace(/\[.*?\]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    getTrackLyricsCacheKey(track, album) {
+        const cleanTitle = this.cleanTrackTitleForLyrics(track.name || '');
+        const cleanArtist = this.cleanArtistForLyrics(track.artist || (album && album.artist) || '');
+        return `${cleanTitle.toLowerCase()}__${cleanArtist.toLowerCase()}`;
+    }
+
+    // --- Fetch Lyrics Engine (LRCLIB + DB + LocalStorage) ---
+    async fetchTrackLyrics(track, album, forceRefresh = false) {
+        if (!track) return;
+        const cleanTitle = this.cleanTrackTitleForLyrics(track.name || '');
+        const cleanArtist = this.cleanArtistForLyrics(track.artist || (album && album.artist) || '');
+        const cacheKey = this.getTrackLyricsCacheKey(track, album);
+
+        // Load saved sync offset
+        const savedOffset = localStorage.getItem(`xtapo_offset_${cacheKey}`);
+        this.lyricsOffset = savedOffset !== null ? parseFloat(savedOffset) : 0;
+        this.updateOffsetUI();
+
+        // 1. Loading UI state
+        this.currentLyricIndex = -1;
+        if (this.heroLyricsPlaceholder) {
+            this.heroLyricsPlaceholder.style.display = 'flex';
+            this.heroLyricsPlaceholder.innerHTML = `
+                <div class="lyrics-spinner"></div>
+                <span>Đang kết nối API LRCLIB & tải lời cho "${this.escapeHtml(cleanTitle)}"...</span>
+            `;
+        }
+        if (this.heroLyricsLines) this.heroLyricsLines.innerHTML = '';
+        if (this.karaokePlaceholder) {
+            this.karaokePlaceholder.style.display = 'flex';
+            if (this.karaokeStatusText) this.karaokeStatusText.textContent = `Đang đồng bộ lời bài hát "${cleanTitle}"...`;
+        }
+        if (this.karaokeLinesList) this.karaokeLinesList.innerHTML = '';
+        if (this.heroLyricsTitle) this.heroLyricsTitle.textContent = `${cleanTitle} - ${cleanArtist || 'XTAPO Music'}`;
+
+        // 2. Check Custom LocalStorage Lyrics First
+        const customLrc = localStorage.getItem(`xtapo_custom_lrc_${cacheKey}`);
+        if (customLrc && !forceRefresh) {
+            const parsed = this.parseLRC(customLrc);
+            this.currentLyrics = {
+                lines: parsed.lines,
+                rawLrc: customLrc,
+                rawPlain: '',
+                isCustom: true,
+                isPlain: parsed.isPlain,
+                source: 'custom_local'
+            };
+            if (this.heroLyricsSourceTag) this.heroLyricsSourceTag.textContent = 'CUSTOM .LRC (ĐÃ LƯU)';
+            this.renderLyrics(this.currentLyrics);
+            return;
+        }
+
+        // 3. Check Cached Lyrics in LocalStorage
+        const cachedRaw = localStorage.getItem(`xtapo_cached_lrc_${cacheKey}`);
+        if (cachedRaw && !forceRefresh) {
+            try {
+                const cachedData = JSON.parse(cachedRaw);
+                const lrcContent = cachedData.synced_lyrics || cachedData.syncedLyrics || '';
+                const plainContent = cachedData.plain_lyrics || cachedData.plainLyrics || '';
+                if (lrcContent || plainContent) {
+                    const parsed = this.parseLRC(lrcContent || plainContent);
+                    this.currentLyrics = {
+                        lines: parsed.lines,
+                        rawLrc: lrcContent,
+                        rawPlain: plainContent,
+                        isCustom: false,
+                        isPlain: parsed.isPlain,
+                        source: 'cache'
+                    };
+                    if (this.heroLyricsSourceTag) this.heroLyricsSourceTag.textContent = lrcContent ? 'LRCLIB SYNCED' : 'LRCLIB PLAIN';
+                    this.renderLyrics(this.currentLyrics);
+                    return;
+                }
+            } catch (e) {}
+        }
+
+        // 4. Fetch from Backend /api/music/lyrics
+        let lyricsFound = false;
+        try {
+            const durationSec = this.getDurationSeconds(track.duration);
+            const params = new URLSearchParams({
+                track_name: cleanTitle,
+                artist_name: cleanArtist,
+                duration: durationSec > 0 ? durationSec.toString() : ''
+            });
+            if (album && album.title) params.append('album_name', album.title);
+
+            const res = await fetch(`/api/music/lyrics?${params.toString()}`);
+            if (res.ok) {
+                const data = await res.json();
+                const synced = data.synced_lyrics || data.syncedLyrics;
+                const plain = data.plain_lyrics || data.plainLyrics;
+                if (synced || plain) {
+                    localStorage.setItem(`xtapo_cached_lrc_${cacheKey}`, JSON.stringify(data));
+                    const parsed = this.parseLRC(synced || plain);
+                    this.currentLyrics = {
+                        lines: parsed.lines,
+                        rawLrc: synced || '',
+                        rawPlain: plain || '',
+                        isCustom: !!data.is_custom,
+                        isPlain: parsed.isPlain,
+                        source: 'backend_lrclib'
+                    };
+                    if (this.heroLyricsSourceTag) {
+                        this.heroLyricsSourceTag.textContent = data.is_custom ? 'CUSTOM .LRC' : (synced ? 'LRCLIB SYNCED' : 'LRCLIB PLAIN');
+                    }
+                    this.renderLyrics(this.currentLyrics);
+                    lyricsFound = true;
+                }
+            }
+        } catch (backendErr) {
+            console.log('[Lyrics] Backend API unavailable, trying client direct LRCLIB:', backendErr);
+        }
+
+        // 5. Fallback: Direct client-side LRCLIB query (if backend is offline or static)
+        if (!lyricsFound) {
+            try {
+                const queryStr = encodeURIComponent(`${cleanTitle} ${cleanArtist}`.trim());
+                const lrclibRes = await fetch(`https://lrclib.net/api/search?q=${queryStr}`);
+                if (lrclibRes.ok) {
+                    const items = await lrclibRes.json();
+                    if (Array.isArray(items) && items.length > 0) {
+                        const best = items.find(it => it.syncedLyrics) || items[0];
+                        const synced = best.syncedLyrics || '';
+                        const plain = best.plainLyrics || '';
+                        if (synced || plain) {
+                            localStorage.setItem(`xtapo_cached_lrc_${cacheKey}`, JSON.stringify(best));
+                            const parsed = this.parseLRC(synced || plain);
+                            this.currentLyrics = {
+                                lines: parsed.lines,
+                                rawLrc: synced,
+                                rawPlain: plain,
+                                isCustom: false,
+                                isPlain: parsed.isPlain,
+                                source: 'lrclib_direct'
+                            };
+                            if (this.heroLyricsSourceTag) this.heroLyricsSourceTag.textContent = synced ? 'LRCLIB SYNCED' : 'LRCLIB PLAIN';
+                            this.renderLyrics(this.currentLyrics);
+                            lyricsFound = true;
+                        }
+                    }
+                }
+            } catch (lrclibErr) {
+                console.log('[Lyrics] LRCLIB direct note:', lrclibErr);
+            }
+        }
+
+        // 6. If no lyrics found anywhere
+        if (!lyricsFound) {
+            this.currentLyrics = null;
+            if (this.heroLyricsPlaceholder) {
+                this.heroLyricsPlaceholder.style.display = 'flex';
+                this.heroLyricsPlaceholder.innerHTML = `
+                    <div style="font-size: 2.2rem; margin-bottom: 6px;">🎤</div>
+                    <div style="font-weight: 700; color: #fff;">Chưa tìm thấy lời bài hát</div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); max-width: 320px; margin: 0 auto; line-height: 1.5;">
+                        Bạn có thể nhấn nút <b>"Sửa .LRC"</b> ở trên để dán lời hoặc tải file .lrc từ máy tính!
+                    </p>
+                    <button class="primary-btn" onclick="window.xtapoApp.openLyricsEditorModal()" style="margin-top: 10px; padding: 8px 18px; font-size: 0.8rem;">
+                        ✏️ Dán File .LRC Ngay
+                    </button>
+                `;
+            }
+            if (this.karaokePlaceholder) {
+                this.karaokePlaceholder.style.display = 'flex';
+                if (this.karaokeStatusText) {
+                    this.karaokeStatusText.innerHTML = `Chưa có sẵn lời cho "${cleanTitle}".<br><span style="font-size: 0.9rem; opacity: 0.7;">Nhấn "Sửa LRC" để thêm lời thủ công!</span>`;
+                }
+            }
+        }
+    }
+
+    getDurationSeconds(durationStr) {
+        if (!durationStr) return 0;
+        if (typeof durationStr === 'number') return durationStr;
+        const parts = durationStr.split(':');
+        if (parts.length === 2) {
+            return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+        }
+        return 0;
+    }
+
+    // --- Parser Engine for .LRC Format ---
+    parseLRC(lrcText) {
+        if (!lrcText || typeof lrcText !== 'string') {
+            return { lines: [], isPlain: true };
+        }
+
+        const lines = [];
+        const rawLines = lrcText.split(/\r?\n/);
+        const timeRegex = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?\]/g;
+        let hasTimestamps = false;
+        let globalOffsetMs = 0;
+
+        // Check for header tags like [offset:+/-500]
+        for (const raw of rawLines) {
+            const offsetMatch = raw.match(/\[offset:\s*([+-]?\d+)\s*\]/i);
+            if (offsetMatch) {
+                globalOffsetMs = parseInt(offsetMatch[1], 10) || 0;
+            }
+        }
+
+        for (const raw of rawLines) {
+            const trimmed = raw.trim();
+            if (!trimmed) continue;
+
+            // Check if line contains [mm:ss.xx]
+            const matches = [...trimmed.matchAll(timeRegex)];
+            if (matches.length > 0) {
+                hasTimestamps = true;
+                const text = trimmed.replace(timeRegex, '').trim();
+                for (const match of matches) {
+                    const mins = parseInt(match[1], 10) || 0;
+                    const secs = parseInt(match[2], 10) || 0;
+                    const msRaw = match[3] || '0';
+                    const ms = msRaw.length === 2 ? parseInt(msRaw, 10) * 10 : parseInt(msRaw, 10);
+                    const totalSecs = mins * 60 + secs + ms / 1000 + globalOffsetMs / 1000;
+                    lines.push({
+                        time: Math.max(0, totalSecs),
+                        text: text || '♪ ♪ ♪'
+                    });
+                }
+            } else if (!trimmed.startsWith('[')) {
+                // Non-timestamp text line
+                lines.push({
+                    time: -1,
+                    text: trimmed
+                });
+            }
+        }
+
+        if (hasTimestamps) {
+            // Sort lines by time ascending
+            lines.sort((a, b) => a.time - b.time);
+
+            // Tự động chèn điểm dạo nhạc (Instrumental Interlude) nếu có khoảng lặng > 6s giữa 2 câu
+            const enrichedLines = [];
+            for (let i = 0; i < lines.length; i++) {
+                enrichedLines.push(lines[i]);
+                if (i < lines.length - 1) {
+                    const gap = lines[i + 1].time - lines[i].time;
+                    if (gap >= 6.5) {
+                        enrichedLines.push({
+                            time: lines[i].time + 2.5,
+                            text: '♪ ♫ ♪ ♫ (Dạo Nhạc) ♫ ♪ ♫ ♪',
+                            isInstrumental: true
+                        });
+                    }
+                }
+            }
+            return { lines: enrichedLines, isPlain: false };
+        } else {
+            // Plain lyrics without timestamps: format as readable lines
+            const plainLines = rawLines.map((l, idx) => ({ time: idx * 4, text: l.trim() })).filter(l => l.text);
+            return { lines: plainLines, isPlain: true };
+        }
+    }
+
+    // --- Render Synced Lyrics DOM ---
+    renderLyrics(lyricsData) {
+        if (!lyricsData || !lyricsData.lines || lyricsData.lines.length === 0) return;
+        const lines = lyricsData.lines;
+
+        if (this.heroLyricsPlaceholder) this.heroLyricsPlaceholder.style.display = 'none';
+        if (this.karaokePlaceholder) this.karaokePlaceholder.style.display = 'none';
+
+        // 1. Render Hero Lyrics lines
+        if (this.heroLyricsLines) {
+            this.heroLyricsLines.innerHTML = '';
+            lines.forEach((line, idx) => {
+                const el = document.createElement('div');
+                el.className = `lyrics-line ${line.isInstrumental ? 'instrumental' : ''}`;
+                el.dataset.index = idx;
+                el.dataset.time = line.time;
+                el.textContent = line.text;
+                el.addEventListener('click', () => {
+                    if (line.time >= 0) {
+                        this.seekTo(line.time);
+                    }
+                });
+                this.heroLyricsLines.appendChild(el);
+            });
+        }
+
+        // 2. Render Karaoke Fullscreen lines
+        if (this.karaokeLinesList) {
+            this.karaokeLinesList.innerHTML = '';
+            lines.forEach((line, idx) => {
+                const el = document.createElement('div');
+                el.className = `karaoke-line ${line.isInstrumental ? 'instrumental' : ''}`;
+                el.dataset.index = idx;
+                el.dataset.time = line.time;
+                el.textContent = line.text;
+                el.addEventListener('click', () => {
+                    if (line.time >= 0) {
+                        this.seekTo(line.time);
+                    }
+                });
+                this.karaokeLinesList.appendChild(el);
+            });
+        }
+
+        // Run sync immediately with current time
+        const curTime = this.synthesizerActive ? this.synthTime : (this.audio.currentTime || 0);
+        this.syncLyricsTime(curTime);
+    }
+
+    // --- Real-time Timestamp Synchronizer & Auto-scroller ---
+    syncLyricsTime(currentTime) {
+        if (!this.currentLyrics || !this.currentLyrics.lines || this.currentLyrics.lines.length === 0) return;
+        const lines = this.currentLyrics.lines;
+        const calibratedTime = currentTime + this.lyricsOffset;
+
+        // Binary search or linear lookup for active line
+        let activeIdx = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].time <= calibratedTime + 0.15) {
+                activeIdx = i;
+            } else {
+                break;
+            }
+        }
+
+        if (activeIdx !== this.currentLyricIndex) {
+            this.currentLyricIndex = activeIdx;
+            this.updateActiveLyricClasses(activeIdx);
+            this.scrollLyricsToActiveLine(false);
+        }
+
+        // Sync Karaoke Modal Timeline Progress Bar
+        if (this.lyricsModal && this.lyricsModal.classList.contains('open')) {
+            const duration = this.synthesizerActive ? this.synthDuration : (this.audio.duration || 1);
+            if (duration > 0 && !isNaN(duration)) {
+                const pct = (currentTime / duration) * 100;
+                if (this.karaokeProgressFill) this.karaokeProgressFill.style.width = `${pct}%`;
+                if (this.karaokeTimeCurrent) this.karaokeTimeCurrent.textContent = this.formatTime(currentTime);
+            }
+        }
+    }
+
+    updateActiveLyricClasses(activeIdx) {
+        // 1. Update Hero Lyrics Elements
+        if (this.heroLyricsLines) {
+            const heroEls = this.heroLyricsLines.querySelectorAll('.lyrics-line');
+            heroEls.forEach((el, idx) => {
+                if (idx === activeIdx) {
+                    el.classList.add('active');
+                    el.classList.remove('past');
+                } else if (idx < activeIdx) {
+                    el.classList.add('past');
+                    el.classList.remove('active');
+                } else {
+                    el.classList.remove('active', 'past');
+                }
+            });
+        }
+
+        // 2. Update Karaoke Modal Elements
+        if (this.karaokeLinesList) {
+            const karaokeEls = this.karaokeLinesList.querySelectorAll('.karaoke-line');
+            karaokeEls.forEach((el, idx) => {
+                if (idx === activeIdx) {
+                    el.classList.add('active');
+                    el.classList.remove('past');
+                } else if (idx < activeIdx) {
+                    el.classList.add('past');
+                    el.classList.remove('active');
+                } else {
+                    el.classList.remove('active', 'past');
+                }
+            });
+        }
+    }
+
+    scrollLyricsToActiveLine(force = false) {
+        if (this.currentLyricIndex < 0) return;
+
+        // 1. Hero Lyrics Auto-scroll
+        if (this.heroLyricsScroll && this.heroLyricsLines && (force || !this.isUserScrollingHeroLyrics)) {
+            const activeEl = this.heroLyricsLines.querySelector(`.lyrics-line[data-index="${this.currentLyricIndex}"]`);
+            if (activeEl) {
+                const containerH = this.heroLyricsScroll.clientHeight;
+                const elTop = activeEl.offsetTop;
+                const elH = activeEl.clientHeight;
+                const targetScroll = Math.max(0, elTop - containerH * 0.38 + elH / 2);
+                this.heroLyricsScroll.scrollTo({
+                    top: targetScroll,
+                    behavior: force ? 'auto' : 'smooth'
+                });
+            }
+        }
+
+        // 2. Karaoke Fullscreen Modal Auto-scroll
+        if (this.karaokeLyricsScroll && this.karaokeLinesList && (force || !this.isUserScrollingKaraokeLyrics)) {
+            const activeEl = this.karaokeLinesList.querySelector(`.karaoke-line[data-index="${this.currentLyricIndex}"]`);
+            if (activeEl) {
+                const containerH = this.karaokeLyricsScroll.clientHeight;
+                const elTop = activeEl.offsetTop;
+                const elH = activeEl.clientHeight;
+                const targetScroll = Math.max(0, elTop - containerH * 0.35 + elH / 2);
+                this.karaokeLyricsScroll.scrollTo({
+                    top: targetScroll,
+                    behavior: force ? 'auto' : 'smooth'
+                });
+            }
+        }
+    }
+
+    seekTo(targetSeconds) {
+        const safeSecs = Math.max(0, targetSeconds);
+        if (this.synthesizerActive) {
+            this.synthTime = safeSecs;
+            this.syncLyricsTime(this.synthTime);
+        } else if (this.audio.duration) {
+            this.audio.currentTime = Math.min(safeSecs, this.audio.duration);
+            this.syncLyricsTime(this.audio.currentTime);
+        }
+        this.showToast(`Tua đến: ${this.formatTime(safeSecs)}`);
+    }
+
+    adjustLyricsOffset(deltaSeconds) {
+        this.lyricsOffset = parseFloat((this.lyricsOffset + deltaSeconds).toFixed(2));
+        this.updateOffsetUI();
+        const track = this.currentTrack;
+        const album = this.currentAlbum;
+        if (track) {
+            const cacheKey = this.getTrackLyricsCacheKey(track, album);
+            localStorage.setItem(`xtapo_offset_${cacheKey}`, this.lyricsOffset.toString());
+        }
+        const curTime = this.synthesizerActive ? this.synthTime : (this.audio.currentTime || 0);
+        this.syncLyricsTime(curTime);
+        this.showToast(`Căn chỉnh lời: ${this.lyricsOffset >= 0 ? '+' : ''}${this.lyricsOffset.toFixed(1)}s`);
+    }
+
+    updateOffsetUI() {
+        const formatted = `${this.lyricsOffset >= 0 ? '+' : ''}${this.lyricsOffset.toFixed(1)}s`;
+        if (this.heroLyricsOffset) this.heroLyricsOffset.textContent = `Offset: ${formatted}`;
+        if (this.karaokeOffsetLabel) this.karaokeOffsetLabel.textContent = formatted;
+        if (this.editorOffsetValue) this.editorOffsetValue.textContent = formatted;
+    }
+
+    // --- Save Custom Lyrics from Editor ---
+    async saveCustomLyricsFromEditor() {
+        const track = this.currentTrack;
+        const album = this.currentAlbum;
+        if (!track || !this.lyricsRawTextarea) return;
+
+        const rawText = this.lyricsRawTextarea.value.trim();
+        if (!rawText) {
+            this.showToast('Vui lòng nhập nội dung lời bài hát hoặc file .lrc!');
+            return;
+        }
+
+        const cacheKey = this.getTrackLyricsCacheKey(track, album);
+        localStorage.setItem(`xtapo_custom_lrc_${cacheKey}`, rawText);
+        localStorage.setItem(`xtapo_offset_${cacheKey}`, this.lyricsOffset.toString());
+
+        const parsed = this.parseLRC(rawText);
+        this.currentLyrics = {
+            lines: parsed.lines,
+            rawLrc: rawText,
+            rawPlain: '',
+            isCustom: true,
+            isPlain: parsed.isPlain,
+            source: 'custom_saved'
+        };
+
+        if (this.heroLyricsSourceTag) this.heroLyricsSourceTag.textContent = 'CUSTOM .LRC (ĐÃ LƯU)';
+        this.renderLyrics(this.currentLyrics);
+        this.closeModal(this.lyricsEditorModal);
+        this.showToast('Đã lưu lời bài hát tùy chỉnh thành công! 🎤');
+
+        // Save to backend database asynchronously
+        try {
+            await fetch('/api/music/lyrics/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    track_name: track.name,
+                    artist_name: track.artist || (album && album.artist) || '',
+                    synced_lyrics: rawText,
+                    plain_lyrics: ''
+                })
+            });
+        } catch (e) {}
+    }
+
+    async handleManualOnlineLyricsSearch() {
+        const trackQuery = this.lyricsSearchTrackInput ? this.lyricsSearchTrackInput.value.trim() : '';
+        const artistQuery = this.lyricsSearchArtistInput ? this.lyricsSearchArtistInput.value.trim() : '';
+
+        if (!trackQuery) {
+            this.showToast('Vui lòng nhập tên bài hát cần tìm!');
+            return;
+        }
+
+        if (this.btnLyricsOnlineSearch) {
+            this.btnLyricsOnlineSearch.disabled = true;
+            this.btnLyricsOnlineSearch.innerHTML = `<span>Đang tìm...</span>`;
+        }
+
+        try {
+            const queryStr = encodeURIComponent(`${trackQuery} ${artistQuery}`.trim());
+            const res = await fetch(`https://lrclib.net/api/search?q=${queryStr}`);
+            if (res.ok) {
+                const items = await res.json();
+                if (Array.isArray(items) && items.length > 0) {
+                    const best = items.find(it => it.syncedLyrics) || items[0];
+                    const lrc = best.syncedLyrics || best.plainLyrics || '';
+                    if (this.lyricsRawTextarea && lrc) {
+                        this.lyricsRawTextarea.value = lrc;
+                        this.showToast(`Tìm thấy lời bài hát: "${best.trackName || trackQuery}" (${best.syncedLyrics ? 'Có đồng bộ' : 'Lời thô'})`);
+                    }
+                } else {
+                    this.showToast(`Không tìm thấy kết quả nào trên LRCLIB cho "${trackQuery}"`);
+                }
+            } else {
+                this.showToast('Lỗi kết nối tới cơ sở dữ liệu LRCLIB');
+            }
+        } catch (e) {
+            this.showToast('Lỗi kết nối tới máy chủ LRCLIB');
+        } finally {
+            if (this.btnLyricsOnlineSearch) {
+                this.btnLyricsOnlineSearch.disabled = false;
+                this.btnLyricsOnlineSearch.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <span>Tìm Trên LRCLIB</span>
+                `;
+            }
+        }
+    }
+
+    escapeHtml(str) {
+        if (!str || typeof str !== 'string') return '';
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 }
 
 // Initialize on DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
     window.xtapoApp = new XTAPOMusicApp();
 });
+
 
