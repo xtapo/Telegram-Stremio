@@ -607,7 +607,7 @@ html, body {
 
 .vinyl-stage {
     position: relative;
-    width: 520px;
+    width: 580px;
     height: 400px;
     display: flex;
     align-items: center;
@@ -622,19 +622,22 @@ html, body {
     width: 370px;
     height: 370px;
     border-radius: 50%;
-    background: radial-gradient(circle, #0e0e11 0%, #15161b 45%, #08080a 70%, #000000 100%);
+    background: radial-gradient(circle at 50% 50%, #181922 0%, #101117 35%, #08080c 70%, #000000 100%);
+    border: 1px solid rgba(255, 255, 255, 0.22);
     box-shadow: 
-        0 15px 40px rgba(0, 0, 0, 0.8),
-        inset 0 0 0 2px rgba(255, 255, 255, 0.08),
-        inset 0 0 10px rgba(0, 0, 0, 0.9);
+        0 20px 50px rgba(0, 0, 0, 0.95),
+        0 0 35px rgba(252, 191, 71, 0.28),
+        0 0 75px rgba(255, 109, 196, 0.14),
+        inset 0 0 0 1.5px rgba(255, 255, 255, 0.22),
+        inset 0 0 14px rgba(0, 0, 0, 0.95);
     top: 15px;
     left: 15px;
     z-index: 1;
     transition: transform 1.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.8s ease;
     transform-origin: center center;
-    transform: translateX(var(--vinyl-retract, 35px)) rotate(0deg);
+    transform: translateX(var(--vinyl-retract, 40px)) rotate(0deg);
     overflow: hidden;
-    will-change: transform;
+    will-change: transform, box-shadow;
 }
 
 /* Concentric Grooves */
@@ -644,32 +647,37 @@ html, body {
     border-radius: 50%;
     background: repeating-radial-gradient(
         circle at 50% 50%,
-        transparent 0px,
+        rgba(255, 255, 255, 0.045) 0px,
+        rgba(255, 255, 255, 0.015) 1px,
         transparent 2px,
-        rgba(255, 255, 255, 0.02) 3px,
-        rgba(0, 0, 0, 0.4) 4px
+        rgba(0, 0, 0, 0.52) 3px,
+        transparent 4px
     );
-    opacity: 0.85;
+    opacity: 0.95;
 }
 
-/* Gloss Reflection (Conic Sheen) */
+/* Gloss Reflection (Conic Sheen & Holographic Highlight) */
 .vinyl-reflection {
     position: absolute;
     inset: 0;
     border-radius: 50%;
     background: conic-gradient(
-        from 45deg at 50% 50%,
-        rgba(255, 255, 255, 0.15) 0deg,
-        transparent 55deg,
-        rgba(255, 255, 255, 0.1) 120deg,
-        transparent 180deg,
-        rgba(255, 255, 255, 0.15) 225deg,
-        transparent 280deg,
-        rgba(255, 255, 255, 0.08) 330deg,
+        from 40deg at 50% 50%,
+        rgba(255, 255, 255, 0.32) 0deg,
+        rgba(252, 191, 71, 0.16) 25deg,
+        transparent 50deg,
+        rgba(255, 255, 255, 0.24) 115deg,
+        rgba(56, 189, 248, 0.14) 140deg,
+        transparent 175deg,
+        rgba(255, 255, 255, 0.35) 220deg,
+        rgba(255, 109, 196, 0.16) 245deg,
+        transparent 270deg,
+        rgba(255, 255, 255, 0.22) 330deg,
         transparent 360deg
     );
     pointer-events: none;
-    mix-blend-mode: overlay;
+    mix-blend-mode: screen;
+    opacity: 0.88;
 }
 
 /* Vinyl Center Label */
@@ -682,8 +690,10 @@ html, body {
     transform: translate(-50%, -50%);
     border-radius: 50%;
     overflow: hidden;
-    border: 4px solid #111;
-    box-shadow: 0 0 15px rgba(0, 0, 0, 0.9);
+    border: 3px solid #15161c;
+    outline: 2px solid rgba(252, 191, 71, 0.5);
+    outline-offset: -1px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.95), inset 0 0 10px rgba(0, 0, 0, 0.85);
 }
 
 .vinyl-center-label img {
@@ -702,63 +712,91 @@ html, body {
     transform: translate(-50%, -50%);
     background: #08090c;
     border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.4);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(252, 191, 71, 0.65);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85);
 }
 
 /* Vinyl Interactive States (Retracted inside when paused, Slow & Silky Slide-out & Spin when playing) */
 .vinyl-stage {
-    --vinyl-retract: 35px;
-    --vinyl-expand: 180px;
+    --vinyl-retract: 40px;
+    --vinyl-expand: 215px;
 }
 
 .vinyl-stage .vinyl-disc {
-    transform: translateX(var(--vinyl-retract, 35px)) rotate(0deg);
+    transform: translateX(var(--vinyl-retract, 40px)) rotate(0deg);
 }
 
 .vinyl-stage:not(.is-playing):not(.is-paused) .vinyl-disc {
-    transform: translateX(var(--vinyl-retract, 35px)) rotate(0deg);
+    transform: translateX(var(--vinyl-retract, 40px)) rotate(0deg);
     animation: none;
 }
 
 /* Subtle peek interaction when hovering album while paused */
 .vinyl-stage:not(.is-playing):hover .vinyl-disc {
-    transform: translateX(calc(var(--vinyl-retract, 35px) + 25px)) rotate(0deg);
-    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateX(calc(var(--vinyl-retract, 40px) + 30px)) rotate(0deg);
+    box-shadow: 
+        0 20px 55px rgba(0, 0, 0, 0.95),
+        0 0 45px rgba(252, 191, 71, 0.45),
+        0 0 90px rgba(255, 109, 196, 0.22),
+        inset 0 0 0 1.8px rgba(255, 255, 255, 0.28),
+        inset 0 0 14px rgba(0, 0, 0, 0.95);
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.6s ease;
 }
 
 .vinyl-stage.is-playing .vinyl-disc {
-    animation: vinylSlideOut 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, vinylSpin 6.5s linear 1.4s infinite;
+    animation: 
+        vinylSlideOut 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, 
+        vinylSpin 6.5s linear 1.4s infinite,
+        vinylAuraPulse 3s ease-in-out infinite alternate;
 }
 
 .vinyl-stage.is-paused .vinyl-disc {
     animation: vinylSlideIn 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes vinylSlideOut {
+@keyframes vinylAuraPulse {
     0% {
-        transform: translateX(var(--vinyl-retract, 35px)) rotate(0deg);
+        box-shadow: 
+            0 20px 50px rgba(0, 0, 0, 0.95),
+            0 0 35px rgba(252, 191, 71, 0.28),
+            0 0 75px rgba(255, 109, 196, 0.15),
+            inset 0 0 0 1.5px rgba(255, 255, 255, 0.22),
+            inset 0 0 14px rgba(0, 0, 0, 0.95);
     }
     100% {
-        transform: translateX(var(--vinyl-expand, 180px)) rotate(0deg);
+        box-shadow: 
+            0 25px 65px rgba(0, 0, 0, 0.98),
+            0 0 60px rgba(252, 191, 71, 0.5),
+            0 0 110px rgba(255, 109, 196, 0.28),
+            inset 0 0 0 2px rgba(255, 255, 255, 0.32),
+            inset 0 0 16px rgba(0, 0, 0, 0.95);
+    }
+}
+
+@keyframes vinylSlideOut {
+    0% {
+        transform: translateX(var(--vinyl-retract, 40px)) rotate(0deg);
+    }
+    100% {
+        transform: translateX(var(--vinyl-expand, 215px)) rotate(0deg);
     }
 }
 
 @keyframes vinylSlideIn {
     0% {
-        transform: translateX(var(--vinyl-expand, 180px));
+        transform: translateX(var(--vinyl-expand, 215px));
     }
     100% {
-        transform: translateX(var(--vinyl-retract, 35px)) rotate(0deg);
+        transform: translateX(var(--vinyl-retract, 40px)) rotate(0deg);
     }
 }
 
 @keyframes vinylSpin {
     from {
-        transform: translateX(var(--vinyl-expand, 180px)) rotate(0deg);
+        transform: translateX(var(--vinyl-expand, 215px)) rotate(0deg);
     }
     to {
-        transform: translateX(var(--vinyl-expand, 180px)) rotate(360deg);
+        transform: translateX(var(--vinyl-expand, 215px)) rotate(360deg);
     }
 }
 
