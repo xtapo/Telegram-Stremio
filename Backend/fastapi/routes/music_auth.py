@@ -123,7 +123,7 @@ async def get_user_favorites(user_id: str = Depends(require_music_auth)):
 async def toggle_user_favorite(payload: dict, user_id: str = Depends(require_music_auth)):
     chat_id = payload.get("chat_id")
     msg_id = payload.get("msg_id")
-    if not chat_id or not msg_id:
+    if chat_id is None or msg_id is None:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Thiếu chat_id hoặc msg_id"})
         
     try:
@@ -140,15 +140,23 @@ async def toggle_user_favorite(payload: dict, user_id: str = Depends(require_mus
         if target:
             favorites = [f for f in favorites if not (str(f.get("chat_id")) == str(chat_id) and str(f.get("msg_id")) == str(msg_id))]
         else:
+            cid = int(chat_id) if str(chat_id).lstrip('-').isdigit() else str(chat_id)
+            mid = int(msg_id) if str(msg_id).lstrip('-').isdigit() else str(msg_id)
+            track_name = payload.get("name") or payload.get("title") or ""
+            artist = payload.get("artist") or ""
+            cover_url = payload.get("cover_url") or payload.get("coverUrl") or ""
             favorites.append({
-                "chat_id": int(chat_id),
-                "msg_id": int(msg_id),
+                "chat_id": cid,
+                "msg_id": mid,
+                "title": track_name,
+                "artist": artist,
+                "cover_url": cover_url,
                 "added_at": time.time()
             })
             is_favorite = True
             
         await coll.update_one({"_id": user_id}, {"$set": {"favorites": favorites}})
-        return {"status": "success", "is_favorite": is_favorite, "message": "Đã thêm vào yêu thích" if is_favorite else "Đã bỏ yêu thích"}
+        return {"status": "success", "is_favorite": is_favorite, "message": "Đã thêm vào bài hát yêu thích ❤️" if is_favorite else "Đã xóa khỏi danh sách yêu thích 🤍"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 

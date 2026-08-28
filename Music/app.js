@@ -459,51 +459,83 @@ class XTAPOMusicApp {
         } catch (e) {}
     }
 
+    getTrackIdentifiers(track) {
+        if (!track) return { chatId: null, msgId: null };
+        const album = this.currentAlbum;
+        const chatId = track.chatId || (track.meta && track.meta.chat_id) || track.chat_id || (album && (album.chatId || album.chat_id)) || 'demo';
+        const msgId = track.msgId || (track.meta && track.meta.msg_id) || track.msg_id || track.id || track.name;
+        return { chatId: String(chatId), msgId: String(msgId) };
+    }
+
     updateFavoriteBtnState() {
         if (!this.favoriteBtn) return;
         const track = this.currentTrack;
-        if (!track || !track.meta || !track.meta.chat_id || !track.meta.msg_id) {
+        if (!track) {
+            this.favoriteBtn.style.color = 'var(--text-muted)';
+            this.favoriteBtn.title = 'Thêm vào yêu thích (Cần đăng nhập)';
+            return;
+        }
+
+        const { chatId, msgId } = this.getTrackIdentifiers(track);
+        if (!chatId || !msgId) {
             this.favoriteBtn.style.color = 'var(--text-muted)';
             return;
         }
-        const isFav = this.favoriteTracks.some(f => String(f.chat_id) === String(track.meta.chat_id) && String(f.msg_id) === String(track.meta.msg_id));
+
+        const isFav = this.favoriteTracks && this.favoriteTracks.some(f => String(f.chat_id) === chatId && String(f.msg_id) === msgId);
         if (isFav) {
             this.favoriteBtn.style.color = '#ef4444'; // Red
+            this.favoriteBtn.title = 'Đã yêu thích (Bấm để bỏ thích)';
             this.favoriteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
         } else {
             this.favoriteBtn.style.color = 'var(--text-muted)';
+            this.favoriteBtn.title = this.currentUser ? 'Thêm vào danh sách yêu thích' : 'Thêm vào yêu thích (Cần đăng nhập)';
             this.favoriteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
         }
     }
 
     async toggleFavorite() {
         if (!this.currentUser) {
-            this.authModal.classList.add('open');
-            return this.showToast("Vui lòng đăng nhập để sử dụng tính năng yêu thích.");
+            if (this.authModal) this.authModal.classList.add('open');
+            return this.showToast("Vui lòng đăng nhập để sử dụng tính năng yêu thích ❤️");
         }
         
         const track = this.currentTrack;
-        if (!track || !track.meta || !track.meta.chat_id || !track.meta.msg_id) return;
-        
+        if (!track) return;
+        const { chatId, msgId } = this.getTrackIdentifiers(track);
+        if (!chatId || !msgId) return this.showToast("Không tìm thấy thông tin bài hát để yêu thích");
+
         try {
             const res = await fetch('/api/music/user/favorites/toggle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: track.meta.chat_id, msg_id: track.meta.msg_id })
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    msg_id: msgId,
+                    name: track.name,
+                    artist: track.artist || this.currentAlbum.artist,
+                    cover_url: track.coverUrl || this.currentAlbum.coverUrl
+                })
             });
             const data = await res.json();
             if (data.status === 'success') {
                 if (data.is_favorite) {
-                    this.favoriteTracks.push({ chat_id: track.meta.chat_id, msg_id: track.meta.msg_id });
+                    this.favoriteTracks.push({
+                        chat_id: chatId,
+                        msg_id: msgId,
+                        title: track.name,
+                        artist: track.artist || this.currentAlbum.artist
+                    });
                 } else {
-                    this.favoriteTracks = this.favoriteTracks.filter(f => !(String(f.chat_id) === String(track.meta.chat_id) && String(f.msg_id) === String(track.meta.msg_id)));
+                    this.favoriteTracks = this.favoriteTracks.filter(f => !(String(f.chat_id) === chatId && String(f.msg_id) === msgId));
                 }
                 this.updateFavoriteBtnState();
+                this.showToast(data.message || (data.is_favorite ? "Đã thêm vào yêu thích ❤️" : "Đã bỏ yêu thích"));
             } else {
                 this.showToast(data.message || "Lỗi cập nhật yêu thích");
             }
         } catch (e) {
-            this.showToast("Lỗi mạng khi cập nhật yêu thích");
+            this.showToast("Lỗi kết nối khi cập nhật yêu thích");
         }
     }
 
@@ -760,6 +792,9 @@ class XTAPOMusicApp {
 
         // Cập nhật MediaSession cho màn hình khóa iPhone (iOS), Android và Desktop
         this.updateMediaSession();
+
+        // Cập nhật trạng thái nút Yêu thích
+        this.updateFavoriteBtnState();
 
         // Update Active Tracklist Item
         const items = this.tracklistEl.querySelectorAll('.track-item');
