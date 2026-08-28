@@ -87,39 +87,98 @@ html, body {
     z-index: 0;
     pointer-events: none;
     overflow: hidden;
-    background-color: #07080b;
+    background-color: #06070a;
+}
+
+/* Cross-fading Album Art Blurred Backdrops */
+.backdrop-art {
+    position: absolute;
+    inset: -15%;
+    width: 130%;
+    height: 130%;
+    background-size: cover;
+    background-position: center 35%;
+    background-repeat: no-repeat;
+    filter: blur(85px) saturate(1.8) brightness(0.32);
+    opacity: 0;
+    transform: scale(1.05) translateZ(0);
+    transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1), transform 16s ease-in-out;
+    will-change: opacity, transform;
+}
+
+.backdrop-art.active {
+    opacity: 1;
+    animation: backdropArtFloat 24s ease-in-out infinite alternate;
+}
+
+@keyframes backdropArtFloat {
+    0% {
+        transform: scale(1.05) translate(0, 0);
+    }
+    50% {
+        transform: scale(1.12) translate(-2%, 2%);
+    }
+    100% {
+        transform: scale(1.08) translate(2%, -1.5%);
+    }
 }
 
 .backdrop-glow {
     position: absolute;
     border-radius: 50%;
-    filter: blur(120px);
-    opacity: 0.35;
-    transition: background 1.2s ease, transform 1.2s ease;
+    filter: blur(110px);
+    opacity: 0.45;
+    transition: background 1.5s ease, transform 1.5s ease, opacity 1.5s ease;
+    mix-blend-mode: screen;
+    pointer-events: none;
 }
 
 .glow-1 {
-    width: 650px;
-    height: 650px;
-    top: -150px;
-    right: -100px;
-    background: radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%);
+    width: 720px;
+    height: 720px;
+    top: -120px;
+    right: -80px;
+    background: radial-gradient(circle, rgba(252, 191, 71, 0.45) 0%, rgba(245, 158, 11, 0.25) 45%, transparent 75%);
+    animation: glowFloat1 18s ease-in-out infinite alternate;
 }
 
 .glow-2 {
-    width: 550px;
-    height: 550px;
-    bottom: -100px;
-    left: -100px;
-    background: radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%);
+    width: 620px;
+    height: 620px;
+    bottom: -80px;
+    left: -80px;
+    background: radial-gradient(circle, rgba(255, 109, 196, 0.38) 0%, rgba(99, 102, 241, 0.22) 50%, transparent 75%);
+    animation: glowFloat2 22s ease-in-out infinite alternate;
+}
+
+@keyframes glowFloat1 {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-40px, 30px) scale(1.08); }
+    100% { transform: translate(20px, -20px) scale(0.95); }
+}
+
+@keyframes glowFloat2 {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(30px, -30px) scale(1.1); }
+    100% { transform: translate(-20px, 20px) scale(0.92); }
 }
 
 .backdrop-overlay {
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at 60% 30%, rgba(15, 17, 23, 0.3) 0%, rgba(8, 9, 13, 0.85) 75%, #050608 100%);
-    backdrop-filter: blur(40px);
-    -webkit-backdrop-filter: blur(40px);
+    background: radial-gradient(circle at 62% 38%, rgba(12, 14, 18, 0.12) 0%, rgba(7, 8, 12, 0.72) 65%, #050608 100%);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+}
+
+/* Audiophile Studio Subtle Film Grain Texture */
+.backdrop-noise {
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.65;
+    mix-blend-mode: overlay;
 }
 
 /* --- App Container --- */
@@ -588,6 +647,108 @@ html, body {
     justify-content: flex-start;
     perspective: 1200px;
     overflow: visible;
+}
+
+/* Ambient Aura Halo behind Vinyl Stage */
+.vinyl-aura-halo {
+    position: absolute;
+    width: 480px;
+    height: 480px;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle,
+        rgba(252, 191, 71, 0.38) 0%,
+        rgba(245, 158, 11, 0.22) 35%,
+        rgba(255, 109, 196, 0.12) 60%,
+        transparent 75%
+    );
+    filter: blur(52px);
+    top: 50%;
+    left: 45%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 0;
+    transition: opacity 1.2s ease, transform 1.2s cubic-bezier(0.16, 1, 0.3, 1), filter 1.2s ease;
+    opacity: 0.65;
+}
+
+/* Glowing Backlight tracking behind Vinyl Disc */
+.vinyl-disc-halo {
+    position: absolute;
+    width: 370px;
+    height: 370px;
+    border-radius: 50%;
+    top: 15px;
+    left: 15px;
+    background: radial-gradient(
+        circle,
+        rgba(252, 191, 71, 0.35) 0%,
+        rgba(255, 109, 196, 0.2) 45%,
+        transparent 70%
+    );
+    filter: blur(36px);
+    pointer-events: none;
+    z-index: 0;
+    transform: translateX(var(--vinyl-retract, 35px));
+    transition: transform 1.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease;
+    opacity: 0.45;
+}
+
+.vinyl-stage.is-playing .vinyl-aura-halo {
+    opacity: 0.95;
+    animation: vinylAuraPulse 4.5s ease-in-out infinite alternate;
+}
+
+.vinyl-stage.is-playing .vinyl-disc-halo {
+    opacity: 0.85;
+    animation: vinylDiscHaloOut 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, vinylDiscHaloPulse 3.5s ease-in-out 1.4s infinite alternate;
+}
+
+.vinyl-stage.is-paused .vinyl-disc-halo {
+    animation: vinylDiscHaloIn 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0.4;
+}
+
+@keyframes vinylAuraPulse {
+    0% {
+        transform: translate(-50%, -50%) scale(0.95);
+        filter: blur(46px);
+        opacity: 0.75;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1.1);
+        filter: blur(60px);
+        opacity: 1;
+    }
+}
+
+@keyframes vinylDiscHaloOut {
+    0% {
+        transform: translateX(var(--vinyl-retract, 35px));
+    }
+    100% {
+        transform: translateX(var(--vinyl-expand, 180px));
+    }
+}
+
+@keyframes vinylDiscHaloIn {
+    0% {
+        transform: translateX(var(--vinyl-expand, 180px));
+    }
+    100% {
+        transform: translateX(var(--vinyl-retract, 35px));
+    }
+}
+
+@keyframes vinylDiscHaloPulse {
+    0% {
+        transform: translateX(var(--vinyl-expand, 180px)) scale(0.96);
+        opacity: 0.65;
+    }
+    100% {
+        transform: translateX(var(--vinyl-expand, 180px)) scale(1.08);
+        opacity: 0.95;
+    }
 }
 
 /* Vinyl Disc 3D Realistic Design */
@@ -1687,6 +1848,20 @@ html, body {
         justify-content: flex-start;
         overflow: visible;
         margin: 0 auto;
+    }
+
+    .vinyl-aura-halo {
+        width: 330px;
+        height: 330px;
+        filter: blur(38px);
+    }
+
+    .vinyl-disc-halo {
+        width: 250px;
+        height: 250px;
+        top: 10px;
+        left: 10px;
+        filter: blur(28px);
     }
     
     .vinyl-disc {

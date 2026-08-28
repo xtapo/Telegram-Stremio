@@ -1012,6 +1012,29 @@ class XTAPOMusicApp {
         }
     }
 
+    updateDynamicBackdrop(coverUrl) {
+        if (!coverUrl) return;
+        if (this._currentBackdropUrl === coverUrl) return;
+        this._currentBackdropUrl = coverUrl;
+
+        const artA = document.getElementById('backdropArtA');
+        const artB = document.getElementById('backdropArtB');
+        if (!artA || !artB) return;
+
+        // Smooth cross-fade between Layer A and Layer B
+        if (!this._activeBackdropLayer || this._activeBackdropLayer === 'A') {
+            artB.style.backgroundImage = `url("${coverUrl}")`;
+            artB.classList.add('active');
+            artA.classList.remove('active');
+            this._activeBackdropLayer = 'B';
+        } else {
+            artA.style.backgroundImage = `url("${coverUrl}")`;
+            artA.classList.add('active');
+            artB.classList.remove('active');
+            this._activeBackdropLayer = 'A';
+        }
+    }
+
     // --- Load Album & Track ---
     loadAlbum(albumIndex, trackIndex = 0, autoPlay = true) {
         this.currentAlbumIndex = albumIndex;
@@ -1042,16 +1065,21 @@ class XTAPOMusicApp {
         const mins = Math.floor(totalSec / 60);
         this.totalDurationLabel.textContent = (!isNaN(mins) && mins > 0) ? `${mins} Minutes` : `${(album.tracks || []).length} Songs`;
 
-        // Update Covers
+        // Update Covers & Dynamic Backdrop
         const initialCover = (album.tracks && album.tracks[trackIndex] && album.tracks[trackIndex].coverUrl) || album.coverUrl;
         this.albumCoverImg.src = initialCover;
         this.vinylCenterImg.src = initialCover;
+        this.updateDynamicBackdrop(initialCover);
 
-        // Update Background Glows
+        // Update Background Glows & Halo
         const glow1 = document.querySelector('.glow-1');
         const glow2 = document.querySelector('.glow-2');
+        const auraHalo = document.getElementById('vinylAuraHalo');
+        const discHalo = document.getElementById('vinylDiscHalo');
         if (glow1 && album.glowColors) glow1.style.background = album.glowColors.glow1;
         if (glow2 && album.glowColors) glow2.style.background = album.glowColors.glow2;
+        if (auraHalo && album.glowColors && album.glowColors.glow1) auraHalo.style.background = album.glowColors.glow1;
+        if (discHalo && album.glowColors && album.glowColors.glow1) discHalo.style.background = album.glowColors.glow1;
 
         // Render Tracklist
         this.renderTracklist();
@@ -1169,13 +1197,18 @@ class XTAPOMusicApp {
         if (this.vinylCenterImg && this.vinylCenterImg.src !== trackCover) {
             this.vinylCenterImg.src = trackCover;
         }
+        this.updateDynamicBackdrop(trackCover);
 
         // Cập nhật màu nền phát sáng theo bài hát nếu có
         if (track && track.glowColors) {
             const glow1 = document.querySelector('.glow-1');
             const glow2 = document.querySelector('.glow-2');
+            const auraHalo = document.getElementById('vinylAuraHalo');
+            const discHalo = document.getElementById('vinylDiscHalo');
             if (glow1 && track.glowColors.glow1) glow1.style.background = track.glowColors.glow1;
             if (glow2 && track.glowColors.glow2) glow2.style.background = track.glowColors.glow2;
+            if (auraHalo && track.glowColors.glow1) auraHalo.style.background = track.glowColors.glow1;
+            if (discHalo && track.glowColors.glow1) discHalo.style.background = track.glowColors.glow1;
         }
 
         // Cập nhật thông tin bài hát đang phát
