@@ -1143,8 +1143,13 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tiểu Sử / Giới Thiệu Ngắn (Bio)</label>
-                <textarea id="edit-artist-bio" rows="3" placeholder="Đôi nét về sự nghiệp, giải thưởng của nghệ sĩ..."
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">Tiểu Sử / Giới Thiệu Ngắn (Bio)</label>
+                    <button type="button" id="btn-autofill-artist-bio" onclick="autoFillArtistBioAndGenres()" class="text-[11px] font-bold text-amber-400 hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> ✨ Tự Động Lấy Bio & Thể Loại
+                    </button>
+                </div>
+                <textarea id="edit-artist-bio" rows="4" placeholder="Đôi nét về sự nghiệp, giải thưởng của nghệ sĩ..."
                           class="w-full px-4 py-2 rounded-xl bg-background text-text border border-border text-xs focus:outline-none focus:border-primary transition"></textarea>
             </div>
 
@@ -2567,7 +2572,7 @@ async function performArtistImageSearch() {
     if (!query) return;
 
     const grid = document.getElementById('picker-results-grid');
-    grid.innerHTML = '<div class="col-span-full py-10 text-center text-xs text-text-secondary"><i class="fa-solid fa-spinner animate-spin mr-1.5 text-primary text-base block mb-2"></i>Đang tìm ảnh chân dung HD từ Deezer & Apple Music...</div>';
+    grid.innerHTML = '<div class="col-span-full py-10 text-center text-xs text-text-secondary"><i class="fa-solid fa-spinner animate-spin mr-1.5 text-primary text-base block mb-2"></i>Đang tìm ảnh từ Deezer, TheAudioDB, Last.fm & Apple Music...</div>';
 
     try {
         const res = await fetch(`/api/music/artist/search-online?name=${encodeURIComponent(query)}`);
@@ -2583,13 +2588,22 @@ async function performArtistImageSearch() {
             }
 
             validPics.forEach(pic => {
+                const isFanart = pic.type === 'fanart' || (pic.source && pic.source.includes('Fanart'));
+                const badgeColor = isFanart ? 'bg-amber-500/20 text-amber-400' : 'bg-primary/20 text-primary';
+                const typeLabel = isFanart ? 'Fanart 1080p' : 'Chân Dung HD';
+
                 const card = document.createElement('div');
                 card.className = 'group relative rounded-2xl overflow-hidden aspect-square border border-hairline hover:border-primary transition transform hover:scale-105 bg-black/40 shadow cursor-pointer';
                 card.innerHTML = `
                     <img src="${pic.avatar_url}" class="w-full h-full object-cover" alt="${pic.name}">
-                    <div class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center p-2 text-center gap-1.5">
+                    <div class="absolute top-2 left-2 z-10">
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold ${badgeColor} backdrop-blur-md shadow">
+                            ${pic.source || 'Online'} • ${typeLabel}
+                        </span>
+                    </div>
+                    <div class="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center p-2 text-center gap-1.5">
                         <span class="text-xs font-black text-white truncate max-w-full">${pic.name}</span>
-                        <span class="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">${pic.source || 'Online HD'}</span>
+                        <span class="text-[10px] text-text-secondary">${pic.genre || pic.source || ''}</span>
                         <button class="mt-1 px-3 py-1 rounded-full bg-primary text-white text-[11px] font-bold shadow hover:brightness-110">
                             <i class="fa-solid fa-check mr-1"></i> Chọn Ảnh Này
                         </button>
@@ -2603,6 +2617,49 @@ async function performArtistImageSearch() {
         }
     } catch (e) {
         grid.innerHTML = `<div class="col-span-full py-8 text-center text-xs text-red-400">Lỗi kết nối: ${e.message}</div>`;
+    }
+}
+
+async function autoFillArtistBioAndGenres() {
+    const artistName = document.getElementById('edit-artist-name').value.trim();
+    if (!artistName) return alertToast('Vui lòng nhập tên nghệ sĩ trước.');
+
+    const btn = document.getElementById('btn-autofill-artist-bio');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Đang tải từ Last.fm & TheAudioDB...';
+    }
+
+    try {
+        const res = await fetch(`/api/music/artist/search-online?name=${encodeURIComponent(artistName)}`);
+        const data = await res.json();
+        if (res.ok && data.status === 'success' && data.results) {
+            const bioMatch = data.results.find(r => r.bio && r.bio.trim());
+            const tags = [];
+            data.results.forEach(r => {
+                if (r.tags) r.tags.slice(0, 4).forEach(t => { if (!tags.includes(t)) tags.push(t); });
+                if (r.genre && !tags.includes(r.genre)) tags.push(r.genre);
+                if (r.primary_genre && !tags.includes(r.primary_genre)) tags.push(r.primary_genre);
+            });
+
+            if (bioMatch && bioMatch.bio) {
+                document.getElementById('edit-artist-bio').value = bioMatch.bio;
+            }
+            if (tags.length > 0) {
+                document.getElementById('edit-artist-genres').value = tags.join(', ');
+            }
+
+            alertToast('Đã tự động lấy Tiểu sử & Thể loại thành công!');
+        } else {
+            alertToast('Không tìm thấy tiểu sử trực tuyến cho nghệ sĩ này.');
+        }
+    } catch (err) {
+        alertToast('Lỗi mạng khi tải tiểu sử: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> ✨ Tự Động Lấy Bio & Thể Loại';
+        }
     }
 }
 

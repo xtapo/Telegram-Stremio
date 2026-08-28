@@ -2056,10 +2056,12 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
 
 async def _search_artist_online_helper(name: str):
     """
-    Tìm kiếm thông tin & ảnh chân dung nghệ sĩ từ Deezer và Apple Music / iTunes
+    Tìm kiếm thông tin, ảnh chân dung, ảnh fanart 1080p, banner và tiểu sử (Bio)
+    từ Deezer, TheAudioDB, Last.fm và Apple Music
     """
     import httpx
     import urllib.parse
+    import re
 
     results = []
     seen_urls = set()
@@ -2067,7 +2069,7 @@ async def _search_artist_online_helper(name: str):
     if not cleaned_name:
         return results
 
-    # 1. Deezer Artist Search (Cung cấp ảnh chân dung nghệ sĩ HD)
+    # 1. Deezer Artist Search (Ảnh chân dung vuông HD 1000x1000)
     try:
         url = f"https://api.deezer.com/search/artist?q={urllib.parse.quote(cleaned_name)}&limit=6"
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
@@ -2086,12 +2088,80 @@ async def _search_artist_online_helper(name: str):
                             "preview_url": art.get("picture_medium", pic_xl),
                             "fans_count": art.get("nb_fan", 0),
                             "nb_album": art.get("nb_album", 0),
+                            "type": "portrait",
                             "source": "Deezer"
                         })
     except Exception as e:
         LOGGER.warning(f"[ARTIST SEARCH] Deezer search error for '{cleaned_name}': {e}")
 
-    # 2. Apple Music / iTunes (Tìm thêm ảnh bìa/album liên quan)
+    # 2. TheAudioDB (Ảnh chân dung, Fanart nền 1080p, Banner, Logo trong suốt, Tiểu sử)
+    try:
+        tadb_url = f"https://www.theaudiodb.com/api/v1/json/2/search.php?s={urllib.parse.quote(cleaned_name)}"
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            resp = await client.get(tadb_url)
+            if resp.status_code == 200:
+                data = resp.json()
+                for art in (data.get("artists") or []):
+                    art_name = art.get("strArtist", cleaned_name)
+                    bio_vi = art.get("strBiographyVI") or ""
+                    bio_en = art.get("strBiographyEN") or ""
+                    bio = bio_vi if bio_vi else bio_en
+                    genre = art.get("strGenre") or ""
+                    
+                    thumb = art.get("strArtistThumb")
+                    if thumb and thumb not in seen_urls:
+                        seen_urls.add(thumb)
+                        results.append({
+                            "name": art_name,
+                            "avatar_url": thumb,
+                            "banner_url": art.get("strArtistFanart") or thumb,
+                            "preview_url": thumb,
+                            "bio": bio,
+                            "genre": genre,
+                            "type": "portrait",
+                            "source": "TheAudioDB"
+                        })
+                    
+                    fanart = art.get("strArtistFanart")
+                    if fanart and fanart not in seen_urls:
+                        seen_urls.add(fanart)
+                        results.append({
+                            "name": f"{art_name} (Fanart)",
+                            "avatar_url": fanart,
+                            "banner_url": fanart,
+                            "preview_url": fanart,
+                            "bio": bio,
+                            "genre": genre,
+                            "type": "fanart",
+                            "source": "TheAudioDB Fanart"
+                        })
+    except Exception as e:
+        LOGGER.warning(f"[ARTIST SEARCH] TheAudioDB error for '{cleaned_name}': {e}")
+
+    # 3. Last.fm (Tiểu sử phong phú + Danh sách Tags Thể Loại)
+    try:
+        lfm_url = f"https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist={urllib.parse.quote(cleaned_name)}&api_key=b25b959554ed76058ac220b7b2e0a026&format=json"
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            resp = await client.get(lfm_url)
+            if resp.status_code == 200:
+                data = resp.json()
+                art = data.get("artist")
+                if art:
+                    raw_bio = art.get("bio", {}).get("summary", "")
+                    clean_bio = re.sub(r'<a[^>]*>.*?</a>', '', raw_bio).strip() if raw_bio else ""
+                    raw_tags = [t.get("name") for t in art.get("tags", {}).get("tag", []) if t.get("name")]
+                    
+                    results.append({
+                        "name": art.get("name", cleaned_name),
+                        "bio": clean_bio,
+                        "tags": raw_tags,
+                        "listeners": art.get("stats", {}).get("listeners", 0),
+                        "source": "Last.fm"
+                    })
+    except Exception as e:
+        LOGGER.warning(f"[ARTIST SEARCH] Last.fm error for '{cleaned_name}': {e}")
+
+    # 4. Apple Music / iTunes (Tìm thêm thể loại chính thức)
     try:
         url = f"https://itunes.apple.com/search?term={urllib.parse.quote(cleaned_name)}&entity=musicArtist&limit=4"
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
@@ -2229,7 +2299,8 @@ async def update_artist_metadata(payload: dict, _: bool = Depends(require_auth))
 @router.post("/api/music/artists/auto-fetch")
 async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
     """
-    Tiến trình quét ngầm tự động tìm & lưu ảnh chân dung HD cho toàn bộ ca sĩ trong thư viện
+    Tiến trình quét ngầm tự động tìm & lưu ảnh chân dung HD, fanart, bio và thể loại cho toàn bộ ca sĩ trong thư viện
+    kết hợp 4 nguồn: Deezer, TheAudioDB, Last.fm và Apple Music
     """
     try:
         albums = await _db_load_library()
@@ -2251,21 +2322,46 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
                 
             slug = art_name.lower().strip()
             existing = await coll.find_one({"_id": slug})
-            if existing and existing.get("avatar_url"):
-                continue  # Đã có ảnh tùy chỉnh/cache
+            if existing and existing.get("avatar_url") and existing.get("bio"):
+                continue  # Đã có đầy đủ ảnh và tiểu sử
                 
-            # Tìm ảnh từ Deezer
             matches = await _search_artist_online_helper(art_name)
             if matches:
-                # Chọn kết quả tốt nhất có avatar_url
-                best_match = next((m for m in matches if m.get("avatar_url")), None)
-                if best_match:
+                # 1. Tìm avatar tốt nhất (ưu tiên ảnh chân dung Deezer / TheAudioDB)
+                avatar_match = next((m for m in matches if m.get("avatar_url") and m.get("type") == "portrait"), None)
+                if not avatar_match:
+                    avatar_match = next((m for m in matches if m.get("avatar_url")), None)
+                
+                # 2. Tìm fanart banner tốt nhất
+                fanart_match = next((m for m in matches if m.get("banner_url") and m.get("type") == "fanart"), None)
+                
+                # 3. Tìm bio tốt nhất
+                bio_match = next((m for m in matches if m.get("bio")), None)
+                
+                # 4. Gom thể loại
+                genres = []
+                for m in matches:
+                    if m.get("tags"):
+                        for t in m["tags"][:4]:
+                            if t and t.title() not in genres: genres.append(t.title())
+                    if m.get("genre") and m["genre"] not in genres:
+                        genres.append(m["genre"])
+                    if m.get("primary_genre") and m["primary_genre"] not in genres:
+                        genres.append(m["primary_genre"])
+
+                avatar_url = avatar_match["avatar_url"] if avatar_match else (existing.get("avatar_url") if existing else "")
+                banner_url = fanart_match["banner_url"] if fanart_match else (avatar_match.get("banner_url") if avatar_match else avatar_url)
+                bio = bio_match["bio"] if bio_match else (existing.get("bio") if existing else "")
+                
+                if avatar_url or bio or genres:
                     doc = {
                         "name": art_name,
-                        "avatar_url": best_match["avatar_url"],
-                        "banner_url": best_match.get("banner_url", best_match["avatar_url"]),
-                        "fans_count": best_match.get("fans_count", 0),
-                        "source": best_match.get("source", "Deezer"),
+                        "avatar_url": avatar_url,
+                        "banner_url": banner_url or avatar_url,
+                        "bio": bio,
+                        "genres": genres[:5],
+                        "fans_count": avatar_match.get("fans_count", 0) if avatar_match else 0,
+                        "source": "Deezer + TheAudioDB + Last.fm",
                         "updated_at": time.time()
                     }
                     await coll.update_one({"_id": slug}, {"$set": doc}, upsert=True)
@@ -2278,7 +2374,7 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
         return JSONResponse(content={
             "status": "success", 
             "count": updated_count, 
-            "message": f"Đã tự động tải và cập nhật ảnh chân dung HD cho {updated_count} ca sĩ!"
+            "message": f"Đã tự động tải và cập nhật ảnh chân dung HD, Fanart & Tiểu sử cho {updated_count} ca sĩ!"
         })
     except Exception as e:
         LOGGER.error(f"[AUTO FETCH ARTISTS] Lỗi: {e}")
