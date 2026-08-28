@@ -1013,11 +1013,13 @@ class XTAPOMusicApp {
             this.pauseIcon.style.display = 'block';
 
             // Mobile Sleeve button icon
-            const mobilePlay = this.mobileSleevePlayBtn.querySelector('.icon-play');
-            const mobilePause = this.mobileSleevePlayBtn.querySelector('.icon-pause');
-            if (mobilePlay && mobilePause) {
-                mobilePlay.style.display = 'none';
-                mobilePause.style.display = 'block';
+            if (this.mobileSleevePlayBtn) {
+                const mobilePlay = this.mobileSleevePlayBtn.querySelector('.icon-play');
+                const mobilePause = this.mobileSleevePlayBtn.querySelector('.icon-pause');
+                if (mobilePlay && mobilePause) {
+                    mobilePlay.style.display = 'none';
+                    mobilePause.style.display = 'block';
+                }
             }
 
             // Vinyl Animation
@@ -1037,11 +1039,13 @@ class XTAPOMusicApp {
         this.pauseIcon.style.display = 'none';
 
         // Mobile Sleeve button icon
-        const mobilePlay = this.mobileSleevePlayBtn.querySelector('.icon-play');
-        const mobilePause = this.mobileSleevePlayBtn.querySelector('.icon-pause');
-        if (mobilePlay && mobilePause) {
-            mobilePlay.style.display = 'block';
-            mobilePause.style.display = 'none';
+        if (this.mobileSleevePlayBtn) {
+            const mobilePlay = this.mobileSleevePlayBtn.querySelector('.icon-play');
+            const mobilePause = this.mobileSleevePlayBtn.querySelector('.icon-pause');
+            if (mobilePlay && mobilePause) {
+                mobilePlay.style.display = 'block';
+                mobilePause.style.display = 'none';
+            }
         }
 
         // Vinyl Animation
@@ -1136,7 +1140,9 @@ class XTAPOMusicApp {
     // --- Control Events ---
     setupControlEvents() {
         this.playBtn.addEventListener('click', () => this.togglePlay());
-        this.mobileSleevePlayBtn.addEventListener('click', () => this.togglePlay());
+        if (this.mobileSleevePlayBtn) {
+            this.mobileSleevePlayBtn.addEventListener('click', () => this.togglePlay());
+        }
         this.nextBtn.addEventListener('click', () => this.nextTrack());
         this.prevBtn.addEventListener('click', () => this.prevTrack());
 

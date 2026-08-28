@@ -812,27 +812,6 @@ html, body {
     z-index: 3;
 }
 
-/* Quick Play overlay for touch / mobile */
-.mobile-sleeve-play-btn {
-    display: none;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.7);
-    border: 2px solid var(--accent-gold);
-    color: #fff;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 4;
-    box-shadow: 0 0 25px rgba(252, 191, 71, 0.4);
-    backdrop-filter: blur(6px);
-}
-
 /* --- Floating Bottom Player Bar --- */
 .kmusic-player-bar {
     position: fixed;
@@ -1826,10 +1805,6 @@ html, body {
         position: relative;
         z-index: 3;
         flex-shrink: 0;
-    }
-    
-    .mobile-sleeve-play-btn {
-        display: flex;
     }
     
     /* Tracklist on Mobile */
