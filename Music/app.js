@@ -380,7 +380,7 @@ class XTAPOMusicApp {
     async loginUser() {
         const username = this.loginUsername.value;
         const password = this.loginPassword.value;
-        if (!username || !password) return this.showToast("Vui lòng nhập đầy đủ username và password.");
+        if (!username || !password) return this.showToast("Vui lòng nhập Username & Password");
         
         try {
             const res = await fetch('/api/music/auth/login', {
@@ -390,11 +390,11 @@ class XTAPOMusicApp {
             });
             const data = await res.json();
             if (data.status === 'success') {
-                this.showToast("Đăng nhập thành công!");
+                this.showToast(`Chào mừng trở lại, ${data.user.display_name}!`);
                 this.authModal.classList.remove('active');
-                this.loginUsername.value = '';
                 this.loginPassword.value = '';
                 await this.fetchUserProfile();
+                await this.fetchTelegramAlbums();
             } else {
                 this.showToast(data.message || "Đăng nhập thất bại.");
             }
@@ -514,6 +514,7 @@ class XTAPOMusicApp {
 
     // --- Fetch Telegram Library from Backend ---
     async fetchTelegramAlbums() {
+        if (!this.currentUser) return; // Do not fetch Telecloud music for guests
         try {
             const res = await fetch('/api/music/albums');
             if (res.ok) {

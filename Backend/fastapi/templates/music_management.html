@@ -106,6 +106,10 @@
                     class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
                 <i class="fa-solid fa-list-ol mr-1"></i> Toàn Bộ Bài Hát
             </button>
+            <button id="tab-users-btn" onclick="switchTab('users')" 
+                    class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text">
+                <i class="fa-solid fa-users mr-1"></i> Quản Lý Users
+            </button>
         </div>
         <span class="text-xs text-text-secondary" id="items-count-indicator">Đang hiển thị...</span>
     </div>
@@ -133,6 +137,26 @@
                 </thead>
                 <tbody id="tracks-table-body" class="divide-y divide-hairline">
                     <!-- Tracks rows injected by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Content Area: Users Management -->
+    <div id="users-view-container" class="glass-panel rounded-3xl overflow-hidden mb-8 hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
+                        <th class="py-3.5 px-4 w-16 text-center">Avatar</th>
+                        <th class="py-3.5 px-4">Username</th>
+                        <th class="py-3.5 px-4">Tên Hiển Thị</th>
+                        <th class="py-3.5 px-4">Ngày Tạo</th>
+                        <th class="py-3.5 px-4 text-right">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table-body" class="divide-y divide-hairline">
+                    <!-- Users rows injected by JS -->
                 </tbody>
             </table>
         </div>
@@ -984,16 +1008,31 @@ function switchTab(tab) {
     currentActiveTab = tab;
     const albumsBtn = document.getElementById('tab-albums-btn');
     const tracksBtn = document.getElementById('tab-tracks-btn');
+    const usersBtn = document.getElementById('tab-users-btn');
+
+    albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
 
     if (tab === 'albums') {
         albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
-        tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
-    } else {
+    } else if (tab === 'tracks') {
         tracksBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
-        albumsBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text';
+    } else if (tab === 'users') {
+        if(usersBtn) usersBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow';
     }
 
-    renderCurrentView();
+    if (tab === 'users') {
+        document.getElementById('albums-view-container').classList.add('hidden');
+        document.getElementById('tracks-view-container').classList.add('hidden');
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('users-view-container').classList.remove('hidden');
+        document.getElementById('items-count-indicator').textContent = 'Đang quản lý Users';
+        fetchMusicUsers();
+    } else {
+        document.getElementById('users-view-container').classList.add('hidden');
+        renderCurrentView();
+    }
 }
 
 // Mini Player Preview
@@ -1964,5 +2003,75 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-</script>
+
+// ── User Management Functions ──────────────────────────────────────────────────
+async function fetchMusicUsers() {
+    try {
+        const res = await fetch('/api/music/admin/users');
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            renderUsersTable(data.users || []);
+        } else {
+            alertToast(data.message || 'Lỗi tải danh sách người dùng');
+        }
+    } catch (e) {
+        console.error(e);
+        alertToast('Lỗi mạng khi tải users');
+    }
+}
+
+function renderUsersTable(users) {
+    const tbody = document.getElementById('users-table-body');
+    tbody.innerHTML = '';
+
+    if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-text-secondary">Chưa có người dùng nào đăng ký</td></tr>';
+        return;
+    }
+
+    users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-surface-2 transition group';
+        
+        const date = new Date(u.created_at * 1000).toLocaleDateString('vi-VN');
+        
+        tr.innerHTML = `
+            <td class="py-3.5 px-4 text-center">
+                <img src="${u.avatar_url}" class="w-10 h-10 rounded-full mx-auto bg-black/20">
+            </td>
+            <td class="py-3.5 px-4 font-bold text-text">
+                ${u.username}
+            </td>
+            <td class="py-3.5 px-4 text-text-secondary">
+                ${u.display_name}
+            </td>
+            <td class="py-3.5 px-4 text-text-secondary">
+                ${date}
+            </td>
+            <td class="py-3.5 px-4 text-right">
+                <button onclick="deleteMusicUser('${u._id}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white inline-flex items-center justify-center transition" title="Xóa người dùng">
+                    <i class="fa-solid fa-trash-can text-[10px]"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function deleteMusicUser(userId) {
+    if (!confirm('Bạn có chắc chắn muốn xóa người dùng này cùng toàn bộ dữ liệu (playlists, favorites) của họ không?')) return;
+    try {
+        const res = await fetch('/api/music/admin/users/' + userId, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast('Đã xóa người dùng thành công');
+            fetchMusicUsers();
+        } else {
+            alertToast(data.message || 'Lỗi xóa người dùng');
+        }
+    } catch (e) {
+        alertToast('Lỗi mạng');
+    }
+}
+\n</script>
 {% endblock %}

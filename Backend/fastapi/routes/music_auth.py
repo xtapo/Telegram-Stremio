@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from Backend import db
 from Backend.helper.passwords import hash_password, verify_password
+from Backend.fastapi.security.credentials import require_auth
 
 auth_router = APIRouter(tags=["Music Authentication"])
 
@@ -240,5 +241,29 @@ async def delete_user_playlist(playlist_id: str, user_id: str = Depends(require_
         playlists = [p for p in playlists if p.get("id") != playlist_id]
         await coll.update_one({"_id": user_id}, {"$set": {"playlists": playlists}})
         return {"status": "success", "message": "Đã xóa playlist."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+# ── Quản Lý Users (Dành cho Admin) ─────────────────────────────────────────
+
+@auth_router.get("/api/music/admin/users")
+async def get_all_music_users(_: bool = Depends(require_auth)):
+    try:
+        users = []
+        coll = db.dbs["tracking"]["music_users"]
+        cursor = coll.find().sort("created_at", -1)
+        async for doc in cursor:
+            doc.pop("password_hash", None)
+            users.append(doc)
+        return JSONResponse(status_code=200, content={"status": "success", "users": users})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+@auth_router.delete("/api/music/admin/users/{user_id}")
+async def delete_music_user(user_id: str, _: bool = Depends(require_auth)):
+    try:
+        await db.dbs["tracking"]["music_users"].delete_one({"_id": user_id})
+        await db.dbs["tracking"]["music_user_data"].delete_one({"_id": user_id})
+        return JSONResponse(status_code=200, content={"status": "success", "message": "Đã xóa user."})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
