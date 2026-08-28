@@ -647,6 +647,49 @@ async def get_music_albums():
     return JSONResponse(content={"status": "empty", "source": "none", "albums": []})
 
 
+# ── Demo Albums Fallback (Dành cho chế độ Demo / Khi chưa quét kênh Telegram) ──
+DEMO_ALBUMS = [
+    {
+        "id": "shania-twain-little-miss-twain",
+        "title": "LITTLE MISS TWAIN",
+        "artist": "SHANIA TWAIN",
+        "year": "2026",
+        "format": "FLAC 24-Bit / 96kHz",
+        "publisher": "Republic Records / UMG",
+        "coverUrl": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
+        "tracks": [
+            {"id": 1, "name": "Any Man of Mine (Little Miss Twain Edition)", "artist": "SHANIA TWAIN", "duration": "4:07", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", "genre": "Country / Folk"},
+            {"id": 2, "name": "That Don't Impress Me Much", "artist": "SHANIA TWAIN", "duration": "3:59", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", "genre": "Pop / Dance"},
+            {"id": 3, "name": "Man! I Feel Like a Woman!", "artist": "SHANIA TWAIN", "duration": "3:53", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", "genre": "Pop / Dance"},
+            {"id": 4, "name": "You're Still the One", "artist": "SHANIA TWAIN", "duration": "3:32", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", "genre": "Ballad / R&B"},
+            {"id": 5, "name": "From This Moment On", "artist": "SHANIA TWAIN", "duration": "4:43", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", "genre": "Ballad / R&B"},
+            {"id": 6, "name": "Up! (Red Album Version)", "artist": "SHANIA TWAIN", "duration": "2:52", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", "genre": "EDM / Remix"},
+            {"id": 7, "name": "Party for Two (ft. Billy Currington)", "artist": "SHANIA TWAIN", "duration": "3:31", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", "genre": "EDM / Remix"}
+        ]
+    },
+    {
+        "id": "daft-punk-ram-10th",
+        "title": "RANDOM ACCESS MEMORIES",
+        "artist": "DAFT PUNK",
+        "year": "2013 / 2023",
+        "format": "FLAC 24-Bit / 88.2kHz",
+        "publisher": "Columbia Records / Daft Life",
+        "coverUrl": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop",
+        "tracks": [
+            {"id": 1, "name": "Give Life Back to Music", "artist": "DAFT PUNK", "duration": "4:35", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", "genre": "EDM / Remix"},
+            {"id": 2, "name": "Instant Crush (ft. Julian Casablancas)", "artist": "DAFT PUNK", "duration": "5:37", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", "genre": "Rock / Alternative"},
+            {"id": 3, "name": "Get Lucky (ft. Pharrell Williams)", "artist": "DAFT PUNK", "duration": "6:09", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", "genre": "EDM / Remix"}
+        ]
+    }
+]
+
+async def _db_load_library_or_fallback():
+    data = await _db_load_library()
+    if data and len(data) > 0:
+        return data
+    return DEMO_ALBUMS
+
+
 # ── Direct M3U8 Playlist Stream Endpoints (VLC, PotPlayer, Foobar2000, Apple Music) ──
 
 def _build_m3u8_content(title: str, tracks: list, base_url: str) -> str:
@@ -685,10 +728,150 @@ def _build_m3u8_content(title: str, tracks: list, base_url: str) -> str:
     return "\n".join(lines)
 
 
+def _render_m3u8_html_player(title: str, tracks: list, stream_url: str, base_url: str) -> str:
+    """Tạo giao diện trình phát nhạc HTML5 Web Player khi người dùng mở trực tiếp link M3U8 trên trình duyệt"""
+    raw_m3u8_url = f"{stream_url}?format=raw" if "?" not in stream_url else f"{stream_url}&format=raw"
+    track_rows = []
+    for idx, t in enumerate(tracks):
+        name = t.get("name") or t.get("title") or f"Track {idx + 1}"
+        artist = t.get("artist") or "XTAPO Music"
+        dur = t.get("duration") or "3:30"
+        purl = t.get("previewUrl") or t.get("url") or ""
+        if t.get("chat_id") and t.get("msg_id"):
+            purl = f"{base_url}/api/music/stream/{t.get('chat_id')}/{t.get('msg_id')}"
+        elif purl.startswith("/"):
+            purl = f"{base_url}{purl}"
+
+        track_rows.append(f"""
+        <div class="track-row" onclick="playTrack('{purl}', '{name}', '{artist}', this)">
+            <div class="track-left">
+                <span class="track-idx">{idx + 1}</span>
+                <div>
+                    <div class="track-name">{name}</div>
+                    <div class="track-artist">{artist}</div>
+                </div>
+            </div>
+            <div class="track-dur">{dur}</div>
+        </div>
+        """)
+
+    first_url = ""
+    if tracks:
+        ft = tracks[0]
+        if ft.get("chat_id") and ft.get("msg_id"):
+            first_url = f"{base_url}/api/music/stream/{ft.get('chat_id')}/{ft.get('msg_id')}"
+        else:
+            first_url = ft.get("previewUrl") or ft.get("url") or ""
+            if first_url.startswith("/"):
+                first_url = f"{base_url}{first_url}"
+
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Playlist: {title} | XTAPO MUSIC</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{ background: #0a0b0e; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; padding: 24px; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; }}
+        .player-container {{ max-width: 680px; width: 100%; background: rgba(20, 23, 32, 0.9); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; padding: 28px; box-shadow: 0 25px 60px rgba(0,0,0,0.8); backdrop-filter: blur(20px); }}
+        .header {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }}
+        .header h2 {{ font-size: 1.3rem; color: #fcbf47; }}
+        .header-sub {{ font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-top: 4px; }}
+        .btn-group {{ display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }}
+        .btn {{ padding: 8px 16px; border-radius: 10px; font-size: 0.82rem; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.06); color: #fff; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; }}
+        .btn:hover {{ background: rgba(255, 255, 255, 0.15); transform: translateY(-1px); }}
+        .btn-primary {{ background: linear-gradient(135deg, #0284c7, #0369a1); border: none; }}
+        .audio-box {{ background: rgba(0,0,0,0.4); border-radius: 14px; padding: 18px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.08); }}
+        .now-playing {{ font-size: 0.9rem; font-weight: 700; color: #38bdf8; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        audio {{ width: 100%; outline: none; border-radius: 8px; }}
+        .track-list {{ display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 4px; }}
+        .track-row {{ display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); cursor: pointer; transition: all 0.2s; }}
+        .track-row:hover, .track-row.active {{ background: rgba(252, 191, 71, 0.12); border-color: rgba(252, 191, 71, 0.35); }}
+        .track-left {{ display: flex; align-items: center; gap: 12px; min-width: 0; }}
+        .track-idx {{ font-size: 0.8rem; font-weight: 700; color: rgba(255,255,255,0.4); width: 20px; text-align: center; }}
+        .track-name {{ font-size: 0.85rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .track-artist {{ font-size: 0.72rem; color: rgba(255,255,255,0.5); }}
+        .track-dur {{ font-size: 0.75rem; color: rgba(255,255,255,0.4); }}
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <div class="header">
+            <div>
+                <h2>📻 {title}</h2>
+                <div class="header-sub">Stream M3U8 Playlist • {len(tracks)} bài hát</div>
+            </div>
+            <a href="/music" class="btn" style="color: #fcbf47;">Trở Về Web Player 🎵</a>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="copyLink()">📋 Sao Chép Link Stream M3U8</button>
+            <a href="{raw_m3u8_url}" class="btn" download="{re.sub(r'[\\/:*?\"<>|]', '_', title)}.m3u8">📥 Tải File .M3U8</a>
+            <a href="{raw_m3u8_url}" class="btn" target="_blank">📄 Xem M3U8 Raw</a>
+        </div>
+
+        <div class="audio-box">
+            <div class="now-playing" id="nowPlayingText">🎵 Nhấn vào bài hát bên dưới để bắt đầu phát</div>
+            <audio id="audioPlayer" controls src="{first_url}"></audio>
+        </div>
+
+        <div class="track-list">
+            {"".join(track_rows)}
+        </div>
+    </div>
+
+    <script>
+        const audio = document.getElementById('audioPlayer');
+        const nowText = document.getElementById('nowPlayingText');
+
+        function playTrack(url, name, artist, el) {{
+            document.querySelectorAll('.track-row').forEach(function(r) {{ r.classList.remove('active'); }});
+            if (el) el.classList.add('active');
+            nowText.textContent = '▶ Đang phát: ' + name + ' - ' + artist;
+            audio.src = url;
+            audio.play();
+        }}
+
+        function copyLink() {{
+            const url = window.location.href.replace('&format=raw', '').replace('?format=raw', '');
+            navigator.clipboard.writeText(url).then(function() {{
+                alert('Đã copy đường link Stream M3U8 vào Clipboard!\\nBạn có thể dán vào VLC Media Player (Ctrl+N) hoặc PotPlayer (Ctrl+U).');
+            }});
+        }}
+    </script>
+</body>
+</html>"""
+
+
+def _serve_m3u8_response(request: Request, title: str, tracks: list, filename: str):
+    base_url = str(request.base_url).rstrip("/")
+    accept = request.headers.get("accept", "").lower()
+    is_browser_view = "text/html" in accept and request.query_params.get("format") != "raw"
+
+    if is_browser_view:
+        html = _render_m3u8_html_player(title, tracks, str(request.url), base_url)
+        return HTMLResponse(content=html)
+
+    m3u8_text = _build_m3u8_content(title, tracks, base_url)
+    safe_title = re.sub(r'[\\/:*?"<>|]', '_', filename)
+    return PlainResponse(
+        content=m3u8_text,
+        media_type="audio/x-mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Cache-Control": "public, max-age=180",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
+
+
 @router.get("/api/music/playlist/album/{album_id:path}")
 async def stream_album_m3u8(request: Request, album_id: str):
     """Trả về file playlist .m3u8 trực tiếp của Album, Thể Loại, Nghệ Sĩ hoặc Playlist"""
-    base_url = str(request.base_url).rstrip("/")
     if album_id.endswith(".m3u8"):
         album_id = album_id[:-5]
 
@@ -697,12 +880,12 @@ async def stream_album_m3u8(request: Request, album_id: str):
 
     # 1. Nếu là Genre Playlist: genre-EDM/Remix hoặc genre/EDM/Remix
     if raw_lower.startswith("genre-") or raw_lower.startswith("genre/"):
-        genre_name = decoded_id[6:] if raw_lower.startswith("genre-") else decoded_id[6:]
+        genre_name = decoded_id[6:]
         return await stream_genre_m3u8(request, genre_name)
 
     # 2. Nếu là Artist Spotlight: artist-Shania Twain hoặc artist/Shania Twain
     if raw_lower.startswith("artist-") or raw_lower.startswith("artist/"):
-        artist_name = decoded_id[7:] if raw_lower.startswith("artist-") else decoded_id[7:]
+        artist_name = decoded_id[7:]
         return await stream_artist_m3u8(request, artist_name)
 
     # 3. Nếu là User Custom Playlist: pl-pl_123 hoặc pl_123
@@ -711,8 +894,8 @@ async def stream_album_m3u8(request: Request, album_id: str):
         from Backend.fastapi.routes.music_auth import stream_user_playlist_m3u8
         return await stream_user_playlist_m3u8(request, pl_id)
 
-    # 4. Tìm kiếm Album thông thường trong Database
-    data = await _db_load_library() or []
+    # 4. Tìm kiếm Album trong Database hoặc Demo Fallback
+    data = await _db_load_library_or_fallback()
     target_album = None
 
     for alb in data:
@@ -722,7 +905,6 @@ async def stream_album_m3u8(request: Request, album_id: str):
             target_album = alb
             break
 
-    # Nếu chưa thấy, thử tìm partial match
     if not target_album:
         for alb in data:
             curr_title = str(alb.get("title", "")).strip().lower()
@@ -730,58 +912,39 @@ async def stream_album_m3u8(request: Request, album_id: str):
                 target_album = alb
                 break
 
-    # 5. Nếu vẫn không thấy, kiểm tra xem có phải là 1 Thể loại trong kho không
+    # 5. Nếu vẫn không thấy, kiểm tra xem có phải Thể loại không
     if not target_album:
         genre_tracks = []
+        clean_key = re.sub(r'[\/\-_ ]+', '', raw_lower)
         for alb in data:
             alb_artist = alb.get("artist", "")
             for t in alb.get("tracks", []):
                 if not t.get("artist"):
                     t["artist"] = alb_artist
                 track_genre = str(t.get("genre", "")).lower()
-                if raw_lower in track_genre:
+                clean_track_genre = re.sub(r'[\/\-_ ]+', '', track_genre)
+                if clean_key in clean_track_genre or clean_track_genre in clean_key:
                     genre_tracks.append(t)
         if genre_tracks:
-            m3u8_text = _build_m3u8_content(f"Genre_{decoded_id}", genre_tracks, base_url)
-            safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{decoded_id}")
-            return PlainResponse(
-                content=m3u8_text,
-                media_type="application/vnd.apple.mpegurl; charset=utf-8",
-                headers={
-                    "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
-                    "Cache-Control": "public, max-age=300",
-                    "Access-Control-Allow-Origin": "*"
-                }
-            )
+            return _serve_m3u8_response(request, f"Thể Loại: {decoded_id}", genre_tracks, f"Genre_{decoded_id}")
 
     if not target_album:
-        raise HTTPException(status_code=404, detail=f"Album '{album_id}' not found")
+        # Fallback gom toàn bộ bài hát nếu không tìm thấy album
+        all_tracks = []
+        for alb in data:
+            all_tracks.extend(alb.get("tracks", []))
+        return _serve_m3u8_response(request, decoded_id, all_tracks, decoded_id)
 
     title = target_album.get("title", "Album")
     tracks = target_album.get("tracks", [])
-    m3u8_text = _build_m3u8_content(title, tracks, base_url)
-
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
-    return PlainResponse(
-        content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
-        headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
-            "Cache-Control": "public, max-age=300",
-            "Access-Control-Allow-Origin": "*"
-        }
-    )
+    return _serve_m3u8_response(request, title, tracks, title)
 
 
 @router.get("/api/music/playlist/all.m3u8")
 @router.get("/api/music/playlist/all")
 async def stream_all_music_m3u8(request: Request):
     """Trả về file playlist .m3u8 toàn bộ kho nhạc thư viện"""
-    base_url = str(request.base_url).rstrip("/")
-    data = await _db_load_library()
-    if not data:
-        raise HTTPException(status_code=404, detail="Library is empty")
-
+    data = await _db_load_library_or_fallback()
     all_tracks = []
     for alb in data:
         for t in alb.get("tracks", []):
@@ -789,26 +952,16 @@ async def stream_all_music_m3u8(request: Request):
                 t["artist"] = alb.get("artist", "")
             all_tracks.append(t)
 
-    m3u8_text = _build_m3u8_content("XTAPO_All_Music_Library", all_tracks, base_url)
-    return PlainResponse(
-        content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
-        headers={
-            "Content-Disposition": 'inline; filename="XTAPO_All_Music_Library.m3u8"',
-            "Cache-Control": "public, max-age=300",
-            "Access-Control-Allow-Origin": "*"
-        }
-    )
+    return _serve_m3u8_response(request, "XTAPO_All_Music_Library", all_tracks, "XTAPO_All_Music_Library")
 
 
 @router.get("/api/music/playlist/artist/{artist_name:path}")
 async def stream_artist_m3u8(request: Request, artist_name: str):
     """Trả về playlist .m3u8 cho ca sĩ/nghệ sĩ cụ thể"""
-    base_url = str(request.base_url).rstrip("/")
     if artist_name.endswith(".m3u8"):
         artist_name = artist_name[:-5]
 
-    data = await _db_load_library() or []
+    data = await _db_load_library_or_fallback()
     decoded_artist = unquote(artist_name).strip().lower()
     artist_tracks = []
     display_artist = unquote(artist_name).strip()
@@ -822,38 +975,27 @@ async def stream_artist_m3u8(request: Request, artist_name: str):
                 artist_tracks.append(t)
 
     if not artist_tracks:
-        # Fallback lấy các bài hát khớp
         for alb in data:
             for t in alb.get("tracks", []):
                 if decoded_artist in t.get("name", "").lower():
                     artist_tracks.append(t)
 
     if not artist_tracks:
-        raise HTTPException(status_code=404, detail=f"No tracks found for artist: {artist_name}")
+        # Fallback lấy bài hát đầu tiên
+        for alb in data:
+            artist_tracks.extend(alb.get("tracks", []))
 
-    m3u8_text = _build_m3u8_content(f"Artist_{display_artist}", artist_tracks, base_url)
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Artist_{display_artist}")
-    return PlainResponse(
-        content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
-        headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
-            "Cache-Control": "public, max-age=300",
-            "Access-Control-Allow-Origin": "*"
-        }
-    )
+    return _serve_m3u8_response(request, f"Nghệ Sĩ: {display_artist}", artist_tracks, f"Artist_{display_artist}")
 
 
 @router.get("/api/music/playlist/genre/{genre_name:path}")
 async def stream_genre_m3u8(request: Request, genre_name: str):
     """Trả về playlist .m3u8 theo thể loại"""
-    base_url = str(request.base_url).rstrip("/")
     if genre_name.endswith(".m3u8"):
         genre_name = genre_name[:-5]
 
-    data = await _db_load_library() or []
+    data = await _db_load_library_or_fallback()
     decoded_genre = unquote(genre_name).strip().lower()
-    # Chuẩn hoá ký tự so sánh (ví dụ: edm/remix, edm-remix, edm remix)
     clean_genre_key = re.sub(r'[\/\-_ ]+', '', decoded_genre)
     genre_tracks = []
     display_genre = unquote(genre_name).strip()
@@ -874,7 +1016,6 @@ async def stream_genre_m3u8(request: Request, genre_name: str):
                 genre_tracks.append(t)
 
     if not genre_tracks:
-        # Nếu chưa tìm thấy, quét tất cả bài hát và dùng detect_genre_from_track_info
         for alb in data:
             for t in alb.get("tracks", []):
                 det = detect_genre_from_track_info(t).lower()
@@ -883,19 +1024,11 @@ async def stream_genre_m3u8(request: Request, genre_name: str):
                     genre_tracks.append(t)
 
     if not genre_tracks:
-        raise HTTPException(status_code=404, detail=f"No tracks found for genre: {genre_name}")
+        # Fallback lấy toàn bộ tracks
+        for alb in data:
+            genre_tracks.extend(alb.get("tracks", []))
 
-    m3u8_text = _build_m3u8_content(f"Genre_{display_genre}", genre_tracks, base_url)
-    safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{display_genre}")
-    return PlainResponse(
-        content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
-        headers={
-            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
-            "Cache-Control": "public, max-age=300",
-            "Access-Control-Allow-Origin": "*"
-        }
-    )
+    return _serve_m3u8_response(request, f"Thể Loại: {display_genre}", genre_tracks, f"Genre_{display_genre}")
 
 
 # ── 3. Quản lý Danh Sách Kênh Nhạc (Channel Management) ───────────────────────
