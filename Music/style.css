@@ -2442,4 +2442,92 @@ html, body {
 }
 
 
-.user-profile-btn { display: flex; align-items: center; background: rgba(255,255,255,0.05); padding: 5px 12px; border-radius: 20px; font-weight: 600; color: #fff; border: 1px solid rgba(255,255,255,0.1); } .user-profile-btn:hover { background: rgba(255,255,255,0.15); } .favorite-btn { color: var(--text-muted); transition: all 0.2s ease; } .favorite-btn:hover { color: #f87171 !important; transform: scale(1.1); }
+.user-profile-btn {
+    display: flex;
+    align-items: center;
+    background: rgba(255,255,255,0.05);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.user-profile-btn:hover {
+    background: rgba(255,255,255,0.15);
+}
+
+/* Minimalist Transparent Favorite Button */
+.favorite-btn {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    vertical-align: middle;
+}
+
+.favorite-btn svg {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.2s ease, fill 0.2s ease, stroke 0.2s ease;
+    display: block;
+}
+
+.favorite-btn:hover {
+    color: #ef4444 !important;
+    transform: scale(1.2);
+}
+
+.favorite-btn:active {
+    transform: scale(0.9);
+}
+
+/* Favorites Modal List Rows */
+.fav-track-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.fav-track-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(239, 68, 68, 0.25);
+    transform: translateX(3px);
+}
+
+.fav-track-row .fav-remove-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.fav-track-row .fav-remove-btn:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    transform: scale(1.15);
+}

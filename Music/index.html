@@ -45,6 +45,7 @@
                     <li><a href="#" class="nav-link" id="navArtists">ARTISTS</a></li>
                     <li><a href="#" class="nav-link" id="navGenres">GENRES</a></li>
                     <li><a href="#" class="nav-link" id="navPlaylists">PLAYLISTS</a></li>
+                    <li><a href="#" class="nav-link" id="navFavorites"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="color: #ef4444; margin-right: 4px; vertical-align: -1px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>YÊU THÍCH</a></li>
                 </ul>
             </nav>
 
@@ -160,10 +161,10 @@
                             <span>NOW PLAYING</span>
                         </div>
                         <div class="now-playing-title" id="nowPlayingTitle">1. Any Man Of Mine (Little Miss Twain Edition)</div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
                             <div class="now-playing-artist" id="nowPlayingArtist">Shania Twain</div>
-                            <button class="icon-btn favorite-btn" id="favoriteBtn" title="Thêm vào yêu thích (Cần đăng nhập)" style="color: var(--text-muted);">
-                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                            <button class="favorite-btn" id="favoriteBtn" title="Thêm vào yêu thích (Cần đăng nhập)">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                                 </svg>
                             </button>
@@ -522,6 +523,44 @@
         </div>
     </div>
 
+    <!-- Favorites Modal -->
+    <div class="modal-overlay" id="favoritesModal">
+        <div class="modal-card" style="max-width: 680px; max-height: 84vh; display: flex; flex-direction: column; padding: 24px;">
+            <div class="modal-header" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); display: flex; align-items: center; justify-content: center; color: #ef4444; font-size: 1.2rem;">
+                        ❤️
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.15rem;">Bài Hát Yêu Thích</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);"><span id="favModalCount">0 bài hát</span> • Lưu trong tài khoản của bạn</p>
+                    </div>
+                </div>
+                <button class="modal-close" id="closeFavoritesModal">&times;</button>
+            </div>
+
+            <!-- Action Toolbar (Play All, Shuffle, Search) -->
+            <div id="favoritesActions" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 8px;">
+                    <button id="btnFavPlayAll" class="primary-btn" style="padding: 8px 18px; border-radius: 12px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Phát Tất Cả
+                    </button>
+                    <button id="btnFavShuffle" class="nav-btn action-badge-btn" style="padding: 8px 14px; border-radius: 12px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+                        Trộn Bài
+                    </button>
+                </div>
+                <input type="text" id="favSearchInput" placeholder="Tìm kiếm bài hát..." style="max-width: 180px; padding: 7px 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; font-size: 0.8rem; outline: none;">
+            </div>
+
+            <!-- List Container -->
+            <div id="favoritesList" style="display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; padding-right: 4px;">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
     <!-- Slide-over Right Drawer (Kollersi Metadata & File Download Drawer) -->
     <aside class="slide-drawer" id="metaDrawer">
         <div class="drawer-backdrop" id="drawerBackdrop"></div>
@@ -589,6 +628,7 @@
                 <li><a href="#" class="mobile-nav-item" id="mobileNavArtists">🎙️ CA SĨ / NGHỆ SĨ</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavGenres">🏷️ THỂ LOẠI (GENRES)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavPlaylists">📑 PLAYLISTS CỦA TÔI</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavFavorites">❤️ BÀI HÁT YÊU THÍCH</a></li>
             </ul>
             <div class="mobile-menu-footer">
                 <button class="mobile-action-btn" id="mobileSelectAlbumBtn">
