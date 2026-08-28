@@ -94,6 +94,19 @@
                         <span class="label-company" id="albumCompany">℗ Republic Records / UMG</span>
                     </div>
 
+                    <!-- Quick Tracklist Trigger for Mobile -->
+                    <div class="mobile-tracklist-trigger-wrap">
+                        <button class="mobile-quick-tracklist-btn" id="mobileQuickTracklistBtn" title="Xem danh sách bài hát">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+                            </svg>
+                            <span>DANH SÁCH BÀI HÁT (<span id="mobileTrackCount">15</span>)</span>
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="opacity: 0.7;">
+                                <polygon points="6 9 12 15 18 9"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+
                     <!-- Audio Visualizer Realtime Waveform -->
                     <div class="visualizer-container">
                         <canvas id="visualizerCanvas" width="400" height="36"></canvas>
@@ -193,6 +206,12 @@
                                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                                 </svg>
                             </button>
+                            <button class="mobile-player-tracklist-btn" id="mobilePlayerTracklistBtn" title="Mở danh sách bài hát">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+                                </svg>
+                                <span>Tracklist</span>
+                            </button>
                         </div>
                     </div>
 
@@ -278,6 +297,32 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Quick Tracklist Modal / Bottom Sheet (Mobile & Quick Select) -->
+    <div class="modal-overlay tracklist-modal-overlay" id="tracklistModal">
+        <div class="modal-card tracklist-modal-card">
+            <div class="tracklist-modal-header">
+                <div class="tracklist-modal-header-info">
+                    <span class="tracklist-modal-subtitle">DANH SÁCH BÀI HÁT</span>
+                    <h3 class="tracklist-modal-title" id="tracklistModalAlbumTitle">Tên Album</h3>
+                    <span class="tracklist-modal-artist" id="tracklistModalArtist">Nghệ Sĩ</span>
+                </div>
+                <button class="modal-close" id="closeTracklistModal">&times;</button>
+            </div>
+            <div class="tracklist-modal-search-box">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="tracklistModalSearchInput" placeholder="Tìm nhanh bài hát trong danh sách..." autocomplete="off">
+            </div>
+            <div class="tracklist-modal-body">
+                <ul class="tracklist" id="modalTracklistEl">
+                    <!-- Injected by app.js -->
+                </ul>
+            </div>
+        </div>
     </div>
 
     <!-- Album Picker Modal -->

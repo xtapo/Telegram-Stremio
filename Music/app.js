@@ -269,6 +269,17 @@ class XTAPOMusicApp {
         this.closeCountryModal = document.getElementById('closeCountryModal');
         this.countryGrid = document.getElementById('countryGrid');
 
+        // Mobile Quick Tracklist Modal & Triggers
+        this.mobileQuickTracklistBtn = document.getElementById('mobileQuickTracklistBtn');
+        this.mobilePlayerTracklistBtn = document.getElementById('mobilePlayerTracklistBtn');
+        this.tracklistModal = document.getElementById('tracklistModal');
+        this.closeTracklistModal = document.getElementById('closeTracklistModal');
+        this.modalTracklistEl = document.getElementById('modalTracklistEl');
+        this.tracklistModalAlbumTitle = document.getElementById('tracklistModalAlbumTitle');
+        this.tracklistModalArtist = document.getElementById('tracklistModalArtist');
+        this.tracklistModalSearchInput = document.getElementById('tracklistModalSearchInput');
+        this.mobileTrackCount = document.getElementById('mobileTrackCount');
+
         // Auth & User Profile
         this.userProfileBtn = document.getElementById('userProfileBtn');
         this.userAvatarImg = document.getElementById('userAvatarImg');
@@ -970,53 +981,97 @@ class XTAPOMusicApp {
         this.loadTrack(trackIndex, autoPlay);
     }
 
-    renderTracklist() {
+    renderTracklist(filterQuery = '') {
         const album = this.currentAlbum;
-        this.tracklistEl.innerHTML = '';
+        const tracks = album.tracks || [];
+        if (this.mobileTrackCount) {
+            this.mobileTrackCount.textContent = tracks.length;
+        }
+        if (this.tracklistModalAlbumTitle) {
+            this.tracklistModalAlbumTitle.textContent = album.title;
+        }
+        if (this.tracklistModalArtist) {
+            this.tracklistModalArtist.textContent = `${album.artist} • ${tracks.length} bài hát`;
+        }
 
-        (album.tracks || []).forEach((track, idx) => {
-            const li = document.createElement('li');
-            li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}`;
-            const trackName = track.name || 'Không có tên';
-            li.innerHTML = `
-                <div class="track-item-left">
-                    <span class="track-number">${idx + 1}</span>
-                    <div class="track-equalizer">
-                        <div class="eq-bar"></div>
-                        <div class="eq-bar"></div>
-                        <div class="eq-bar"></div>
+        // Render Main Tracklist
+        if (this.tracklistEl) {
+            this.tracklistEl.innerHTML = '';
+            tracks.forEach((track, idx) => {
+                const li = this.createTrackListItem(track, idx, false);
+                this.tracklistEl.appendChild(li);
+            });
+        }
+
+        // Render Modal Tracklist (with filter)
+        if (this.modalTracklistEl) {
+            this.modalTracklistEl.innerHTML = '';
+            const q = (filterQuery || '').toLowerCase().trim();
+            const filtered = tracks
+                .map((track, idx) => ({ track, idx }))
+                .filter(({ track }) => !q || (track.name || '').toLowerCase().includes(q) || (track.artist || album.artist || '').toLowerCase().includes(q));
+
+            if (filtered.length === 0) {
+                this.modalTracklistEl.innerHTML = `
+                    <div style="text-align:center; padding: 24px; color: var(--text-muted); font-size: 0.85rem;">
+                        Không tìm thấy bài hát nào khớp với "${this.escapeHtml(filterQuery)}"
                     </div>
-                    <span class="track-name" title="${this.escapeHtml(trackName)}">${this.escapeHtml(trackName)}</span>
-                </div>
-                <div class="track-item-right">
-                    <button class="track-add-playlist-btn" title="Thêm vào Playlist">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>
-                    </button>
-                    <span class="track-duration">${track.duration || '--:--'}</span>
-                </div>
-            `;
-
-            const addPlBtn = li.querySelector('.track-add-playlist-btn');
-            if (addPlBtn) {
-                addPlBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.openAddToPlaylist(track);
+                `;
+            } else {
+                filtered.forEach(({ track, idx }) => {
+                    const li = this.createTrackListItem(track, idx, true);
+                    this.modalTracklistEl.appendChild(li);
                 });
             }
+        }
+    }
 
-            li.addEventListener('click', (e) => {
-                if (e.target.closest('.track-add-playlist-btn')) return;
-                if (this.currentTrackIndex === idx && this.isPlaying) {
-                    this.pause();
-                } else if (this.currentTrackIndex === idx && !this.isPlaying) {
-                    this.play();
-                } else {
-                    this.loadTrack(idx, true);
-                }
+    createTrackListItem(track, idx, isModal = false) {
+        const li = document.createElement('li');
+        li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}`;
+        const trackName = track.name || 'Không có tên';
+        li.innerHTML = `
+            <div class="track-item-left">
+                <span class="track-number">${idx + 1}</span>
+                <div class="track-equalizer">
+                    <div class="eq-bar"></div>
+                    <div class="eq-bar"></div>
+                    <div class="eq-bar"></div>
+                </div>
+                <span class="track-name" title="${this.escapeHtml(trackName)}">${this.escapeHtml(trackName)}</span>
+            </div>
+            <div class="track-item-right">
+                <button class="track-add-playlist-btn" title="Thêm vào Playlist">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>
+                </button>
+                <span class="track-duration">${track.duration || '--:--'}</span>
+            </div>
+        `;
+
+        const addPlBtn = li.querySelector('.track-add-playlist-btn');
+        if (addPlBtn) {
+            addPlBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.openAddToPlaylist(track);
             });
+        }
 
-            this.tracklistEl.appendChild(li);
+        li.addEventListener('click', (e) => {
+            if (e.target.closest('.track-add-playlist-btn')) return;
+            if (this.currentTrackIndex === idx && this.isPlaying) {
+                this.pause();
+            } else if (this.currentTrackIndex === idx && !this.isPlaying) {
+                this.play();
+            } else {
+                this.loadTrack(idx, true);
+                if (isModal) {
+                    this.closeModal(this.tracklistModal);
+                    this.showToast(`Đang phát: ${trackName}`);
+                }
+            }
         });
+
+        return li;
     }
 
     loadTrack(trackIndex, autoPlay = true) {
@@ -1687,6 +1742,30 @@ class XTAPOMusicApp {
             });
         }
 
+        // Mobile Quick Tracklist Modal & Triggers
+        const openTracklistModalHandler = () => {
+            if (this.tracklistModalSearchInput) this.tracklistModalSearchInput.value = '';
+            this.renderTracklist();
+            this.openModal(this.tracklistModal);
+            if (this.tracklistModalSearchInput) {
+                setTimeout(() => this.tracklistModalSearchInput.focus(), 120);
+            }
+        };
+        if (this.mobileQuickTracklistBtn) {
+            this.mobileQuickTracklistBtn.addEventListener('click', openTracklistModalHandler);
+        }
+        if (this.mobilePlayerTracklistBtn) {
+            this.mobilePlayerTracklistBtn.addEventListener('click', openTracklistModalHandler);
+        }
+        if (this.closeTracklistModal) {
+            this.closeTracklistModal.addEventListener('click', () => this.closeModal(this.tracklistModal));
+        }
+        if (this.tracklistModalSearchInput) {
+            this.tracklistModalSearchInput.addEventListener('input', (e) => {
+                this.renderTracklist(e.target.value);
+            });
+        }
+
         // Search Modal
         if (this.searchBtn) {
             this.searchBtn.addEventListener('click', () => {
@@ -2065,7 +2144,7 @@ class XTAPOMusicApp {
         }
 
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.downloadProgressModal, this.m3u8Modal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -2242,6 +2321,7 @@ class XTAPOMusicApp {
                 this.closeModal(this.artistModal);
                 this.closeModal(this.genreModal);
                 this.closeModal(this.countryModal);
+                this.closeModal(this.tracklistModal);
                 this.metaDrawer.classList.remove('open');
                 this.closeMobileDrawer();
             }

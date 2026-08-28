@@ -3635,5 +3635,199 @@ html, body {
     }
 }
 
+/* ==========================================================================
+   MOBILE QUICK TRACKLIST & BOTTOM SHEET SYSTEM
+   ========================================================================== */
+
+.mobile-tracklist-trigger-wrap {
+    display: none;
+    margin: 8px 0 12px 0;
+    width: 100%;
+}
+
+.mobile-quick-tracklist-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 320px;
+    padding: 10px 18px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, rgba(252, 191, 71, 0.18), rgba(217, 119, 6, 0.1));
+    border: 1px solid rgba(252, 191, 71, 0.4);
+    color: var(--accent-gold);
+    font-family: var(--font-heading);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    transition: all 0.25s ease;
+    margin: 0 auto;
+}
+
+.mobile-quick-tracklist-btn:hover {
+    background: linear-gradient(135deg, rgba(252, 191, 71, 0.28), rgba(217, 119, 6, 0.2));
+    border-color: var(--accent-gold);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(252, 191, 71, 0.35);
+}
+
+.mobile-quick-tracklist-btn:active {
+    transform: translateY(0);
+}
+
+.mobile-player-tracklist-btn {
+    display: none;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    background: rgba(252, 191, 71, 0.12);
+    border: 1px solid rgba(252, 191, 71, 0.3);
+    color: var(--accent-gold);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.mobile-player-tracklist-btn:hover {
+    background: rgba(252, 191, 71, 0.22);
+    border-color: var(--accent-gold);
+}
+
+@media (max-width: 1024px) {
+    .mobile-tracklist-trigger-wrap {
+        display: flex;
+    }
+    
+    .mobile-player-tracklist-btn {
+        display: inline-flex;
+    }
+}
+
+/* Tracklist Bottom Sheet / Modal */
+.tracklist-modal-card {
+    width: 100%;
+    max-width: 520px;
+    background: rgba(18, 20, 28, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+}
+
+.tracklist-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tracklist-modal-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.tracklist-modal-subtitle {
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: var(--accent-gold);
+    text-transform: uppercase;
+}
+
+.tracklist-modal-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.2px;
+}
+
+.tracklist-modal-artist {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.tracklist-modal-search-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    margin: 12px 18px 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: var(--text-muted);
+}
+
+.tracklist-modal-search-box input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+
+.tracklist-modal-search-box input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.tracklist-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 14px 18px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tracklist-modal-body .tracklist {
+    max-height: none;
+    overflow-y: visible;
+}
+
+@media (max-width: 768px) {
+    .tracklist-modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .tracklist-modal-card {
+        max-width: 100%;
+        width: 100%;
+        border-radius: 22px 22px 0 0;
+        border-bottom: none;
+        max-height: 78vh;
+        animation: sheetSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+}
+
+@keyframes sheetSlideUp {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+
 
 
