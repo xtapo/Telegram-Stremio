@@ -375,18 +375,24 @@ class XTAPOMusicApp {
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
-        this.loadAlbum(0, 0, false);
-        this.renderAlbumGrid();
         this.setupKeyboardShortcuts();
         
+        // 1. Kiểm tra phiên đăng nhập và danh sách yêu thích
         await this.fetchUserProfile();
-        await this.fetchTelegramAlbums();
+
+        // 2. Tải kho nhạc Telegram ngầm (không gọi loadAlbum đè trước)
+        await this.fetchTelegramAlbums(false);
+
+        // 3. Tải metadata nghệ sĩ
         await this.fetchArtistMetadata();
 
-        // Mặc định khi tải trang: Tự động mở danh sách bài hát yêu thích nếu user có bài hát yêu thích
+        // 4. Mở trực tiếp playlist thích hợp: Yêu Thích nếu có, hoặc Album mặc định
         if (this.currentUser && this.favoriteTracks && this.favoriteTracks.length > 0) {
             this.playFavoritesQueue(0, false, false);
             if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+        } else {
+            this.loadAlbum(0, 0, false);
+            this.renderAlbumGrid();
         }
     }
 
@@ -485,10 +491,13 @@ class XTAPOMusicApp {
                 this.authModal.classList.remove('open');
                 this.loginPassword.value = '';
                 await this.fetchUserProfile();
-                await this.fetchTelegramAlbums();
+                await this.fetchTelegramAlbums(false);
                 if (this.favoriteTracks && this.favoriteTracks.length > 0) {
                     this.playFavoritesQueue(0, false, false);
                     if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+                } else {
+                    this.loadAlbum(0, 0, false);
+                    this.renderAlbumGrid();
                 }
             } else {
                 this.showToast(data.message || "Đăng nhập thất bại.");
@@ -841,7 +850,7 @@ class XTAPOMusicApp {
     }
 
     // --- Fetch Telegram Library from Backend ---
-    async fetchTelegramAlbums() {
+    async fetchTelegramAlbums(shouldLoadAlbum = true) {
         if (!this.currentUser) return; // Do not fetch Telecloud music for guests
         try {
             const res = await fetch('/api/music/albums');
@@ -851,7 +860,9 @@ class XTAPOMusicApp {
                     this.albums = data.albums;
                     this.currentAlbumIndex = 0;
                     this.currentTrackIndex = 0;
-                    this.loadAlbum(0, 0, false);
+                    if (shouldLoadAlbum) {
+                        this.loadAlbum(0, 0, false);
+                    }
                     this.renderAlbumGrid();
                     if (this.albumCountBadge) {
                         this.albumCountBadge.textContent = `${this.albums.length} Albums (TG)`;
@@ -859,7 +870,6 @@ class XTAPOMusicApp {
                     if (this.tgStorageLabel) {
                         this.tgStorageLabel.textContent = '⚡ Telegram Live';
                     }
-                    this.showToast(`Đã đồng bộ ${this.albums.length} Album từ Telegram Cloud!`);
                 }
             }
         } catch (err) {
