@@ -3168,7 +3168,7 @@ async def get_realtime_lyrics(
             synced = best_match.get("syncedLyrics") or ""
             plain = best_match.get("plainLyrics") or ""
 
-            if synced or plain:
+            if synced:
                 result = {
                     "status": "success",
                     "id": best_match.get("id"),
@@ -3183,6 +3183,74 @@ async def get_realtime_lyrics(
                 }
                 _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
                 return JSONResponse(content=result)
+
+        # 4. Chiến lược D: Thử Netease Cloud Music (163 Music - Siêu mạnh về V-Pop, K-Pop, C-Pop & Quốc Tế)
+        try:
+            netease_query = f"{cleaned_track} {cleaned_artist}".strip()
+            netease_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Referer": "https://music.163.com/"
+            }
+            n_resp = await client.post(
+                "https://music.163.com/api/cloudsearch/pc",
+                data={"s": netease_query, "type": 1, "limit": 4},
+                headers=netease_headers
+            )
+            if n_resp.status_code == 200:
+                n_data = n_resp.json()
+                n_songs = n_data.get("result", {}).get("songs", [])
+                for song in n_songs:
+                    sid = song.get("id")
+                    if not sid:
+                        continue
+                    r_lrc = await client.get(
+                        "https://music.163.com/api/song/lyric",
+                        params={"os": "pc", "id": sid, "lv": -1, "kv": -1, "tv": -1},
+                        headers=netease_headers
+                    )
+                    if r_lrc.status_code == 200:
+                        l_json = r_lrc.json()
+                        raw_lrc = l_json.get("lrc", {}).get("lyric", "").strip()
+                        if raw_lrc:
+                            has_synced = bool(re.search(r'\[\d{1,2}:\d{1,2}', raw_lrc))
+                            artist_str = ""
+                            if song.get("ar") and isinstance(song["ar"], list) and len(song["ar"]) > 0:
+                                artist_str = song["ar"][0].get("name", "")
+                            
+                            netease_result = {
+                                "status": "success",
+                                "id": sid,
+                                "track_name": song.get("name") or cleaned_track,
+                                "artist_name": artist_str or cleaned_artist,
+                                "album_name": (song.get("al") or {}).get("name") or album_name,
+                                "duration": int(song.get("dt", 0) / 1000) if song.get("dt") else None,
+                                "synced_lyrics": raw_lrc if has_synced else "",
+                                "plain_lyrics": "" if has_synced else raw_lrc,
+                                "instrumental": False,
+                                "source": "netease_cloud"
+                            }
+                            _lyrics_memory_cache[cache_key] = {"data": netease_result, "_cached_at": time.time()}
+                            return JSONResponse(content=netease_result)
+        except Exception as e:
+            LOGGER.debug(f"[Netease Lyrics Engine] Note: {e}")
+
+        # 5. Nếu chỉ có plain lyrics từ LRCLIB
+        if collected_items and collected_items[0].get("plainLyrics"):
+            best_p = collected_items[0]
+            result = {
+                "status": "success",
+                "id": best_p.get("id"),
+                "track_name": best_p.get("trackName") or cleaned_track,
+                "artist_name": best_p.get("artistName") or cleaned_artist,
+                "album_name": best_p.get("albumName") or album_name,
+                "duration": best_p.get("duration"),
+                "synced_lyrics": "",
+                "plain_lyrics": best_p.get("plainLyrics") or "",
+                "instrumental": best_p.get("instrumental", False),
+                "source": "lrclib_plain"
+            }
+            _lyrics_memory_cache[cache_key] = {"data": result, "_cached_at": time.time()}
+            return JSONResponse(content=result)
 
     # Không tìm thấy lời bài hát
     not_found_res = {

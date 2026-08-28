@@ -4345,8 +4345,10 @@ class XTAPOMusicApp {
                         isPlain: parsed.isPlain,
                         source: 'backend_lrclib'
                     };
+                    const isNetease = data.source === 'netease_cloud';
+                    const srcLabel = data.is_custom ? 'CUSTOM .LRC' : (isNetease ? 'NETEASE SYNCED' : (synced ? 'LRCLIB SYNCED' : 'PLAIN LYRICS'));
                     if (this.heroLyricsSourceTag) {
-                        this.heroLyricsSourceTag.textContent = data.is_custom ? 'CUSTOM .LRC' : (synced ? 'LRCLIB SYNCED' : 'LRCLIB PLAIN');
+                        this.heroLyricsSourceTag.textContent = srcLabel;
                     }
                     this.renderLyrics(this.currentLyrics);
                     lyricsFound = true;
