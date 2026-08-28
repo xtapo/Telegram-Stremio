@@ -13,7 +13,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 96kHz",
         totalSize: "1.18 GB",
         publisher: "Republic Records / UMG",
-        coverUrl: "https://img.kollersi.com/202608/ga-1200x1200bb.webp",
+        coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
             glow1: "radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)",
             glow2: "radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%)"
@@ -44,7 +44,7 @@ const ALBUMS_DATABASE = [
         format: "FLAC 24-Bit / 192kHz",
         totalSize: "1.45 GB",
         publisher: "Mercury Nashville / UMG",
-        coverUrl: "https://img.kollersi.com/202608/36-1200x1200bb.webp",
+        coverUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1000&auto=format&fit=crop",
         glowColors: {
             glow1: "radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)",
             glow2: "radial-gradient(circle, #f59e0b 0%, #c2410c 60%, transparent 80%)"
@@ -501,25 +501,7 @@ class XTAPOMusicApp {
         this.updateProgress(0);
 
         // Cập nhật MediaSession cho màn hình khóa iPhone (iOS), Android và Desktop
-        if ('mediaSession' in navigator) {
-            try {
-                const fullCoverUrl = new URL(trackCover, window.location.href).href;
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.name || 'Unknown Track',
-                    artist: artistName,
-                    album: album.title || 'XTAPO Music',
-                    artwork: [
-                        { src: fullCoverUrl, sizes: '96x96', type: 'image/jpeg' },
-                        { src: fullCoverUrl, sizes: '128x128', type: 'image/jpeg' },
-                        { src: fullCoverUrl, sizes: '192x192', type: 'image/jpeg' },
-                        { src: fullCoverUrl, sizes: '256x256', type: 'image/jpeg' },
-                        { src: fullCoverUrl, sizes: '384x384', type: 'image/jpeg' },
-                        { src: fullCoverUrl, sizes: '512x512', type: 'image/jpeg' }
-                    ]
-                });
-                navigator.mediaSession.playbackState = autoPlay ? 'playing' : 'paused';
-            } catch (e) {}
-        }
+        this.updateMediaSession();
 
         // Update Active Tracklist Item
         const items = this.tracklistEl.querySelectorAll('.track-item');
@@ -604,13 +586,54 @@ class XTAPOMusicApp {
         });
     }
 
+    updateMediaSession() {
+        if (!('mediaSession' in navigator)) return;
+
+        const track = this.currentTrack;
+        const album = this.currentAlbum;
+        if (!track || !album) return;
+
+        const trackName = track.name || 'Unknown Track';
+        const artistName = track.artist || album.artist || 'XTAPO Music';
+        const albumTitle = album.title || 'XTAPO Music';
+        const rawCover = track.coverUrl || album.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop';
+        const fullCoverUrl = new URL(rawCover, window.location.href).href;
+
+        const sizes = [96, 128, 192, 256, 384, 512];
+        const artwork = sizes.map(s => ({
+            src: fullCoverUrl,
+            sizes: `${s}x${s}`,
+            type: fullCoverUrl.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'
+        }));
+
+        try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: trackName,
+                artist: artistName,
+                album: albumTitle,
+                artwork: artwork
+            });
+            navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
+        } catch (e) {
+            console.warn('Error setting MediaMetadata:', e);
+        }
+
+        if ('setPositionState' in navigator.mediaSession && this.audio.duration && !isNaN(this.audio.duration)) {
+            try {
+                navigator.mediaSession.setPositionState({
+                    duration: this.audio.duration,
+                    playbackRate: this.audio.playbackRate || 1,
+                    position: Math.min(this.audio.currentTime || 0, this.audio.duration)
+                });
+            } catch (e) {}
+        }
+    }
+
     // --- Audio Engine & Synth Fallback ---
     play() {
         this.isPlaying = true;
         this.updatePlayStateVisuals(true);
-        if ('mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = 'playing';
-        }
+        this.updateMediaSession();
 
         const playPromise = this.audio.play();
         if (playPromise !== undefined) {
@@ -787,16 +810,20 @@ class XTAPOMusicApp {
         this.audio.addEventListener('loadedmetadata', () => {
             if (this.audio.duration) {
                 this.timeTotal.textContent = this.formatTime(this.audio.duration);
-                if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
-                    try {
-                        navigator.mediaSession.setPositionState({
-                            duration: this.audio.duration,
-                            playbackRate: this.audio.playbackRate || 1,
-                            position: this.audio.currentTime || 0
-                        });
-                    } catch (e) {}
-                }
+                this.updateMediaSession();
             }
+        });
+
+        this.audio.addEventListener('loadeddata', () => {
+            this.updateMediaSession();
+        });
+
+        this.audio.addEventListener('play', () => {
+            this.updateMediaSession();
+        });
+
+        this.audio.addEventListener('playing', () => {
+            this.updateMediaSession();
         });
 
         this.audio.addEventListener('progress', () => {
