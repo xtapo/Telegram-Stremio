@@ -3204,29 +3204,61 @@ class XTAPOMusicApp {
     /**
      * Mở Modal Chia Sẻ & Lấy Link Stream M3U8 Trực Tiếp
      */
-    openM3U8ShareModal({ title, urlPath, tracks }) {
+    async openM3U8ShareModal({ title, urlPath, tracks }) {
         if (!tracks || tracks.length === 0) {
             this.showToast('Không có bài hát nào trong playlist/album này!');
             return;
         }
 
-        const fullUrl = window.location.origin + (urlPath.startsWith('/') ? urlPath : `/${urlPath}`);
+        let fullUrl = window.location.origin + (urlPath.startsWith('/') ? urlPath : `/${urlPath}`);
         this.currentM3U8Context = { title, url: fullUrl, tracks };
 
         if (this.m3u8ModalTitle) this.m3u8ModalTitle.textContent = `Stream M3U8: ${title}`;
         if (this.m3u8DirectUrlInput) this.m3u8DirectUrlInput.value = fullUrl;
         if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Sao Chép Link';
 
-        // Tự động sao chép link stream vào clipboard
-        navigator.clipboard.writeText(fullUrl).then(() => {
-            if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Đã Copy! ✅';
-            this.showToast(`Đã copy link stream M3U8: ${title}`);
-            setTimeout(() => {
-                if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Sao Chép Link';
-            }, 2500);
-        }).catch(() => {});
-
+        // Tự động sao chép link stream vào clipboard ban đầu
+        navigator.clipboard.writeText(fullUrl).catch(() => {});
         this.openModal(this.m3u8Modal);
+
+        // Tạo dynamic playlist share trên server để đảm bảo 100% khớp danh sách bài hát
+        try {
+            const cleanTracks = tracks.map(t => ({
+                name: t.name || t.title || 'Track',
+                artist: t.artist || 'XTAPO Artist',
+                duration: t.duration || '0',
+                chat_id: t.chat_id || t.chatId || '',
+                msg_id: t.msg_id || t.msgId || '',
+                previewUrl: t.previewUrl || t.url || ''
+            }));
+
+            const res = await fetch('/api/music/playlist/share', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, tracks: cleanTracks })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.m3u8_url) {
+                    fullUrl = data.m3u8_url;
+                    this.currentM3U8Context.url = fullUrl;
+                    if (this.m3u8DirectUrlInput) this.m3u8DirectUrlInput.value = fullUrl;
+                    navigator.clipboard.writeText(fullUrl).then(() => {
+                        if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Đã Copy! ✅';
+                        this.showToast(`Đã tạo & copy link stream M3U8: ${title}`);
+                        setTimeout(() => {
+                            if (this.m3u8CopyText) this.m3u8CopyText.textContent = 'Sao Chép Link';
+                        }, 2500);
+                    }).catch(() => {});
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('Fallback to static M3U8 URL:', e);
+        }
+
+        this.showToast(`Đã copy link stream M3U8: ${title}`);
     }
 }
 

@@ -649,6 +649,67 @@ async def get_music_albums():
 
 # ── Direct M3U8 Playlist Stream Endpoints (VLC, PotPlayer, Foobar2000, Apple Music) ──
 
+_SHARED_M3U8_CACHE: Dict[str, dict] = {}
+
+DEMO_ALBUMS_FALLBACK = [
+    {
+        "id": "shania-twain-little-miss-twain",
+        "title": "LITTLE MISS TWAIN",
+        "artist": "SHANIA TWAIN",
+        "tracks": [
+            { "id": 1, "name": "Any Man of Mine (Little Miss Twain Edition)", "artist": "SHANIA TWAIN", "duration": "4:07", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+            { "id": 2, "name": "That Don't Impress Me Much", "artist": "SHANIA TWAIN", "duration": "3:59", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
+            { "id": 3, "name": "Man! I Feel Like a Woman!", "artist": "SHANIA TWAIN", "duration": "3:53", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
+            { "id": 4, "name": "You're Still the One", "artist": "SHANIA TWAIN", "duration": "3:32", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" },
+            { "id": 5, "name": "From This Moment On", "artist": "SHANIA TWAIN", "duration": "4:43", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3" }
+        ]
+    },
+    {
+        "id": "shania-twain-come-on-over",
+        "title": "COME ON OVER",
+        "artist": "SHANIA TWAIN",
+        "tracks": [
+            { "id": 1, "name": "Man! I Feel Like a Woman!", "artist": "SHANIA TWAIN", "duration": "3:53", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
+            { "id": 2, "name": "I'm Holdin' On to Love", "artist": "SHANIA TWAIN", "duration": "3:30", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" },
+            { "id": 3, "name": "Love Gets Me Every Time", "artist": "SHANIA TWAIN", "duration": "3:33", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3" }
+        ]
+    },
+    {
+        "id": "taylor-swift-1989-tv",
+        "title": "1989 (TAYLOR'S VERSION)",
+        "artist": "TAYLOR SWIFT",
+        "tracks": [
+            { "id": 1, "name": "Welcome to New York (Taylor's Version)", "artist": "TAYLOR SWIFT", "duration": "3:32", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+            { "id": 2, "name": "Blank Space (Taylor's Version)", "artist": "TAYLOR SWIFT", "duration": "3:51", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
+            { "id": 3, "name": "Style (Taylor's Version)", "artist": "TAYLOR SWIFT", "duration": "3:51", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }
+        ]
+    },
+    {
+        "id": "daft-punk-ram-10th",
+        "title": "RANDOM ACCESS MEMORIES",
+        "artist": "DAFT PUNK",
+        "tracks": [
+            { "id": 1, "name": "Give Life Back to Music", "artist": "DAFT PUNK", "duration": "4:35", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" },
+            { "id": 2, "name": "Giorgio by Moroder", "artist": "DAFT PUNK", "duration": "9:04", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3" },
+            { "id": 3, "name": "Get Lucky", "artist": "DAFT PUNK", "duration": "6:09", "previewUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3" }
+        ]
+    }
+]
+
+def _get_request_base_url(request: Request) -> str:
+    """Xác định Base URL chính xác cho Stream (qua Proxy / Domain Public / Header)"""
+    try:
+        from Backend.helper.settings_manager import SettingsManager
+        mgr_url = (SettingsManager.current().base_url or "").rstrip("/")
+        if mgr_url and mgr_url.startswith("http"):
+            return mgr_url
+    except Exception:
+        pass
+
+    proto = request.headers.get("x-forwarded-proto") or request.headers.get("x-scheme") or request.url.scheme or "http"
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}".rstrip("/")
+
 def _build_m3u8_content(title: str, tracks: list, base_url: str) -> str:
     lines = ["#EXTM3U", "#EXTENC:UTF-8", f"#PLAYLIST:{title}\n"]
     for idx, t in enumerate(tracks):
@@ -685,10 +746,69 @@ def _build_m3u8_content(title: str, tracks: list, base_url: str) -> str:
     return "\n".join(lines)
 
 
+# ── Dynamic Playlist Share Endpoint (Đảm bảo 100% Client Sync với VLC/PotPlayer) ──
+
+@router.post("/api/music/playlist/share")
+async def create_shared_playlist(payload: dict, request: Request):
+    """Tạo hoặc đồng bộ M3U8 Playlist tức thì từ danh sách bài hát của Frontend"""
+    title = payload.get("title", "XTAPO_Playlist").strip() or "XTAPO_Playlist"
+    tracks = payload.get("tracks", [])
+    if not tracks:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Danh sách bài hát rỗng"})
+
+    share_key = secrets.token_hex(8)
+    _SHARED_M3U8_CACHE[share_key] = {
+        "title": title,
+        "tracks": tracks,
+        "created_at": time.time()
+    }
+
+    base_url = _get_request_base_url(request)
+    m3u8_url = f"{base_url}/api/music/playlist/share/{share_key}.m3u8"
+    return {"status": "success", "share_id": share_key, "m3u8_url": m3u8_url}
+
+
+@router.get("/api/music/playlist/share/{share_id:path}")
+async def get_shared_playlist_m3u8(request: Request, share_id: str):
+    """Trả về M3U8 từ bộ nhớ chia sẻ động"""
+    base_url = _get_request_base_url(request)
+    if share_id.endswith(".m3u8"):
+        share_id = share_id[:-5]
+
+    item = _SHARED_M3U8_CACHE.get(share_id)
+    if not item:
+        # Thử tìm trong DB nếu có lưu
+        try:
+            coll = db.dbs["tracking"]["music_shared_playlists"]
+            doc = await coll.find_one({"_id": share_id})
+            if doc:
+                item = doc
+        except Exception:
+            pass
+
+    if not item:
+        raise HTTPException(status_code=404, detail="Playlist share link expired or not found")
+
+    title = item.get("title", "Shared Playlist")
+    tracks = item.get("tracks", [])
+    m3u8_text = _build_m3u8_content(title, tracks, base_url)
+    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
+
+    return PlainResponse(
+        content=m3u8_text,
+        media_type="audio/x-mpegurl; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+            "Cache-Control": "public, max-age=3600",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
 @router.get("/api/music/playlist/album/{album_id:path}")
 async def stream_album_m3u8(request: Request, album_id: str):
     """Trả về file playlist .m3u8 trực tiếp của Album, Thể Loại, Nghệ Sĩ hoặc Playlist"""
-    base_url = str(request.base_url).rstrip("/")
+    base_url = _get_request_base_url(request)
     if album_id.endswith(".m3u8"):
         album_id = album_id[:-5]
 
@@ -711,11 +831,12 @@ async def stream_album_m3u8(request: Request, album_id: str):
         from Backend.fastapi.routes.music_auth import stream_user_playlist_m3u8
         return await stream_user_playlist_m3u8(request, pl_id)
 
-    # 4. Tìm kiếm Album thông thường trong Database
+    # 4. Tìm kiếm Album thông thường trong Database và Fallback
     data = await _db_load_library() or []
+    all_albums = list(data) + DEMO_ALBUMS_FALLBACK
     target_album = None
 
-    for alb in data:
+    for alb in all_albums:
         curr_id = str(alb.get("id", "")).strip().lower()
         curr_title = str(alb.get("title", "")).strip().lower()
         if curr_id == raw_lower or curr_title == raw_lower:
@@ -724,7 +845,7 @@ async def stream_album_m3u8(request: Request, album_id: str):
 
     # Nếu chưa thấy, thử tìm partial match
     if not target_album:
-        for alb in data:
+        for alb in all_albums:
             curr_title = str(alb.get("title", "")).strip().lower()
             if raw_lower in curr_title or curr_title in raw_lower:
                 target_album = alb
@@ -733,7 +854,7 @@ async def stream_album_m3u8(request: Request, album_id: str):
     # 5. Nếu vẫn không thấy, kiểm tra xem có phải là 1 Thể loại trong kho không
     if not target_album:
         genre_tracks = []
-        for alb in data:
+        for alb in all_albums:
             alb_artist = alb.get("artist", "")
             for t in alb.get("tracks", []):
                 if not t.get("artist"):
@@ -746,7 +867,7 @@ async def stream_album_m3u8(request: Request, album_id: str):
             safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{decoded_id}")
             return PlainResponse(
                 content=m3u8_text,
-                media_type="application/vnd.apple.mpegurl; charset=utf-8",
+                media_type="audio/x-mpegurl; charset=utf-8",
                 headers={
                     "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
                     "Cache-Control": "public, max-age=300",
@@ -764,7 +885,7 @@ async def stream_album_m3u8(request: Request, album_id: str):
     safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
     return PlainResponse(
         content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        media_type="audio/x-mpegurl; charset=utf-8",
         headers={
             "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
             "Cache-Control": "public, max-age=300",
@@ -777,13 +898,12 @@ async def stream_album_m3u8(request: Request, album_id: str):
 @router.get("/api/music/playlist/all")
 async def stream_all_music_m3u8(request: Request):
     """Trả về file playlist .m3u8 toàn bộ kho nhạc thư viện"""
-    base_url = str(request.base_url).rstrip("/")
-    data = await _db_load_library()
-    if not data:
-        raise HTTPException(status_code=404, detail="Library is empty")
+    base_url = _get_request_base_url(request)
+    data = await _db_load_library() or []
+    all_albums = list(data) if data else DEMO_ALBUMS_FALLBACK
 
     all_tracks = []
-    for alb in data:
+    for alb in all_albums:
         for t in alb.get("tracks", []):
             if not t.get("artist"):
                 t["artist"] = alb.get("artist", "")
@@ -792,7 +912,7 @@ async def stream_all_music_m3u8(request: Request):
     m3u8_text = _build_m3u8_content("XTAPO_All_Music_Library", all_tracks, base_url)
     return PlainResponse(
         content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        media_type="audio/x-mpegurl; charset=utf-8",
         headers={
             "Content-Disposition": 'inline; filename="XTAPO_All_Music_Library.m3u8"',
             "Cache-Control": "public, max-age=300",
@@ -804,16 +924,17 @@ async def stream_all_music_m3u8(request: Request):
 @router.get("/api/music/playlist/artist/{artist_name:path}")
 async def stream_artist_m3u8(request: Request, artist_name: str):
     """Trả về playlist .m3u8 cho ca sĩ/nghệ sĩ cụ thể"""
-    base_url = str(request.base_url).rstrip("/")
+    base_url = _get_request_base_url(request)
     if artist_name.endswith(".m3u8"):
         artist_name = artist_name[:-5]
 
     data = await _db_load_library() or []
+    all_albums = list(data) + DEMO_ALBUMS_FALLBACK
     decoded_artist = unquote(artist_name).strip().lower()
     artist_tracks = []
     display_artist = unquote(artist_name).strip()
 
-    for alb in data:
+    for alb in all_albums:
         alb_artist = alb.get("artist", "")
         for t in alb.get("tracks", []):
             track_artist = t.get("artist") or alb_artist
@@ -823,7 +944,7 @@ async def stream_artist_m3u8(request: Request, artist_name: str):
 
     if not artist_tracks:
         # Fallback lấy các bài hát khớp
-        for alb in data:
+        for alb in all_albums:
             for t in alb.get("tracks", []):
                 if decoded_artist in t.get("name", "").lower():
                     artist_tracks.append(t)
@@ -835,7 +956,7 @@ async def stream_artist_m3u8(request: Request, artist_name: str):
     safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Artist_{display_artist}")
     return PlainResponse(
         content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        media_type="audio/x-mpegurl; charset=utf-8",
         headers={
             "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
             "Cache-Control": "public, max-age=300",
@@ -847,18 +968,18 @@ async def stream_artist_m3u8(request: Request, artist_name: str):
 @router.get("/api/music/playlist/genre/{genre_name:path}")
 async def stream_genre_m3u8(request: Request, genre_name: str):
     """Trả về playlist .m3u8 theo thể loại"""
-    base_url = str(request.base_url).rstrip("/")
+    base_url = _get_request_base_url(request)
     if genre_name.endswith(".m3u8"):
         genre_name = genre_name[:-5]
 
     data = await _db_load_library() or []
+    all_albums = list(data) + DEMO_ALBUMS_FALLBACK
     decoded_genre = unquote(genre_name).strip().lower()
-    # Chuẩn hoá ký tự so sánh (ví dụ: edm/remix, edm-remix, edm remix)
     clean_genre_key = re.sub(r'[\/\-_ ]+', '', decoded_genre)
     genre_tracks = []
     display_genre = unquote(genre_name).strip()
 
-    for alb in data:
+    for alb in all_albums:
         alb_artist = alb.get("artist", "")
         for t in alb.get("tracks", []):
             if not t.get("artist"):
@@ -875,7 +996,7 @@ async def stream_genre_m3u8(request: Request, genre_name: str):
 
     if not genre_tracks:
         # Nếu chưa tìm thấy, quét tất cả bài hát và dùng detect_genre_from_track_info
-        for alb in data:
+        for alb in all_albums:
             for t in alb.get("tracks", []):
                 det = detect_genre_from_track_info(t).lower()
                 clean_det = re.sub(r'[\/\-_ ]+', '', det)
@@ -889,14 +1010,13 @@ async def stream_genre_m3u8(request: Request, genre_name: str):
     safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{display_genre}")
     return PlainResponse(
         content=m3u8_text,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
+        media_type="audio/x-mpegurl; charset=utf-8",
         headers={
             "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
             "Cache-Control": "public, max-age=300",
             "Access-Control-Allow-Origin": "*"
         }
     )
-
 
 # ── 3. Quản lý Danh Sách Kênh Nhạc (Channel Management) ───────────────────────
 @router.get("/api/music/channels")
