@@ -602,8 +602,9 @@ html, body {
     top: 15px;
     left: 15px;
     z-index: 1;
-    transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.85s cubic-bezier(0.34, 1.35, 0.64, 1), box-shadow 0.6s ease;
     transform-origin: center center;
+    transform: translateX(35px) rotate(0deg);
     overflow: hidden;
 }
 
@@ -676,19 +677,26 @@ html, body {
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
-/* Vinyl Interactive States (Slide-out to Right & Spin) */
-.vinyl-stage.is-playing .vinyl-disc,
-.vinyl-stage.is-active .vinyl-disc {
+/* Vinyl Interactive States (Retracted inside when paused, Slide-out & Spin when playing) */
+.vinyl-stage .vinyl-disc,
+.vinyl-stage.is-paused .vinyl-disc,
+.vinyl-stage:not(.is-playing) .vinyl-disc {
+    transform: translateX(35px) rotate(0deg);
+    animation: none;
+}
+
+/* Subtle peek interaction when hovering album while paused */
+.vinyl-stage:not(.is-playing):hover .vinyl-disc {
+    transform: translateX(60px) rotate(0deg);
+}
+
+.vinyl-stage.is-playing .vinyl-disc {
     transform: translateX(180px) rotate(0deg);
 }
 
-.vinyl-stage.is-spinning .vinyl-disc {
+.vinyl-stage.is-playing.is-spinning .vinyl-disc {
     animation: vinylSpin 5s linear infinite;
     animation-play-state: running;
-}
-
-.vinyl-stage.is-paused .vinyl-disc {
-    animation-play-state: paused;
 }
 
 @keyframes vinylSpin {
@@ -1682,7 +1690,19 @@ html, body {
         top: 10px;
         left: 10px;
         z-index: 1;
-        transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transform: translateX(25px) rotate(0deg);
+        transition: transform 0.85s cubic-bezier(0.34, 1.35, 0.64, 1);
+    }
+
+    .vinyl-stage .vinyl-disc,
+    .vinyl-stage.is-paused .vinyl-disc,
+    .vinyl-stage:not(.is-playing) .vinyl-disc {
+        transform: translateX(25px) rotate(0deg);
+        animation: none;
+    }
+
+    .vinyl-stage:not(.is-playing):hover .vinyl-disc {
+        transform: translateX(45px) rotate(0deg);
     }
 
     .vinyl-center-label {
@@ -1697,18 +1717,13 @@ html, body {
         flex-shrink: 0;
     }
     
-    .vinyl-stage.is-playing .vinyl-disc,
-    .vinyl-stage.is-active .vinyl-disc {
+    .vinyl-stage.is-playing .vinyl-disc {
         transform: translateX(130px) rotate(0deg);
     }
 
-    .vinyl-stage.is-spinning .vinyl-disc {
+    .vinyl-stage.is-playing.is-spinning .vinyl-disc {
         animation: vinylSpinTablet 5s linear infinite;
         animation-play-state: running;
-    }
-
-    .vinyl-stage.is-paused .vinyl-disc {
-        animation-play-state: paused;
     }
     
     @keyframes vinylSpinTablet {
@@ -1795,8 +1810,15 @@ html, body {
         left: 5px;
         position: absolute;
         z-index: 1;
-        transform: translateX(0px) rotate(0deg);
-        transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transform: translateX(18px) rotate(0deg);
+        transition: transform 0.85s cubic-bezier(0.34, 1.35, 0.64, 1);
+    }
+
+    .vinyl-stage .vinyl-disc,
+    .vinyl-stage.is-paused .vinyl-disc,
+    .vinyl-stage:not(.is-playing) .vinyl-disc {
+        transform: translateX(18px) rotate(0deg);
+        animation: none;
     }
     
     .vinyl-center-label {
@@ -1812,18 +1834,13 @@ html, body {
         flex-shrink: 0;
     }
     
-    .vinyl-stage.is-playing .vinyl-disc,
-    .vinyl-stage.is-active .vinyl-disc {
+    .vinyl-stage.is-playing .vinyl-disc {
         transform: translateX(80px) rotate(0deg);
     }
 
-    .vinyl-stage.is-spinning .vinyl-disc {
+    .vinyl-stage.is-playing.is-spinning .vinyl-disc {
         animation: vinylSpinMobile 5s linear infinite;
         animation-play-state: running;
-    }
-
-    .vinyl-stage.is-paused .vinyl-disc {
-        animation-play-state: paused;
     }
     
     @keyframes vinylSpinMobile {
@@ -2056,6 +2073,15 @@ html, body {
         height: 150px;
         top: 8px;
         left: 8px;
+        transform: translateX(12px) rotate(0deg);
+        transition: transform 0.85s cubic-bezier(0.34, 1.35, 0.64, 1);
+    }
+
+    .vinyl-stage .vinyl-disc,
+    .vinyl-stage.is-paused .vinyl-disc,
+    .vinyl-stage:not(.is-playing) .vinyl-disc {
+        transform: translateX(12px) rotate(0deg);
+        animation: none;
     }
     
     .vinyl-center-label {
@@ -2068,9 +2094,13 @@ html, body {
         height: 150px;
     }
     
-    .vinyl-stage.is-playing .vinyl-disc,
-    .vinyl-stage.is-active .vinyl-disc {
-        transform: translateX(60px);
+    .vinyl-stage.is-playing .vinyl-disc {
+        transform: translateX(60px) rotate(0deg);
+    }
+
+    .vinyl-stage.is-playing.is-spinning .vinyl-disc {
+        animation: vinylSpinMobile 5s linear infinite;
+        animation-play-state: running;
     }
     
     @keyframes vinylSpinMobile {

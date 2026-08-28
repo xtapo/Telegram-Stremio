@@ -779,7 +779,7 @@ class XTAPOMusicApp {
 
         // Vinyl Animation
         this.vinylStage.classList.add('is-paused');
-        this.vinylStage.classList.remove('is-spinning');
+        this.vinylStage.classList.remove('is-playing', 'is-active', 'is-spinning');
 
         // Tracklist Active Item
         const activeItem = this.tracklistEl.querySelector('.track-item.active');
