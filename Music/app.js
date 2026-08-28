@@ -135,7 +135,12 @@ class XTAPOMusicApp {
 
         // Elements
         this.audio = document.getElementById('mainAudio');
-        if (this.audio) this.audio.preload = 'auto';
+        if (this.audio) {
+            this.audio.preload = 'auto';
+            this.audio.playsInline = true;
+            this.audio.setAttribute('playsinline', '');
+            this.audio.setAttribute('webkit-playsinline', '');
+        }
         this.preloaderAudio = new Audio();
         this.preloaderAudio.preload = 'auto';
         this._preloadedTrackUrl = null;
@@ -1464,6 +1469,20 @@ class XTAPOMusicApp {
     // --- Audio Engine & Synth Fallback ---
     initWebAudioAnalyser() {
         if (this.analyser) return;
+
+        // KIỂM TRA THIẾT BỊ iOS (iPhone, iPad, iPod)
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                      (typeof navigator.vendor === 'string' && navigator.vendor.includes('Apple') && !window.MSStream);
+
+        if (isIOS) {
+            // Trên iOS/WebKit: KHÔNG nối <audio> qua AudioContext (createMediaElementSource)
+            // vì iOS sẽ tự động Suspend (đóng băng) Web Audio khi tắt màn hình hoặc khoá máy,
+            // làm mất âm thanh hoàn toàn.
+            // Để thẻ <audio> phát thuần native, Visualizer trên iOS sẽ tự động dùng bộ mô phỏng sóng mượt mà!
+            return;
+        }
+
         try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) return;
