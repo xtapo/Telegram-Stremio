@@ -338,14 +338,14 @@ class XTAPOMusicApp {
                         this.logoutUser();
                     }
                 } else {
-                    this.authModal.classList.add('active');
+                    this.authModal.classList.add('open');
                 }
             });
         }
         
         if (this.closeAuthModal) {
             this.closeAuthModal.addEventListener('click', () => {
-                this.authModal.classList.remove('active');
+                this.authModal.classList.remove('open');
             });
         }
         
@@ -391,7 +391,7 @@ class XTAPOMusicApp {
             const data = await res.json();
             if (data.status === 'success') {
                 this.showToast(`Chào mừng trở lại, ${data.user.display_name}!`);
-                this.authModal.classList.remove('active');
+                this.authModal.classList.remove('open');
                 this.loginPassword.value = '';
                 await this.fetchUserProfile();
                 await this.fetchTelegramAlbums();
@@ -418,7 +418,7 @@ class XTAPOMusicApp {
             const data = await res.json();
             if (data.status === 'success') {
                 this.showToast("Đăng ký thành công!");
-                this.authModal.classList.remove('active');
+                this.authModal.classList.remove('open');
                 this.regUsername.value = '';
                 this.regPassword.value = '';
                 this.regDisplayName.value = '';
@@ -472,7 +472,7 @@ class XTAPOMusicApp {
 
     async toggleFavorite() {
         if (!this.currentUser) {
-            this.authModal.classList.add('active');
+            this.authModal.classList.add('open');
             return this.showToast("Vui lòng đăng nhập để sử dụng tính năng yêu thích.");
         }
         
@@ -867,7 +867,7 @@ class XTAPOMusicApp {
     play() {
         const album = this.currentAlbum;
         if (album && !album.isDemo && !this.currentUser) {
-            this.authModal.classList.add('active');
+            this.authModal.classList.add('open');
             this.showToast("Vui lòng đăng nhập để nghe nhạc ngoài bản Demo (Guest).");
             this.pause();
             return;
