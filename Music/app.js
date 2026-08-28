@@ -1678,28 +1678,32 @@ class XTAPOMusicApp {
     // --- Modals & Drawers Setup ---
     setupModalEvents() {
         // Album Picker
-        this.albumPickerBtn.addEventListener('click', () => this.openModal(this.albumModal));
-        this.closeAlbumModal.addEventListener('click', () => this.closeModal(this.albumModal));
-        this.mobileSelectAlbumBtn.addEventListener('click', () => {
-            this.closeMobileDrawer();
-            this.openModal(this.albumModal);
-        });
+        if (this.albumPickerBtn) this.albumPickerBtn.addEventListener('click', () => this.openModal(this.albumModal));
+        if (this.closeAlbumModal) this.closeAlbumModal.addEventListener('click', () => this.closeModal(this.albumModal));
+        if (this.mobileSelectAlbumBtn) {
+            this.mobileSelectAlbumBtn.addEventListener('click', () => {
+                this.closeMobileDrawer();
+                this.openModal(this.albumModal);
+            });
+        }
 
         // Search Modal
-        this.searchBtn.addEventListener('click', () => {
-            this.openModal(this.searchModal);
-            setTimeout(() => this.searchInput.focus(), 100);
-        });
-        this.closeSearchModal.addEventListener('click', () => this.closeModal(this.searchModal));
-        this.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+        if (this.searchBtn) {
+            this.searchBtn.addEventListener('click', () => {
+                this.openModal(this.searchModal);
+                setTimeout(() => this.searchInput.focus(), 100);
+            });
+        }
+        if (this.closeSearchModal) this.closeSearchModal.addEventListener('click', () => this.closeModal(this.searchModal));
+        if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
 
         // File / Metadata Drawer
-        const openDrawer = () => this.metaDrawer.classList.add('open');
-        const closeDrawer = () => this.metaDrawer.classList.remove('open');
-        this.metaInfoBtn.addEventListener('click', openDrawer);
-        this.openDrawerBtn.addEventListener('click', openDrawer);
-        this.closeDrawerBtn.addEventListener('click', closeDrawer);
-        this.drawerBackdrop.addEventListener('click', closeDrawer);
+        const openDrawer = () => this.metaDrawer && this.metaDrawer.classList.add('open');
+        const closeDrawer = () => this.metaDrawer && this.metaDrawer.classList.remove('open');
+        if (this.metaInfoBtn) this.metaInfoBtn.addEventListener('click', openDrawer);
+        if (this.openDrawerBtn) this.openDrawerBtn.addEventListener('click', openDrawer);
+        if (this.closeDrawerBtn) this.closeDrawerBtn.addEventListener('click', closeDrawer);
+        if (this.drawerBackdrop) this.drawerBackdrop.addEventListener('click', closeDrawer);
 
         // Mobile Menu Drawer
         this.hamburgerBtn.addEventListener('click', () => this.mobileMenuDrawer.classList.add('open'));
