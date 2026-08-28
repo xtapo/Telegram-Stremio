@@ -1804,10 +1804,9 @@ class XTAPOMusicApp {
             this.btnExportAlbumM3U8.addEventListener('click', () => {
                 if (this.albumExportMenu) this.albumExportMenu.classList.remove('show');
                 const album = this.currentAlbum;
-                const albId = album.id || album.title;
                 this.openM3U8ShareModal({
                     title: album.title,
-                    urlPath: `/api/music/playlist/album/${encodeURIComponent(albId)}.m3u8`,
+                    urlPath: this.getAlbumM3U8Url(album),
                     tracks: album.tracks
                 });
             });
@@ -1837,10 +1836,9 @@ class XTAPOMusicApp {
         if (this.drawerExportM3U8Btn) {
             this.drawerExportM3U8Btn.addEventListener('click', () => {
                 const album = this.currentAlbum;
-                const albId = album.id || album.title;
                 this.openM3U8ShareModal({
                     title: album.title,
-                    urlPath: `/api/music/playlist/album/${encodeURIComponent(albId)}.m3u8`,
+                    urlPath: this.getAlbumM3U8Url(album),
                     tracks: album.tracks
                 });
             });
@@ -3179,6 +3177,28 @@ class XTAPOMusicApp {
         } finally {
             this.activeDownloadAbortController = null;
         }
+    }
+
+    /**
+     * Xác định URL Stream M3U8 tương ứng với từng loại Album / Genre / Artist / Playlist
+     */
+    getAlbumM3U8Url(album) {
+        if (!album) return '/api/music/playlist/all.m3u8';
+        const albId = String(album.id || album.title || '');
+
+        if (albId.startsWith('genre-')) {
+            const rawGenre = decodeURIComponent(albId.substring(6));
+            return `/api/music/playlist/genre/${encodeURIComponent(rawGenre)}.m3u8`;
+        }
+        if (albId.startsWith('artist-')) {
+            const rawArtist = decodeURIComponent(albId.substring(7));
+            return `/api/music/playlist/artist/${encodeURIComponent(rawArtist)}.m3u8`;
+        }
+        if (albId.startsWith('pl-')) {
+            const plId = albId.substring(3);
+            return `/api/music/playlist/user/playlist/${encodeURIComponent(plId)}.m3u8`;
+        }
+        return `/api/music/playlist/album/${encodeURIComponent(albId)}.m3u8`;
     }
 
     /**

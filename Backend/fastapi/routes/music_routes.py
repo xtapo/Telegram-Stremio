@@ -685,27 +685,77 @@ def _build_m3u8_content(title: str, tracks: list, base_url: str) -> str:
     return "\n".join(lines)
 
 
-@router.get("/api/music/playlist/album/{album_id}.m3u8")
-@router.get("/api/music/playlist/album/{album_id}")
+@router.get("/api/music/playlist/album/{album_id:path}")
 async def stream_album_m3u8(request: Request, album_id: str):
-    """Trả về file playlist .m3u8 trực tiếp của Album để mở trên VLC, PotPlayer, Foobar2000..."""
+    """Trả về file playlist .m3u8 trực tiếp của Album, Thể Loại, Nghệ Sĩ hoặc Playlist"""
     base_url = str(request.base_url).rstrip("/")
-    data = await _db_load_library()
-    if not data:
-        raise HTTPException(status_code=404, detail="Library is empty")
+    if album_id.endswith(".m3u8"):
+        album_id = album_id[:-5]
 
+    decoded_id = unquote(album_id).strip()
+    raw_lower = decoded_id.lower()
+
+    # 1. Nếu là Genre Playlist: genre-EDM/Remix hoặc genre/EDM/Remix
+    if raw_lower.startswith("genre-") or raw_lower.startswith("genre/"):
+        genre_name = decoded_id[6:] if raw_lower.startswith("genre-") else decoded_id[6:]
+        return await stream_genre_m3u8(request, genre_name)
+
+    # 2. Nếu là Artist Spotlight: artist-Shania Twain hoặc artist/Shania Twain
+    if raw_lower.startswith("artist-") or raw_lower.startswith("artist/"):
+        artist_name = decoded_id[7:] if raw_lower.startswith("artist-") else decoded_id[7:]
+        return await stream_artist_m3u8(request, artist_name)
+
+    # 3. Nếu là User Custom Playlist: pl-pl_123 hoặc pl_123
+    if raw_lower.startswith("pl-") or raw_lower.startswith("playlist-"):
+        pl_id = decoded_id[3:] if raw_lower.startswith("pl-") else decoded_id[9:]
+        from Backend.fastapi.routes.music_auth import stream_user_playlist_m3u8
+        return await stream_user_playlist_m3u8(request, pl_id)
+
+    # 4. Tìm kiếm Album thông thường trong Database
+    data = await _db_load_library() or []
     target_album = None
-    decoded_id = unquote(album_id).strip().lower()
 
     for alb in data:
         curr_id = str(alb.get("id", "")).strip().lower()
         curr_title = str(alb.get("title", "")).strip().lower()
-        if curr_id == decoded_id or curr_title == decoded_id:
+        if curr_id == raw_lower or curr_title == raw_lower:
             target_album = alb
             break
 
+    # Nếu chưa thấy, thử tìm partial match
     if not target_album:
-        raise HTTPException(status_code=404, detail="Album not found")
+        for alb in data:
+            curr_title = str(alb.get("title", "")).strip().lower()
+            if raw_lower in curr_title or curr_title in raw_lower:
+                target_album = alb
+                break
+
+    # 5. Nếu vẫn không thấy, kiểm tra xem có phải là 1 Thể loại trong kho không
+    if not target_album:
+        genre_tracks = []
+        for alb in data:
+            alb_artist = alb.get("artist", "")
+            for t in alb.get("tracks", []):
+                if not t.get("artist"):
+                    t["artist"] = alb_artist
+                track_genre = str(t.get("genre", "")).lower()
+                if raw_lower in track_genre:
+                    genre_tracks.append(t)
+        if genre_tracks:
+            m3u8_text = _build_m3u8_content(f"Genre_{decoded_id}", genre_tracks, base_url)
+            safe_title = re.sub(r'[\\/:*?"<>|]', '_', f"Genre_{decoded_id}")
+            return PlainResponse(
+                content=m3u8_text,
+                media_type="application/vnd.apple.mpegurl; charset=utf-8",
+                headers={
+                    "Content-Disposition": f'inline; filename="{safe_title}.m3u8"',
+                    "Cache-Control": "public, max-age=300",
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+
+    if not target_album:
+        raise HTTPException(status_code=404, detail=f"Album '{album_id}' not found")
 
     title = target_album.get("title", "Album")
     tracks = target_album.get("tracks", [])
@@ -751,15 +801,14 @@ async def stream_all_music_m3u8(request: Request):
     )
 
 
-@router.get("/api/music/playlist/artist/{artist_name}.m3u8")
-@router.get("/api/music/playlist/artist/{artist_name}")
+@router.get("/api/music/playlist/artist/{artist_name:path}")
 async def stream_artist_m3u8(request: Request, artist_name: str):
     """Trả về playlist .m3u8 cho ca sĩ/nghệ sĩ cụ thể"""
     base_url = str(request.base_url).rstrip("/")
-    data = await _db_load_library()
-    if not data:
-        raise HTTPException(status_code=404, detail="Library is empty")
+    if artist_name.endswith(".m3u8"):
+        artist_name = artist_name[:-5]
 
+    data = await _db_load_library() or []
     decoded_artist = unquote(artist_name).strip().lower()
     artist_tracks = []
     display_artist = unquote(artist_name).strip()
@@ -768,9 +817,16 @@ async def stream_artist_m3u8(request: Request, artist_name: str):
         alb_artist = alb.get("artist", "")
         for t in alb.get("tracks", []):
             track_artist = t.get("artist") or alb_artist
-            if decoded_artist in track_artist.lower():
+            if decoded_artist in track_artist.lower() or track_artist.lower() in decoded_artist:
                 display_artist = track_artist
                 artist_tracks.append(t)
+
+    if not artist_tracks:
+        # Fallback lấy các bài hát khớp
+        for alb in data:
+            for t in alb.get("tracks", []):
+                if decoded_artist in t.get("name", "").lower():
+                    artist_tracks.append(t)
 
     if not artist_tracks:
         raise HTTPException(status_code=404, detail=f"No tracks found for artist: {artist_name}")
@@ -788,16 +844,17 @@ async def stream_artist_m3u8(request: Request, artist_name: str):
     )
 
 
-@router.get("/api/music/playlist/genre/{genre_name}.m3u8")
-@router.get("/api/music/playlist/genre/{genre_name}")
+@router.get("/api/music/playlist/genre/{genre_name:path}")
 async def stream_genre_m3u8(request: Request, genre_name: str):
     """Trả về playlist .m3u8 theo thể loại"""
     base_url = str(request.base_url).rstrip("/")
-    data = await _db_load_library()
-    if not data:
-        raise HTTPException(status_code=404, detail="Library is empty")
+    if genre_name.endswith(".m3u8"):
+        genre_name = genre_name[:-5]
 
+    data = await _db_load_library() or []
     decoded_genre = unquote(genre_name).strip().lower()
+    # Chuẩn hoá ký tự so sánh (ví dụ: edm/remix, edm-remix, edm remix)
+    clean_genre_key = re.sub(r'[\/\-_ ]+', '', decoded_genre)
     genre_tracks = []
     display_genre = unquote(genre_name).strip()
 
@@ -807,8 +864,23 @@ async def stream_genre_m3u8(request: Request, genre_name: str):
             if not t.get("artist"):
                 t["artist"] = alb_artist
             track_genre = str(t.get("genre", "")).lower()
-            if decoded_genre in track_genre or (decoded_genre == "khác" and not track_genre):
+            clean_track_genre = re.sub(r'[\/\-_ ]+', '', track_genre)
+
+            if (
+                clean_genre_key in clean_track_genre 
+                or clean_track_genre in clean_genre_key 
+                or (decoded_genre in ["khác", "other"] and not track_genre)
+            ):
                 genre_tracks.append(t)
+
+    if not genre_tracks:
+        # Nếu chưa tìm thấy, quét tất cả bài hát và dùng detect_genre_from_track_info
+        for alb in data:
+            for t in alb.get("tracks", []):
+                det = detect_genre_from_track_info(t).lower()
+                clean_det = re.sub(r'[\/\-_ ]+', '', det)
+                if clean_genre_key in clean_det or clean_det in clean_genre_key:
+                    genre_tracks.append(t)
 
     if not genre_tracks:
         raise HTTPException(status_code=404, detail=f"No tracks found for genre: {genre_name}")
