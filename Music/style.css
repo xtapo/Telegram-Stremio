@@ -1655,40 +1655,342 @@ html, body {
         display: flex;
     }
     
+    .kmusic-hero {
+        padding: 24px 20px 20px;
+    }
+
     .hero-inner {
-        grid-template-columns: 1fr 1fr;
-        gap: 32px;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+        gap: 24px;
     }
     
+    .kmusic-album-title {
+        font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+    }
+
     .vinyl-stage {
         --vinyl-retract: 25px;
-        --vinyl-expand: 130px;
-        width: 440px;
-        height: 320px;
+        --vinyl-expand: 100px;
+        width: 360px;
+        height: 270px;
         display: flex;
         align-items: center;
         justify-content: flex-start;
         overflow: visible;
+        margin: 0 auto;
     }
     
     .vinyl-disc {
-        width: 300px;
-        height: 300px;
+        width: 250px;
+        height: 250px;
         top: 10px;
         left: 10px;
         z-index: 1;
     }
 
     .vinyl-center-label {
-        width: 105px;
-        height: 105px;
+        width: 88px;
+        height: 88px;
     }
     
     .album-sleeve {
-        width: 300px;
-        height: 300px;
+        width: 250px;
+        height: 250px;
         z-index: 3;
         flex-shrink: 0;
+    }
+}
+
+/* ==========================================================================
+   CAR INFOTAINMENT & SHORT LANDSCAPE SCREENS (MÀN HÌNH Ô TÔ / ANDROID AUTO / CARPLAY)
+   ========================================================================== */
+@media (max-height: 760px) and (min-width: 650px), (max-width: 1200px) and (orientation: landscape) and (max-height: 820px) {
+    :root {
+        --header-height: 52px;
+        --player-bar-height: 70px;
+    }
+
+    .top-nav {
+        height: 52px;
+        padding: 0 16px;
+    }
+
+    .brand-logo {
+        width: 32px;
+        height: 32px;
+    }
+
+    .brand-text {
+        font-size: 1.05rem;
+    }
+
+    .nav-btn {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+    }
+
+    .btn-badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+    }
+
+    .user-profile-btn {
+        padding: 3px 10px;
+        font-size: 0.75rem;
+    }
+
+    .user-profile-btn img {
+        width: 20px !important;
+        height: 20px !important;
+    }
+
+    /* Hero Section in Car Landscape */
+    .kmusic-hero {
+        padding: 6px 20px 76px;
+        min-height: auto;
+    }
+
+    .hero-inner {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr) !important;
+        gap: 16px !important;
+        min-height: calc(100vh - 130px) !important;
+        align-items: center !important;
+    }
+
+    /* Left Info Column */
+    .kmusic-info-col {
+        min-width: 0;
+        z-index: 2;
+    }
+
+    .album-badge-row {
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+
+    .badge-tag {
+        font-size: 0.65rem;
+        padding: 2px 7px;
+        letter-spacing: 1px;
+    }
+
+    .kmusic-album-title {
+        font-size: clamp(1.2rem, 2.7vw, 1.75rem);
+        line-height: 1.15;
+        margin-bottom: 3px;
+        letter-spacing: 0.5px;
+    }
+
+    .kmusic-artist-name {
+        font-size: 0.9rem;
+        letter-spacing: 2px;
+        margin-bottom: 5px;
+    }
+
+    .album-metadata-snippet {
+        font-size: 0.75rem;
+        margin-bottom: 6px;
+        gap: 6px;
+    }
+
+    .visualizer-container {
+        height: 20px;
+        margin-bottom: 6px;
+        max-width: 360px;
+    }
+
+    .tracklist-container {
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+    }
+
+    .tracklist-header {
+        padding-bottom: 5px;
+        margin-bottom: 4px;
+        font-size: 0.72rem;
+    }
+
+    .album-quick-export-btn {
+        padding: 3px 9px;
+        font-size: 0.72rem;
+    }
+
+    .tracklist {
+        max-height: clamp(105px, 28vh, 175px);
+        padding-right: 4px;
+    }
+
+    .track-item {
+        padding: 5px 8px;
+        margin-bottom: 2px;
+        gap: 8px;
+    }
+
+    .track-number {
+        font-size: 0.8rem;
+        width: 18px;
+    }
+
+    .track-name {
+        font-size: 0.82rem;
+    }
+
+    .track-duration {
+        font-size: 0.75rem;
+    }
+
+    .track-add-playlist-btn svg {
+        width: 13px;
+        height: 13px;
+    }
+
+    /* Right Column: Vinyl Disc & Cover Stage in Car Mode */
+    .kmusic-cover-col {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-width: 0;
+        overflow: visible;
+    }
+
+    .vinyl-stage {
+        --vinyl-retract: 18px;
+        --vinyl-expand: clamp(60px, 9vw, 95px);
+        width: clamp(230px, 30vw, 310px);
+        height: clamp(165px, 26vh, 225px);
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        overflow: visible;
+        margin: 0 auto;
+    }
+
+    .vinyl-disc {
+        width: clamp(155px, 25vh, 215px);
+        height: clamp(155px, 25vh, 215px);
+        top: 5px;
+        left: 5px;
+    }
+
+    .album-sleeve {
+        width: clamp(155px, 25vh, 215px);
+        height: clamp(155px, 25vh, 215px);
+    }
+
+    .vinyl-center-label {
+        width: clamp(54px, 8vh, 74px);
+        height: clamp(54px, 8vh, 74px);
+    }
+
+    /* Bottom Player Bar in Car Mode */
+    .kmusic-player-bar {
+        height: 70px;
+        padding: 0 14px;
+    }
+
+    .player-bar-inner {
+        padding: 0 6px;
+        gap: 12px;
+        grid-template-columns: minmax(170px, 1fr) minmax(260px, 1.8fr) minmax(130px, 0.9fr);
+    }
+
+    .now-playing-title {
+        font-size: 0.85rem;
+    }
+
+    .now-playing-artist {
+        font-size: 0.72rem;
+    }
+
+    .main-play-btn {
+        width: 42px;
+        height: 42px;
+    }
+
+    .step-btn {
+        width: 32px;
+        height: 32px;
+    }
+
+    .sub-btn {
+        width: 26px;
+        height: 26px;
+    }
+
+    .control-buttons {
+        gap: 10px;
+    }
+
+    .progress-wrapper {
+        gap: 8px;
+    }
+
+    .time-label {
+        font-size: 0.72rem;
+        min-width: 34px;
+    }
+}
+
+/* Ultra-Short Car Displays (e.g. 800x480, 1024x500, 1280x480) */
+@media (max-height: 540px) and (min-width: 600px) {
+    :root {
+        --header-height: 44px;
+        --player-bar-height: 62px;
+    }
+
+    .top-nav {
+        height: 44px;
+    }
+
+    .visualizer-container {
+        display: none;
+    }
+
+    .album-metadata-snippet {
+        display: none;
+    }
+
+    .kmusic-album-title {
+        font-size: 1.2rem;
+        margin-bottom: 2px;
+    }
+
+    .kmusic-artist-name {
+        font-size: 0.82rem;
+        margin-bottom: 3px;
+    }
+
+    .tracklist {
+        max-height: 95px;
+    }
+
+    .vinyl-stage {
+        --vinyl-retract: 14px;
+        --vinyl-expand: 60px;
+        width: 220px;
+        height: 150px;
+    }
+
+    .vinyl-disc,
+    .album-sleeve {
+        width: 145px;
+        height: 145px;
+    }
+
+    .vinyl-center-label {
+        width: 50px;
+        height: 50px;
+    }
+
+    .kmusic-player-bar {
+        height: 62px;
+    }
+
+    .main-play-btn {
+        width: 36px;
+        height: 36px;
     }
 }
 
