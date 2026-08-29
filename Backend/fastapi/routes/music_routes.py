@@ -1635,7 +1635,7 @@ class MusicScanManager:
                         fingerprint_cover = None
                         fingerprint_genre = None
                         if final_artist == "Unknown Artist" or final_title.lower().startswith("track") or final_title.lower().startswith("audio") or "track" in f_name.lower():
-                            fg_res = await recognize_audio_from_telegram(client, msg)
+                            fg_res = await recognize_audio_from_telegram(client, msg, chat_id=resolved_chat_id, msg_id=msg.id)
                             if fg_res:
                                 final_title = fg_res.get("title") or final_title
                                 final_artist = fg_res.get("artist") or final_artist
@@ -2575,11 +2575,14 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
             except Exception:
                 continue
 
-            msg = await client.get_messages(chat_id_int, msg_id_int)
-            if not msg:
-                continue
-                
-            fg_res = await recognize_audio_from_telegram(client, msg, is_manual=True)
+            fg_res = await recognize_audio_from_telegram(
+                client=None,
+                message=None,
+                is_manual=True,
+                chat_id=chat_id_int,
+                msg_id=msg_id_int,
+            )
+            await asyncio.sleep(0.3)
             if fg_res:
                 update_fields = {}
                 if fg_res.get("title"): update_fields["name"] = fg_res["title"]
