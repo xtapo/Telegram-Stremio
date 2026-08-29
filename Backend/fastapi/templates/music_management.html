@@ -1750,8 +1750,15 @@ function renderTracksTable(query = '') {
             <td class="py-3 px-4 text-center text-text-secondary text-xs">${globalIdx}</td>
             <td class="py-3 px-4">
                 <div class="flex items-center gap-3">
-                    <img src="${track.coverUrl || track.albumCover}" class="w-8 h-8 rounded-lg object-cover" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
-                    <span class="font-bold text-text text-sm">${track.name}</span>
+                    <img src="${track.coverUrl || track.albumCover}" class="w-8 h-8 rounded-lg object-cover shrink-0" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="font-bold text-text text-sm">${track.name}</span>
+                        ${track.isShazam ? `
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 shadow-sm" title="Đã nhận diện qua Shazam">
+                                <i class="fa-solid fa-wand-magic-sparkles text-[8px] text-indigo-400"></i> Shazam
+                            </span>
+                        ` : ''}
+                    </div>
                 </div>
             </td>
             <td class="py-3 px-4 text-text-secondary text-xs font-semibold">${track.artist || 'Unknown'}</td>
@@ -1766,7 +1773,8 @@ function renderTracksTable(query = '') {
                         <i class="fa-solid fa-play text-[10px]"></i>
                     </button>
                     <button onclick="identifyTrackShazam('${track.chatId}', '${track.msgId}')" 
-                            class="w-7 h-7 rounded-lg bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white flex items-center justify-center transition" title="Nhận diện Shazam">
+                            class="w-7 h-7 rounded-lg ${track.isShazam ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/40 hover:brightness-110' : 'bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white'} flex items-center justify-center transition" 
+                            title="${track.isShazam ? 'Đã nhận diện Shazam (bấm để nhận diện lại)' : 'Nhận diện Shazam'}">
                         <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
                     </button>
                     <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 
@@ -1939,9 +1947,16 @@ function openAlbumTracklistModal(albumId, animate = true) {
                 </td>
                 <td class="py-2.5 px-2 text-center font-bold text-text-secondary">${idx + 1}</td>
                 <td class="py-2.5 px-3 font-bold text-text">
-                    <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')">
-                        ${track.name}
-                    </span>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')">
+                            ${track.name}
+                        </span>
+                        ${track.isShazam ? `
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 shadow-sm" title="Đã nhận diện qua Shazam">
+                                <i class="fa-solid fa-wand-magic-sparkles text-[8px] text-indigo-400"></i> Shazam
+                            </span>
+                        ` : ''}
+                    </div>
                 </td>
                 <td class="py-2.5 px-3 text-text-secondary">${track.artist || album.artist}</td>
                 <td class="py-2.5 px-3">${formatQualityBadge(track.format || album.format, track.qualityTier || album.qualityTier)}</td>
@@ -1954,7 +1969,8 @@ function openAlbumTracklistModal(albumId, animate = true) {
                             <i class="fa-solid fa-play text-[9px]"></i>
                         </button>
                         <button onclick="identifyTrackShazam('${track.chatId}', '${track.msgId}')" 
-                                class="w-6 h-6 rounded-lg bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white flex items-center justify-center transition" title="Nhận diện Shazam">
+                                class="w-6 h-6 rounded-lg ${track.isShazam ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/40 hover:brightness-110' : 'bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white'} flex items-center justify-center transition" 
+                                title="${track.isShazam ? 'Đã nhận diện Shazam (bấm để nhận diện lại)' : 'Nhận diện Shazam'}">
                             <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
                         </button>
                         <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 

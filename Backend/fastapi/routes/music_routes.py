@@ -1734,6 +1734,7 @@ class MusicScanManager:
                                 "cover_url": t.get("coverUrl", a.get("coverUrl", "")),
                                 "year": a.get("year", "2026"),
                                 "publisher": a.get("publisher", ""),
+                                "isShazam": bool(t.get("isShazam", False)),
                                 "stream_url": t.get("previewUrl", "")
                             })
                 except Exception as e:
@@ -1777,7 +1778,8 @@ class MusicScanManager:
                     "msgId": tr["msg_id"],
                     "coverUrl": tr["cover_url"],
                     "genre": tr.get("genre") or detect_genre_from_track_info(tr),
-                    "country": tr.get("country") or detect_country_from_track_info(tr)
+                    "country": tr.get("country") or detect_country_from_track_info(tr),
+                    "isShazam": bool(tr.get("isShazam", False))
                 })
 
             final_albums = list(albums_dict.values())
@@ -2589,6 +2591,7 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
                 if fg_res.get("artist"): update_fields["artist"] = fg_res["artist"]
                 if fg_res.get("album"): update_fields["album"] = fg_res["album"]
                 if fg_res.get("cover_url"): update_fields["coverUrl"] = fg_res["cover_url"]
+                update_fields["isShazam"] = True
                 
                 if update_fields:
                     updated = False
