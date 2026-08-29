@@ -2585,6 +2585,41 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
                 msg_id=msg_id_int,
             )
             await asyncio.sleep(0.3)
+
+            # Tìm thông tin track hiện tại trong thư viện
+            curr_track = None
+            curr_album = None
+            for a in albums:
+                for tr in a.get("tracks", []):
+                    if int(tr.get("chatId", 0)) == chat_id_int and int(tr.get("msgId", 0)) == msg_id_int:
+                        curr_track = tr
+                        curr_album = a
+                        break
+                if curr_track:
+                    break
+
+            # Nếu Shazam âm thanh không nhận diện được (ví dụ file DSD .dff, WAV Lossless), fallback sang tìm kiếm siêu dữ liệu Online (Apple/Deezer)
+            if not fg_res and curr_track:
+                from Backend.helper.metadata.music_scraper import fetch_music_metadata
+                raw_name = curr_track.get("name", "")
+                raw_artist = curr_track.get("artist", "")
+                if raw_artist.lower() in ["unknown artist", "unknown", "va", "various artists"]:
+                    raw_artist = ""
+                scraped = await fetch_music_metadata(
+                    raw_title=raw_name,
+                    raw_artist=raw_artist,
+                    file_name=raw_name
+                )
+                if scraped and scraped.get("title") and scraped.get("artist"):
+                    LOGGER.info(f"[SHAZAM FALLBACK] Nhận diện thành công qua Metadata trực tuyến: {scraped.get('artist')} - {scraped.get('title')}")
+                    fg_res = {
+                        "title": scraped.get("title"),
+                        "artist": scraped.get("artist"),
+                        "album": scraped.get("album"),
+                        "cover_url": scraped.get("cover_url"),
+                        "genre": scraped.get("genre")
+                    }
+
             if fg_res:
                 update_fields = {}
                 if fg_res.get("title"): update_fields["name"] = fg_res["title"]

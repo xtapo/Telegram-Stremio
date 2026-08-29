@@ -26,7 +26,7 @@ def clean_audio_filename(fn: str) -> str:
         return ""
     
     # 1. Bỏ phần mở rộng audio
-    fn = re.sub(r'\.(mp3|flac|m4a|wav|aac|ogg|opus|alac|dsf|ape)$', '', fn, flags=re.IGNORECASE)
+    fn = re.sub(r'\.(mp3|flac|m4a|wav|aac|ogg|opus|alac|dsf|dff|dsd|ape|wma)$', '', fn, flags=re.IGNORECASE)
     
     # 2. Bỏ @channel username (ví dụ: @nhachot_2026, @MyChannel)
     fn = re.sub(r'@[^\s_.-]+[_\s.-]*', ' ', fn)
@@ -37,15 +37,15 @@ def clean_audio_filename(fn: str) -> str:
     # 4. Bỏ các tag trong ngoặc tròn như (Official Music Video), (Lyric Video), (Audio), (Remastered)
     fn = re.sub(r'\((Official|Lyric|Audio|Visualizer|Remastered|Album Version|Explicit|Video|Bonus|Deluxe|Live|MV|Full MV).*?\)', ' ', fn, flags=re.IGNORECASE)
     
-    # 5. Bỏ các từ khóa chất lượng
-    fn = re.sub(r'\b(320kbps|128kbps|256kbps|FLAC|MP3|WAV|24bit|16bit|96kHz|44\.1kHz|Hi-Res|Lossless|Kbps|HQ|HD|4K|1080p)\b', ' ', fn, flags=re.IGNORECASE)
+    # 5. Bỏ các từ khóa chất lượng và định dạng audio thừa ở đuôi
+    fn = re.sub(r'\b(320kbps|128kbps|256kbps|FLAC|MP3|WAV|DFF|DSF|DSD|24bit|16bit|96kHz|44\.1kHz|Hi-Res|Lossless|Kbps|HQ|HD|4K|1080p)\b', ' ', fn, flags=re.IGNORECASE)
     
     # 6. Chuẩn hóa khoảng trắng, dấu chấm, gạch dưới
     fn = fn.replace('_', ' ')
     fn = re.sub(r'\.+', ' ', fn)
     fn = re.sub(r'\s*-\s*', ' - ', fn)
     
-    # 7. Bỏ số thứ tự bài hát ở đầu (ví dụ: "01. ", "01 - ", "01_", "1-02 ", "Track 01 ")
+    # 7. Bỏ số thứ tự bài hát ở đầu (ví dụ: "01. ", "01 - ", "01_", "1-02 ", "Track 01 ", "02 ")
     fn = re.sub(r'^\s*(\d{1,3}[\.\-_\s]+|\bTrack\s*\d+\b\s*[\.\-_\s]*|[A-D]\d+[\.\-_\s]+)', '', fn)
     
     fn = re.sub(r'\s+', ' ', fn).strip()
