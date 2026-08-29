@@ -712,19 +712,19 @@
 </div>
 
 <!-- Modal 4: Xem Danh Sách Bài Hát Trong Album (Album Tracklist Modal) -->
-<div id="album-tracklist-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
-    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] flex flex-col">
+<div id="album-tracklist-modal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-6xl rounded-3xl p-5 sm:p-7 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[92vh] flex flex-col">
         
         <!-- Album Header Info -->
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-hairline">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-hairline">
             <div class="flex items-center gap-4 min-w-0">
-                <img id="tracklist-album-cover" src="" class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-hairline shadow-lg shrink-0" alt="Cover">
+                <img id="tracklist-album-cover" src="" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-hairline shadow-lg shrink-0" alt="Cover">
                 <div class="min-w-0">
                     <span id="tracklist-album-format" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 inline-block mb-1">Hi-Res</span>
-                    <h3 id="tracklist-album-title" class="text-base sm:text-lg font-black text-text truncate">Tên Album</h3>
+                    <h3 id="tracklist-album-title" class="text-base sm:text-xl font-black text-text truncate">Tên Album</h3>
                     <p id="tracklist-album-artist" class="text-xs sm:text-sm font-semibold text-text-secondary truncate mt-0.5">Ca Sĩ</p>
-                    <div class="flex items-center gap-3 text-xs text-text-secondary mt-2">
-                        <span id="tracklist-album-tracks-count">0 Bài hát</span>
+                    <div class="flex items-center gap-3 text-xs text-text-secondary mt-1.5 flex-wrap">
+                        <span id="tracklist-album-tracks-count" class="font-bold text-primary">0 Bài hát</span>
                         <span>•</span>
                         <span id="tracklist-album-size">0 MB</span>
                         <span>•</span>
@@ -735,20 +735,59 @@
 
             <!-- Header Action Buttons -->
             <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                <button id="tracklist-play-all-btn" class="px-3.5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/25 hover:brightness-110 flex items-center gap-1.5 transition">
+                <button id="tracklist-play-all-btn" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/25 hover:brightness-110 flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-play"></i> Phát Toàn Bộ
                 </button>
-                <button id="tracklist-edit-album-btn" class="w-8 h-8 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs flex items-center justify-center transition" title="Sửa Album">
+                <button id="tracklist-edit-album-btn" class="w-9 h-9 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs flex items-center justify-center transition" title="Sửa Album">
                     <i class="fa-solid fa-pen-to-square"></i>
                 </button>
-                <button onclick="closeAlbumTracklistModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button onclick="closeAlbumTracklistModal()" class="w-9 h-9 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
+                    <i class="fa-solid fa-xmark text-sm"></i>
                 </button>
             </div>
         </div>
 
+        <!-- Search & Pagination Controls Bar -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-3 pt-1">
+            <div class="relative flex-1 max-w-md">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary"></i>
+                <input type="text" id="tracklist-search-input" placeholder="Tìm tên bài hát hoặc ca sĩ..." 
+                       class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-surface border border-hairline text-xs text-text placeholder:text-text-secondary/60 focus:outline-none focus:border-primary transition"
+                       oninput="handleTracklistSearch(this.value)">
+            </div>
+            <div class="flex items-center gap-2.5 text-xs flex-wrap justify-between sm:justify-end">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-text-secondary text-[11px]">Hiển thị:</span>
+                    <select id="tracklist-page-size" onchange="changeTracklistPageSize(this.value)" class="bg-surface border border-hairline rounded-lg px-2.5 py-1 text-xs text-text font-medium focus:outline-none cursor-pointer">
+                        <option value="50">50 bài/trang</option>
+                        <option value="100">100 bài/trang</option>
+                        <option value="250">250 bài/trang</option>
+                        <option value="500">500 bài/trang</option>
+                        <option value="all">Tất cả bài</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-1 bg-surface/60 border border-hairline/80 rounded-xl p-0.5">
+                    <button id="tracklist-btn-first" onclick="changeTracklistPage('first')" class="w-7 h-7 rounded-lg hover:bg-surface-2 text-text font-bold text-xs disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center transition" title="Trang đầu">
+                        <i class="fa-solid fa-angles-left text-[10px]"></i>
+                    </button>
+                    <button id="tracklist-btn-prev" onclick="changeTracklistPage('prev')" class="w-7 h-7 rounded-lg hover:bg-surface-2 text-text font-bold text-xs disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center transition" title="Trang trước">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                    </button>
+                    <span class="px-2 py-0.5 font-bold text-text text-xs whitespace-nowrap">
+                        Trang <span id="tracklist-current-page" class="text-primary font-black">1</span> / <span id="tracklist-total-pages">1</span>
+                    </span>
+                    <button id="tracklist-btn-next" onclick="changeTracklistPage('next')" class="w-7 h-7 rounded-lg hover:bg-surface-2 text-text font-bold text-xs disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center transition" title="Trang kế tiếp">
+                        <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                    </button>
+                    <button id="tracklist-btn-last" onclick="changeTracklistPage('last')" class="w-7 h-7 rounded-lg hover:bg-surface-2 text-text font-bold text-xs disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center transition" title="Trang cuối">
+                        <i class="fa-solid fa-angles-right text-[10px]"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Bulk Selection Toolbar (hidden until tracks are selected) -->
-        <div id="bulk-toolbar" class="hidden mt-3 p-2.5 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-between gap-3 animate-bounce">
+        <div id="bulk-toolbar" class="hidden mt-3 p-2.5 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-between gap-3">
             <div class="flex items-center gap-2 text-xs">
                 <i class="fa-solid fa-check-double text-primary"></i>
                 <span class="font-bold text-primary">Đã chọn <span id="bulk-selected-count">0</span> bài hát</span>
@@ -767,18 +806,18 @@
         </div>
 
         <!-- Tracklist Content Table -->
-        <div class="flex-1 overflow-y-auto mt-4 pr-1">
+        <div class="flex-1 overflow-y-auto overflow-x-auto mt-3 pr-1">
             <table class="w-full text-left border-collapse text-xs">
                 <thead>
-                    <tr class="border-b border-hairline text-text-secondary font-bold uppercase text-[10px]">
-                        <th class="py-2.5 px-2 w-8 text-center"><input type="checkbox" id="tracklist-select-all" onchange="toggleSelectAllTracks(this.checked)" class="w-3.5 h-3.5 accent-primary cursor-pointer" title="Chọn tất cả"></th>
-                        <th class="py-2.5 px-2 w-8 text-center">#</th>
-                        <th class="py-2.5 px-3">Tên Bài Hát</th>
-                        <th class="py-2.5 px-3">Ca Sĩ</th>
-                        <th class="py-2.5 px-3">Chất Lượng</th>
-                        <th class="py-2.5 px-3">Thời Lượng</th>
-                        <th class="py-2.5 px-3">Dung Lượng</th>
-                        <th class="py-2.5 px-3 text-right">Thao Tác</th>
+                    <tr class="border-b border-hairline text-text-secondary font-bold uppercase text-[10px] sticky top-0 bg-surface/95 backdrop-blur z-10">
+                        <th class="py-2.5 px-2 w-10 text-center"><input type="checkbox" id="tracklist-select-all" onchange="toggleSelectAllTracks(this.checked)" class="w-3.5 h-3.5 accent-primary cursor-pointer" title="Chọn tất cả bài trên trang này"></th>
+                        <th class="py-2.5 px-2 w-12 text-center">#</th>
+                        <th class="py-2.5 px-3 min-w-[200px]">Tên Bài Hát</th>
+                        <th class="py-2.5 px-3 min-w-[150px]">Ca Sĩ</th>
+                        <th class="py-2.5 px-3 min-w-[120px]">Chất Lượng</th>
+                        <th class="py-2.5 px-3 w-24 text-center">Thời Lượng</th>
+                        <th class="py-2.5 px-3 w-24 text-center">Dung Lượng</th>
+                        <th class="py-2.5 px-3 w-36 text-right">Thao Tác</th>
                     </tr>
                 </thead>
                 <tbody id="tracklist-modal-body" class="divide-y divide-hairline"></tbody>
@@ -786,9 +825,12 @@
         </div>
 
         <!-- Footer -->
-        <div class="pt-3 mt-3 border-t border-hairline flex items-center justify-between text-xs text-text-secondary">
-            <span id="tracklist-footer-info">Tổng cộng 0 bài hát</span>
-            <button onclick="closeAlbumTracklistModal()" class="px-4 py-1.5 rounded-xl bg-surface hover:bg-surface-2 text-text font-bold transition">Đóng</button>
+        <div class="pt-3 mt-3 border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-text-secondary">
+            <div class="flex items-center gap-2">
+                <span id="tracklist-footer-info">Tổng cộng 0 bài hát</span>
+                <span id="tracklist-page-info" class="text-text font-bold text-primary"></span>
+            </div>
+            <button onclick="closeAlbumTracklistModal()" class="px-5 py-1.5 rounded-xl bg-surface hover:bg-surface-2 text-text font-bold transition">Đóng</button>
         </div>
     </div>
 </div>
@@ -1904,17 +1946,28 @@ function playTrackFromAlbum(albumId, trackIndex) {
     }
 }
 
-// ── Modal 4: Album Tracklist View ───────────────────────────────────────────────
+// ── Modal 4: Album Tracklist View with Pagination & Search ──────────────────────────────
 let bulkSelectedTracks = [];
+let bulkSelectedTracksMap = new Map(); // key: `${chatId}_${msgId}`, val: { chatId, msgId, name }
 let lastCheckedTracklistIndex = null;
+let tracklistCurrentPage = 1;
+let tracklistPageSize = 50;
+let tracklistSearchQuery = '';
+let tracklistFilteredTracks = [];
 
 function openAlbumTracklistModal(albumId, animate = true) {
     const album = globalAlbums.find(a => a.id === albumId);
     if (!album) return;
 
     currentViewAlbumId = albumId;
+    bulkSelectedTracksMap.clear();
     bulkSelectedTracks = [];
     lastCheckedTracklistIndex = null;
+    tracklistCurrentPage = 1;
+    tracklistSearchQuery = '';
+    const searchInput = document.getElementById('tracklist-search-input');
+    if (searchInput) searchInput.value = '';
+
     updateBulkToolbar();
 
     document.getElementById('tracklist-album-cover').src = album.coverUrl || '';
@@ -1924,69 +1977,11 @@ function openAlbumTracklistModal(albumId, animate = true) {
     document.getElementById('tracklist-album-tracks-count').textContent = `${album.tracks ? album.tracks.length : 0} Bài hát`;
     document.getElementById('tracklist-album-size').textContent = album.totalSize || '';
     document.getElementById('tracklist-album-year').textContent = album.year || '2026';
-    document.getElementById('tracklist-footer-info').textContent = `Album: ${album.title} • ${album.tracks ? album.tracks.length : 0} bài hát • 💡 Giữ phím Shift để chọn nhanh nhiều bài`;
 
     document.getElementById('tracklist-play-all-btn').onclick = () => playTrackFromAlbum(album.id, 0);
     document.getElementById('tracklist-edit-album-btn').onclick = () => openEditAlbumModal(album.id);
-    document.getElementById('tracklist-select-all').checked = false;
 
-    const tbody = document.getElementById('tracklist-modal-body');
-    tbody.innerHTML = '';
-
-    if (!album.tracks || album.tracks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-text-secondary">Chưa có bài hát nào trong album này.</td></tr>`;
-    } else {
-        album.tracks.forEach((track, idx) => {
-            const tr = document.createElement('tr');
-            tr.className = 'hover:bg-surface/50 transition group select-none';
-            tr.innerHTML = `
-                <td class="py-2.5 px-2 text-center" onclick="event.stopPropagation();">
-                    <input type="checkbox" class="track-checkbox w-3.5 h-3.5 accent-primary cursor-pointer" 
-                           data-chat-id="${track.chatId}" data-msg-id="${track.msgId}" data-name="${track.name}"
-                           onclick="handleTracklistCheckboxClick(event, ${idx})">
-                </td>
-                <td class="py-2.5 px-2 text-center font-bold text-text-secondary">${idx + 1}</td>
-                <td class="py-2.5 px-3 font-bold text-text">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                        <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')">
-                            ${track.name}
-                        </span>
-                        ${track.isShazam ? `
-                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 shadow-sm" title="Đã nhận diện qua Shazam">
-                                <i class="fa-solid fa-wand-magic-sparkles text-[8px] text-indigo-400"></i> Shazam
-                            </span>
-                        ` : ''}
-                    </div>
-                </td>
-                <td class="py-2.5 px-3 text-text-secondary">${track.artist || album.artist}</td>
-                <td class="py-2.5 px-3">${formatQualityBadge(track.format || album.format, track.qualityTier || album.qualityTier)}</td>
-                <td class="py-2.5 px-3 text-text-secondary">${track.duration || '--:--'}</td>
-                <td class="py-2.5 px-3 text-text-secondary">${track.size || ''}</td>
-                <td class="py-2.5 px-3 text-right">
-                    <div class="inline-flex items-center gap-1">
-                        <button onclick="previewTrack('${track.previewUrl}', '${track.name.replace(/'/g, "\\'")}', '${(track.artist || album.artist).replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')" 
-                                class="w-6 h-6 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
-                            <i class="fa-solid fa-play text-[9px]"></i>
-                        </button>
-                        <button onclick="identifyTrackShazam('${track.chatId}', '${track.msgId}')" 
-                                class="w-6 h-6 rounded-lg ${track.isShazam ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/40 hover:brightness-110' : 'bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white'} flex items-center justify-center transition" 
-                                title="${track.isShazam ? 'Đã nhận diện Shazam (bấm để nhận diện lại)' : 'Nhận diện Shazam'}">
-                            <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
-                        </button>
-                        <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 
-                                class="w-6 h-6 rounded-lg bg-surface hover:bg-surface-2 text-text flex items-center justify-center transition" title="Sửa bài">
-                            <i class="fa-solid fa-pen-to-square text-[9px]"></i>
-                        </button>
-                        <button onclick="deleteTrack('${track.chatId}', '${track.msgId}')" 
-                                class="w-6 h-6 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white flex items-center justify-center transition" title="Xóa bài">
-                            <i class="fa-solid fa-trash-can text-[9px]"></i>
-                        </button>
-                    </div>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
+    renderTracklistPage();
 
     const modal = document.getElementById('album-tracklist-modal');
     modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -1995,8 +1990,163 @@ function openAlbumTracklistModal(albumId, animate = true) {
     }
 }
 
+function handleTracklistSearch(query) {
+    tracklistSearchQuery = (query || '').toLowerCase().trim();
+    tracklistCurrentPage = 1;
+    renderTracklistPage();
+}
+
+function changeTracklistPageSize(size) {
+    tracklistPageSize = size === 'all' ? 'all' : parseInt(size, 10);
+    tracklistCurrentPage = 1;
+    renderTracklistPage();
+}
+
+function changeTracklistPage(action) {
+    const album = globalAlbums.find(a => a.id === currentViewAlbumId);
+    if (!album || !album.tracks) return;
+
+    const totalTracks = tracklistFilteredTracks.length;
+    const pageSize = tracklistPageSize === 'all' ? totalTracks : tracklistPageSize;
+    const totalPages = Math.max(1, Math.ceil(totalTracks / (pageSize || 1)));
+
+    if (action === 'first') tracklistCurrentPage = 1;
+    else if (action === 'prev') tracklistCurrentPage = Math.max(1, tracklistCurrentPage - 1);
+    else if (action === 'next') tracklistCurrentPage = Math.min(totalPages, tracklistCurrentPage + 1);
+    else if (action === 'last') tracklistCurrentPage = totalPages;
+
+    renderTracklistPage();
+}
+
+function renderTracklistPage() {
+    const album = globalAlbums.find(a => a.id === currentViewAlbumId);
+    if (!album) return;
+
+    const allTracks = album.tracks || [];
+    
+    // Filter by search query
+    if (tracklistSearchQuery) {
+        tracklistFilteredTracks = allTracks.map((t, originalIndex) => ({ ...t, originalIndex })).filter(t => {
+            const name = (t.name || '').toLowerCase();
+            const artist = (t.artist || album.artist || '').toLowerCase();
+            return name.includes(tracklistSearchQuery) || artist.includes(tracklistSearchQuery);
+        });
+    } else {
+        tracklistFilteredTracks = allTracks.map((t, originalIndex) => ({ ...t, originalIndex }));
+    }
+
+    const totalTracks = tracklistFilteredTracks.length;
+    const pageSize = tracklistPageSize === 'all' ? Math.max(1, totalTracks) : tracklistPageSize;
+    const totalPages = Math.max(1, Math.ceil(totalTracks / pageSize));
+
+    if (tracklistCurrentPage > totalPages) tracklistCurrentPage = totalPages;
+    if (tracklistCurrentPage < 1) tracklistCurrentPage = 1;
+
+    const startIndex = (tracklistCurrentPage - 1) * pageSize;
+    const endIndex = tracklistPageSize === 'all' ? totalTracks : Math.min(totalTracks, startIndex + pageSize);
+    const pageTracks = tracklistFilteredTracks.slice(startIndex, endIndex);
+
+    // Update pagination controls
+    const curPageEl = document.getElementById('tracklist-current-page');
+    const totPagesEl = document.getElementById('tracklist-total-pages');
+    const btnFirst = document.getElementById('tracklist-btn-first');
+    const btnPrev = document.getElementById('tracklist-btn-prev');
+    const btnNext = document.getElementById('tracklist-btn-next');
+    const btnLast = document.getElementById('tracklist-btn-last');
+
+    if (curPageEl) curPageEl.textContent = tracklistCurrentPage;
+    if (totPagesEl) totPagesEl.textContent = totalPages;
+    if (btnFirst) btnFirst.disabled = tracklistCurrentPage <= 1;
+    if (btnPrev) btnPrev.disabled = tracklistCurrentPage <= 1;
+    if (btnNext) btnNext.disabled = tracklistCurrentPage >= totalPages;
+    if (btnLast) btnLast.disabled = tracklistCurrentPage >= totalPages;
+
+    const footerInfo = document.getElementById('tracklist-footer-info');
+    if (footerInfo) {
+        footerInfo.textContent = `Album: ${album.title} • ${allTracks.length} bài hát • 💡 Giữ Shift để chọn nhiều bài`;
+    }
+    const pageInfo = document.getElementById('tracklist-page-info');
+    if (pageInfo) {
+        pageInfo.textContent = totalTracks > 0 ? `(Hiển thị ${startIndex + 1} - ${endIndex} / ${totalTracks} bài)` : '(0 bài)';
+    }
+
+    const tbody = document.getElementById('tracklist-modal-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (pageTracks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-text-secondary font-medium">Không tìm thấy bài hát nào phù hợp.</td></tr>`;
+        const selAll = document.getElementById('tracklist-select-all');
+        if (selAll) selAll.checked = false;
+        return;
+    }
+
+    const allPageChecked = pageTracks.every(t => bulkSelectedTracksMap.has(`${t.chatId}_${t.msgId}`));
+    const selAll = document.getElementById('tracklist-select-all');
+    if (selAll) selAll.checked = allPageChecked;
+
+    const frag = document.createDocumentFragment();
+    pageTracks.forEach((track, pageIdx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-surface/50 transition group select-none';
+        const key = `${track.chatId}_${track.msgId}`;
+        const isChecked = bulkSelectedTracksMap.has(key);
+        const originalIndex = track.originalIndex;
+
+        tr.innerHTML = `
+            <td class="py-2.5 px-2 text-center" onclick="event.stopPropagation();">
+                <input type="checkbox" class="track-checkbox w-3.5 h-3.5 accent-primary cursor-pointer" 
+                       data-chat-id="${track.chatId}" data-msg-id="${track.msgId}" data-name="${track.name}"
+                       ${isChecked ? 'checked' : ''}
+                       onclick="handleTracklistCheckboxClick(event, ${pageIdx})">
+            </td>
+            <td class="py-2.5 px-2 text-center font-bold text-text-secondary">${originalIndex + 1}</td>
+            <td class="py-2.5 px-3 font-bold text-text">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="hover:text-primary cursor-pointer" onclick="previewTrack('${track.previewUrl}', '${(track.name || '').replace(/'/g, "\\'")}', '${(track.artist || album.artist || '').replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')">
+                        ${track.name}
+                    </span>
+                    ${track.isShazam ? `
+                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 shadow-sm" title="Đã nhận diện qua Shazam">
+                            <i class="fa-solid fa-wand-magic-sparkles text-[8px] text-indigo-400"></i> Shazam
+                        </span>
+                    ` : ''}
+                </div>
+            </td>
+            <td class="py-2.5 px-3 text-text-secondary truncate max-w-[200px]">${track.artist || album.artist}</td>
+            <td class="py-2.5 px-3">${formatQualityBadge(track.format || album.format, track.qualityTier || album.qualityTier)}</td>
+            <td class="py-2.5 px-3 text-center text-text-secondary whitespace-nowrap">${track.duration || '--:--'}</td>
+            <td class="py-2.5 px-3 text-center text-text-secondary whitespace-nowrap">${track.size || ''}</td>
+            <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                <div class="inline-flex items-center gap-1">
+                    <button onclick="previewTrack('${track.previewUrl}', '${(track.name || '').replace(/'/g, "\\'")}', '${(track.artist || album.artist || '').replace(/'/g, "\\'")}', '${track.coverUrl || album.coverUrl}', '${track.format || album.format}', '${track.qualityTier || album.qualityTier}')" 
+                            class="w-6 h-6 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition" title="Nghe thử">
+                        <i class="fa-solid fa-play text-[9px]"></i>
+                    </button>
+                    <button onclick="identifyTrackShazam('${track.chatId}', '${track.msgId}')" 
+                            class="w-6 h-6 rounded-lg ${track.isShazam ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/40 hover:brightness-110' : 'bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white'} flex items-center justify-center transition" 
+                            title="${track.isShazam ? 'Đã nhận diện Shazam (bấm để nhận diện lại)' : 'Nhận diện Shazam'}">
+                        <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
+                    </button>
+                    <button onclick="openEditTrackModal('${track.chatId}', '${track.msgId}')" 
+                            class="w-6 h-6 rounded-lg bg-surface hover:bg-surface-2 text-text flex items-center justify-center transition" title="Sửa bài">
+                        <i class="fa-solid fa-pen-to-square text-[9px]"></i>
+                    </button>
+                    <button onclick="deleteTrack('${track.chatId}', '${track.msgId}')" 
+                            class="w-6 h-6 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white flex items-center justify-center transition" title="Xóa bài">
+                        <i class="fa-solid fa-trash-can text-[9px]"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        frag.appendChild(tr);
+    });
+    tbody.appendChild(frag);
+}
+
 function closeAlbumTracklistModal() {
     currentViewAlbumId = null;
+    bulkSelectedTracksMap.clear();
     bulkSelectedTracks = [];
     lastCheckedTracklistIndex = null;
     updateBulkToolbar();
@@ -2006,58 +2156,89 @@ function closeAlbumTracklistModal() {
 }
 
 // ── Bulk Selection & Bulk Edit ────────────────────────────────────────────────
-function handleTracklistCheckboxClick(e, index) {
+function handleTracklistCheckboxClick(e, pageIdx) {
     const checkboxes = Array.from(document.querySelectorAll('#tracklist-modal-body .track-checkbox'));
-    const targetCheckbox = checkboxes[index];
+    const targetCheckbox = checkboxes[pageIdx];
     if (!targetCheckbox) return;
 
-    if (e.shiftKey && lastCheckedTracklistIndex !== null && lastCheckedTracklistIndex !== index) {
-        const start = Math.min(lastCheckedTracklistIndex, index);
-        const end = Math.max(lastCheckedTracklistIndex, index);
+    if (e.shiftKey && lastCheckedTracklistIndex !== null && lastCheckedTracklistIndex !== pageIdx) {
+        const start = Math.min(lastCheckedTracklistIndex, pageIdx);
+        const end = Math.max(lastCheckedTracklistIndex, pageIdx);
         const shouldCheck = targetCheckbox.checked;
 
         for (let i = start; i <= end; i++) {
             if (checkboxes[i]) {
                 checkboxes[i].checked = shouldCheck;
+                const cb = checkboxes[i];
+                const key = `${cb.dataset.chatId}_${cb.dataset.msgId}`;
+                if (shouldCheck) {
+                    bulkSelectedTracksMap.set(key, {
+                        chatId: cb.dataset.chatId,
+                        msgId: cb.dataset.msgId,
+                        name: cb.dataset.name
+                    });
+                } else {
+                    bulkSelectedTracksMap.delete(key);
+                }
             }
+        }
+    } else {
+        const key = `${targetCheckbox.dataset.chatId}_${targetCheckbox.dataset.msgId}`;
+        if (targetCheckbox.checked) {
+            bulkSelectedTracksMap.set(key, {
+                chatId: targetCheckbox.dataset.chatId,
+                msgId: targetCheckbox.dataset.msgId,
+                name: targetCheckbox.dataset.name
+            });
+        } else {
+            bulkSelectedTracksMap.delete(key);
         }
     }
 
-    lastCheckedTracklistIndex = index;
-    onTrackCheckboxChange();
-}
-
-function onTrackCheckboxChange() {
-    const checkboxes = document.querySelectorAll('#tracklist-modal-body .track-checkbox');
-    bulkSelectedTracks = [];
-    checkboxes.forEach(cb => {
-        if (cb.checked) {
-            bulkSelectedTracks.push({
-                chatId: cb.dataset.chatId,
-                msgId: cb.dataset.msgId,
-                name: cb.dataset.name
-            });
-        }
-    });
+    lastCheckedTracklistIndex = pageIdx;
+    bulkSelectedTracks = Array.from(bulkSelectedTracksMap.values());
     updateBulkToolbar();
+
+    const allChecked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+    const selAll = document.getElementById('tracklist-select-all');
+    if (selAll) selAll.checked = allChecked;
 }
 
 function toggleSelectAllTracks(checked) {
     const checkboxes = document.querySelectorAll('#tracklist-modal-body .track-checkbox');
-    checkboxes.forEach(cb => cb.checked = checked);
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        const key = `${cb.dataset.chatId}_${cb.dataset.msgId}`;
+        if (checked) {
+            bulkSelectedTracksMap.set(key, {
+                chatId: cb.dataset.chatId,
+                msgId: cb.dataset.msgId,
+                name: cb.dataset.name
+            });
+        } else {
+            bulkSelectedTracksMap.delete(key);
+        }
+    });
     lastCheckedTracklistIndex = null;
-    onTrackCheckboxChange();
+    bulkSelectedTracks = Array.from(bulkSelectedTracksMap.values());
+    updateBulkToolbar();
 }
 
 function clearBulkSelection() {
-    document.getElementById('tracklist-select-all').checked = false;
+    bulkSelectedTracksMap.clear();
+    bulkSelectedTracks = [];
+    const selAll = document.getElementById('tracklist-select-all');
+    if (selAll) selAll.checked = false;
     lastCheckedTracklistIndex = null;
-    toggleSelectAllTracks(false);
+    const checkboxes = document.querySelectorAll('#tracklist-modal-body .track-checkbox');
+    checkboxes.forEach(cb => cb.checked = false);
+    updateBulkToolbar();
 }
 
 function updateBulkToolbar() {
     const toolbar = document.getElementById('bulk-toolbar');
     const countSpan = document.getElementById('bulk-selected-count');
+    if (!toolbar || !countSpan) return;
     if (bulkSelectedTracks.length > 0) {
         toolbar.classList.remove('hidden');
         countSpan.textContent = bulkSelectedTracks.length;
