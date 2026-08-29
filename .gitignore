@@ -11,3 +11,16 @@ log.txt
 test.py
 config.env
 *.pyc
+
+# Android & Gradle
+.gradle/
+**/android/.gradle/
+**/android/build/
+**/android/app/build/
+**/android/local.properties
+
+# iOS & Xcode
+**/ios/build/
+**/ios/DerivedData/
+*.xcuserdata/
+
