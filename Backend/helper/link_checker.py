@@ -19,6 +19,12 @@ class DeadLinkChecker:
         self.is_running = False
 
     async def start(self):
+        import os
+        enable_bg_scan = os.environ.get("ENABLE_DEAD_LINK_CHECKER", "False").strip().lower() in ("true", "1", "yes")
+        if not enable_bg_scan:
+            LOGGER.info("Dead Link Checker background mass-scan is DISABLED to prevent Telegram rate limits (FloodWait). Lazy checking on-demand is active.")
+            return
+
         if self.is_running:
             return
         self.is_running = True

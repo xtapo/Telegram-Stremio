@@ -2211,47 +2211,66 @@ DEFAULT_COVER_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 
 </svg>""".encode("utf-8")
 
 
+COVERS_DIR = os.path.join(MUSIC_DIR, "covers")
+try:
+    os.makedirs(COVERS_DIR, exist_ok=True)
+except Exception:
+    pass
+
+
 # ── 5. Lấy Ảnh Cover / Thumbnail từ Telegram Message ──────────────────────────
 @router.get("/api/music/cover/{chat_id}/{msg_id}")
 async def get_music_cover(chat_id: int, msg_id: int):
     cache_key = f"{chat_id}_{msg_id}"
+    local_cover_path = os.path.join(COVERS_DIR, f"{cache_key}.jpg")
+
+    # 1. Kiểm tra cache file ảnh cục bộ trên đĩa (< 1ms)
+    if os.path.exists(local_cover_path) and os.path.getsize(local_cover_path) > 0:
+        return FileResponse(local_cover_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
+
+    # 2. Kiểm tra cache RAM
     now = time.time()
     if cache_key in _cover_cache:
         data, mime, exp = _cover_cache[cache_key]
         if now < exp:
-            return PlainResponse(content=data, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+            return PlainResponse(content=data, media_type=mime, headers={"Cache-Control": "public, max-age=604800"})
 
+    # 3. Ưu tiên Userbot tải thumbnail (Userbot không bị giới hạn MTProto cross-DC AUTH_BYTES_INVALID như Bot Tokens)
     clients_to_try = []
-    active = _get_active_client()
-    if active:
-        clients_to_try.append(active)
+    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+        clients_to_try.append(botmod.Userbot)
     if StreamBot and StreamBot not in clients_to_try:
         clients_to_try.append(StreamBot)
-    if multi_clients:
-        for c in multi_clients.values():
-            if c not in clients_to_try:
-                clients_to_try.append(c)
 
     data = None
     for cl in clients_to_try:
         try:
             msg = await cl.get_messages(chat_id, msg_id)
-            media = getattr(msg, "audio", None) or getattr(msg, "document", None)
+            if not msg:
+                continue
+            media = getattr(msg, "audio", None) or getattr(msg, "document", None) or getattr(msg, "video", None)
             thumbs = getattr(media, "thumbs", None) if media else None
-            if thumbs:
+            if thumbs and len(thumbs) > 0:
                 buf = await cl.download_media(thumbs[-1], in_memory=True)
                 if buf and hasattr(buf, "getvalue"):
                     data = buf.getvalue()
-                    break
+                    if data and len(data) > 0:
+                        try:
+                            with open(local_cover_path, "wb") as f:
+                                f.write(data)
+                        except Exception:
+                            pass
+                        break
         except Exception:
             continue
 
     if data:
         _cover_cache[cache_key] = (data, "image/jpeg", now + _COVER_CACHE_TTL)
-        return PlainResponse(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+        return PlainResponse(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
 
-    _cover_cache[cache_key] = (DEFAULT_COVER_SVG, "image/svg+xml", now + 3600)
-    return PlainResponse(content=DEFAULT_COVER_SVG, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=3600"})
+    # Nếu không có thumbnail hoặc tải lỗi, cache SVG mặc định trong 24h để không spam Telegram
+    _cover_cache[cache_key] = (DEFAULT_COVER_SVG, "image/svg+xml", now + 86400)
+    return PlainResponse(content=DEFAULT_COVER_SVG, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
 
 
 # ── 6. Xóa Album / Xóa Bài Hát khỏi Thư Viện Cache & MongoDB ─────────────────
