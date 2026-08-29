@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Telegram Music</string>
+    <string name="server_url_dialog_title">Cấu hình Server Telegram-Stremio</string>
+    <string name="server_url_hint">https://your-server-domain.com</string>
+    <string name="server_url_desc">Nhập địa chỉ máy chủ Telegram-Stremio (hoặc IP:Port) để kết nối phát nhạc:</string>
+    <string name="save_and_connect">Lưu &amp; Kết nối</string>
+    <string name="cancel">Hủy</string>
+    <string name="change_server">Đổi Server</string>
+    <string name="reload">Tải lại</string>
+    <string name="error_loading_title">Không thể kết nối máy chủ</string>
+    <string name="error_loading_desc">Vui lòng kiểm tra lại kết nối mạng hoặc địa chỉ Server URL.</string>
+    <string name="retry">Thử lại</string>
+    <string name="exit_prompt">Nhấn Back thêm lần nữa để thoát</string>
+</resources>

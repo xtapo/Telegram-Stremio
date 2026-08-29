@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Gradient Music Note Icon -->
+    <path
+        android:fillColor="#6366F1"
+        android:pathData="M48,34v28.5c-1.5,-0.9 -3.3,-1.5 -5.3,-1.5 -5,0 -9,4 -9,9s4,9 9,9 9,-4 9,-9V42h16v18.5c-1.5,-0.9 -3.3,-1.5 -5.3,-1.5 -5,0 -9,4 -9,9s4,9 9,9 9,-4 9,-9V34H48z" />
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M48,34h20v6H48z" />
+</vector>
