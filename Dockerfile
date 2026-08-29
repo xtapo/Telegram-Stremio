@@ -18,8 +18,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
 COPY . .
-RUN uv lock
-RUN uv sync --locked
+RUN uv sync --frozen
 RUN chmod +x start.sh
 CMD ["bash", "start.sh"]
+
