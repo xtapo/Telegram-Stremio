@@ -45,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS_NAME = "TelegramMusicPrefs";
     private static final String KEY_SERVER_URL = "server_url";
+    private static final String DEFAULT_SERVER_URL = "https://tg.xtapo.org";
     private static final int REQUEST_NOTIFICATION_PERMISSION = 1001;
 
     private WebView webView;
@@ -249,7 +250,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String getServerUrl() {
-        return prefs.getString(KEY_SERVER_URL, "");
+        return prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
     }
 
     private void saveServerUrl(String url) {

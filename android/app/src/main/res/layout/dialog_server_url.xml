@@ -39,7 +39,7 @@
             android:layout_height="wrap_content"
             android:inputType="textUri"
             android:singleLine="true"
-            android:text="http://"
+            android:text="https://tg.xtapo.org"
             android:textColor="@color/text_primary"
             android:textSize="15sp" />
 
