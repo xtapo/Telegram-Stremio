@@ -3708,6 +3708,109 @@ html, body {
     cursor: not-allowed;
 }
 
+/* Country Filter Tabs / Pills in Modals */
+.country-filter-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 12px;
+    scrollbar-width: none;
+}
+
+.country-filter-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.country-filter-pill {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.country-filter-pill:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.country-filter-pill.active {
+    background: var(--color-primary);
+    color: #ffffff;
+    border-color: var(--color-primary);
+    font-weight: 700;
+    box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+}
+
+.country-filter-pill .pill-count {
+    font-size: 0.7rem;
+    opacity: 0.8;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+/* Country Sub-Navigation Tabs */
+.country-subnav-tabs {
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 12px;
+    margin-top: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.country-subnav-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.country-tab-btn {
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.country-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.country-tab-btn.active {
+    background: var(--color-primary);
+    color: #ffffff;
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+}
+
+.country-badge-count {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
 @media (max-width: 768px) {
     .country-grid {
         grid-template-columns: 1fr;

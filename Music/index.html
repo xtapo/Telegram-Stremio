@@ -437,6 +437,11 @@
                     </div>
                     <button class="modal-close" id="closeArtistModal">&times;</button>
                 </div>
+
+                <!-- Country Filter Tabs for Artists -->
+                <div class="country-filter-tabs" id="artistCountryFilterTabs" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; scrollbar-width: none;">
+                    <!-- Populated dynamically -->
+                </div>
                 
                 <!-- Search bar for artists -->
                 <div style="margin-bottom: 14px;">
@@ -528,7 +533,7 @@
     <!-- Genres Filter Modal -->
     <div class="modal-overlay" id="genreModal">
         <div class="modal-card" style="max-width: 780px;">
-            <div class="modal-header">
+            <div class="modal-header" style="margin-bottom: 12px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-size: 1.4rem;">🏷️</span>
                     <div>
@@ -538,28 +543,126 @@
                 </div>
                 <button class="modal-close" id="closeGenreModal">&times;</button>
             </div>
-            <div class="genre-grid" id="genreGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; max-height: 65vh; overflow-y: auto; padding-right: 4px;">
+
+            <!-- Country Filter Tabs for Genres -->
+            <div class="country-filter-tabs" id="genreCountryFilterTabs" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; scrollbar-width: none;">
+                <!-- Populated dynamically -->
+            </div>
+
+            <div class="genre-grid" id="genreGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; max-height: 60vh; overflow-y: auto; padding-right: 4px;">
                 <!-- Populated dynamically -->
             </div>
         </div>
     </div>
 
-    <!-- Country / Regional Filter Modal -->
+    <!-- Country / Regional Filter Modal (Dual View: Overview & Drill-down Detail) -->
     <div class="modal-overlay" id="countryModal">
-        <div class="modal-card" style="max-width: 820px;">
-            <div class="modal-header">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 1.4rem;">🗺️</span>
-                    <div>
-                        <h3 style="margin: 0;">Khám Phá Nhạc Theo Quốc Gia & Khu Vực</h3>
-                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Phân loại âm nhạc theo từng vùng lãnh thổ, quốc gia và nền văn hóa</p>
+        <div class="modal-card" style="max-width: 860px; padding: 0; overflow: hidden; max-height: 88vh; display: flex; flex-direction: column;">
+            
+            <!-- View 1: Tổng Quan Danh Sách Quốc Gia (Country Overview List View) -->
+            <div id="countryListView" style="display: flex; flex-direction: column; height: 100%; padding: 24px; overflow-y: auto;">
+                <div class="modal-header" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 1.4rem;">🗺️</span>
+                        <div>
+                            <h3 style="margin: 0;">Khám Phá Nhạc Theo Quốc Gia & Khu Vực</h3>
+                            <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Phân loại âm nhạc theo từng vùng lãnh thổ, quốc gia và nền văn hóa</p>
+                        </div>
+                    </div>
+                    <button class="modal-close" id="closeCountryModal">&times;</button>
+                </div>
+                <div class="country-grid" id="countryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; overflow-y: auto; flex: 1; padding-right: 4px;">
+                    <!-- Populated dynamically by app.js -->
+                </div>
+            </div>
+
+            <!-- View 2: Chi Tiết Quốc Gia: Thể Loại, Ca Sĩ, Bài Hát (Country Detail View) -->
+            <div id="countryDetailView" style="display: none; flex-direction: column; height: 100%; overflow-y: auto;">
+                <!-- Hero Banner of the selected country -->
+                <div class="country-spotlight-hero" id="countrySpotlightHero" style="position: relative; padding: 24px 24px 18px 24px; display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--border-color); background: linear-gradient(180deg, rgba(20, 23, 32, 0.6) 0%, rgba(20, 23, 32, 0.98) 100%);">
+                    <!-- Top Actions Bar -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; z-index: 10;">
+                        <button id="btnBackToCountryList" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            Tất cả Quốc Gia
+                        </button>
+                        <button class="modal-close" onclick="window.xtapoApp.closeModal(document.getElementById('countryModal'))" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">&times;</button>
+                    </div>
+
+                    <!-- Header Content -->
+                    <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
+                        <div id="countryDetailFlag" style="font-size: 3rem; line-height: 1; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));">🇻🇳</div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                <span class="country-code-tag" id="countryDetailCode">VN</span>
+                                <span class="badge-tag accent-tag" style="font-size: 0.7rem;">KHU VỰC ÂM NHẠC</span>
+                            </div>
+                            <h2 id="countryDetailName" style="margin: 0; font-size: 1.6rem; font-weight: 800; color: #fff;">Việt Nam</h2>
+                            <p id="countryDetailSub" style="margin: 4px 0 0 0; font-size: 0.82rem; color: var(--text-muted);">V-Pop, Bolero, Rap Việt, Acoustic</p>
+                        </div>
+                        <!-- Action buttons -->
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <button id="btnCountryPlayAll" class="primary-btn" style="padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                Phát Tất Cả
+                            </button>
+                            <button id="btnCountryShuffle" class="nav-btn action-badge-btn" style="padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+                                Trộn Bài
+                            </button>
+                            <button id="btnCountryExportM3U8" class="nav-btn action-badge-btn" style="padding: 9px 14px; border-radius: 12px; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;" title="Xuất playlist M3U8">
+                                .M3U8
+                            </button>
+                            <button id="btnCountryDownloadZip" class="nav-btn action-badge-btn" style="padding: 9px 14px; border-radius: 12px; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;" title="Tải toàn bộ file ZIP">
+                                .ZIP
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Category Switcher Tabs -->
+                    <div class="country-subnav-tabs" style="display: flex; gap: 8px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; margin-top: 4px; overflow-x: auto;">
+                        <button class="country-tab-btn active" id="tabBtnCountryGenres" data-tab="genres">
+                            🏷️ Thể Loại <span class="country-badge-count" id="countryGenreCountBadge">0</span>
+                        </button>
+                        <button class="country-tab-btn" id="tabBtnCountryArtists" data-tab="artists">
+                            🎙️ Ca Sĩ / Nghệ Sĩ <span class="country-badge-count" id="countryArtistCountBadge">0</span>
+                        </button>
+                        <button class="country-tab-btn" id="tabBtnCountryTracks" data-tab="tracks">
+                            🎵 Danh Sách Bài Hát <span class="country-badge-count" id="countryTrackCountBadge">0</span>
+                        </button>
                     </div>
                 </div>
-                <button class="modal-close" id="closeCountryModal">&times;</button>
+
+                <!-- Tab 1: Genres Section -->
+                <div id="countryGenresSection" style="padding: 20px; display: block;">
+                    <div class="genre-grid" id="countryDetailGenreGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Tab 2: Artists Section -->
+                <div id="countryArtistsSection" style="padding: 20px; display: none;">
+                    <div style="margin-bottom: 14px;">
+                        <input type="text" id="countryArtistSearchInput" placeholder="Tìm ca sĩ trong quốc gia này..." 
+                               style="width: 100%; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
+                    </div>
+                    <div class="artist-grid" id="countryDetailArtistGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Tab 3: Tracks Section -->
+                <div id="countryTracksSection" style="padding: 20px; display: none;">
+                    <div style="margin-bottom: 14px;">
+                        <input type="text" id="countryTrackSearchInput" placeholder="Tìm bài hát trong quốc gia này..." 
+                               style="width: 100%; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
+                    </div>
+                    <div id="countryDetailTracksList" class="track-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
             </div>
-            <div class="country-grid" id="countryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; max-height: 65vh; overflow-y: auto; padding-right: 4px;">
-                <!-- Populated dynamically by app.js -->
-            </div>
+
         </div>
     </div>
 

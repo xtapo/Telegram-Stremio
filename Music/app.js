@@ -282,6 +282,40 @@ class XTAPOMusicApp {
         this.closeCountryModal = document.getElementById('closeCountryModal');
         this.countryGrid = document.getElementById('countryGrid');
 
+        // Country Modal Dual-View elements
+        this.countryListView = document.getElementById('countryListView');
+        this.countryDetailView = document.getElementById('countryDetailView');
+        this.btnBackToCountryList = document.getElementById('btnBackToCountryList');
+        this.countryDetailFlag = document.getElementById('countryDetailFlag');
+        this.countryDetailCode = document.getElementById('countryDetailCode');
+        this.countryDetailName = document.getElementById('countryDetailName');
+        this.countryDetailSub = document.getElementById('countryDetailSub');
+        this.btnCountryPlayAll = document.getElementById('btnCountryPlayAll');
+        this.btnCountryShuffle = document.getElementById('btnCountryShuffle');
+        this.btnCountryExportM3U8 = document.getElementById('btnCountryExportM3U8');
+        this.btnCountryDownloadZip = document.getElementById('btnCountryDownloadZip');
+        this.tabBtnCountryGenres = document.getElementById('tabBtnCountryGenres');
+        this.tabBtnCountryArtists = document.getElementById('tabBtnCountryArtists');
+        this.tabBtnCountryTracks = document.getElementById('tabBtnCountryTracks');
+        this.countryGenreCountBadge = document.getElementById('countryGenreCountBadge');
+        this.countryArtistCountBadge = document.getElementById('countryArtistCountBadge');
+        this.countryTrackCountBadge = document.getElementById('countryTrackCountBadge');
+        this.countryGenresSection = document.getElementById('countryGenresSection');
+        this.countryArtistsSection = document.getElementById('countryArtistsSection');
+        this.countryTracksSection = document.getElementById('countryTracksSection');
+        this.countryDetailGenreGrid = document.getElementById('countryDetailGenreGrid');
+        this.countryDetailArtistGrid = document.getElementById('countryDetailArtistGrid');
+        this.countryDetailTracksList = document.getElementById('countryDetailTracksList');
+        this.countryArtistSearchInput = document.getElementById('countryArtistSearchInput');
+        this.countryTrackSearchInput = document.getElementById('countryTrackSearchInput');
+        this.artistCountryFilterTabs = document.getElementById('artistCountryFilterTabs');
+        this.genreCountryFilterTabs = document.getElementById('genreCountryFilterTabs');
+
+        this.selectedArtistCountryFilter = 'all';
+        this.selectedGenreCountryFilter = 'all';
+        this.currentDetailCountryObj = null;
+        this.currentCountryDetailTab = 'genres';
+
         // Mobile Quick Tracklist Modal & Triggers
         this.mobileQuickTracklistBtn = document.getElementById('mobileQuickTracklistBtn');
         this.mobilePlayerTracklistBtn = document.getElementById('mobilePlayerTracklistBtn');
@@ -2328,6 +2362,66 @@ class XTAPOMusicApp {
             this.closeCountryModal.addEventListener('click', () => this.closeModal(this.countryModal));
         }
 
+        // Country Detail View Events
+        if (this.btnBackToCountryList) {
+            this.btnBackToCountryList.addEventListener('click', () => {
+                this.showCountryListView();
+            });
+        }
+        if (this.tabBtnCountryGenres) {
+            this.tabBtnCountryGenres.addEventListener('click', () => this.switchCountryDetailTab('genres'));
+        }
+        if (this.tabBtnCountryArtists) {
+            this.tabBtnCountryArtists.addEventListener('click', () => this.switchCountryDetailTab('artists'));
+        }
+        if (this.tabBtnCountryTracks) {
+            this.tabBtnCountryTracks.addEventListener('click', () => this.switchCountryDetailTab('tracks'));
+        }
+        if (this.countryArtistSearchInput) {
+            this.countryArtistSearchInput.addEventListener('input', (e) => {
+                if (this.currentDetailCountryObj) {
+                    this.renderCountryArtists(this.currentDetailCountryObj, e.target.value.trim());
+                }
+            });
+        }
+        if (this.countryTrackSearchInput) {
+            this.countryTrackSearchInput.addEventListener('input', (e) => {
+                if (this.currentDetailCountryObj) {
+                    this.renderCountryTracks(this.currentDetailCountryObj, e.target.value.trim());
+                }
+            });
+        }
+        if (this.btnCountryPlayAll) {
+            this.btnCountryPlayAll.addEventListener('click', () => {
+                if (this.currentDetailCountryObj) {
+                    this.closeModal(this.countryModal);
+                    this.playCountryQueue(this.currentDetailCountryObj, false);
+                }
+            });
+        }
+        if (this.btnCountryShuffle) {
+            this.btnCountryShuffle.addEventListener('click', () => {
+                if (this.currentDetailCountryObj) {
+                    this.closeModal(this.countryModal);
+                    this.playCountryQueue(this.currentDetailCountryObj, true);
+                }
+            });
+        }
+        if (this.btnCountryExportM3U8) {
+            this.btnCountryExportM3U8.addEventListener('click', () => {
+                if (this.currentDetailCountryObj && this.currentDetailCountryObj.tracks) {
+                    this.exportM3U8(`Nhac_${this.currentDetailCountryObj.country}`, this.currentDetailCountryObj.tracks);
+                }
+            });
+        }
+        if (this.btnCountryDownloadZip) {
+            this.btnCountryDownloadZip.addEventListener('click', () => {
+                if (this.currentDetailCountryObj && this.currentDetailCountryObj.tracks) {
+                    this.downloadZipPackage(this.currentDetailCountryObj.tracks, `Tuyen_Tap_Nhac_${this.currentDetailCountryObj.country}`, this.currentDetailCountryObj.coverUrl, `Tuyển Tập Nhạc ${this.currentDetailCountryObj.country}`);
+                }
+            });
+        }
+
         // Favorites Modal Events
         if (this.navFavorites && this.favoritesModal) {
             this.navFavorites.addEventListener('click', (e) => {
@@ -3569,17 +3663,34 @@ class XTAPOMusicApp {
         }
     }
 
-    renderArtistGrid(searchQuery = '') {
+    renderArtistGrid(searchQuery = '', selectedCountry = null) {
         if (!this.artistGrid) return;
+        if (selectedCountry !== null) {
+            this.selectedArtistCountryFilter = selectedCountry;
+        }
         this.artistGrid.innerHTML = '';
 
-        // Extract and aggregate all artists
+        // Extract and aggregate all artists with their countries
         const artistMap = new Map();
+        const countryArtistCounts = {
+            'all': 0,
+            'Việt Nam': 0,
+            'Âu Mỹ': 0,
+            'Hàn Quốc': 0,
+            'Hoa Ngữ': 0,
+            'Nhật Bản': 0,
+            'Quốc Tế': 0
+        };
+
         this.albums.forEach(album => {
             const albArtist = (album.artist || 'Unknown Artist').trim();
+            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
                 const trackArtist = (track.artist || albArtist || 'Unknown Artist').trim();
                 if (!trackArtist || trackArtist.toLowerCase() === 'unknown') return;
+
+                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
 
                 if (!artistMap.has(trackArtist)) {
                     // Check cached metadata
@@ -3595,11 +3706,13 @@ class XTAPOMusicApp {
                         bannerUrl: bannerUrl,
                         bio: bio,
                         genres: genres,
+                        countries: new Set([validCountry]),
                         albums: new Map([[album.id || album.title, album]]),
                         tracks: [track]
                     });
                 } else {
                     const existing = artistMap.get(trackArtist);
+                    existing.countries.add(validCountry);
                     existing.albums.set(album.id || album.title, album);
                     if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
                         existing.tracks.push(track);
@@ -3610,6 +3723,42 @@ class XTAPOMusicApp {
 
         this.artistMap = artistMap;
 
+        // Calculate counts for country filter tabs
+        countryArtistCounts['all'] = artistMap.size;
+        artistMap.forEach(art => {
+            art.countries.forEach(c => {
+                if (countryArtistCounts[c] !== undefined) {
+                    countryArtistCounts[c]++;
+                }
+            });
+        });
+
+        // Render country filter tabs in Artist Modal
+        if (this.artistCountryFilterTabs) {
+            this.artistCountryFilterTabs.innerHTML = '';
+            const filterOptions = [
+                { id: 'all', label: 'Tất cả', icon: '🌐' },
+                { id: 'Việt Nam', label: 'Việt Nam', icon: '🇻🇳' },
+                { id: 'Âu Mỹ', label: 'Âu Mỹ', icon: '🇺🇸' },
+                { id: 'Hàn Quốc', label: 'Hàn Quốc', icon: '🇰🇷' },
+                { id: 'Hoa Ngữ', label: 'Hoa Ngữ', icon: '🇨🇳' },
+                { id: 'Nhật Bản', label: 'Nhật Bản', icon: '🇯🇵' },
+                { id: 'Quốc Tế', label: 'Quốc Tế', icon: '🌍' }
+            ];
+
+            filterOptions.forEach(opt => {
+                const count = countryArtistCounts[opt.id] || 0;
+                const pill = document.createElement('button');
+                pill.className = `country-filter-pill ${this.selectedArtistCountryFilter === opt.id ? 'active' : ''}`;
+                pill.innerHTML = `<span>${opt.icon}</span> <span>${opt.label}</span> <span class="pill-count">${count}</span>`;
+                pill.onclick = () => {
+                    this.selectedArtistCountryFilter = opt.id;
+                    this.renderArtistGrid(this.artistSearchInput ? this.artistSearchInput.value.trim() : '', opt.id);
+                };
+                this.artistCountryFilterTabs.appendChild(pill);
+            });
+        }
+
         if (artistMap.size === 0) {
             this.artistGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có dữ liệu ca sĩ trong thư viện.</div>';
             return;
@@ -3617,9 +3766,20 @@ class XTAPOMusicApp {
 
         let sortedArtists = Array.from(artistMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
 
+        // Filter by country
+        if (this.selectedArtistCountryFilter && this.selectedArtistCountryFilter !== 'all') {
+            sortedArtists = sortedArtists.filter(a => a.countries.has(this.selectedArtistCountryFilter));
+        }
+
+        // Filter by search query
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             sortedArtists = sortedArtists.filter(a => a.name.toLowerCase().includes(q));
+        }
+
+        if (sortedArtists.length === 0) {
+            this.artistGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Không tìm thấy ca sĩ nào thuộc khu vực đã chọn.</div>';
+            return;
         }
 
         sortedArtists.forEach(art => {
@@ -3797,8 +3957,11 @@ class XTAPOMusicApp {
         this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${tracks.length} bài)`);
     }
 
-    renderGenreGrid() {
+    renderGenreGrid(selectedCountry = null) {
         if (!this.genreGrid) return;
+        if (selectedCountry !== null) {
+            this.selectedGenreCountryFilter = selectedCountry;
+        }
         this.genreGrid.innerHTML = '';
 
         const genreIcons = {
@@ -3879,11 +4042,36 @@ class XTAPOMusicApp {
             'Khác': 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.1))'
         };
 
-        // Aggregate tracks by genre
+        // Calculate genre sets and track counts per country
+        const countryGenreSets = {
+            'all': new Set(),
+            'Việt Nam': new Set(),
+            'Âu Mỹ': new Set(),
+            'Hàn Quốc': new Set(),
+            'Hoa Ngữ': new Set(),
+            'Nhật Bản': new Set(),
+            'Quốc Tế': new Set()
+        };
+
         const genreMap = new Map();
+
         this.albums.forEach(album => {
+            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
                 const g = (track.genre || 'Khác').trim() || 'Khác';
+                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
+
+                countryGenreSets['all'].add(g);
+                if (countryGenreSets[validCountry]) {
+                    countryGenreSets[validCountry].add(g);
+                }
+
+                // Filter for current view
+                if (this.selectedGenreCountryFilter && this.selectedGenreCountryFilter !== 'all' && validCountry !== this.selectedGenreCountryFilter) {
+                    return;
+                }
+
                 if (!genreMap.has(g)) {
                     genreMap.set(g, {
                         genre: g,
@@ -3899,8 +4087,34 @@ class XTAPOMusicApp {
             });
         });
 
+        // Render country filter tabs in Genre Modal
+        if (this.genreCountryFilterTabs) {
+            this.genreCountryFilterTabs.innerHTML = '';
+            const filterOptions = [
+                { id: 'all', label: 'Tất cả', icon: '🌐' },
+                { id: 'Việt Nam', label: 'Việt Nam', icon: '🇻🇳' },
+                { id: 'Âu Mỹ', label: 'Âu Mỹ', icon: '🇺🇸' },
+                { id: 'Hàn Quốc', label: 'Hàn Quốc', icon: '🇰🇷' },
+                { id: 'Hoa Ngữ', label: 'Hoa Ngữ', icon: '🇨🇳' },
+                { id: 'Nhật Bản', label: 'Nhật Bản', icon: '🇯🇵' },
+                { id: 'Quốc Tế', label: 'Quốc Tế', icon: '🌍' }
+            ];
+
+            filterOptions.forEach(opt => {
+                const count = (countryGenreSets[opt.id] && countryGenreSets[opt.id].size) || 0;
+                const pill = document.createElement('button');
+                pill.className = `country-filter-pill ${this.selectedGenreCountryFilter === opt.id ? 'active' : ''}`;
+                pill.innerHTML = `<span>${opt.icon}</span> <span>${opt.label}</span> <span class="pill-count">${count}</span>`;
+                pill.onclick = () => {
+                    this.selectedGenreCountryFilter = opt.id;
+                    this.renderGenreGrid(opt.id);
+                };
+                this.genreCountryFilterTabs.appendChild(pill);
+            });
+        }
+
         if (genreMap.size === 0) {
-            this.genreGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có dữ liệu thể loại trong thư viện.</div>';
+            this.genreGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có thể loại âm nhạc nào trong khu vực này.</div>';
             return;
         }
 
@@ -3921,7 +4135,11 @@ class XTAPOMusicApp {
 
             card.addEventListener('click', () => {
                 this.closeModal(this.genreModal);
-                this.playGenreQueue(gObj.genre, 0, true);
+                if (this.selectedGenreCountryFilter && this.selectedGenreCountryFilter !== 'all') {
+                    this.playCountryGenreQueue(this.selectedGenreCountryFilter, gObj.genre, 0, true);
+                } else {
+                    this.playGenreQueue(gObj.genre, 0, true);
+                }
             });
 
             this.genreGrid.appendChild(card);
@@ -3967,6 +4185,7 @@ class XTAPOMusicApp {
 
     renderCountryGrid() {
         if (!this.countryGrid) return;
+        this.showCountryListView();
         this.countryGrid.innerHTML = '';
 
         const countryMeta = {
@@ -4084,7 +4303,7 @@ class XTAPOMusicApp {
                     <span><b>${artistCount}</b> nghệ sĩ</span>
                 </div>
                 <div class="country-card-actions">
-                    <button class="country-play-btn" ${trackCount === 0 ? 'disabled' : ''} title="Phát nhạc ${cObj.country}">
+                    <button class="country-play-btn" ${trackCount === 0 ? 'disabled' : ''} title="Phát toàn bộ nhạc ${cObj.country}">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                         <span>Phát Toàn Bộ</span>
                     </button>
@@ -4097,12 +4316,11 @@ class XTAPOMusicApp {
                 </div>
             `;
 
-            // Click entire card to play if tracks exist
+            // Click entire card to open drill-down detail view
             card.addEventListener('click', (e) => {
                 if (e.target.closest('.country-action-btn') || e.target.closest('.country-play-btn')) return;
                 if (trackCount > 0) {
-                    this.closeModal(this.countryModal);
-                    this.playCountryQueue(cObj, false);
+                    this.openCountryDetail(cObj);
                 } else {
                     this.showToast(`Chưa có bài hát nào thuộc khu vực "${cObj.country}" trong thư viện.`);
                 }
@@ -4144,6 +4362,368 @@ class XTAPOMusicApp {
 
             this.countryGrid.appendChild(card);
         });
+    }
+
+    showCountryListView() {
+        if (this.countryListView && this.countryDetailView) {
+            this.countryListView.style.display = 'flex';
+            this.countryDetailView.style.display = 'none';
+        }
+        this.currentDetailCountryObj = null;
+    }
+
+    openCountryDetail(cObj) {
+        if (!this.countryDetailView || !this.countryListView) return;
+        this.currentDetailCountryObj = cObj;
+
+        this.countryListView.style.display = 'none';
+        this.countryDetailView.style.display = 'flex';
+
+        const countryMeta = {
+            'Việt Nam': { flag: '🇻🇳', code: 'VN', sub: 'V-Pop, Bolero, Rap Việt, Acoustic' },
+            'Âu Mỹ': { flag: '🇺🇸', code: 'US-UK', sub: 'Pop, Rock, Country, R&B, EDM, Hip-Hop' },
+            'Hàn Quốc': { flag: '🇰🇷', code: 'K-POP', sub: 'K-Pop, K-Drama OST, Korean Indie' },
+            'Hoa Ngữ': { flag: '🇨🇳', code: 'C-POP', sub: 'Mandopop, Cantopop, Nhạc Hoa, C-Rock' },
+            'Nhật Bản': { flag: '🇯🇵', code: 'J-POP', sub: 'J-Pop, Anime OST, City Pop, J-Rock' },
+            'Quốc Tế': { flag: '🌍', code: 'GLOBAL', sub: 'Latin, Châu Âu, Nhạc Không Lời & Khác' }
+        };
+
+        const meta = countryMeta[cObj.country] || { flag: '🗺️', code: 'INT', sub: 'Âm nhạc thế giới' };
+
+        // Update header details
+        if (this.countryDetailFlag) this.countryDetailFlag.textContent = meta.flag;
+        if (this.countryDetailCode) this.countryDetailCode.textContent = meta.code;
+        if (this.countryDetailName) this.countryDetailName.textContent = cObj.country;
+        if (this.countryDetailSub) this.countryDetailSub.textContent = meta.sub;
+
+        // Count unique genres in this country
+        const genreSet = new Set();
+        (cObj.tracks || []).forEach(t => {
+            genreSet.add((t.genre || 'Khác').trim() || 'Khác');
+        });
+
+        if (this.countryGenreCountBadge) this.countryGenreCountBadge.textContent = genreSet.size;
+        if (this.countryArtistCountBadge) this.countryArtistCountBadge.textContent = cObj.artists ? cObj.artists.size : 0;
+        if (this.countryTrackCountBadge) this.countryTrackCountBadge.textContent = cObj.tracks ? cObj.tracks.length : 0;
+
+        // Reset search inputs
+        if (this.countryArtistSearchInput) this.countryArtistSearchInput.value = '';
+        if (this.countryTrackSearchInput) this.countryTrackSearchInput.value = '';
+
+        // Switch to the last active tab (or 'genres' by default)
+        this.switchCountryDetailTab(this.currentCountryDetailTab || 'genres');
+    }
+
+    switchCountryDetailTab(tabName) {
+        this.currentCountryDetailTab = tabName;
+
+        const tabs = [
+            { id: 'genres', btn: this.tabBtnCountryGenres, sec: this.countryGenresSection },
+            { id: 'artists', btn: this.tabBtnCountryArtists, sec: this.countryArtistsSection },
+            { id: 'tracks', btn: this.tabBtnCountryTracks, sec: this.countryTracksSection }
+        ];
+
+        tabs.forEach(t => {
+            if (t.btn) {
+                if (t.id === tabName) {
+                    t.btn.classList.add('active');
+                } else {
+                    t.btn.classList.remove('active');
+                }
+            }
+            if (t.sec) {
+                t.sec.style.display = (t.id === tabName) ? 'block' : 'none';
+            }
+        });
+
+        if (!this.currentDetailCountryObj) return;
+
+        if (tabName === 'genres') {
+            this.renderCountryGenres(this.currentDetailCountryObj);
+        } else if (tabName === 'artists') {
+            this.renderCountryArtists(this.currentDetailCountryObj, this.countryArtistSearchInput ? this.countryArtistSearchInput.value.trim() : '');
+        } else if (tabName === 'tracks') {
+            this.renderCountryTracks(this.currentDetailCountryObj, this.countryTrackSearchInput ? this.countryTrackSearchInput.value.trim() : '');
+        }
+    }
+
+    renderCountryGenres(cObj) {
+        if (!this.countryDetailGenreGrid) return;
+        this.countryDetailGenreGrid.innerHTML = '';
+
+        const genreIcons = {
+            'Bolero / Trữ Tình': '🎻', 'Bolero': '🎻', 'Trữ Tình': '🎻',
+            'Lofi / Chill': '☕', 'Lofi': '☕', 'Chill': '☕',
+            'EDM / Remix': '⚡', 'EDM': '⚡', 'Remix': '⚡', 'Vinahouse': '⚡',
+            'Acoustic / Instrumental': '🎸', 'Acoustic': '🎸', 'Instrumental': '🎹',
+            'Rap / Hip-Hop': '🎤', 'Rap': '🎤', 'Hip-Hop': '🎤',
+            'Pop / Ballad': '💖', 'Pop': '✨', 'Ballad': '🎼', 'Nhạc Trẻ': '💖',
+            'Rock / Indie': '🤘', 'Rock': '🤘', 'Indie': '🎸',
+            'R&B / Soul': '🎷', 'R&B': '🎷', 'Soul': '🎷',
+            'Jazz / Blues': '🎺', 'Nhạc Phim / OST': '🎬', 'OST': '🎬',
+            'Cổ Điển / Classical': '🎼', 'Nhạc Đỏ / Cách Mạng': '⭐',
+            'Country / Folk': '🌾', 'Latin / Reggae': '🌴', 'Thiếu Nhi / Kids': '🎈',
+            'Podcast / Sách Nói': '🎙️', 'Khác': '🎵'
+        };
+
+        const genreColors = {
+            'Bolero / Trữ Tình': 'linear-gradient(135deg, rgba(217, 119, 6, 0.35), rgba(180, 83, 9, 0.15))',
+            'Lofi / Chill': 'linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(67, 56, 202, 0.15))',
+            'EDM / Remix': 'linear-gradient(135deg, rgba(236, 72, 153, 0.35), rgba(190, 24, 93, 0.15))',
+            'Acoustic / Instrumental': 'linear-gradient(135deg, rgba(16, 185, 129, 0.35), rgba(4, 120, 87, 0.15))',
+            'Rap / Hip-Hop': 'linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(185, 28, 28, 0.15))',
+            'Pop / Ballad': 'linear-gradient(135deg, rgba(2, 132, 199, 0.35), rgba(3, 105, 161, 0.15))',
+            'Rock / Indie': 'linear-gradient(135deg, rgba(139, 92, 246, 0.35), rgba(109, 40, 217, 0.15))',
+            'R&B / Soul': 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(126, 34, 206, 0.15))',
+            'Nhạc Phim / OST': 'linear-gradient(135deg, rgba(20, 184, 166, 0.35), rgba(13, 148, 136, 0.15))',
+            'Nhạc Đỏ / Cách Mạng': 'linear-gradient(135deg, rgba(220, 38, 38, 0.4), rgba(185, 28, 28, 0.15))',
+            'Khác': 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.1))'
+        };
+
+        const genreMap = new Map();
+        (cObj.tracks || []).forEach(track => {
+            const g = (track.genre || 'Khác').trim() || 'Khác';
+            if (!genreMap.has(g)) {
+                genreMap.set(g, {
+                    genre: g,
+                    tracks: [track],
+                    coverUrl: track.coverUrl || cObj.coverUrl
+                });
+            } else {
+                const existing = genreMap.get(g);
+                if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                    existing.tracks.push(track);
+                }
+            }
+        });
+
+        if (genreMap.size === 0) {
+            this.countryDetailGenreGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 30px;">Chưa có thể loại nào trong quốc gia này.</div>';
+            return;
+        }
+
+        const sortedGenres = Array.from(genreMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
+
+        sortedGenres.forEach(gObj => {
+            const icon = genreIcons[gObj.genre] || '🎵';
+            const bg = genreColors[gObj.genre] || 'linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02))';
+
+            const card = document.createElement('div');
+            card.className = 'genre-card-item';
+            card.style.background = bg;
+            card.innerHTML = `
+                <div class="genre-card-icon">${icon}</div>
+                <div class="genre-card-name">${this.escapeHtml(gObj.genre)}</div>
+                <div class="genre-card-count">${gObj.tracks.length} bài hát (${this.escapeHtml(cObj.country)})</div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                    <button class="country-play-btn" style="padding: 5px 8px; font-size: 0.72rem;" title="Phát thể loại này">Phát</button>
+                    <button class="country-action-btn btn-export-m3u8" style="padding: 5px 8px; font-size: 0.7rem;" title="Xuất M3U8">.M3U8</button>
+                    <button class="country-action-btn btn-download-zip" style="padding: 5px 8px; font-size: 0.7rem;" title="Tải ZIP">.ZIP</button>
+                </div>
+            `;
+
+            // Click entire card to play
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('.country-action-btn') || e.target.closest('.country-play-btn')) return;
+                this.closeModal(this.countryModal);
+                this.playCountryGenreQueue(cObj.country, gObj.genre, 0, true);
+            });
+
+            const playBtn = card.querySelector('.country-play-btn');
+            if (playBtn) {
+                playBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.closeModal(this.countryModal);
+                    this.playCountryGenreQueue(cObj.country, gObj.genre, 0, true);
+                });
+            }
+
+            const m3u8Btn = card.querySelector('.btn-export-m3u8');
+            if (m3u8Btn) {
+                m3u8Btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.exportM3U8(`Nhac_${cObj.country}_${gObj.genre}`, gObj.tracks);
+                });
+            }
+
+            const zipBtn = card.querySelector('.btn-download-zip');
+            if (zipBtn) {
+                zipBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.downloadZipPackage(gObj.tracks, `Nhac_${cObj.country}_${gObj.genre}`, gObj.coverUrl, `Nhạc ${cObj.country} - ${gObj.genre}`);
+                });
+            }
+
+            this.countryDetailGenreGrid.appendChild(card);
+        });
+    }
+
+    renderCountryArtists(cObj, query = '') {
+        if (!this.countryDetailArtistGrid) return;
+        this.countryDetailArtistGrid.innerHTML = '';
+
+        const artistMap = new Map();
+        (cObj.tracks || []).forEach(track => {
+            const trackArtist = (track.artist || 'Unknown Artist').trim();
+            if (!trackArtist || trackArtist.toLowerCase() === 'unknown') return;
+
+            if (!artistMap.has(trackArtist)) {
+                const cached = this.artistCacheMap ? this.artistCacheMap.get(trackArtist.toLowerCase().trim()) : null;
+                const avatarUrl = (cached && cached.avatar_url) ? cached.avatar_url : (track.coverUrl || cObj.coverUrl);
+
+                artistMap.set(trackArtist, {
+                    name: trackArtist,
+                    coverUrl: avatarUrl,
+                    tracks: [track]
+                });
+            } else {
+                const existing = artistMap.get(trackArtist);
+                if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                    existing.tracks.push(track);
+                }
+            }
+        });
+
+        if (artistMap.size === 0) {
+            this.countryDetailArtistGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 30px;">Chưa có dữ liệu ca sĩ trong quốc gia này.</div>';
+            return;
+        }
+
+        let sortedArtists = Array.from(artistMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
+
+        if (query) {
+            const q = query.toLowerCase();
+            sortedArtists = sortedArtists.filter(a => a.name.toLowerCase().includes(q));
+        }
+
+        if (sortedArtists.length === 0) {
+            this.countryDetailArtistGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 30px;">Không tìm thấy ca sĩ phù hợp.</div>';
+            return;
+        }
+
+        sortedArtists.forEach(art => {
+            const card = document.createElement('div');
+            card.className = 'artist-card-item';
+            card.innerHTML = `
+                <img src="${art.coverUrl}" class="artist-avatar-img" alt="${this.escapeHtml(art.name)}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                <div class="artist-card-info">
+                    <h4>${this.escapeHtml(art.name)}</h4>
+                    <p>${art.tracks.length} bài hát (${this.escapeHtml(cObj.country)})</p>
+                </div>
+            `;
+
+            card.addEventListener('click', () => {
+                this.closeModal(this.countryModal);
+                this.openModal(this.artistModal);
+                this.openArtistByName(art.name);
+            });
+
+            this.countryDetailArtistGrid.appendChild(card);
+        });
+    }
+
+    renderCountryTracks(cObj, query = '') {
+        if (!this.countryDetailTracksList) return;
+        this.countryDetailTracksList.innerHTML = '';
+
+        let tracks = cObj.tracks || [];
+        if (query) {
+            const q = query.toLowerCase();
+            tracks = tracks.filter(t => (t.name && t.name.toLowerCase().includes(q)) || (t.artist && t.artist.toLowerCase().includes(q)));
+        }
+
+        if (tracks.length === 0) {
+            this.countryDetailTracksList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 30px;">Không tìm thấy bài hát nào.</div>';
+            return;
+        }
+
+        tracks.forEach((track, idx) => {
+            const trItem = document.createElement('div');
+            trItem.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s; cursor: pointer;';
+            trItem.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); width: 24px; text-align: center;">${idx + 1}</span>
+                    <img src="${track.coverUrl || cObj.coverUrl}" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover;" alt="Cover">
+                    <div style="min-width: 0;">
+                        <div style="font-size: 0.85rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.name)}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.artist || 'Unknown')} • ${this.escapeHtml(track.genre || 'Khác')}</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">${track.duration || ''}</span>
+                    <button class="nav-btn icon-btn" style="width: 30px; height: 30px; border-radius: 50%; background: var(--color-primary); color: #fff; display: flex; align-items: center; justify-content: center;" title="Phát bài này">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    </button>
+                </div>
+            `;
+            trItem.onmouseover = () => trItem.style.background = 'rgba(255,255,255,0.06)';
+            trItem.onmouseout = () => trItem.style.background = 'rgba(255,255,255,0.02)';
+
+            trItem.onclick = () => {
+                this.closeModal(this.countryModal);
+                const originalIdx = (cObj.tracks || []).findIndex(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name);
+                this.playCountryQueue(cObj, false, true, originalIdx !== -1 ? originalIdx : 0);
+            };
+
+            this.countryDetailTracksList.appendChild(trItem);
+        });
+    }
+
+    playCountryGenreQueue(countryName, genreName, startIndex = 0, autoPlay = true) {
+        if (!genreName) return;
+        this.activeGenre = genreName;
+        this.activeCountry = countryName;
+        this.activeArtist = null;
+        this.activePlaylistId = null;
+
+        const tracks = [];
+        let coverUrl = '';
+        (this.albums || []).forEach(album => {
+            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
+            (album.tracks || []).forEach(track => {
+                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
+                if (countryName && countryName !== 'all' && validCountry !== countryName) return;
+
+                const g = (track.genre || 'Khác').trim() || 'Khác';
+                if (g.toLowerCase() === genreName.toLowerCase()) {
+                    if (!tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                        tracks.push(track);
+                        if (!coverUrl) coverUrl = track.coverUrl || album.coverUrl;
+                    }
+                }
+            });
+        });
+
+        if (tracks.length === 0) {
+            this.showToast(`Không có bài hát thuộc thể loại "${genreName}" tại khu vực ${countryName}`);
+            return;
+        }
+
+        const genreAlbum = {
+            id: `genre-${encodeURIComponent(countryName || 'all')}-${encodeURIComponent(genreName)}`,
+            title: `${genreName} • ${countryName || 'Toàn Cầu'}`,
+            artist: `Tuyển Tập ${genreName} (${countryName || 'Quốc Tế'})`,
+            coverUrl: coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop',
+            format: 'FLAC Hi-Res Lossless',
+            year: new Date().getFullYear().toString(),
+            publisher: `${countryName || 'Quốc Tế'} • ${genreName}`,
+            glowColors: { glow1: 'radial-gradient(circle, #ec4899 0%, #be185d 60%, transparent 80%)', glow2: 'radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)' },
+            tracks: tracks
+        };
+
+        const existingIdx = this.albums.findIndex(a => a.id === genreAlbum.id);
+        if (existingIdx !== -1) {
+            this.albums[existingIdx] = genreAlbum;
+            this.loadAlbum(existingIdx, startIndex, autoPlay);
+        } else {
+            this.albums.unshift(genreAlbum);
+            this.loadAlbum(0, startIndex, autoPlay);
+        }
+        this.renderAlbumGrid();
+        if (autoPlay) {
+            this.showToast(`Đang phát "${genreName} (${countryName})" • ${tracks.length} bài hát`);
+        }
     }
 
     playCountryQueue(cObj, isShuffle = false, autoPlay = true, startIndex = 0) {
