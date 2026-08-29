@@ -17,19 +17,6 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
-    signingConfigs {
-        debug {
-            // Default Android debug keystore
-        }
-        release {
-            // Sign release build with debug key for instant direct installation
-            storeFile rootProject.file('app/debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }
-    }
-
     buildTypes {
         release {
             minifyEnabled false
