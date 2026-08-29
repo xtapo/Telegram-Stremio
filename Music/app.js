@@ -468,10 +468,22 @@ class XTAPOMusicApp {
         // 4. Khôi phục bài hát & vị trí đang phát dở (Player State) hoặc mở mặc định
         const restored = this.restorePlayerState();
         if (!restored) {
-            if (this.currentUser && this.favoriteTracks && this.favoriteTracks.length > 0) {
-                this.playFavoritesQueue(0, false, false);
-                if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+            if (this.currentUser) {
+                // Người dùng đã đăng nhập: KHÔNG tải demo Shania Twain
+                if (this.favoriteTracks && this.favoriteTracks.length > 0) {
+                    this.playFavoritesQueue(0, false, false);
+                    if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+                } else if (this.playlists && this.playlists.length > 0 && this.playlists[0].tracks?.length > 0) {
+                    this.playPlaylist(this.playlists[0], 0, false);
+                    if (this.navPlaylists) this.setActiveNavLink(this.navPlaylists);
+                } else if (this.albums && this.albums.length > 0 && !this.albums[0].isDemo) {
+                    this.loadAlbum(0, 0, false);
+                    this.renderAlbumGrid();
+                } else {
+                    this.showEmptyCloudState();
+                }
             } else {
+                // Khách vãng lai (Guest): tải kho demo mẫu
                 this.loadAlbum(0, 0, false);
                 this.renderAlbumGrid();
             }
@@ -592,9 +604,14 @@ class XTAPOMusicApp {
                 if (this.favoriteTracks && this.favoriteTracks.length > 0) {
                     this.playFavoritesQueue(0, false, false);
                     if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
-                } else {
+                } else if (this.playlists && this.playlists.length > 0 && this.playlists[0].tracks?.length > 0) {
+                    this.playPlaylist(this.playlists[0], 0, false);
+                    if (this.navPlaylists) this.setActiveNavLink(this.navPlaylists);
+                } else if (this.albums && this.albums.length > 0 && !this.albums[0].isDemo) {
                     this.loadAlbum(0, 0, false);
                     this.renderAlbumGrid();
+                } else {
+                    this.showEmptyCloudState();
                 }
             } else {
                 this.showToast(data.message || "Đăng nhập thất bại.");
@@ -624,6 +641,8 @@ class XTAPOMusicApp {
                 this.regPassword.value = '';
                 this.regDisplayName.value = '';
                 await this.fetchUserProfile();
+                await this.fetchTelegramAlbums(false);
+                this.showEmptyCloudState();
             } else {
                 this.showToast(data.message || "Đăng ký thất bại.");
             }
@@ -638,8 +657,13 @@ class XTAPOMusicApp {
             this.showToast("Đã đăng xuất.");
             this.currentUser = null;
             this.playlists = [];
+            this.albums = [...ALBUMS_DATABASE];
             this.updateAuthUI(false);
             if (this.playlistGrid) this.playlistGrid.innerHTML = '';
+            localStorage.removeItem('xtapo_music_player_state');
+            localStorage.removeItem('xtapo_music_active_view');
+            this.loadAlbum(0, 0, false);
+            this.renderAlbumGrid();
         } catch (e) { }
     }
 
@@ -938,12 +962,67 @@ class XTAPOMusicApp {
 
     // --- Current Album & Track Getters ---
     get currentAlbum() {
+        if (this.currentUser) {
+            const nonDemoAlbums = (this.albums || []).filter(a => !a.isDemo);
+            if (nonDemoAlbums.length > 0) {
+                return this.albums[this.currentAlbumIndex] || nonDemoAlbums[0];
+            }
+            return {
+                id: 'empty-library',
+                title: 'KHO NHẠC TELEGRAM',
+                artist: this.currentUser.display_name || this.currentUser.username,
+                publisher: 'XTAPO Cloud Streaming',
+                year: '2026',
+                coverUrl: this.currentUser.avatar_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop',
+                tracks: []
+            };
+        }
         return this.albums[this.currentAlbumIndex] || this.albums[0] || ALBUMS_DATABASE[0];
     }
 
     get currentTrack() {
         const album = this.currentAlbum;
+        if (!album || !album.tracks || album.tracks.length === 0) return null;
         return album.tracks[this.currentTrackIndex] || album.tracks[0];
+    }
+
+    showEmptyCloudState() {
+        if (!this.currentUser) return;
+        this.albumTitle.textContent = "KHO NHẠC TELEGRAM";
+        this.artistName.textContent = `Xin chào ${this.currentUser.display_name || this.currentUser.username}`;
+        this.albumCompany.textContent = "XTAPO Cloud Streaming";
+        this.trackCountLabel.textContent = "0 Bài hát";
+        this.totalDurationLabel.textContent = "0 Phút";
+        this.albumYearTag.textContent = "2026";
+        this.badgeAudioSpecs.textContent = "LOSSLESS";
+        this.albumCoverImg.src = this.currentUser.avatar_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop";
+        this.vinylCenterImg.src = this.albumCoverImg.src;
+
+        this.nowPlayingTitle.textContent = "Chưa phát bài hát nào";
+        this.nowPlayingArtist.textContent = this.currentUser.display_name || this.currentUser.username;
+        this.timeTotal.textContent = "--:--";
+        this.timeCurrent.textContent = "0:00";
+        this.updateProgress(0);
+
+        if (this.tracklistEl) {
+            this.tracklistEl.innerHTML = `
+                <li style="padding: 30px 20px; text-align: center; color: var(--text-muted); list-style: none;">
+                    <div style="font-size: 2rem; margin-bottom: 8px;">☁️</div>
+                    <div style="font-weight: 700; color: #fff; font-size: 1rem; margin-bottom: 6px;">Kho nhạc Cloud của bạn đang trống</div>
+                    <div style="font-size: 0.85rem; margin-bottom: 16px; opacity: 0.8;">Kết nối kênh Telegram hoặc tạo Playlist để bắt đầu thưởng thức âm nhạc!</div>
+                    <button id="btnEmptyScanTg" class="nav-btn" style="background: var(--color-primary); color: #fff; border: none; padding: 8px 18px; border-radius: 20px; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        <span>Quét kênh Telegram</span>
+                    </button>
+                </li>
+            `;
+            const scanBtn = document.getElementById('btnEmptyScanTg');
+            if (scanBtn) {
+                scanBtn.addEventListener('click', () => {
+                    this.openModal(this.tgModal);
+                });
+            }
+        }
     }
 
     // --- Fetch Telegram Library from Backend ---
@@ -953,19 +1032,30 @@ class XTAPOMusicApp {
             const res = await fetch('/api/music/albums');
             if (res.ok) {
                 const data = await res.json();
-                if (data && data.status === 'success' && data.albums && data.albums.length > 0) {
-                    this.albums = data.albums;
-                    this.currentAlbumIndex = 0;
-                    this.currentTrackIndex = 0;
-                    if (shouldLoadAlbum) {
-                        this.loadAlbum(0, 0, false);
-                    }
-                    this.renderAlbumGrid();
-                    if (this.albumCountBadge) {
-                        this.albumCountBadge.textContent = `${this.albums.length} Albums (TG)`;
-                    }
-                    if (this.tgStorageLabel) {
-                        this.tgStorageLabel.textContent = '⚡ Telegram Live';
+                if (data && data.status === 'success') {
+                    if (data.albums && data.albums.length > 0) {
+                        this.albums = data.albums;
+                        this.currentAlbumIndex = 0;
+                        this.currentTrackIndex = 0;
+                        if (shouldLoadAlbum) {
+                            this.loadAlbum(0, 0, false);
+                        }
+                        this.renderAlbumGrid();
+                        if (this.albumCountBadge) {
+                            this.albumCountBadge.textContent = `${this.albums.length} Albums (TG)`;
+                        }
+                        if (this.tgStorageLabel) {
+                            this.tgStorageLabel.textContent = '⚡ Telegram Live';
+                        }
+                    } else {
+                        this.albums = [];
+                        if (this.albumCountBadge) {
+                            this.albumCountBadge.textContent = '0 Albums';
+                        }
+                        if (this.tgStorageLabel) {
+                            this.tgStorageLabel.textContent = '⚡ Telegram Cloud';
+                        }
+                        this.renderAlbumGrid();
                     }
                 }
             }
@@ -2500,6 +2590,7 @@ class XTAPOMusicApp {
                 isMuted: !!this.isMuted,
                 isShuffle: !!this.isShuffle,
                 repeatMode: this.repeatMode || 0,
+                isDemo: !!(album && (album.isDemo || String(album.id || '').startsWith('shania-'))),
                 isFavoriteMode: !!(album && album.id === 'favorites-playlist'),
                 activePlaylistId: this.activePlaylistId || null,
                 activeArtist: this.activeArtist || null,
@@ -2523,22 +2614,24 @@ class XTAPOMusicApp {
     findAlbumIndex(state) {
         if (!this.albums || this.albums.length === 0) return 0;
         if (state.albumId) {
-            const idx = this.albums.findIndex(a => (a.id && String(a.id) === String(state.albumId)) || a.title === state.albumId);
+            const idx = this.albums.findIndex(a => (!this.currentUser || !a.isDemo) && ((a.id && String(a.id) === String(state.albumId)) || a.title === state.albumId));
             if (idx !== -1) return idx;
         }
         if (state.albumTitle) {
-            const idx = this.albums.findIndex(a => a.title === state.albumTitle);
+            const idx = this.albums.findIndex(a => (!this.currentUser || !a.isDemo) && a.title === state.albumTitle);
             if (idx !== -1) return idx;
         }
         if (state.trackChatId && state.trackMsgId) {
-            const idx = this.albums.findIndex(a => (a.tracks || []).some(t => {
+            const idx = this.albums.findIndex(a => (!this.currentUser || !a.isDemo) && (a.tracks || []).some(t => {
                 const ident = this.getTrackIdentifiers(t);
                 return ident.chatId === String(state.trackChatId) && ident.msgId === String(state.trackMsgId);
             }));
             if (idx !== -1) return idx;
         }
         if (typeof state.albumIndex === 'number' && state.albumIndex >= 0 && state.albumIndex < this.albums.length) {
-            return state.albumIndex;
+            if (!this.currentUser || !this.albums[state.albumIndex]?.isDemo) {
+                return state.albumIndex;
+            }
         }
         return 0;
     }
@@ -2549,6 +2642,11 @@ class XTAPOMusicApp {
             if (!raw) return false;
             const state = JSON.parse(raw);
             if (!state) return false;
+
+            // Nếu người dùng đã đăng nhập mà state trước đó là demo, bỏ qua không khôi phục demo
+            if (this.currentUser && (state.isDemo || (state.albumId && String(state.albumId).startsWith('shania-')))) {
+                return false;
+            }
 
             // 1. Phục hồi các nút điều khiển
             if (typeof state.volume === 'number' && !isNaN(state.volume)) {
@@ -2924,7 +3022,19 @@ class XTAPOMusicApp {
     renderAlbumGrid() {
         if (!this.albumGrid) return;
         this.albumGrid.innerHTML = '';
-        this.albums.forEach((album, idx) => {
+        const displayAlbums = this.currentUser ? (this.albums || []).filter(a => !a.isDemo) : (this.albums || []);
+        if (displayAlbums.length === 0) {
+            this.albumGrid.innerHTML = `
+                <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 50px 20px;">
+                    <div style="font-size: 2rem; margin-bottom: 8px;">☁️</div>
+                    <div style="font-weight: 700; color: #fff; margin-bottom: 6px;">Chưa có Album nào</div>
+                    <div style="font-size: 0.85rem;">Quét nhạc từ Telegram hoặc tạo Playlist để thêm nhạc vào thư viện của bạn!</div>
+                </div>
+            `;
+            return;
+        }
+
+        displayAlbums.forEach((album, idx) => {
             const card = document.createElement('div');
             card.className = `album-card ${idx === this.currentAlbumIndex ? 'active' : ''}`;
             card.innerHTML = `
@@ -2932,12 +3042,13 @@ class XTAPOMusicApp {
                 <div class="album-card-info">
                     <span class="album-card-title">${album.title}</span>
                     <span class="album-card-artist">${album.artist}</span>
-                    <span class="album-card-year">${album.year} • ${album.tracks.length} Tracks</span>
+                    <span class="album-card-year">${album.year || '2026'} • ${(album.tracks || []).length} Tracks</span>
                 </div>
             `;
 
             card.addEventListener('click', () => {
-                this.loadAlbum(idx, 0, true);
+                const realIdx = this.albums.findIndex(a => a.id === album.id || a.title === album.title);
+                this.loadAlbum(realIdx !== -1 ? realIdx : idx, 0, true);
                 this.closeModal(this.albumModal);
                 this.showToast(`Đã chuyển sang album: ${album.title}`);
                 this.renderAlbumGrid();
