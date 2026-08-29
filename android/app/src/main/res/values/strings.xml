@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">Telegram Music</string>
-    <string name="server_url_dialog_title">Cấu hình Server Telegram-Stremio</string>
+    <string name="app_name">XT-Music</string>
+    <string name="server_url_dialog_title">Cấu hình Server XT-Music</string>
     <string name="server_url_hint">https://your-server-domain.com</string>
     <string name="server_url_desc">Nhập địa chỉ máy chủ Telegram-Stremio (hoặc IP:Port) để kết nối phát nhạc:</string>
     <string name="save_and_connect">Lưu &amp; Kết nối</string>

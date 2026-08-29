@@ -1,6 +1,6 @@
-# 📱 Hướng Dẫn Tải & Cài Đặt Ứng Dụng APK "Telegram Music"
+# 📱 Hướng Dẫn Tải & Cài Đặt Ứng Dụng APK "XT-Music"
 
-Ứng dụng Android **Telegram Music** cho phép bạn nghe nhạc từ máy chủ Telegram-Stremio trực tiếp trên điện thoại, hỗ trợ **phát nhạc ngầm khi tắt màn hình**, hiển thị thông tin bài hát trên màn hình khóa và điều khiển qua thanh thông báo (Notification Media Controls).
+Ứng dụng Android **XT-Music** cho phép bạn nghe nhạc từ máy chủ Telegram-Stremio trực tiếp trên điện thoại, hỗ trợ **phát nhạc ngầm khi tắt màn hình**, hiển thị thông tin bài hát trên màn hình khóa và điều khiển qua thanh thông báo (Notification Media Controls).
 
 ---
 
@@ -12,7 +12,7 @@ Bạn không cần cài đặt phần mềm lập trình nào trên máy tính, 
 Mở terminal hoặc Git client của bạn và chạy lệnh:
 ```bash
 git add .
-git commit -m "Add Android app and APK build workflow"
+git commit -m "Update app to XT-Music"
 git push
 ```
 
@@ -23,16 +23,16 @@ git push
 4. Nhấp vào nút **Run workflow** (hoặc chọn đợt chạy mới nhất do lệnh `git push` kích hoạt).
 5. Chờ khoảng **1 đến 2 phút** để tiến trình build hoàn tất (hiện dấu tích xanh ✅).
 6. Nhấp vào lần chạy vừa hoàn thành, cuộn xuống mục **Artifacts** ở dưới cùng.
-7. Nhấp vào **Telegram-Music-APK** để tải file `.zip` chứa file cài đặt `Telegram-Music.apk`.
+7. Nhấp vào **XT-Music-APK** để tải file `.zip` chứa file cài đặt `XT-Music.apk`.
 
 ---
 
 ## 📲 Cách 2: Cài đặt và Kết nối trên Điện thoại
 
-1. Chuyển file `Telegram-Music.apk` vào điện thoại của bạn (qua Zalo, Telegram, Google Drive hoặc tải trực tiếp bằng trình duyệt trên điện thoại).
+1. Chuyển file `XT-Music.apk` vào điện thoại của bạn (qua Zalo, Telegram, Google Drive hoặc tải trực tiếp bằng trình duyệt trên điện thoại).
 2. Nhấp vào file `.apk` để tiến hành cài đặt:
    - *Nếu điện thoại hỏi "Cho phép cài đặt ứng dụng từ nguồn này", hãy bật "Cho phép" (Allow).*
-3. Mở ứng dụng **Telegram Music**:
+3. Mở ứng dụng **XT-Music**:
    - Lần đầu tiên mở app, một bảng thông báo sẽ xuất hiện yêu cầu **Cấu hình Server**.
    - Nhập URL máy chủ của bạn (Ví dụ: `https://my-server.hf.space` hoặc `http://192.168.1.10:8000`).
    - Bấm **Lưu & Kết nối**.
