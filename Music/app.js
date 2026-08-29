@@ -1331,41 +1331,99 @@ class XTAPOMusicApp {
             this.tracklistModalArtist.textContent = `${album.artist} • ${tracks.length} bài hát`;
         }
 
-        // Render Main Tracklist
+        // Render Main Tracklist with Lazy Infinite Scroll Chunking
         if (this.tracklistEl) {
             this.tracklistEl.innerHTML = '';
-            tracks.forEach((track, idx) => {
-                const li = this.createTrackListItem(track, idx, false);
-                this.tracklistEl.appendChild(li);
-            });
+            this._mainTracklistRenderedCount = 0;
+            const targetInitial = Math.min(tracks.length, Math.max(60, this.currentTrackIndex + 20));
+            this.appendMainTracklistBatch(targetInitial);
+
+            // Bind scroll listener for main tracklist if not already bound
+            if (!this._mainTracklistScrollBound) {
+                this._mainTracklistScrollBound = true;
+                this.tracklistEl.addEventListener('scroll', () => {
+                    const el = this.tracklistEl;
+                    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) {
+                        const albumTracks = (this.currentAlbum && this.currentAlbum.tracks) || [];
+                        if (this._mainTracklistRenderedCount < albumTracks.length) {
+                            this.appendMainTracklistBatch(50);
+                        }
+                    }
+                }, { passive: true });
+            }
         }
 
-        // Render Modal Tracklist (with filter)
+        // Render Modal Tracklist with Progressive Filter Chunking
         if (this.modalTracklistEl) {
             this.modalTracklistEl.innerHTML = '';
             const q = (filterQuery || '').toLowerCase().trim();
-            const filtered = tracks
+            this._modalFilteredTracks = tracks
                 .map((track, idx) => ({ track, idx }))
                 .filter(({ track }) => !q || (track.name || '').toLowerCase().includes(q) || (track.artist || album.artist || '').toLowerCase().includes(q));
 
-            if (filtered.length === 0) {
+            this._modalTracklistRenderedCount = 0;
+
+            if (this._modalFilteredTracks.length === 0) {
                 this.modalTracklistEl.innerHTML = `
                     <div style="text-align:center; padding: 24px; color: var(--text-muted); font-size: 0.85rem;">
                         Không tìm thấy bài hát nào khớp với "${this.escapeHtml(filterQuery)}"
                     </div>
                 `;
             } else {
-                filtered.forEach(({ track, idx }) => {
-                    const li = this.createTrackListItem(track, idx, true);
-                    this.modalTracklistEl.appendChild(li);
-                });
+                this.appendModalTracklistBatch(50);
+            }
+
+            if (!this._modalTracklistScrollBound) {
+                this._modalTracklistScrollBound = true;
+                this.modalTracklistEl.addEventListener('scroll', () => {
+                    const el = this.modalTracklistEl;
+                    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) {
+                        if (this._modalTracklistRenderedCount < this._modalFilteredTracks.length) {
+                            this.appendModalTracklistBatch(50);
+                        }
+                    }
+                }, { passive: true });
             }
         }
     }
 
+    appendMainTracklistBatch(count = 50) {
+        const album = this.currentAlbum;
+        if (!album || !album.tracks || !this.tracklistEl) return;
+        const tracks = album.tracks;
+        const start = this._mainTracklistRenderedCount || 0;
+        const end = Math.min(tracks.length, start + count);
+        if (start >= end) return;
+
+        const frag = document.createDocumentFragment();
+        for (let i = start; i < end; i++) {
+            const li = this.createTrackListItem(tracks[i], i, false);
+            frag.appendChild(li);
+        }
+        this.tracklistEl.appendChild(frag);
+        this._mainTracklistRenderedCount = end;
+    }
+
+    appendModalTracklistBatch(count = 50) {
+        if (!this.modalTracklistEl || !this._modalFilteredTracks) return;
+        const start = this._modalTracklistRenderedCount || 0;
+        const end = Math.min(this._modalFilteredTracks.length, start + count);
+        if (start >= end) return;
+
+        const frag = document.createDocumentFragment();
+        for (let i = start; i < end; i++) {
+            const { track, idx } = this._modalFilteredTracks[i];
+            const li = this.createTrackListItem(track, idx, true);
+            frag.appendChild(li);
+        }
+        this.modalTracklistEl.appendChild(frag);
+        this._modalTracklistRenderedCount = end;
+    }
+
     createTrackListItem(track, idx, isModal = false) {
         const li = document.createElement('li');
-        li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}`;
+        li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}${(!this.isPlaying && idx === this.currentTrackIndex) ? ' paused' : ''}`;
+        li.setAttribute('data-index', idx);
         const trackName = track.name || 'Không có tên';
         li.innerHTML = `
             <div class="track-item-left">
@@ -1463,18 +1521,24 @@ class XTAPOMusicApp {
         if (this.karaokeProgressFill) this.karaokeProgressFill.style.width = '0%';
 
         // Update Active Tracklist Item
-        const items = this.tracklistEl.querySelectorAll('.track-item');
-        items.forEach((item, idx) => {
-            if (idx === this.currentTrackIndex) {
-                item.classList.add('active');
-                if (!this.isPlaying) item.classList.add('paused');
-                else item.classList.remove('paused');
-                // Smooth scroll into view
-                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            } else {
-                item.classList.remove('active', 'paused');
+        if (this.tracklistEl) {
+            if (this.currentTrackIndex >= (this._mainTracklistRenderedCount || 0)) {
+                this.appendMainTracklistBatch(this.currentTrackIndex - (this._mainTracklistRenderedCount || 0) + 20);
             }
-        });
+
+            const prevActive = this.tracklistEl.querySelector('.track-item.active');
+            if (prevActive) {
+                prevActive.classList.remove('active', 'paused');
+            }
+
+            const activeItem = this.tracklistEl.querySelector(`.track-item[data-index="${this.currentTrackIndex}"]`);
+            if (activeItem) {
+                activeItem.classList.add('active');
+                if (!this.isPlaying) activeItem.classList.add('paused');
+                else activeItem.classList.remove('paused');
+                activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
 
         // Set Audio Source
         this.stopAudioSynth();
@@ -2219,7 +2283,11 @@ class XTAPOMusicApp {
         }
         if (this.tracklistModalSearchInput) {
             this.tracklistModalSearchInput.addEventListener('input', (e) => {
-                this.renderTracklist(e.target.value);
+                clearTimeout(this._modalSearchDebounceTimer);
+                const val = e.target.value;
+                this._modalSearchDebounceTimer = setTimeout(() => {
+                    this.renderTracklist(val);
+                }, 150);
             });
         }
 
@@ -2231,7 +2299,15 @@ class XTAPOMusicApp {
             });
         }
         if (this.closeSearchModal) this.closeSearchModal.addEventListener('click', () => this.closeModal(this.searchModal));
-        if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+        if (this.searchInput) {
+            this.searchInput.addEventListener('input', (e) => {
+                clearTimeout(this._searchDebounceTimer);
+                const val = e.target.value;
+                this._searchDebounceTimer = setTimeout(() => {
+                    this.handleSearch(val);
+                }, 150);
+            });
+        }
 
         // File / Metadata Drawer
         const openDrawer = () => this.metaDrawer && this.metaDrawer.classList.add('open');
@@ -3039,12 +3115,17 @@ class XTAPOMusicApp {
         this.activePlaylistId = null;
 
         const tracks = [];
+        const seenKeys = new Set();
         let coverUrl = '';
+        const targetGenreLow = genreName.toLowerCase().trim();
+
         (this.albums || []).forEach(album => {
             (album.tracks || []).forEach(track => {
-                const g = (track.genre || 'Khác').trim() || 'Khác';
-                if (g.toLowerCase() === genreName.toLowerCase()) {
-                    if (!tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                const g = ((track.genre || 'Khác').trim() || 'Khác').toLowerCase();
+                if (g === targetGenreLow) {
+                    const key = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
+                    if (!seenKeys.has(key)) {
+                        seenKeys.add(key);
                         tracks.push(track);
                         if (!coverUrl) coverUrl = track.coverUrl || album.coverUrl;
                     }
@@ -3088,13 +3169,18 @@ class XTAPOMusicApp {
         this.activePlaylistId = null;
 
         const tracks = [];
+        const seenKeys = new Set();
         let coverUrl = '';
+        const targetCountryLow = countryName.toLowerCase().trim();
+
         (this.albums || []).forEach(album => {
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
                 const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
-                if (c.toLowerCase() === countryName.toLowerCase() || (countryName === 'Quốc Tế' && !['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c))) {
-                    if (!tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                if (c.toLowerCase() === targetCountryLow || (countryName === 'Quốc Tế' && !['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c))) {
+                    const key = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
+                    if (!seenKeys.has(key)) {
+                        seenKeys.add(key);
                         tracks.push(track);
                         if (!coverUrl) coverUrl = track.coverUrl || album.coverUrl;
                     }
@@ -3192,6 +3278,7 @@ class XTAPOMusicApp {
 
     updateDrawerInfo() {
         const album = this.currentAlbum;
+        if (!album) return;
         if (this.drawerAlbumTitle) this.drawerAlbumTitle.textContent = `${album.artist} - ${album.title}`;
         if (this.drawerSpecFormat) this.drawerSpecFormat.textContent = album.format;
         if (this.drawerSpecSize) this.drawerSpecSize.textContent = album.totalSize;
@@ -3200,13 +3287,42 @@ class XTAPOMusicApp {
 
         if (!this.drawerFileList) return;
         this.drawerFileList.innerHTML = '';
-        album.tracks.forEach((track, idx) => {
+        this._drawerRenderedCount = 0;
+        
+        // Lazy load initial 40 items only
+        this.appendDrawerFileListBatch(40);
+
+        if (!this._drawerScrollBound) {
+            this._drawerScrollBound = true;
+            this.drawerFileList.addEventListener('scroll', () => {
+                const el = this.drawerFileList;
+                if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) {
+                    const albumTracks = (this.currentAlbum && this.currentAlbum.tracks) || [];
+                    if (this._drawerRenderedCount < albumTracks.length) {
+                        this.appendDrawerFileListBatch(40);
+                    }
+                }
+            }, { passive: true });
+        }
+    }
+
+    appendDrawerFileListBatch(count = 40) {
+        const album = this.currentAlbum;
+        if (!album || !album.tracks || !this.drawerFileList) return;
+        const tracks = album.tracks;
+        const start = this._drawerRenderedCount || 0;
+        const end = Math.min(tracks.length, start + count);
+        if (start >= end) return;
+
+        const frag = document.createDocumentFragment();
+        for (let idx = start; idx < end; idx++) {
+            const track = tracks[idx];
             const row = document.createElement('div');
             row.className = 'file-row';
             row.innerHTML = `
                 <div class="file-info">
-                    <div class="file-title">${idx + 1}. ${track.name}</div>
-                    <div class="file-meta">${track.artist || album.artist} • ${track.format || album.format || 'Lossless'} • ${track.duration || ''}</div>
+                    <div class="file-title">${idx + 1}. ${this.escapeHtml(track.name || 'Không có tên')}</div>
+                    <div class="file-meta">${this.escapeHtml(track.artist || album.artist || '')} • ${this.escapeHtml(track.format || album.format || 'Lossless')} • ${track.duration || ''}</div>
                 </div>
                 <div class="file-actions">
                     <button class="file-action-btn download-btn">Phát Ngay</button>
@@ -3231,8 +3347,10 @@ class XTAPOMusicApp {
                 });
             }
 
-            this.drawerFileList.appendChild(row);
-        });
+            frag.appendChild(row);
+        }
+        this.drawerFileList.appendChild(frag);
+        this._drawerRenderedCount = end;
     }
 
     handleSearch(query) {
@@ -3241,32 +3359,42 @@ class XTAPOMusicApp {
             return;
         }
 
-        const q = query.toLowerCase();
+        const q = query.toLowerCase().trim();
         let matches = [];
 
-        this.albums.forEach((album, albumIdx) => {
-            album.tracks.forEach((track, trackIdx) => {
-                if (track.name.toLowerCase().includes(q) || album.artist.toLowerCase().includes(q) || album.title.toLowerCase().includes(q)) {
+        for (let albumIdx = 0; albumIdx < this.albums.length; albumIdx++) {
+            const album = this.albums[albumIdx];
+            const artistLow = (album.artist || '').toLowerCase();
+            const titleLow = (album.title || '').toLowerCase();
+            const tracks = album.tracks || [];
+            for (let trackIdx = 0; trackIdx < tracks.length; trackIdx++) {
+                const track = tracks[trackIdx];
+                const trackNameLow = (track.name || '').toLowerCase();
+                const trackArtistLow = (track.artist || '').toLowerCase();
+                if (trackNameLow.includes(q) || trackArtistLow.includes(q) || artistLow.includes(q) || titleLow.includes(q)) {
                     matches.push({ album, albumIdx, track, trackIdx });
+                    if (matches.length >= 100) break;
                 }
-            });
-        });
+            }
+            if (matches.length >= 100) break;
+        }
 
         if (matches.length === 0) {
-            this.searchResults.innerHTML = `<div class="search-empty">Không tìm thấy bài hát nào khớp với "${query}"</div>`;
+            this.searchResults.innerHTML = `<div class="search-empty">Không tìm thấy bài hát nào khớp với "${this.escapeHtml(query)}"</div>`;
             return;
         }
 
         this.searchResults.innerHTML = '';
+        const frag = document.createDocumentFragment();
         matches.forEach(item => {
             const el = document.createElement('div');
             el.className = 'search-item';
             el.innerHTML = `
                 <div>
-                    <div style="font-weight:600; color:#fff;">${item.track.name}</div>
-                    <div style="font-size:0.78rem; color:rgba(255,255,255,0.5);">${item.album.artist} • ${item.album.title}</div>
+                    <div style="font-weight:600; color:#fff;">${this.escapeHtml(item.track.name || '')}</div>
+                    <div style="font-size:0.78rem; color:rgba(255,255,255,0.5);">${this.escapeHtml(item.album.artist || '')} • ${this.escapeHtml(item.album.title || '')}</div>
                 </div>
-                <span style="color:var(--accent-gold); font-size:0.8rem;">${item.track.duration}</span>
+                <span style="color:var(--accent-gold); font-size:0.8rem;">${item.track.duration || ''}</span>
             `;
 
             el.addEventListener('click', () => {
@@ -3275,8 +3403,9 @@ class XTAPOMusicApp {
                 this.showToast(`Đang phát: ${item.track.name}`);
             });
 
-            this.searchResults.appendChild(el);
+            frag.appendChild(el);
         });
+        this.searchResults.appendChild(frag);
     }
 
     // --- Keyboard Shortcuts ---
@@ -3694,11 +3823,12 @@ class XTAPOMusicApp {
 
                 if (!artistMap.has(trackArtist)) {
                     // Check cached metadata
-                    const cached = this.artistCacheMap.get(trackArtist.toLowerCase().trim());
+                    const cached = this.artistCacheMap ? this.artistCacheMap.get(trackArtist.toLowerCase().trim()) : null;
                     const avatarUrl = (cached && cached.avatar_url) ? cached.avatar_url : (track.coverUrl || album.coverUrl);
                     const bannerUrl = (cached && cached.banner_url) ? cached.banner_url : avatarUrl;
                     const bio = cached ? (cached.bio || '') : '';
                     const genres = cached ? (cached.genres || []) : (track.genre ? [track.genre] : []);
+                    const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
 
                     artistMap.set(trackArtist, {
                         name: trackArtist,
@@ -3708,13 +3838,16 @@ class XTAPOMusicApp {
                         genres: genres,
                         countries: new Set([validCountry]),
                         albums: new Map([[album.id || album.title, album]]),
+                        trackKeys: new Set([trackKey]),
                         tracks: [track]
                     });
                 } else {
                     const existing = artistMap.get(trackArtist);
                     existing.countries.add(validCountry);
                     existing.albums.set(album.id || album.title, album);
-                    if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                    const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
+                    if (!existing.trackKeys.has(trackKey)) {
+                        existing.trackKeys.add(trackKey);
                         existing.tracks.push(track);
                     }
                 }
@@ -4072,15 +4205,18 @@ class XTAPOMusicApp {
                     return;
                 }
 
+                const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
                 if (!genreMap.has(g)) {
                     genreMap.set(g, {
                         genre: g,
                         tracks: [track],
+                        trackKeys: new Set([trackKey]),
                         coverUrl: track.coverUrl || album.coverUrl
                     });
                 } else {
                     const existing = genreMap.get(g);
-                    if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                    if (!existing.trackKeys.has(trackKey)) {
+                        existing.trackKeys.add(trackKey);
                         existing.tracks.push(track);
                     }
                 }
@@ -4251,6 +4387,7 @@ class XTAPOMusicApp {
             countryMap.set(cName, {
                 country: cName,
                 tracks: [],
+                trackKeys: new Set(),
                 artists: new Set(),
                 albums: new Set(),
                 coverUrl: countryMeta[cName].defaultCover
@@ -4264,7 +4401,9 @@ class XTAPOMusicApp {
                 const key = countryMeta[c] ? c : 'Quốc Tế';
                 const entry = countryMap.get(key);
                 if (entry) {
-                    if (!entry.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                    const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
+                    if (!entry.trackKeys.has(trackKey)) {
+                        entry.trackKeys.add(trackKey);
                         entry.tracks.push(track);
                         if (track.artist) entry.artists.add(track.artist.trim());
                         entry.albums.add(album.title);
@@ -4483,15 +4622,18 @@ class XTAPOMusicApp {
         const genreMap = new Map();
         (cObj.tracks || []).forEach(track => {
             const g = (track.genre || 'Khác').trim() || 'Khác';
+            const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
             if (!genreMap.has(g)) {
                 genreMap.set(g, {
                     genre: g,
                     tracks: [track],
+                    trackKeys: new Set([trackKey]),
                     coverUrl: track.coverUrl || cObj.coverUrl
                 });
             } else {
                 const existing = genreMap.get(g);
-                if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                if (!existing.trackKeys.has(trackKey)) {
+                    existing.trackKeys.add(trackKey);
                     existing.tracks.push(track);
                 }
             }
@@ -4567,6 +4709,7 @@ class XTAPOMusicApp {
             const trackArtist = (track.artist || 'Unknown Artist').trim();
             if (!trackArtist || trackArtist.toLowerCase() === 'unknown') return;
 
+            const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
             if (!artistMap.has(trackArtist)) {
                 const cached = this.artistCacheMap ? this.artistCacheMap.get(trackArtist.toLowerCase().trim()) : null;
                 const avatarUrl = (cached && cached.avatar_url) ? cached.avatar_url : (track.coverUrl || cObj.coverUrl);
@@ -4574,11 +4717,13 @@ class XTAPOMusicApp {
                 artistMap.set(trackArtist, {
                     name: trackArtist,
                     coverUrl: avatarUrl,
+                    trackKeys: new Set([trackKey]),
                     tracks: [track]
                 });
             } else {
                 const existing = artistMap.get(trackArtist);
-                if (!existing.tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                if (!existing.trackKeys.has(trackKey)) {
+                    existing.trackKeys.add(trackKey);
                     existing.tracks.push(track);
                 }
             }
@@ -4677,7 +4822,10 @@ class XTAPOMusicApp {
         this.activePlaylistId = null;
 
         const tracks = [];
+        const seenKeys = new Set();
         let coverUrl = '';
+        const targetGenreLow = genreName.toLowerCase().trim();
+
         (this.albums || []).forEach(album => {
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
@@ -4685,9 +4833,11 @@ class XTAPOMusicApp {
                 const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
                 if (countryName && countryName !== 'all' && validCountry !== countryName) return;
 
-                const g = (track.genre || 'Khác').trim() || 'Khác';
-                if (g.toLowerCase() === genreName.toLowerCase()) {
-                    if (!tracks.some(t => (t.msgId && t.msgId === track.msgId) || t.name === track.name)) {
+                const g = ((track.genre || 'Khác').trim() || 'Khác').toLowerCase();
+                if (g === targetGenreLow) {
+                    const key = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
+                    if (!seenKeys.has(key)) {
+                        seenKeys.add(key);
                         tracks.push(track);
                         if (!coverUrl) coverUrl = track.coverUrl || album.coverUrl;
                     }
