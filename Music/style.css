@@ -2137,13 +2137,13 @@ html, body {
         overflow: visible;
     }
     
-    /* Tắt hoàn toàn xoay đĩa than trên Mobile để máy mát và siêu tiết kiệm pin */
+    /* Hiện đĩa than mở sẵn ra cạnh album trên Mobile và không xoay để máy mát */
     .vinyl-stage.is-playing .vinyl-disc,
     .vinyl-stage.is-paused .vinyl-disc,
     .vinyl-stage .vinyl-disc,
     .vinyl-disc {
         animation: none !important;
-        transform: translateX(var(--vinyl-retract, 18px)) rotate(0deg) !important;
+        transform: translateX(var(--vinyl-expand, 80px)) rotate(0deg) !important;
     }
 
     .vinyl-disc {

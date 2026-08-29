@@ -456,16 +456,14 @@ class XTAPOMusicApp {
         this.setupVisualizer();
         this.setupKeyboardShortcuts();
         
-        // 1. Kiểm tra phiên đăng nhập và danh sách yêu thích
-        await this.fetchUserProfile();
+        // 1. Tải song song thông tin User, Thư viện Albums Telegram và Metadata nghệ sĩ
+        await Promise.all([
+            this.fetchUserProfile(),
+            this.fetchTelegramAlbums(false),
+            this.fetchArtistMetadata()
+        ]);
 
-        // 2. Tải kho nhạc Telegram ngầm (không gọi loadAlbum đè trước)
-        await this.fetchTelegramAlbums(false);
-
-        // 3. Tải metadata nghệ sĩ
-        await this.fetchArtistMetadata();
-
-        // 4. Khôi phục bài hát & vị trí đang phát dở (Player State) hoặc mở mặc định
+        // 2. Khôi phục bài hát & vị trí đang phát dở (Player State) hoặc mở mặc định
         const restored = this.restorePlayerState();
         if (!restored) {
             if (this.currentUser) {
@@ -1027,7 +1025,6 @@ class XTAPOMusicApp {
 
     // --- Fetch Telegram Library from Backend ---
     async fetchTelegramAlbums(shouldLoadAlbum = true) {
-        if (!this.currentUser) return; // Do not fetch Telecloud music for guests
         try {
             const res = await fetch('/api/music/albums');
             if (res.ok) {

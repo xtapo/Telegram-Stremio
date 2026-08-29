@@ -672,37 +672,49 @@ async def _db_save_channels(channels: list):
         LOGGER.warning(f"[MUSIC DB] Could not save channels to MongoDB: {e}")
 
 
-async def _db_load_library() -> list:
+_IN_MEMORY_LIBRARY_CACHE = None
+
+async def _db_load_library(force_reload: bool = False) -> list:
+    global _IN_MEMORY_LIBRARY_CACHE
+    if not force_reload and _IN_MEMORY_LIBRARY_CACHE is not None:
+        return _IN_MEMORY_LIBRARY_CACHE
+
+    # Đọc từ file cache cục bộ trước để phản hồi tức thì
+    if os.path.exists(LIBRARY_CACHE_FILE):
+        try:
+            with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    _IN_MEMORY_LIBRARY_CACHE = data
+                    return data
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Failed to load library cache file: {e}")
+
     try:
         if db and hasattr(db, "dbs") and "tracking" in db.dbs:
             doc = await db.dbs["tracking"]["music_library"].find_one({"_id": "telegram_music_library"})
             if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
+                _IN_MEMORY_LIBRARY_CACHE = doc["albums"]
                 try:
                     os.makedirs(MUSIC_DIR, exist_ok=True)
                     with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                        json.dump(doc["albums"], f, ensure_ascii=False, indent=2)
+                        json.dump(doc["albums"], f, ensure_ascii=False)
                 except Exception:
                     pass
                 return doc["albums"]
     except Exception as e:
         LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
 
-    if os.path.exists(LIBRARY_CACHE_FILE):
-        try:
-            with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-        except Exception as e:
-            LOGGER.error(f"[MUSIC] Failed to load library cache file: {e}")
     return []
 
 
 async def _db_save_library(albums: list):
+    global _IN_MEMORY_LIBRARY_CACHE
+    _IN_MEMORY_LIBRARY_CACHE = albums
     try:
         os.makedirs(MUSIC_DIR, exist_ok=True)
         with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(albums, f, ensure_ascii=False, indent=2)
+            json.dump(albums, f, ensure_ascii=False)
     except Exception as e:
         LOGGER.error(f"[MUSIC] Failed to write library cache file: {e}")
 
@@ -732,9 +744,10 @@ def _load_playlists_file() -> list:
                 data = json.load(f)
                 if isinstance(data, list):
                     return data
-        except Exception as e:
-            LOGGER.error(f"[MUSIC] Error reading playlists file: {e}")
+        except Exception:
+            pass
     return []
+
 
 def _save_playlists_file(playlists: list):
     try:
@@ -742,130 +755,14 @@ def _save_playlists_file(playlists: list):
         with open(PLAYLISTS_FILE, "w", encoding="utf-8") as f:
             json.dump(playlists, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        LOGGER.error(f"[MUSIC] Error saving playlists file: {e}")
-
-async def _db_load_playlists() -> list:
-    try:
-        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
-            cursor = db.dbs["tracking"]["music_playlists"].find()
-            docs = [d async for d in cursor]
-            if docs:
-                playlists = [{"id": str(d.get("id") or d.get("_id")), "name": d.get("name", ""), "tracks": d.get("tracks", []), "created_at": d.get("created_at", time.time())} for d in docs]
-                _save_playlists_file(playlists)
-                return playlists
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC DB] Could not read playlists from MongoDB: {e}")
-    return _load_playlists_file()
-
-async def _db_save_playlists(playlists: list):
-    _save_playlists_file(playlists)
-    try:
-        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
-            coll = db.dbs["tracking"]["music_playlists"]
-            curr_ids = [str(p.get("id")) for p in playlists]
-            if curr_ids:
-                await coll.delete_many({"_id": {"$nin": curr_ids}})
-                for p in playlists:
-                    p_id = str(p.get("id"))
-                    await coll.update_one(
-                        {"_id": p_id},
-                        {"$set": {"_id": p_id, "id": p_id, "name": p.get("name", ""), "tracks": p.get("tracks", []), "created_at": p.get("created_at", time.time())}},
-                        upsert=True
-                    )
-            else:
-                await coll.delete_many({})
-            LOGGER.info(f"[MUSIC DB] Đã đồng bộ {len(playlists)} playlists lên MongoDB.")
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC DB] Could not save playlists to MongoDB: {e}")
+        LOGGER.error(f"[MUSIC] Failed to save playlists: {e}")
 
 
 # ── 2. Lấy danh sách Albums & Tracks từ MongoDB / Telegram Cache ───────────────
 @router.get("/api/music/albums")
 async def get_music_albums():
     data = await _db_load_library()
-    if data:
-        try:
-            changed = False
-            for alb in data:
-                tracks = alb.get("tracks", [])
-                if tracks:
-                    for t in tracks:
-                        t["album"] = alb.get("title", "")
-                        
-                        # Auto-fix missing duration
-                        cur_dur = t.get("duration", "")
-                        if not cur_dur or cur_dur in ["--:--", "0:00", ""]:
-                            sz_str = t.get("size", "")
-                            sz_bytes = _parse_size_str(sz_str)
-                            fmt = t.get("format", "FLAC")
-                            if sz_bytes > 0:
-                                est_kbps = 900 if ("FLAC" in fmt or "24-Bit" in fmt or "DSD" in fmt or "WAV" in fmt) else 320
-                                est_sec = max(45, int(sz_bytes / (est_kbps * 125)))
-                                t["duration"] = _format_duration(est_sec)
-                                changed = True
-                            else:
-                                t["duration"] = "3:45"
-                                changed = True
-
-                        # Detect & Auto-Upgrade Genre
-                        detected_genre = detect_genre_from_track_info(t)
-                        if not t.get("genre") or t.get("genre") == "Khác" or t.get("genre") != detected_genre:
-                            t["genre"] = detected_genre
-                            changed = True
-
-                        # Detect Country
-                        detected_country = detect_country_from_track_info(t)
-                        if not t.get("country") or t.get("country") in ["Quốc Tế", ""]:
-                            t["country"] = detected_country
-                            changed = True
-
-                        # Detect Year
-                        if not t.get("year") or str(t.get("year")) in ["2026", ""]:
-                            t["year"] = detect_year_from_track_info(t)
-                            changed = True
-
-                        current_fmt = t.get("format", "")
-                        if not current_fmt or current_fmt in ["FLAC Hi-Res", "MP3 Master", "Hi-Res", "AUDIO Hi-Res", "AUDIO Master"]:
-                            fmt, tier, br = detect_audio_quality_from_track_info(t)
-                            t["format"] = fmt
-                            t["qualityTier"] = tier
-                            t["bitrate"] = br
-                            changed = True
-
-                    deduped_tracks, removed = deduplicate_tracks(tracks)
-                    if removed > 0:
-                        for idx, t in enumerate(deduped_tracks, 1):
-                            t["id"] = idx
-                        alb["tracks"] = deduped_tracks
-                        changed = True
-
-                track_formats = [t.get("format", "") for t in alb.get("tracks", [])]
-                if track_formats and (not alb.get("format") or alb.get("format") in ["FLAC Hi-Res", "MP3 Master", "Hi-Res"]):
-                    hires_fmt = next((f for f in track_formats if "Hi-Res" in f or "24-Bit" in f or "DSD" in f), track_formats[0])
-                    alb["format"] = hires_fmt
-                    changed = True
-
-                # Determine Album Country
-                if not alb.get("country"):
-                    album_country = detect_country_from_track_info({"name": alb.get("title", ""), "artist": alb.get("artist", ""), "album": alb.get("title", "")})
-                    alb["country"] = album_country
-                    changed = True
-
-                # Determine Album Year
-                if not alb.get("year") or str(alb.get("year")) in ["2026", ""]:
-                    track_years = [t.get("year") for t in alb.get("tracks", []) if t.get("year") and str(t.get("year")) not in ["2026", ""]]
-                    if track_years:
-                        alb["year"] = track_years[0]
-                    else:
-                        alb["year"] = detect_year_from_track_info({"name": alb.get("title", ""), "artist": alb.get("artist", ""), "album": alb.get("title", "")})
-                    changed = True
-
-            if changed:
-                await _db_save_library(data)
-
-            return JSONResponse(content={"status": "success", "source": "database", "albums": data})
-        except Exception as e:
-            LOGGER.error(f"[MUSIC] Failed to process library data: {e}")
+    return JSONResponse(content={"status": "success", "source": "database", "albums": data or []})
 
 @router.post("/api/music/reclassify-genres")
 async def reclassify_library_genres():
