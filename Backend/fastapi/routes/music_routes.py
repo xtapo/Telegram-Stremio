@@ -2219,6 +2219,8 @@ try:
 except Exception:
     pass
 
+_COVER_SEMAPHORE = asyncio.Semaphore(2)
+
 
 # ── 5. Lấy Ảnh Cover / Thumbnail từ Telegram Message ──────────────────────────
 @router.get("/api/music/cover/{chat_id}/{msg_id}")
@@ -2228,47 +2230,60 @@ async def get_music_cover(chat_id: int, msg_id: int):
 
     # 1. Kiểm tra cache file ảnh cục bộ trên đĩa (< 1ms)
     if os.path.exists(local_cover_path) and os.path.getsize(local_cover_path) > 0:
-        return FileResponse(local_cover_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
+        return FileResponse(local_cover_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800, immutable"})
 
     # 2. Kiểm tra cache RAM
     now = time.time()
     if cache_key in _cover_cache:
         data, mime, exp = _cover_cache[cache_key]
         if now < exp:
-            return PlainResponse(content=data, media_type=mime, headers={"Cache-Control": "public, max-age=604800"})
+            return PlainResponse(content=data, media_type=mime, headers={"Cache-Control": "public, max-age=604800, immutable"})
 
-    # 3. Ưu tiên Userbot tải thumbnail (Userbot không bị giới hạn MTProto cross-DC AUTH_BYTES_INVALID như Bot Tokens)
-    clients_to_try = []
-    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
-        clients_to_try.append(botmod.Userbot)
-    if StreamBot and StreamBot not in clients_to_try:
-        clients_to_try.append(StreamBot)
-
+    # 3. Sử dụng Semaphore giới hạn tối đa 2 tác vụ tải ảnh đồng thời để KHÔNG BAO GIỜ làm nghẽn kết nối MTProto nghe nhạc
     data = None
-    for cl in clients_to_try:
-        try:
-            msg = await cl.get_messages(chat_id, msg_id)
-            if not msg:
-                continue
-            media = getattr(msg, "audio", None) or getattr(msg, "document", None) or getattr(msg, "video", None)
-            thumbs = getattr(media, "thumbs", None) if media else None
-            if thumbs and len(thumbs) > 0:
-                buf = await cl.download_media(thumbs[-1], in_memory=True)
-                if buf and hasattr(buf, "getvalue"):
-                    data = buf.getvalue()
+    try:
+        async with _COVER_SEMAPHORE:
+            # Kiểm tra lại cache đĩa trong lock đề phòng request khác vừa tải xong
+            if os.path.exists(local_cover_path) and os.path.getsize(local_cover_path) > 0:
+                return FileResponse(local_cover_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800, immutable"})
+
+            clients_to_try = []
+            if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+                clients_to_try.append(botmod.Userbot)
+            if StreamBot and StreamBot not in clients_to_try:
+                clients_to_try.append(StreamBot)
+
+            for cl in clients_to_try:
+                try:
+                    async def _fetch_thumb():
+                        msg = await cl.get_messages(chat_id, msg_id)
+                        if not msg:
+                            return None
+                        media = getattr(msg, "audio", None) or getattr(msg, "document", None) or getattr(msg, "video", None)
+                        thumbs = getattr(media, "thumbs", None) if media else None
+                        if thumbs and len(thumbs) > 0:
+                            buf = await cl.download_media(thumbs[-1], in_memory=True)
+                            if buf and hasattr(buf, "getvalue"):
+                                return buf.getvalue()
+                        return None
+
+                    # Timeout tối đa 3.5s để giải phóng connection ngay nếu Telegram phản hồi chậm
+                    data = await asyncio.wait_for(_fetch_thumb(), timeout=3.5)
                     if data and len(data) > 0:
                         try:
-                            with open(local_cover_path, "wb") as f:
-                                f.write(data)
+                            loop = asyncio.get_running_loop()
+                            await loop.run_in_executor(None, lambda: open(local_cover_path, "wb").write(data))
                         except Exception:
                             pass
                         break
-        except Exception:
-            continue
+                except Exception:
+                    continue
+    except Exception:
+        pass
 
     if data:
         _cover_cache[cache_key] = (data, "image/jpeg", now + _COVER_CACHE_TTL)
-        return PlainResponse(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
+        return PlainResponse(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800, immutable"})
 
     # Nếu không có thumbnail hoặc tải lỗi, cache SVG mặc định trong 24h để không spam Telegram
     _cover_cache[cache_key] = (DEFAULT_COVER_SVG, "image/svg+xml", now + 86400)

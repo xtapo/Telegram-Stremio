@@ -879,7 +879,7 @@ class XTAPOMusicApp {
             row.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1;">
                     <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); width: 22px; text-align: center;">${index + 1}</span>
-                    <img src="${track.coverUrl}" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex-shrink: 0;" alt="Cover">
+                    <img src="${track.coverUrl}" loading="lazy" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex-shrink: 0;" alt="Cover">
                     <div style="min-width: 0; flex: 1;">
                         <div style="font-size: 0.85rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.name)}</div>
                         <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.artist)} • <span style="color: var(--accent-gold);">${track.format}</span></div>
@@ -3170,7 +3170,7 @@ class XTAPOMusicApp {
             const card = document.createElement('div');
             card.className = `album-card ${idx === this.currentAlbumIndex ? 'active' : ''}`;
             card.innerHTML = `
-                <img src="${album.coverUrl}" class="album-card-img" alt="${album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                <img src="${album.coverUrl}" loading="lazy" class="album-card-img" alt="${album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
                 <div class="album-card-info">
                     <span class="album-card-title">${album.title}</span>
                     <span class="album-card-artist">${album.artist}</span>
@@ -3786,7 +3786,7 @@ class XTAPOMusicApp {
             const card = document.createElement('div');
             card.className = 'artist-card-item';
             card.innerHTML = `
-                <img src="${art.coverUrl}" class="artist-avatar-img" alt="${this.escapeHtml(art.name)}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                <img src="${art.coverUrl}" loading="lazy" class="artist-avatar-img" alt="${this.escapeHtml(art.name)}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
                 <div class="artist-card-info">
                     <h4>${this.escapeHtml(art.name)}</h4>
                     <p>${art.tracks.length} bài hát • ${art.albums.size} album</p>
@@ -3852,7 +3852,7 @@ class XTAPOMusicApp {
                 const albCard = document.createElement('div');
                 albCard.style.cssText = 'background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: 12px; padding: 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;';
                 albCard.innerHTML = `
-                    <img src="${album.coverUrl}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover;" alt="Album Cover">
+                    <img src="${album.coverUrl}" loading="lazy" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover;" alt="Album Cover">
                     <div style="min-width: 0; flex: 1;">
                         <div style="font-weight: 700; font-size: 0.8rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(album.title)}</div>
                         <div style="font-size: 0.75rem; color: var(--text-muted);">${album.tracks ? album.tracks.length : 0} bài • ${album.year || '2026'}</div>
@@ -3881,7 +3881,7 @@ class XTAPOMusicApp {
                 trItem.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
                         <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); width: 20px; text-align: center;">${idx + 1}</span>
-                        <img src="${track.coverUrl || art.coverUrl}" style="width: 36px; height: 36px; border-radius: 8px; object-fit: cover;" alt="Cover">
+                        <img src="${track.coverUrl || art.coverUrl}" loading="lazy" style="width: 36px; height: 36px; border-radius: 8px; object-fit: cover;" alt="Cover">
                         <div style="min-width: 0;">
                             <div style="font-size: 0.85rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.name)}</div>
                             <div style="font-size: 0.75rem; color: var(--text-muted);">${track.albumName || 'Single'}</div>
@@ -4605,7 +4605,7 @@ class XTAPOMusicApp {
             const card = document.createElement('div');
             card.className = 'artist-card-item';
             card.innerHTML = `
-                <img src="${art.coverUrl}" class="artist-avatar-img" alt="${this.escapeHtml(art.name)}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                <img src="${art.coverUrl}" loading="lazy" class="artist-avatar-img" alt="${this.escapeHtml(art.name)}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
                 <div class="artist-card-info">
                     <h4>${this.escapeHtml(art.name)}</h4>
                     <p>${art.tracks.length} bài hát (${this.escapeHtml(cObj.country)})</p>
@@ -4643,7 +4643,7 @@ class XTAPOMusicApp {
             trItem.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
                     <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); width: 24px; text-align: center;">${idx + 1}</span>
-                    <img src="${track.coverUrl || cObj.coverUrl}" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover;" alt="Cover">
+                    <img src="${track.coverUrl || cObj.coverUrl}" loading="lazy" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover;" alt="Cover">
                     <div style="min-width: 0;">
                         <div style="font-size: 0.85rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.name)}</div>
                         <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.artist || 'Unknown')} • ${this.escapeHtml(track.genre || 'Khác')}</div>
