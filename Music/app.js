@@ -986,20 +986,21 @@ class XTAPOMusicApp {
 
     showEmptyCloudState() {
         if (!this.currentUser) return;
-        this.albumTitle.textContent = "KHO NHẠC TELEGRAM";
-        this.artistName.textContent = `Xin chào ${this.currentUser.display_name || this.currentUser.username}`;
-        this.albumCompany.textContent = "XTAPO Cloud Streaming";
-        this.trackCountLabel.textContent = "0 Bài hát";
-        this.totalDurationLabel.textContent = "0 Phút";
-        this.albumYearTag.textContent = "2026";
-        this.badgeAudioSpecs.textContent = "LOSSLESS";
-        this.albumCoverImg.src = this.currentUser.avatar_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop";
-        this.vinylCenterImg.src = this.albumCoverImg.src;
+        if (this.albumTitle) this.albumTitle.textContent = "KHO NHẠC TELEGRAM";
+        if (this.artistName) this.artistName.textContent = `Xin chào ${this.currentUser.display_name || this.currentUser.username}`;
+        if (this.albumCompany) this.albumCompany.textContent = "XTAPO Cloud Streaming";
+        if (this.trackCountLabel) this.trackCountLabel.textContent = "0 Bài hát";
+        if (this.totalDurationLabel) this.totalDurationLabel.textContent = "0 Phút";
+        if (this.albumYearTag) this.albumYearTag.textContent = "2026";
+        if (this.badgeAudioSpecs) this.badgeAudioSpecs.textContent = "LOSSLESS";
+        const fallbackAvatar = this.currentUser.avatar_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop";
+        if (this.albumCoverImg) this.albumCoverImg.src = fallbackAvatar;
+        if (this.vinylCenterImg) this.vinylCenterImg.src = fallbackAvatar;
 
-        this.nowPlayingTitle.textContent = "Chưa phát bài hát nào";
-        this.nowPlayingArtist.textContent = this.currentUser.display_name || this.currentUser.username;
-        this.timeTotal.textContent = "--:--";
-        this.timeCurrent.textContent = "0:00";
+        if (this.nowPlayingTitle) this.nowPlayingTitle.textContent = "Chưa phát bài hát nào";
+        if (this.nowPlayingArtist) this.nowPlayingArtist.textContent = this.currentUser.display_name || this.currentUser.username;
+        if (this.timeTotal) this.timeTotal.textContent = "--:--";
+        if (this.timeCurrent) this.timeCurrent.textContent = "0:00";
         this.updateProgress(0);
 
         if (this.tracklistEl) {
@@ -1236,13 +1237,13 @@ class XTAPOMusicApp {
         }
 
         // Update Text Info
-        this.albumTitle.textContent = album.title;
-        this.artistName.textContent = album.artist;
-        this.albumCompany.textContent = album.publisher;
-        this.trackCountLabel.textContent = `${album.tracks.length} Songs`;
+        if (this.albumTitle) this.albumTitle.textContent = album.title || '';
+        if (this.artistName) this.artistName.textContent = album.artist || '';
+        if (this.albumCompany) this.albumCompany.textContent = album.publisher || '';
+        if (this.trackCountLabel) this.trackCountLabel.textContent = `${(album.tracks || []).length} Songs`;
 
         // Update Badges
-        const currentTrackObj = (album.tracks && album.tracks[trackIndex]) || album.tracks[0];
+        const currentTrackObj = (album.tracks && album.tracks[trackIndex]) || (album.tracks && album.tracks[0]);
         this.updateAudioBadges(currentTrackObj, album);
 
         // Calculate total album duration
@@ -1258,7 +1259,9 @@ class XTAPOMusicApp {
             }
         });
         const mins = Math.floor(totalSec / 60);
-        this.totalDurationLabel.textContent = (!isNaN(mins) && mins > 0) ? `${mins} Minutes` : `${(album.tracks || []).length} Songs`;
+        if (this.totalDurationLabel) {
+            this.totalDurationLabel.textContent = (!isNaN(mins) && mins > 0) ? `${mins} Minutes` : `${(album.tracks || []).length} Songs`;
+        }
 
         // Update Covers
         const initialCover = (album.tracks && album.tracks[trackIndex] && album.tracks[trackIndex].coverUrl) || album.coverUrl;
