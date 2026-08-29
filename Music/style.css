@@ -2118,16 +2118,16 @@ html, body {
         display: flex;
         justify-content: center;
         align-items: center;
-        overflow: hidden;
+        overflow: visible;
         padding: 8px 0 16px 0;
         box-sizing: border-box;
     }
     
     .vinyl-stage {
-        --vinyl-retract: 18px;
-        --vinyl-expand: 80px;
-        width: 280px;
-        max-width: 90vw;
+        --vinyl-retract: 20px;
+        --vinyl-expand: 115px;
+        width: 295px;
+        max-width: 92vw;
         height: 190px;
         position: relative;
         display: flex;
@@ -2137,27 +2137,27 @@ html, body {
         overflow: visible;
     }
     
-    /* Hiện đĩa than mở sẵn ra cạnh album trên Mobile và không xoay để máy mát */
+    /* Hiện đĩa than mở sẵn rộng ra cạnh album trên Mobile (thấy rõ nhãn đĩa) và không xoay */
     .vinyl-stage.is-playing .vinyl-disc,
     .vinyl-stage.is-paused .vinyl-disc,
     .vinyl-stage .vinyl-disc,
     .vinyl-disc {
         animation: none !important;
-        transform: translateX(var(--vinyl-expand, 80px)) rotate(0deg) !important;
+        transform: translateX(var(--vinyl-expand, 115px)) rotate(0deg) !important;
     }
 
     .vinyl-disc {
-        width: 180px;
-        height: 180px;
-        top: 5px;
-        left: 5px;
+        width: 176px;
+        height: 176px;
+        top: 2px;
+        left: 2px;
         position: absolute;
         z-index: 1;
     }
     
     .vinyl-center-label {
-        width: 65px;
-        height: 65px;
+        width: 66px;
+        height: 66px;
     }
     
     .album-sleeve {
@@ -2378,28 +2378,36 @@ html, body {
     }
 
     .vinyl-stage {
-        --vinyl-retract: 12px;
-        --vinyl-expand: 60px;
-        width: 230px;
-        max-width: 92vw;
+        --vinyl-retract: 16px;
+        --vinyl-expand: 100px;
+        width: 260px;
+        max-width: 94vw;
         height: 165px;
+    }
+
+    .vinyl-stage.is-playing .vinyl-disc,
+    .vinyl-stage.is-paused .vinyl-disc,
+    .vinyl-stage .vinyl-disc,
+    .vinyl-disc {
+        animation: none !important;
+        transform: translateX(var(--vinyl-expand, 100px)) rotate(0deg) !important;
     }
     
     .vinyl-disc {
-        width: 150px;
-        height: 150px;
-        top: 8px;
-        left: 8px;
+        width: 152px;
+        height: 152px;
+        top: 2px;
+        left: 2px;
     }
     
     .vinyl-center-label {
-        width: 54px;
-        height: 54px;
+        width: 56px;
+        height: 56px;
     }
     
     .album-sleeve {
-        width: 150px;
-        height: 150px;
+        width: 155px;
+        height: 155px;
     }
 
     .tracklist-container {
