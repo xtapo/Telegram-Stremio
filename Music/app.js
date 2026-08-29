@@ -2014,7 +2014,16 @@ class XTAPOMusicApp {
         const numBars = 36;
         let dpr = window.devicePixelRatio || 1;
 
+        const isMobileScreen = () => window.innerWidth <= 768;
+
         const resizeCanvas = () => {
+            if (isMobileScreen()) {
+                if (this.visualizerAnimationId) {
+                    cancelAnimationFrame(this.visualizerAnimationId);
+                    this.visualizerAnimationId = null;
+                }
+                return;
+            }
             if (this.canvas) {
                 const rect = this.canvas.getBoundingClientRect();
                 dpr = window.devicePixelRatio || 1;
@@ -2026,10 +2035,37 @@ class XTAPOMusicApp {
             }
         };
 
-        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            if (!isMobileScreen() && !this.visualizerAnimationId && !document.hidden) {
+                draw();
+            }
+        });
         setTimeout(resizeCanvas, 100);
 
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (this.visualizerAnimationId) {
+                    cancelAnimationFrame(this.visualizerAnimationId);
+                    this.visualizerAnimationId = null;
+                }
+            } else {
+                if (!isMobileScreen() && !this.visualizerAnimationId) {
+                    draw();
+                }
+            }
+        });
+
         const draw = () => {
+            // Tắt hoàn toàn trên di động hoặc khi tab bị ẩn để giải phóng GPU/CPU 100%
+            if (isMobileScreen() || document.hidden) {
+                if (this.visualizerAnimationId) {
+                    cancelAnimationFrame(this.visualizerAnimationId);
+                    this.visualizerAnimationId = null;
+                }
+                return;
+            }
+
             if (!this.canvas || !ctx) return;
             const w = this.canvas.width;
             const h = this.canvas.height;
@@ -2112,7 +2148,9 @@ class XTAPOMusicApp {
             this.visualizerAnimationId = requestAnimationFrame(draw);
         };
 
-        draw();
+        if (!isMobileScreen()) {
+            draw();
+        }
     }
 
     // --- Modals & Drawers Setup ---

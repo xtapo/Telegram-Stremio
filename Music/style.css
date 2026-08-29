@@ -2137,6 +2137,15 @@ html, body {
         overflow: visible;
     }
     
+    /* Tắt hoàn toàn xoay đĩa than trên Mobile để máy mát và siêu tiết kiệm pin */
+    .vinyl-stage.is-playing .vinyl-disc,
+    .vinyl-stage.is-paused .vinyl-disc,
+    .vinyl-stage .vinyl-disc,
+    .vinyl-disc {
+        animation: none !important;
+        transform: translateX(var(--vinyl-retract, 18px)) rotate(0deg) !important;
+    }
+
     .vinyl-disc {
         width: 180px;
         height: 180px;
@@ -2197,11 +2206,10 @@ html, body {
         word-break: break-word;
     }
     
-    .visualizer-container {
-        width: 100%;
-        max-width: 100%;
-        margin: 0 auto 16px auto;
-        box-sizing: border-box;
+    /* Tắt và ẩn hoàn toàn sóng nhạc trên Mobile */
+    .visualizer-container,
+    #visualizerCanvas {
+        display: none !important;
     }
 
     .tracklist-container {
