@@ -465,14 +465,32 @@ class XTAPOMusicApp {
         // 3. Tải metadata nghệ sĩ
         await this.fetchArtistMetadata();
 
-        // 4. Mở trực tiếp playlist thích hợp: Yêu Thích nếu có, hoặc Album mặc định
-        if (this.currentUser && this.favoriteTracks && this.favoriteTracks.length > 0) {
-            this.playFavoritesQueue(0, false, false);
-            if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+        // 4. Khôi phục bài hát & vị trí đang phát dở (Player State) hoặc mở mặc định
+        const restored = this.restorePlayerState();
+        if (!restored) {
+            if (this.currentUser && this.favoriteTracks && this.favoriteTracks.length > 0) {
+                this.playFavoritesQueue(0, false, false);
+                if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+            } else {
+                this.loadAlbum(0, 0, false);
+                this.renderAlbumGrid();
+            }
         } else {
-            this.loadAlbum(0, 0, false);
             this.renderAlbumGrid();
         }
+
+        // 5. Khôi phục tab / modal / danh mục đang mở (URL Hash)
+        this.restoreViewStateFromHash();
+
+        // 6. Khôi phục vị trí cuộn trang (Scroll Position)
+        try {
+            const savedScroll = sessionStorage.getItem('xtapo_music_scroll_pos');
+            if (savedScroll) {
+                requestAnimationFrame(() => {
+                    window.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
+                });
+            }
+        } catch (e) {}
     }
 
     // --- Authentication & User State ---
@@ -1124,6 +1142,12 @@ class XTAPOMusicApp {
         this.currentAlbumIndex = albumIndex;
         const album = this.currentAlbum;
 
+        if (album && album.id && String(album.id).startsWith('pl-')) {
+            this.activePlaylistId = String(album.id).replace('pl-', '');
+        } else {
+            this.activePlaylistId = null;
+        }
+
         // Update Text Info
         this.albumTitle.textContent = album.title;
         this.artistName.textContent = album.artist;
@@ -1342,6 +1366,8 @@ class XTAPOMusicApp {
             this.pauseVisuals();
         }
 
+        this.savePlayerState();
+
         // Tự động nạp trước (preload) bài hát kế tiếp sau 1.2s
         setTimeout(() => this.preloadNextTrack(), 1200);
     }
@@ -1553,6 +1579,7 @@ class XTAPOMusicApp {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = 'paused';
         }
+        this.savePlayerState();
     }
 
     togglePlay() {
@@ -1721,6 +1748,8 @@ class XTAPOMusicApp {
                         });
                     } catch (e) {}
                 }
+
+                this.throttledSavePlayerState();
             }
         });
 
@@ -1831,7 +1860,8 @@ class XTAPOMusicApp {
         this.shuffleBtn.addEventListener('click', () => {
             this.isShuffle = !this.isShuffle;
             this.shuffleBtn.classList.toggle('active', this.isShuffle);
-            this.showToast(this.isShuffle ? "Cháº¿ Ä‘á»™ phÃ¡t xÃ¡o trá»™n: Báº¬T" : "Cháº¿ Ä‘á»™ phÃ¡t xÃ¡o trá»™n: Táº®T");
+            this.savePlayerState();
+            this.showToast(this.isShuffle ? "Chế độ phát xáo trộn: BẬT" : "Chế độ phát xáo trộn: TẮT");
         });
 
         // Repeat Mode Toggle (0: off -> 1: all -> 2: one)
@@ -1840,16 +1870,17 @@ class XTAPOMusicApp {
             if (this.repeatMode === 0) {
                 this.repeatBtn.classList.remove('active');
                 this.repeatIndicator.textContent = '';
-                this.showToast("Cháº¿ Ä‘á»™ láº·p láº¡i: Táº®T");
+                this.showToast("Chế độ lặp lại: TẮT");
             } else if (this.repeatMode === 1) {
                 this.repeatBtn.classList.add('active');
                 this.repeatIndicator.textContent = 'ALL';
-                this.showToast("Cháº¿ Ä‘á»™ láº·p láº¡i: Táº¤T Cáº¢");
+                this.showToast("Chế độ lặp lại: TẤT CẢ");
             } else if (this.repeatMode === 2) {
                 this.repeatBtn.classList.add('active');
                 this.repeatIndicator.textContent = '1';
-                this.showToast("Cháº¿ Ä‘á»™ láº·p láº¡i: 1 BÃ€I");
+                this.showToast("Chế độ lặp lại: 1 BÀI");
             }
+            this.savePlayerState();
         });
 
         // Volume Control
@@ -1858,6 +1889,7 @@ class XTAPOMusicApp {
             this.audio.volume = this.volume;
             this.isMuted = this.volume === 0;
             this.updateVolumeIcons();
+            this.savePlayerState();
         });
 
         this.volumeMuteBtn.addEventListener('click', () => {
@@ -1870,6 +1902,7 @@ class XTAPOMusicApp {
                 this.volumeSlider.value = this.audio.volume;
             }
             this.updateVolumeIcons();
+            this.savePlayerState();
         });
     }
 
@@ -2098,6 +2131,10 @@ class XTAPOMusicApp {
             this.navMusics.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.setActiveNavLink(this.navMusics);
+                this.clearHash();
+                [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.favoritesModal, this.lyricsModal].forEach(m => {
+                    if (m) m.classList.remove('open');
+                });
                 this.showToast('Đang phát kho nhạc chính');
             });
         }
@@ -2194,7 +2231,14 @@ class XTAPOMusicApp {
 
         // Mobile Nav Links Events
         const mobileLinks = [
-            { id: 'mobileNavMusics', action: () => this.showToast('Đang phát kho nhạc chính') },
+            { id: 'mobileNavMusics', action: () => {
+                this.setActiveNavLink(this.navMusics);
+                this.clearHash();
+                [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.favoritesModal, this.lyricsModal].forEach(m => {
+                    if (m) m.classList.remove('open');
+                });
+                this.showToast('Đang phát kho nhạc chính');
+            } },
             { id: 'mobileNavHires', action: () => this.filterHiresAlbums() },
             { id: 'mobileNavAlbums', action: () => this.openModal(this.albumModal) },
             { id: 'mobileNavArtists', action: () => { this.renderArtistGrid(); this.openModal(this.artistModal); } },
@@ -2406,7 +2450,7 @@ class XTAPOMusicApp {
         }
 
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal, this.favoritesModal, this.lyricsModal, this.lyricsEditorModal, this.authModal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -2423,14 +2467,309 @@ class XTAPOMusicApp {
                 });
             }
         });
+
+        // Lắng nghe sự kiện hashchange của trình duyệt (hỗ trợ nút Back/Forward và Deep link)
+        window.addEventListener('hashchange', () => {
+            this.restoreViewStateFromHash();
+        });
+
+        // Lưu trạng thái & vị trí cuộn chuột trước khi tải lại trang
+        window.addEventListener('beforeunload', () => {
+            this.savePlayerState();
+            try {
+                sessionStorage.setItem('xtapo_music_scroll_pos', window.scrollY.toString());
+            } catch (e) {}
+        });
+    }
+
+    // --- State Persistence & URL Deep Linking ---
+    savePlayerState() {
+        try {
+            const album = this.currentAlbum;
+            const track = this.currentTrack;
+            const state = {
+                albumId: album ? (album.id || album.title) : null,
+                albumIndex: this.currentAlbumIndex,
+                trackIndex: this.currentTrackIndex,
+                trackName: track ? track.name : null,
+                trackChatId: track ? track.chatId : null,
+                trackMsgId: track ? track.msgId : null,
+                currentTime: (this.audio && !isNaN(this.audio.currentTime)) ? this.audio.currentTime : 0,
+                volume: typeof this.volume === 'number' ? this.volume : 0.85,
+                isMuted: !!this.isMuted,
+                isShuffle: !!this.isShuffle,
+                repeatMode: this.repeatMode || 0,
+                isFavoriteMode: !!(album && album.id === 'favorites-playlist'),
+                activePlaylistId: this.activePlaylistId || null
+            };
+            localStorage.setItem('xtapo_music_player_state', JSON.stringify(state));
+        } catch (e) {
+            console.warn('Không thể lưu player state:', e);
+        }
+    }
+
+    throttledSavePlayerState() {
+        const now = Date.now();
+        if (!this._lastStateSaveTime || now - this._lastStateSaveTime > 2500) {
+            this._lastStateSaveTime = now;
+            this.savePlayerState();
+        }
+    }
+
+    findAlbumIndex(state) {
+        if (!this.albums || this.albums.length === 0) return 0;
+        if (state.albumId) {
+            const idx = this.albums.findIndex(a => (a.id && String(a.id) === String(state.albumId)) || a.title === state.albumId);
+            if (idx !== -1) return idx;
+        }
+        if (state.trackChatId && state.trackMsgId) {
+            const idx = this.albums.findIndex(a => (a.tracks || []).some(t => {
+                const ident = this.getTrackIdentifiers(t);
+                return ident.chatId === String(state.trackChatId) && ident.msgId === String(state.trackMsgId);
+            }));
+            if (idx !== -1) return idx;
+        }
+        if (typeof state.albumIndex === 'number' && state.albumIndex >= 0 && state.albumIndex < this.albums.length) {
+            return state.albumIndex;
+        }
+        return 0;
+    }
+
+    restorePlayerState() {
+        try {
+            const raw = localStorage.getItem('xtapo_music_player_state');
+            if (!raw) return false;
+            const state = JSON.parse(raw);
+            if (!state) return false;
+
+            // 1. Phục hồi các nút điều khiển
+            if (typeof state.volume === 'number' && !isNaN(state.volume)) {
+                this.volume = state.volume;
+                if (this.volumeSlider) this.volumeSlider.value = this.volume;
+                if (this.audio) this.audio.volume = state.isMuted ? 0 : this.volume;
+                this.isMuted = !!state.isMuted;
+                this.updateVolumeIcons();
+            }
+
+            if (typeof state.isShuffle === 'boolean') {
+                this.isShuffle = state.isShuffle;
+                if (this.shuffleBtn) this.shuffleBtn.classList.toggle('active', this.isShuffle);
+            }
+
+            if (typeof state.repeatMode === 'number') {
+                this.repeatMode = state.repeatMode;
+                if (this.repeatBtn && this.repeatIndicator) {
+                    if (this.repeatMode === 0) {
+                        this.repeatBtn.classList.remove('active');
+                        this.repeatIndicator.textContent = '';
+                    } else if (this.repeatMode === 1) {
+                        this.repeatBtn.classList.add('active');
+                        this.repeatIndicator.textContent = 'ALL';
+                    } else if (this.repeatMode === 2) {
+                        this.repeatBtn.classList.add('active');
+                        this.repeatIndicator.textContent = '1';
+                    }
+                }
+            }
+
+            // 2. Phục hồi danh sách phát / bài hát
+            const targetTrackIdx = (typeof state.trackIndex === 'number' && state.trackIndex >= 0) ? state.trackIndex : 0;
+
+            if (state.isFavoriteMode && this.favoriteTracks && this.favoriteTracks.length > 0) {
+                this.playFavoritesQueue(targetTrackIdx, false, false);
+                if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+            } else if (state.activePlaylistId && this.playlists && this.playlists.length > 0) {
+                const pl = this.playlists.find(p => String(p.id) === String(state.activePlaylistId));
+                if (pl && pl.tracks && pl.tracks.length > 0) {
+                    this.playPlaylist(pl, false, false);
+                    if (this.currentAlbum && this.currentAlbum.tracks && this.currentAlbum.tracks[targetTrackIdx]) {
+                        this.loadTrack(targetTrackIdx, false);
+                    }
+                } else {
+                    const albumIdx = this.findAlbumIndex(state);
+                    this.loadAlbum(albumIdx, targetTrackIdx, false);
+                }
+            } else {
+                const albumIdx = this.findAlbumIndex(state);
+                this.loadAlbum(albumIdx, targetTrackIdx, false);
+            }
+
+            // 3. Phục hồi thời gian đang phát (Seek đến giây trước đó ở trạng thái Pause)
+            if (typeof state.currentTime === 'number' && state.currentTime > 0) {
+                const targetTime = state.currentTime;
+                const applySeek = () => {
+                    try {
+                        if (this.audio && this.audio.duration && targetTime < this.audio.duration) {
+                            this.audio.currentTime = targetTime;
+                            const percent = (targetTime / this.audio.duration) * 100;
+                            this.updateProgress(percent);
+                            this.timeCurrent.textContent = this.formatTime(targetTime);
+                            this.syncLyricsTime(targetTime);
+                        }
+                    } catch (err) {}
+                };
+                if (this.audio && this.audio.readyState >= 1 && this.audio.duration) {
+                    applySeek();
+                } else if (this.audio) {
+                    const onLoadedMeta = () => {
+                        applySeek();
+                        this.audio.removeEventListener('loadedmetadata', onLoadedMeta);
+                    };
+                    this.audio.addEventListener('loadedmetadata', onLoadedMeta, { once: true });
+                }
+            }
+
+            return true;
+        } catch (e) {
+            console.error('Lỗi khi khôi phục player state:', e);
+            return false;
+        }
+    }
+
+    setHash(hash) {
+        if (!hash) return;
+        if (window.location.hash !== `#${hash}`) {
+            window.history.replaceState(null, '', `#${hash}`);
+        }
+    }
+
+    clearHash() {
+        if (window.location.hash && window.location.hash !== '' && window.location.hash !== '#') {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+    }
+
+    clearHashIfModalClosed(modal) {
+        const currentHash = window.location.hash.replace(/^#/, '');
+        if (!currentHash) return;
+
+        if (modal === this.artistModal && currentHash.startsWith('artist')) {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.albumModal && (currentHash === 'albums' || currentHash === 'hires')) {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.genreModal && currentHash === 'genres') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.countryModal && currentHash === 'countries') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.playlistModal && currentHash === 'playlists') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.favoritesModal && currentHash === 'favorites') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.tracklistModal && currentHash === 'tracklist') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.searchModal && currentHash === 'search') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.lyricsModal && currentHash === 'lyrics') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.lyricsEditorModal && currentHash === 'lyrics-edit') {
+            this.clearHash();
+            return;
+        }
+    }
+
+    restoreViewStateFromHash() {
+        const rawHash = window.location.hash.replace(/^#/, '');
+        if (!rawHash) return;
+
+        if (rawHash === 'albums') {
+            this.setActiveNavLink(this.navAlbums);
+            this.openModal(this.albumModal);
+        } else if (rawHash === 'hires') {
+            this.setActiveNavLink(this.navHires);
+            this.filterHiresAlbums();
+        } else if (rawHash === 'artists') {
+            this.setActiveNavLink(this.navArtists);
+            this.showArtistListView();
+            this.renderArtistGrid();
+            this.openModal(this.artistModal);
+        } else if (rawHash.startsWith('artist/')) {
+            const artistName = decodeURIComponent(rawHash.replace('artist/', ''));
+            this.setActiveNavLink(this.navArtists);
+            this.openModal(this.artistModal);
+            this.openArtistByName(artistName);
+        } else if (rawHash === 'genres') {
+            this.setActiveNavLink(this.navGenres);
+            this.renderGenreGrid();
+            this.openModal(this.genreModal);
+        } else if (rawHash === 'countries') {
+            this.setActiveNavLink(this.navCountries);
+            this.renderCountryGrid();
+            this.openModal(this.countryModal);
+        } else if (rawHash === 'playlists') {
+            this.setActiveNavLink(this.navPlaylists);
+            this.loadPlaylists();
+            this.openModal(this.playlistModal);
+        } else if (rawHash === 'favorites') {
+            this.setActiveNavLink(this.navFavorites);
+            this.openFavoritesModal();
+        } else if (rawHash === 'search') {
+            this.openModal(this.searchModal);
+        } else if (rawHash === 'lyrics') {
+            this.openModal(this.lyricsModal);
+        } else if (rawHash === 'tracklist') {
+            this.openModal(this.tracklistModal);
+        }
+    }
+
+    openArtistByName(artistName) {
+        if (!artistName) return;
+        this.renderArtistGrid();
+        if (this.artistMap) {
+            const art = this.artistMap.get(artistName) || Array.from(this.artistMap.values()).find(a => a.name.toLowerCase() === artistName.toLowerCase());
+            if (art) {
+                this.openArtistSpotlight(art);
+            }
+        }
     }
 
     openModal(modal) {
-        if (modal) modal.classList.add('open');
+        if (!modal) return;
+        modal.classList.add('open');
+        if (modal === this.albumModal && window.location.hash !== '#hires') {
+            this.setHash('albums');
+        } else if (modal === this.artistModal) {
+            if (!window.location.hash.startsWith('#artist/')) {
+                this.setHash('artists');
+            }
+        } else if (modal === this.genreModal) {
+            this.setHash('genres');
+        } else if (modal === this.countryModal) {
+            this.setHash('countries');
+        } else if (modal === this.playlistModal) {
+            this.setHash('playlists');
+        } else if (modal === this.favoritesModal) {
+            this.setHash('favorites');
+        } else if (modal === this.tracklistModal) {
+            this.setHash('tracklist');
+        } else if (modal === this.searchModal) {
+            this.setHash('search');
+        } else if (modal === this.lyricsModal) {
+            this.setHash('lyrics');
+        }
     }
 
     closeModal(modal) {
-        if (modal) modal.classList.remove('open');
+        if (!modal) return;
+        modal.classList.remove('open');
+        this.clearHashIfModalClosed(modal);
     }
 
     setActiveNavLink(activeLink) {
@@ -2774,7 +3113,7 @@ class XTAPOMusicApp {
         }
     }
 
-    playPlaylist(playlist) {
+    playPlaylist(playlist, startIndex = 0, autoPlay = true) {
         if (!playlist || !playlist.tracks || playlist.tracks.length === 0) {
             this.showToast('Playlist này hiện chưa có bài hát nào!');
             return;
@@ -2795,13 +3134,15 @@ class XTAPOMusicApp {
         const existingIdx = this.albums.findIndex(a => a.id === playlistAlbum.id);
         if (existingIdx !== -1) {
             this.albums[existingIdx] = playlistAlbum;
-            this.loadAlbum(existingIdx, 0, true);
+            this.loadAlbum(existingIdx, startIndex, autoPlay);
         } else {
             this.albums.unshift(playlistAlbum);
-            this.loadAlbum(0, 0, true);
+            this.loadAlbum(0, startIndex, autoPlay);
         }
         this.renderAlbumGrid();
-        this.showToast(`Đang phát playlist "${playlist.name}" (${playlist.tracks.length} bài)`);
+        if (autoPlay) {
+            this.showToast(`Đang phát playlist "${playlist.name}" (${playlist.tracks.length} bài)`);
+        }
     }
 
     async openAddToPlaylist(track) {
@@ -2917,12 +3258,9 @@ class XTAPOMusicApp {
     }
 
     // --- Artists & Genres Feature Methods ---
-    setActiveNavLink(activeEl) {
-        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
-        if (activeEl) activeEl.classList.add('active');
-    }
 
     filterHiresAlbums() {
+        this.setHash('hires');
         const hiresAlbums = this.albums.filter(a => {
             const fmt = (a.format || '').toLowerCase();
             return fmt.includes('flac') || fmt.includes('24-bit') || fmt.includes('hi-res') || fmt.includes('dsd') || fmt.includes('lossless');
@@ -2936,6 +3274,7 @@ class XTAPOMusicApp {
     }
 
     showArtistListView() {
+        this.setHash('artists');
         if (this.artistListView && this.artistProfileView) {
             this.artistListView.style.display = 'flex';
             this.artistProfileView.style.display = 'none';
@@ -2981,6 +3320,8 @@ class XTAPOMusicApp {
             });
         });
 
+        this.artistMap = artistMap;
+
         if (artistMap.size === 0) {
             this.artistGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có dữ liệu ca sĩ trong thư viện.</div>';
             return;
@@ -3015,6 +3356,7 @@ class XTAPOMusicApp {
     openArtistSpotlight(art) {
         if (!this.artistProfileView || !this.artistListView) return;
 
+        this.setHash(`artist/${encodeURIComponent(art.name)}`);
         this.artistListView.style.display = 'none';
         this.artistProfileView.style.display = 'flex';
 
