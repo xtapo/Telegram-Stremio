@@ -2219,7 +2219,7 @@ try:
 except Exception:
     pass
 
-_COVER_SEMAPHORE = asyncio.Semaphore(2)
+_COVER_SEMAPHORE = asyncio.Semaphore(10)
 
 
 # ── 5. Lấy Ảnh Cover / Thumbnail từ Telegram Message ──────────────────────────

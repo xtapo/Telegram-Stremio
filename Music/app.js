@@ -792,7 +792,7 @@ class XTAPOMusicApp {
 
     getAllLibraryTracks() {
         const trackMap = new Map();
-        (this.albums || []).forEach(album => {
+        (this.getBaseAlbums()).forEach(album => {
             (album.tracks || []).forEach(track => {
                 const { chatId, msgId } = this.getTrackIdentifiers(track);
                 const key = `${chatId}_${msgId}`;
@@ -978,18 +978,34 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        const existingIdx = this.albums.findIndex(a => a.id === favAlbum.id);
-        if (existingIdx !== -1) {
-            this.albums[existingIdx] = favAlbum;
-            this.loadAlbum(existingIdx, startIndex, autoPlay);
-        } else {
-            this.albums.unshift(favAlbum);
-            this.loadAlbum(0, startIndex, autoPlay);
-        }
-        this.renderAlbumGrid();
+        this.setVirtualAlbum(favAlbum, startIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát Tuyển Tập Yêu Thích (${tracks.length} bài hát) ❤️`);
         }
+    }
+
+    // --- Base Albums & Virtual Queues Helper ---
+    getBaseAlbums() {
+        return (this.albums || []).filter(a => {
+            if (!a || !a.id) return true;
+            const id = String(a.id);
+            return !id.startsWith('genre-') && 
+                   !id.startsWith('artist-') && 
+                   !id.startsWith('country-') && 
+                   !id.startsWith('fav-') && 
+                   !id.startsWith('favorites-') && 
+                   !id.startsWith('pl-') && 
+                   !id.startsWith('hires-');
+        });
+    }
+
+    setVirtualAlbum(virtualAlbum, startIndex = 0, autoPlay = true) {
+        // Luôn làm sạch các danh sách ảo tạm thời cũ trước khi thêm danh sách mới
+        this.albums = this.getBaseAlbums();
+        this.albums.unshift(virtualAlbum);
+        this.currentAlbumIndex = 0;
+        this.loadAlbum(0, startIndex, autoPlay);
+        this.renderAlbumGrid();
     }
 
     // --- Current Album & Track Getters ---
@@ -1474,17 +1490,20 @@ class XTAPOMusicApp {
         const track = this.currentTrack;
         const album = this.currentAlbum;
 
-        // Cập nhật ảnh đĩa than & Album Sleeve theo từng bài hát
+        // Cập nhật ảnh đĩa than & Album Sleeve theo từng bài hát ngay lập tức
         const trackCover = (track && track.coverUrl) || (album && album.coverUrl) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
-        if (this.albumCoverImg && this.albumCoverImg.src !== trackCover) {
+        if (this.albumCoverImg) {
             this.albumCoverImg.src = trackCover;
         }
-        if (this.vinylCenterImg && this.vinylCenterImg.src !== trackCover) {
+        if (this.vinylCenterImg) {
             this.vinylCenterImg.src = trackCover;
         }
 
         // Cập nhật Dynamic Album Art Backdrop phong cách Apple Music
         this.updateDynamicBackdrop(trackCover);
+
+        // Preload trước ảnh cover của các bài hát xung quanh để chuyển bài hiện ngay
+        this.preloadCoversForCurrentAlbum();
 
         // Cập nhật màu nền phát sáng theo bài hát nếu có
         if (track && track.glowColors) {
@@ -1558,6 +1577,21 @@ class XTAPOMusicApp {
 
         // Tự động nạp trước (preload) bài hát kế tiếp sau 1.2s
         setTimeout(() => this.preloadNextTrack(), 1200);
+    }
+
+    preloadCoversForCurrentAlbum() {
+        const album = this.currentAlbum;
+        if (!album || !album.tracks || album.tracks.length === 0) return;
+        const start = Math.max(0, this.currentTrackIndex - 2);
+        const end = Math.min(album.tracks.length, this.currentTrackIndex + 20);
+        for (let i = start; i < end; i++) {
+            const tr = album.tracks[i];
+            const cUrl = (tr && tr.coverUrl) || album.coverUrl;
+            if (cUrl && typeof cUrl === 'string' && !cUrl.startsWith('data:')) {
+                const img = new Image();
+                img.src = cUrl;
+            }
+        }
     }
 
     preloadNextTrack() {
@@ -3119,7 +3153,7 @@ class XTAPOMusicApp {
         let coverUrl = '';
         const targetGenreLow = genreName.toLowerCase().trim();
 
-        (this.albums || []).forEach(album => {
+        this.getBaseAlbums().forEach(album => {
             (album.tracks || []).forEach(track => {
                 const g = ((track.genre || 'Khác').trim() || 'Khác').toLowerCase();
                 if (g === targetGenreLow) {
@@ -3147,15 +3181,7 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        const existingIdx = this.albums.findIndex(a => a.id === genreAlbum.id);
-        if (existingIdx !== -1) {
-            this.albums[existingIdx] = genreAlbum;
-            this.loadAlbum(existingIdx, startIndex, autoPlay);
-        } else {
-            this.albums.unshift(genreAlbum);
-            this.loadAlbum(0, startIndex, autoPlay);
-        }
-        this.renderAlbumGrid();
+        this.setVirtualAlbum(genreAlbum, startIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát thể loại "${genreName}" (${tracks.length} bài)`);
         }
@@ -3173,7 +3199,7 @@ class XTAPOMusicApp {
         let coverUrl = '';
         const targetCountryLow = countryName.toLowerCase().trim();
 
-        (this.albums || []).forEach(album => {
+        this.getBaseAlbums().forEach(album => {
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
                 const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
@@ -3361,9 +3387,10 @@ class XTAPOMusicApp {
 
         const q = query.toLowerCase().trim();
         let matches = [];
+        const baseAlbums = this.getBaseAlbums();
 
-        for (let albumIdx = 0; albumIdx < this.albums.length; albumIdx++) {
-            const album = this.albums[albumIdx];
+        for (let albumIdx = 0; albumIdx < baseAlbums.length; albumIdx++) {
+            const album = baseAlbums[albumIdx];
             const artistLow = (album.artist || '').toLowerCase();
             const titleLow = (album.title || '').toLowerCase();
             const tracks = album.tracks || [];
@@ -3642,15 +3669,7 @@ class XTAPOMusicApp {
             tracks: playlist.tracks
         };
 
-        const existingIdx = this.albums.findIndex(a => a.id === playlistAlbum.id);
-        if (existingIdx !== -1) {
-            this.albums[existingIdx] = playlistAlbum;
-            this.loadAlbum(existingIdx, startIndex, autoPlay);
-        } else {
-            this.albums.unshift(playlistAlbum);
-            this.loadAlbum(0, startIndex, autoPlay);
-        }
-        this.renderAlbumGrid();
+        this.setVirtualAlbum(playlistAlbum, startIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát playlist "${playlist.name}" (${playlist.tracks.length} bài)`);
         }
@@ -3772,7 +3791,7 @@ class XTAPOMusicApp {
 
     filterHiresAlbums() {
         this.setHash('hires');
-        const hiresAlbums = this.albums.filter(a => {
+        const hiresAlbums = this.getBaseAlbums().filter(a => {
             const fmt = (a.format || '').toLowerCase();
             return fmt.includes('flac') || fmt.includes('24-bit') || fmt.includes('hi-res') || fmt.includes('dsd') || fmt.includes('lossless');
         });
@@ -3811,7 +3830,7 @@ class XTAPOMusicApp {
             'Quốc Tế': 0
         };
 
-        this.albums.forEach(album => {
+        this.getBaseAlbums().forEach(album => {
             const albArtist = (album.artist || 'Unknown Artist').trim();
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
@@ -4078,15 +4097,7 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        const existingIdx = this.albums.findIndex(a => a.id === artistAlbum.id);
-        if (existingIdx !== -1) {
-            this.albums[existingIdx] = artistAlbum;
-            this.loadAlbum(existingIdx, startIndex, true);
-        } else {
-            this.albums.unshift(artistAlbum);
-            this.loadAlbum(0, startIndex, true);
-        }
-        this.renderAlbumGrid();
+        this.setVirtualAlbum(artistAlbum, startIndex, true);
         this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${tracks.length} bài)`);
     }
 
@@ -4188,7 +4199,7 @@ class XTAPOMusicApp {
 
         const genreMap = new Map();
 
-        this.albums.forEach(album => {
+        this.getBaseAlbums().forEach(album => {
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
                 const g = (track.genre || 'Khác').trim() || 'Khác';
@@ -4394,7 +4405,7 @@ class XTAPOMusicApp {
             });
         });
 
-        this.albums.forEach(album => {
+        this.getBaseAlbums().forEach(album => {
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
                 const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
@@ -4826,7 +4837,7 @@ class XTAPOMusicApp {
         let coverUrl = '';
         const targetGenreLow = genreName.toLowerCase().trim();
 
-        (this.albums || []).forEach(album => {
+        this.getBaseAlbums().forEach(album => {
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
                 const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
@@ -4862,15 +4873,7 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        const existingIdx = this.albums.findIndex(a => a.id === genreAlbum.id);
-        if (existingIdx !== -1) {
-            this.albums[existingIdx] = genreAlbum;
-            this.loadAlbum(existingIdx, startIndex, autoPlay);
-        } else {
-            this.albums.unshift(genreAlbum);
-            this.loadAlbum(0, startIndex, autoPlay);
-        }
-        this.renderAlbumGrid();
+        this.setVirtualAlbum(genreAlbum, startIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát "${genreName} (${countryName})" • ${tracks.length} bài hát`);
         }
@@ -4917,15 +4920,7 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        const existingIdx = this.albums.findIndex(a => a.id === countryAlbum.id);
-        if (existingIdx !== -1) {
-            this.albums[existingIdx] = countryAlbum;
-            this.loadAlbum(existingIdx, startIndex, autoPlay);
-        } else {
-            this.albums.unshift(countryAlbum);
-            this.loadAlbum(0, startIndex, autoPlay);
-        }
-        this.renderAlbumGrid();
+        this.setVirtualAlbum(countryAlbum, startIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát tuyển tập nhạc "${cObj.country}" (${tracks.length} bài hát)`);
         }
