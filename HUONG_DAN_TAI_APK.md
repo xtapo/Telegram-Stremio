@@ -42,7 +42,21 @@ git push
 
 ---
 
+## 🚗 Cách Sử Dụng Trên Màn Hình Xe Hơi (Android Auto)
+
+Ứng dụng **XT-Music** đã được tích hợp chuẩn `MediaBrowserService` để hiển thị và điều khiển trực tiếp trên màn hình xe ô tô.
+
+### Bước kích hoạt 1 lần duy nhất trên điện thoại:
+1. Mở ứng dụng **Android Auto** trên điện thoại (hoặc vào *Cài đặt > tìm "Android Auto"*).
+2. Cuộn xuống dưới cùng > **Chạm 10 lần liên tiếp vào dòng "Phiên bản" (Version)** cho đến khi hiện thông báo bật chế độ nhà phát triển.
+3. Bấm vào biểu tượng **3 dấu chấm (⋮)** ở góc trên bên phải > Chọn **Cài đặt cho nhà phát triển (Developer settings)**.
+4. Tích chọn **"Nguồn không xác định" (Unknown sources)**.
+5. Cắm điện thoại vào màn hình xe qua cổng USB hoặc kết nối Android Auto không dây: **XT-Music** sẽ xuất hiện trên danh sách ứng dụng giải trí của xe, hỗ trợ bấm chuyển bài ngay trên vô lăng!
+
+---
+
 ## 🎧 Tính Năng Nổi Bật của Ứng Dụng APK
+- ✅ **Hỗ trợ Android Auto**: Hiển thị trên màn hình xe ô tô, điều khiển qua phím vô lăng.
 - ✅ **Phát nhạc nền (Background Playback)**: Nhạc vẫn phát mượt mà khi bạn khóa màn hình hoặc dùng ứng dụng khác (Facebook, lướt web, v.v.).
 - ✅ **MediaSession Controls**: Hiển thị tên bài hát, ảnh bìa album và các nút Next/Previous/Pause trên màn hình khóa.
 - ✅ **Giao diện tối (Dark Mode)**: Tương thích hoàn hảo với giao diện người dùng hiện đại của Web Player.

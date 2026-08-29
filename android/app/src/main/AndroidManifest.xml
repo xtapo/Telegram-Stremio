@@ -26,6 +26,13 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="34">
 
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="com.google.android.gms.car.notification.SmallIcon"
+            android:resource="@drawable/ic_launcher_foreground" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -36,6 +43,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Android Auto / Automotive MediaBrowserService -->
+        <service
+            android:name=".XTMediaBrowserService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

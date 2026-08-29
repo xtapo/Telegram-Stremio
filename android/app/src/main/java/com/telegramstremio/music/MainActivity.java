@@ -72,6 +72,7 @@ public class MainActivity extends AppCompatActivity {
         setupWakeLock();
         checkPermissions();
         setupBackNavigation();
+        setupMediaControls();
 
         String serverUrl = getServerUrl();
         if (TextUtils.isEmpty(serverUrl)) {
@@ -79,6 +80,52 @@ public class MainActivity extends AppCompatActivity {
         } else {
             loadMusicUrl(serverUrl);
         }
+    }
+
+    private void setupMediaControls() {
+        try {
+            Intent serviceIntent = new Intent(this, XTMediaBrowserService.class);
+            startService(serviceIntent);
+        } catch (Exception ignored) {
+        }
+
+        XTMediaBrowserService.setControlListener(new XTMediaBrowserService.MediaControlListener() {
+            @Override
+            public void onPlayRequested() {
+                runOnUiThread(() -> {
+                    if (webView != null) {
+                        webView.evaluateJavascript("document.querySelector('#playBtn')?.click() || (document.querySelector('audio') && document.querySelector('audio').play());", null);
+                    }
+                });
+            }
+
+            @Override
+            public void onPauseRequested() {
+                runOnUiThread(() -> {
+                    if (webView != null) {
+                        webView.evaluateJavascript("(document.querySelector('audio') && document.querySelector('audio').pause()) || document.querySelector('#playBtn')?.click();", null);
+                    }
+                });
+            }
+
+            @Override
+            public void onSkipNextRequested() {
+                runOnUiThread(() -> {
+                    if (webView != null) {
+                        webView.evaluateJavascript("document.querySelector('#nextBtn')?.click();", null);
+                    }
+                });
+            }
+
+            @Override
+            public void onSkipPrevRequested() {
+                runOnUiThread(() -> {
+                    if (webView != null) {
+                        webView.evaluateJavascript("document.querySelector('#prevBtn')?.click();", null);
+                    }
+                });
+            }
+        });
     }
 
     private void initViews() {
