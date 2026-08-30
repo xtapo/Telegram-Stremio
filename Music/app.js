@@ -627,17 +627,21 @@ class XTAPOMusicApp {
         }
 
         // Tab Switching
-        if (this.tabQrLogin && this.tabPhoneLogin && this.tabPwLogin) {
+        if (this.tabQrLogin) {
             this.tabQrLogin.addEventListener('click', () => {
                 this.switchAuthTab('qr');
                 if (!this._qrPollTimer && !this.currentUser) {
                     this.initTelegramQrLogin();
                 }
             });
+        }
+        if (this.tabPhoneLogin) {
             this.tabPhoneLogin.addEventListener('click', () => {
                 this.switchAuthTab('phone');
                 this.stopQrPolling();
             });
+        }
+        if (this.tabPwLogin) {
             this.tabPwLogin.addEventListener('click', () => {
                 this.switchAuthTab('pw');
                 this.stopQrPolling();

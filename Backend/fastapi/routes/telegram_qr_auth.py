@@ -65,7 +65,11 @@ async def get_user_tg_client(user_id: str) -> Optional[Client]:
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
             in_memory=True,
-            no_updates=True
+            no_updates=True,
+            app_version="XTAPO 2.6.0",
+            device_model="XTAPO Web Player",
+            system_version="Web Audio Engine",
+            lang_code="vi"
         )
         await new_client.connect()
         _USER_CLIENT_POOL[user_id] = new_client
@@ -121,7 +125,11 @@ async def init_telegram_qr_login():
             name=f"qr_temp_{session_id}",
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
-            in_memory=True
+            in_memory=True,
+            app_version="XTAPO 2.6.0",
+            device_model="XTAPO Web Player",
+            system_version="Web Audio Engine",
+            lang_code="vi"
         )
         await temp_client.connect()
 
@@ -134,11 +142,17 @@ async def init_telegram_qr_login():
         )
 
         # Xử lý nếu Telegram yêu cầu chuyển Data Center (DC)
-        if isinstance(res, LoginTokenMigrateTo):
+        while isinstance(res, LoginTokenMigrateTo):
             target_dc = res.dc_id
             LOGGER.info(f"[QR AUTH] Di chuyển MTProto DC sang DC {target_dc}")
-            await temp_client.disconnect()
+            try:
+                await temp_client.disconnect()
+            except Exception:
+                pass
+            temp_client.storage.dc_id = target_dc
+            temp_client.storage.auth_key = None
             temp_client.session.dc_id = target_dc
+            temp_client.session.auth_key = None
             await temp_client.connect()
             res = await temp_client.invoke(
                 ExportLoginToken(
@@ -419,7 +433,11 @@ async def send_telegram_phone_code(payload: dict):
             name=f"phone_temp_{session_id}",
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
-            in_memory=True
+            in_memory=True,
+            app_version="XTAPO 2.6.0",
+            device_model="XTAPO Web Player",
+            system_version="Web Audio Engine",
+            lang_code="vi"
         )
         await temp_client.connect()
 

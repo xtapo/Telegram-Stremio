@@ -12,13 +12,13 @@
     <link rel="apple-touch-icon" sizes="512x512" href="/music/icon-512.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400;1,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/music/style.css?v=2.2">
-    <link rel="stylesheet" href="/Music/style.css?v=2.2">
+    <link rel="stylesheet" href="/music/style.css?v=3.0">
+    <link rel="stylesheet" href="/Music/style.css?v=3.0">
     <!-- JSZip for Client-side Zip Packaging & High-Speed Batch Downloads -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- QRCode.js for Telegram MTProto QR Login -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Standalone Offline QRCode.js for Instant Telegram QR Render -->
+    <script src="/music/qrcode.min.js?v=1.0"></script>
+    <script src="/Music/qrcode.min.js?v=1.0"></script>
 </head>
 <body class="kmusic-body">
     <!-- Ambient Dynamic Background Blur (Apple Music Style) -->
@@ -734,15 +734,15 @@
 
             <!-- Tab Switcher -->
             <div class="auth-tabs">
-                <button class="auth-tab-btn active" id="tabQrLogin">
+                <button class="auth-tab-btn active" id="tabQrLogin" onclick="window._musicApp?.switchAuthTab('qr')">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-5 0h3v3h-3v-3zm2 5h3v3h-3v-3zm3-2h3v5h-2v-3h-1v-2zm-3-3h2v2h-2v-2z"/></svg>
                     <span>Quét Mã QR</span>
                 </button>
-                <button class="auth-tab-btn" id="tabPhoneLogin">
+                <button class="auth-tab-btn" id="tabPhoneLogin" onclick="window._musicApp?.switchAuthTab('phone')">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
                     <span>Số Điện Thoại</span>
                 </button>
-                <button class="auth-tab-btn" id="tabPwLogin">
+                <button class="auth-tab-btn" id="tabPwLogin" onclick="window._musicApp?.switchAuthTab('pw')">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
                     <span>Mật Khẩu</span>
                 </button>
@@ -1337,6 +1337,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="/Music/app.js?v=2.2"></script>
+    <script src="/Music/app.js?v=3.0"></script>
 </body>
 </html>
