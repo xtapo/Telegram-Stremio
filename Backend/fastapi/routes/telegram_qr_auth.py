@@ -201,6 +201,13 @@ async def init_telegram_qr_login():
             "user_data": None
         }
 
+        # Khởi động Dispatcher để nhận RawUpdate events
+        try:
+            await temp_client.dispatcher.start()
+            LOGGER.info(f"[QR AUTH] Dispatcher khởi động thành công (Session: {session_id})")
+        except Exception as disp_err:
+            LOGGER.warning(f"[QR AUTH] Không khởi động được Dispatcher: {disp_err}")
+
         # Đăng ký Raw Update Handler lắng nghe UpdateLoginToken khi người dùng quét mã trên điện thoại
         async def on_qr_raw_update(client, update, users, chats):
             try:
@@ -234,6 +241,52 @@ async def init_telegram_qr_login():
                 LOGGER.error(f"[QR RAW UPDATE ERROR] {ex}", exc_info=True)
 
         temp_client.add_handler(RawUpdateHandler(on_qr_raw_update))
+
+        # Fallback: Auto-check mỗi 3 giây để phát hiện quét mã (phòng trường hợp Dispatcher không nhận được sự kiện)
+        async def _auto_check_qr_scan():
+            await asyncio.sleep(5)  # Chờ 5 giây đầu tiên
+            while True:
+                sdata = _ACTIVE_QR_SESSIONS.get(session_id)
+                if not sdata or sdata.get("status") != "pending":
+                    break
+                if time.time() > sdata.get("expires_at", 0) + 10:
+                    break
+                try:
+                    cl = sdata.get("client")
+                    if cl and getattr(cl, "is_connected", False):
+                        check_res = await cl.invoke(
+                            ExportLoginToken(
+                                api_id=Telegram.API_ID,
+                                api_hash=Telegram.API_HASH,
+                                except_ids=[]
+                            )
+                        )
+                        if isinstance(check_res, LoginTokenMigrateTo):
+                            LOGGER.info(f"[QR AUTO-CHECK] Phát hiện quét mã! Di chuyển DC {check_res.dc_id}...")
+                            check_res = await _migrate_and_import_token(cl, check_res)
+                        if isinstance(check_res, LoginTokenSuccess):
+                            auth_user = getattr(check_res.authorization, "user", None)
+                            if auth_user:
+                                try:
+                                    cl.storage.user_id = auth_user.id
+                                    cl.storage.is_bot = False
+                                    cl.storage.is_authorized = True
+                                except Exception:
+                                    pass
+                            user_data = await _finalize_qr_login(cl, auth_user=auth_user)
+                            sdata["status"] = "success"
+                            sdata["user_data"] = user_data
+                            LOGGER.info(f"[QR AUTO-CHECK] ✅ Đăng nhập thành công qua auto-check!")
+                            break
+                except SessionPasswordNeeded:
+                    LOGGER.info(f"[QR AUTO-CHECK] Phát hiện cần 2FA (Session: {session_id})")
+                    sdata["status"] = "needs_2fa"
+                    break
+                except Exception as e:
+                    LOGGER.debug(f"[QR AUTO-CHECK] {e}")
+                await asyncio.sleep(3)
+
+        asyncio.create_task(_auto_check_qr_scan())
 
         return {
             "status": "success",
