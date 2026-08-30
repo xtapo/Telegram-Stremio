@@ -3778,9 +3778,19 @@ function renderUsersTable(users) {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-surface-2 transition group';
         
-        const date = new Date(u.created_at * 1000).toLocaleDateString('vi-VN', {
+        const timestamp = u.created_at || u.last_login || Date.now()/1000;
+        const date = new Date(timestamp * 1000).toLocaleDateString('vi-VN', {
             year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
         });
+
+        const isTelegram = u.auth_type === 'telegram_qr' || u.telegram_id || (u._id && String(u._id).startsWith('tg_'));
+        const typeBadge = isTelegram
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30 text-[10px] font-bold" title="Telegram ID: ${u.telegram_id || u._id}">
+                    <i class="fa-brands fa-telegram"></i> Telegram QR
+               </span>`
+            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-2 text-text-secondary border border-hairline text-[10px] font-semibold">
+                    <i class="fa-solid fa-key text-[9px]"></i> Mật Khẩu
+               </span>`;
 
         const isActive = u.is_active !== false;
         const statusBadge = isActive 
@@ -3800,7 +3810,10 @@ function renderUsersTable(users) {
                 <img src="${u.avatar_url}" class="w-10 h-10 rounded-full mx-auto bg-black/20 border border-hairline object-cover" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}'">
             </td>
             <td class="py-3.5 px-4">
-                <div class="font-bold text-text">${u.username}</div>
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-text">${u.username}</span>
+                    ${typeBadge}
+                </div>
                 <div class="text-[10px] text-text-secondary font-mono">${u._id}</div>
             </td>
             <td class="py-3.5 px-4 text-text font-medium">

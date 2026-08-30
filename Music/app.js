@@ -334,17 +334,34 @@ class XTAPOMusicApp {
         
         this.authModal = document.getElementById('authModal');
         this.closeAuthModal = document.getElementById('closeAuthModal');
-        this.tabLogin = document.getElementById('tabLogin');
-        this.tabRegister = document.getElementById('tabRegister');
-        this.loginForm = document.getElementById('loginForm');
-        this.registerForm = document.getElementById('registerForm');
+        this.tabQrLogin = document.getElementById('tabQrLogin');
+        this.tabPwLogin = document.getElementById('tabPwLogin');
+        this.qrLoginPane = document.getElementById('qrLoginPane');
+        this.pwLoginPane = document.getElementById('pwLoginPane');
         
+        this.qrCodeContainer = document.getElementById('qrCodeContainer');
+        this.qrLoadingSpinner = document.getElementById('qrLoadingSpinner');
+        this.qrExpiredOverlay = document.getElementById('qrExpiredOverlay');
+        this.btnRefreshQr = document.getElementById('btnRefreshQr');
+        this.qrStatusBadge = document.getElementById('qrStatusBadge');
+        this.qrStatusText = document.getElementById('qrStatusText');
+        this.qrCountdownTag = document.getElementById('qrCountdownTag');
+        this.qrCountdownSec = document.getElementById('qrCountdownSec');
+        
+        this.qr2FaSection = document.getElementById('qr2FaSection');
+        this.qr2FaInput = document.getElementById('qr2FaInput');
+        this.btnSubmit2Fa = document.getElementById('btnSubmit2Fa');
+
+        this.loginForm = document.getElementById('loginForm');
         this.loginSubmitBtn = document.getElementById('loginSubmitBtn');
-        this.regSubmitBtn = document.getElementById('regSubmitBtn');
         this.loginUsername = document.getElementById('loginUsername');
         this.loginPassword = document.getElementById('loginPassword');
-        this.regUsername = document.getElementById('regUsername');
         this.favoriteBtn = document.getElementById('favoriteBtn');
+
+        this._qrPollTimer = null;
+        this._qrCountdownTimer = null;
+        this._currentQrSessionId = null;
+        this._qrCodeInstance = null;
 
         // Favorites Modal
         this.navFavorites = document.getElementById('navFavorites');
@@ -577,6 +594,8 @@ class XTAPOMusicApp {
                     }
                 } else {
                     this.authModal.classList.add('open');
+                    this.switchAuthTab('qr');
+                    this.initTelegramQrLogin();
                 }
             });
         }
@@ -584,34 +603,231 @@ class XTAPOMusicApp {
         if (this.closeAuthModal) {
             this.closeAuthModal.addEventListener('click', () => {
                 this.authModal.classList.remove('open');
+                this.stopQrPolling();
             });
         }
-        
-        if (this.tabLogin && this.tabRegister) {
-            this.tabLogin.addEventListener('click', () => {
-                this.tabLogin.classList.add('active');
-                this.tabRegister.classList.remove('active');
-                this.loginForm.style.display = 'block';
-                this.registerForm.style.display = 'none';
+
+        // Tab Switching
+        if (this.tabQrLogin && this.tabPwLogin) {
+            this.tabQrLogin.addEventListener('click', () => {
+                this.switchAuthTab('qr');
+                if (!this._qrPollTimer && !this.currentUser) {
+                    this.initTelegramQrLogin();
+                }
             });
-            this.tabRegister.addEventListener('click', () => {
-                this.tabRegister.classList.add('active');
-                this.tabLogin.classList.remove('active');
-                this.registerForm.style.display = 'block';
-                this.loginForm.style.display = 'none';
+            this.tabPwLogin.addEventListener('click', () => {
+                this.switchAuthTab('pw');
+                this.stopQrPolling();
+            });
+        }
+
+        // QR Actions
+        if (this.btnRefreshQr) {
+            this.btnRefreshQr.addEventListener('click', () => this.initTelegramQrLogin());
+        }
+
+        if (this.btnSubmit2Fa) {
+            this.btnSubmit2Fa.addEventListener('click', () => this.submitQr2Fa());
+        }
+        if (this.qr2FaInput) {
+            this.qr2FaInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.submitQr2Fa();
             });
         }
         
         if (this.loginSubmitBtn) {
             this.loginSubmitBtn.addEventListener('click', () => this.loginUser());
         }
-        
-        if (this.regSubmitBtn) {
-            this.regSubmitBtn.addEventListener('click', () => this.registerUser());
+        if (this.loginPassword) {
+            this.loginPassword.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.loginUser();
+            });
         }
         
         if (this.favoriteBtn) {
             this.favoriteBtn.addEventListener('click', () => this.toggleFavorite());
+        }
+    }
+
+    switchAuthTab(tabName) {
+        if (tabName === 'qr') {
+            if (this.tabQrLogin) this.tabQrLogin.classList.add('active');
+            if (this.tabPwLogin) this.tabPwLogin.classList.remove('active');
+            if (this.qrLoginPane) this.qrLoginPane.style.display = 'block';
+            if (this.pwLoginPane) this.pwLoginPane.style.display = 'none';
+        } else {
+            if (this.tabPwLogin) this.tabPwLogin.classList.add('active');
+            if (this.tabQrLogin) this.tabQrLogin.classList.remove('active');
+            if (this.pwLoginPane) this.pwLoginPane.style.display = 'block';
+            if (this.qrLoginPane) this.qrLoginPane.style.display = 'none';
+        }
+    }
+
+    // --- Telegram MTProto QR Login Implementation ---
+    async initTelegramQrLogin() {
+        this.stopQrPolling();
+        if (this.qrLoadingSpinner) this.qrLoadingSpinner.classList.add('active');
+        if (this.qrExpiredOverlay) this.qrExpiredOverlay.style.display = 'none';
+        if (this.qr2FaSection) this.qr2FaSection.style.display = 'none';
+        if (this.qrStatusText) this.qrStatusText.textContent = "Đang kết nối Telegram...";
+
+        try {
+            const res = await fetch('/api/music/auth/telegram/qr/init', { method: 'POST' });
+            const data = await res.json();
+
+            if (this.qrLoadingSpinner) this.qrLoadingSpinner.classList.remove('active');
+
+            if (data.status === 'success' && data.tg_url) {
+                this._currentQrSessionId = data.session_id;
+                this.renderQrCode(data.tg_url);
+                if (this.qrStatusText) this.qrStatusText.textContent = "Mở Telegram trên điện thoại để quét mã";
+                this.startQrPolling(data.session_id, data.expires_at || (Date.now()/1000 + 60));
+            } else {
+                if (this.qrStatusText) this.qrStatusText.textContent = data.message || "Lỗi tạo mã QR";
+                this.showToast(data.message || "Không thể tạo mã QR đăng nhập.");
+            }
+        } catch (e) {
+            if (this.qrLoadingSpinner) this.qrLoadingSpinner.classList.remove('active');
+            if (this.qrStatusText) this.qrStatusText.textContent = "Lỗi kết nối máy chủ";
+            this.showToast("Lỗi kết nối tới máy chủ tạo mã QR.");
+        }
+    }
+
+    renderQrCode(tgUrl) {
+        if (!this.qrCodeContainer) return;
+        this.qrCodeContainer.innerHTML = '';
+        
+        try {
+            if (typeof QRCode !== 'undefined') {
+                this._qrCodeInstance = new QRCode(this.qrCodeContainer, {
+                    text: tgUrl,
+                    width: 196,
+                    height: 196,
+                    colorDark: "#0c1017",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            } else {
+                // Fallback SVG / Image nếu QRCode.js chưa tải
+                const img = document.createElement('img');
+                img.src = `https://api.qrserver.com/v1/create-qr-code/?size=196x196&data=${encodeURIComponent(tgUrl)}&margin=10`;
+                img.alt = "Telegram QR Code";
+                this.qrCodeContainer.appendChild(img);
+            }
+        } catch (err) {
+            console.error("Lỗi render QRCode:", err);
+            const img = document.createElement('img');
+            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=196x196&data=${encodeURIComponent(tgUrl)}&margin=10`;
+            this.qrCodeContainer.appendChild(img);
+        }
+    }
+
+    startQrPolling(sessionId, expiresAt) {
+        this.stopQrPolling();
+
+        // 1. Countdown timer
+        const updateCountdown = () => {
+            const nowSec = Date.now() / 1000;
+            const remaining = Math.max(0, Math.ceil(expiresAt - nowSec));
+            if (this.qrCountdownSec) this.qrCountdownSec.textContent = remaining;
+
+            if (remaining <= 0) {
+                this.stopQrPolling();
+                if (this.qrExpiredOverlay) this.qrExpiredOverlay.style.display = 'flex';
+                if (this.qrStatusText) this.qrStatusText.textContent = "Mã QR đã hết hạn";
+            }
+        };
+        updateCountdown();
+        this._qrCountdownTimer = setInterval(updateCountdown, 1000);
+
+        // 2. Status poll loop
+        this._qrPollTimer = setInterval(async () => {
+            if (!this.authModal.classList.contains('open')) {
+                this.stopQrPolling();
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/music/auth/telegram/qr/status?session_id=${encodeURIComponent(sessionId)}`);
+                const data = await res.json();
+
+                if (data.status === 'success' && data.user) {
+                    this.handleQrSuccess(data);
+                } else if (data.status === 'needs_2fa') {
+                    if (this.qr2FaSection) this.qr2FaSection.style.display = 'block';
+                    if (this.qrStatusText) this.qrStatusText.textContent = "🔐 Yêu cầu nhập mật khẩu 2FA";
+                    if (this.qr2FaInput) this.qr2FaInput.focus();
+                } else if (data.status === 'expired') {
+                    this.stopQrPolling();
+                    if (this.qrExpiredOverlay) this.qrExpiredOverlay.style.display = 'flex';
+                    if (this.qrStatusText) this.qrStatusText.textContent = "Mã QR đã hết hạn";
+                } else if (data.status === 'pending') {
+                    if (data.message && this.qrStatusText) {
+                        this.qrStatusText.textContent = data.message;
+                    }
+                }
+            } catch (err) {
+                // Ignore transient network glitches in polling
+            }
+        }, 1800);
+    }
+
+    stopQrPolling() {
+        if (this._qrPollTimer) {
+            clearInterval(this._qrPollTimer);
+            this._qrPollTimer = null;
+        }
+        if (this._qrCountdownTimer) {
+            clearInterval(this._qrCountdownTimer);
+            this._qrCountdownTimer = null;
+        }
+    }
+
+    async submitQr2Fa() {
+        if (!this._currentQrSessionId || !this.qr2FaInput) return;
+        const password = this.qr2FaInput.value.trim();
+        if (!password) return this.showToast("Vui lòng nhập mật khẩu 2FA.");
+
+        if (this.btnSubmit2Fa) this.btnSubmit2Fa.textContent = "Đang xác thực...";
+
+        try {
+            const res = await fetch('/api/music/auth/telegram/qr/2fa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: this._currentQrSessionId, password })
+            });
+            const data = await res.json();
+            if (this.btnSubmit2Fa) this.btnSubmit2Fa.textContent = "Xác Nhận Đăng Nhập";
+
+            if (data.status === 'success' && data.user) {
+                this.handleQrSuccess(data);
+            } else {
+                this.showToast(data.message || "Mật khẩu 2FA không chính xác.");
+            }
+        } catch (e) {
+            if (this.btnSubmit2Fa) this.btnSubmit2Fa.textContent = "Xác Nhận Đăng Nhập";
+            this.showToast("Lỗi kết nối khi xác thực 2FA.");
+        }
+    }
+
+    async handleQrSuccess(data) {
+        this.stopQrPolling();
+        this.showToast(`🎉 Đăng nhập Telegram thành công! Chào mừng ${data.user.display_name}!`);
+        this.authModal.classList.remove('open');
+        if (this.qr2FaInput) this.qr2FaInput.value = '';
+
+        await this.fetchUserProfile();
+        await this.fetchTelegramAlbums(false);
+
+        if (this.favoriteTracks && this.favoriteTracks.length > 0) {
+            this.playFavoritesQueue(0, false, false);
+            if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
+        } else if (this.playlists && this.playlists.length > 0 && this.playlists[0].tracks?.length > 0) {
+            this.playPlaylist(this.playlists[0], 0, false);
+            if (this.navPlaylists) this.setActiveNavLink(this.navPlaylists);
+        } else if (this.albums && this.albums.length > 0 && !this.albums[0].isDemo) {
+            this.loadAlbum(0, 0, false);
+            this.renderAlbumGrid();
         }
     }
 
@@ -647,36 +863,6 @@ class XTAPOMusicApp {
                 }
             } else {
                 this.showToast(data.message || "Đăng nhập thất bại.");
-            }
-        } catch (e) {
-            this.showToast("Lỗi kết nối.");
-        }
-    }
-
-    async registerUser() {
-        const username = this.regUsername.value;
-        const display_name = this.regDisplayName.value;
-        const password = this.regPassword.value;
-        if (!username || !password) return this.showToast("Vui lòng nhập đủ thông tin.");
-        
-        try {
-            const res = await fetch('/api/music/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, display_name })
-            });
-            const data = await res.json();
-            if (data.status === 'success') {
-                this.showToast("Đăng ký thành công!");
-                this.authModal.classList.remove('open');
-                this.regUsername.value = '';
-                this.regPassword.value = '';
-                this.regDisplayName.value = '';
-                await this.fetchUserProfile();
-                await this.fetchTelegramAlbums(false);
-                this.showEmptyCloudState();
-            } else {
-                this.showToast(data.message || "Đăng ký thất bại.");
             }
         } catch (e) {
             this.showToast("Lỗi kết nối.");

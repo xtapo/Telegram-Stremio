@@ -75,8 +75,16 @@ async def login_music_user(payload: dict, request: Request):
 
 @auth_router.post("/api/music/auth/logout")
 async def logout_music_user(request: Request):
-    request.session.pop("music_user_id", None)
+    user_id = request.session.pop("music_user_id", None)
     request.session.pop("music_username", None)
+    request.session.pop("music_display_name", None)
+    request.session.pop("music_avatar_url", None)
+    if user_id:
+        try:
+            from Backend.fastapi.routes.telegram_qr_auth import close_user_tg_client
+            await close_user_tg_client(user_id)
+        except Exception:
+            pass
     return {"status": "success", "message": "Đã đăng xuất."}
 
 

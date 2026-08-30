@@ -4520,6 +4520,325 @@ html, body {
     }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   TELEGRAM MTPROTO QR AUTH & MODAL STYLING
+   ───────────────────────────────────────────────────────────── */
+.auth-modal-container {
+    max-width: 440px !important;
+    background: rgba(18, 20, 29, 0.96) !important;
+    backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 24px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(0, 136, 204, 0.2);
+    overflow: hidden;
+    padding: 0 !important;
+}
+
+.auth-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.auth-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.auth-brand-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: #29b6f6;
+    text-transform: uppercase;
+}
+
+.auth-brand-badge svg {
+    color: #29b6f6;
+}
+
+.auth-modal-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+/* Tabs switcher */
+.auth-tabs {
+    display: flex;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 6px;
+    margin: 16px 24px 0;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    gap: 6px;
+}
+
+.auth-tab-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-tab-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.auth-tab-btn.active {
+    background: linear-gradient(135deg, rgba(0, 136, 204, 0.25), rgba(41, 182, 246, 0.15));
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(0, 136, 204, 0.2);
+}
+
+.auth-modal-body {
+    padding: 20px 24px 26px !important;
+}
+
+/* QR Stage Card */
+.qr-stage-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 20px;
+    padding: 20px 16px;
+    position: relative;
+}
+
+.qr-code-box {
+    width: 220px;
+    height: 220px;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(41, 182, 246, 0.25);
+    overflow: hidden;
+    margin-bottom: 18px;
+}
+
+.qr-canvas-wrap {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qr-canvas-wrap img,
+.qr-canvas-wrap canvas {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    display: block;
+}
+
+/* Animated Scanner Ray */
+.qr-scanner-ray {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #0088cc, #38bdf8, transparent);
+    box-shadow: 0 0 12px #38bdf8, 0 0 20px #0088cc;
+    animation: qrScanMove 2.2s ease-in-out infinite alternate;
+    pointer-events: none;
+    z-index: 5;
+}
+
+@keyframes qrScanMove {
+    0% { top: 6px; opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { top: calc(100% - 9px); opacity: 0.3; }
+}
+
+/* QR Loading Spinner */
+.qr-loading-spinner {
+    position: absolute;
+    inset: 0;
+    background: rgba(18, 20, 29, 0.92);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.8rem;
+    font-weight: 600;
+    z-index: 8;
+    text-align: center;
+    padding: 16px;
+}
+
+.qr-loading-spinner.active {
+    display: flex;
+}
+
+.qr-spin-ring {
+    width: 38px;
+    height: 38px;
+    border: 3px solid rgba(56, 189, 248, 0.2);
+    border-top-color: #38bdf8;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* QR Expired Overlay */
+.qr-expired-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 17, 26, 0.94);
+    backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #ffffff;
+    font-size: 0.88rem;
+    font-weight: 700;
+    z-index: 9;
+    padding: 16px;
+    animation: fadeIn 0.3s ease;
+}
+
+.qr-expired-icon {
+    font-size: 2.2rem;
+    animation: pulse 1.5s infinite;
+}
+
+.qr-refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #0088cc 0%, #00b4d8 100%);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 136, 204, 0.4);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.qr-refresh-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(0, 136, 204, 0.6);
+}
+
+/* Instructions */
+.qr-instructions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.qr-guide-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.82);
+    line-height: 1.4;
+}
+
+.step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    color: #38bdf8;
+    font-size: 0.72rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Status row */
+.qr-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.qr-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #38bdf8;
+}
+
+.qr-pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 10px #38bdf8;
+    animation: pulse 1.5s infinite;
+}
+
+.qr-countdown-tag {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.qr-countdown-tag b {
+    color: var(--accent-gold);
+}
+
+/* 2FA Section */
+.qr-2fa-container {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 16px;
+    padding: 16px;
+    margin-top: 16px;
+    animation: slideDown 0.3s ease;
+}
+
+.qr-2fa-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 
 
 

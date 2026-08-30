@@ -2018,12 +2018,27 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         except Exception as e:
             LOGGER.warning(f"[MUSIC CACHE] Đọc cache thất bại ({e}), fallback sang tải Telegram.")
 
-    # 2. Cache Miss: Tìm client Telegram phù hợp
+    # 2. Cache Miss: Tìm client Telegram phù hợp (Ưu tiên User Client cá nhân của người dùng đã đăng nhập QR)
     streamer = None
     client_idx = 0
     tg_client = None
 
-    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+    # Kiểm tra xem người dùng hiện tại có phiên Telegram riêng (QR Login) hay không
+    music_user_id = request.session.get("music_user_id")
+    user_personal_client = None
+    if music_user_id:
+        try:
+            from Backend.fastapi.routes.telegram_qr_auth import get_user_tg_client
+            user_personal_client = await get_user_tg_client(music_user_id)
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC STREAM] Không thể lấy User Client của {music_user_id}: {e}")
+
+    if user_personal_client and getattr(user_personal_client, "is_connected", False):
+        tg_client = user_personal_client
+        client_idx = -99  # Designated user-specific client index
+        streamer = _get_streamer(tg_client, client_idx)
+        LOGGER.info(f"[MUSIC STREAM] Sử dụng phiên Telegram cá nhân của user '{music_user_id}' để stream bài #{msg_id} trong {chat_id}")
+    elif botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
         tg_client = botmod.Userbot
         client_idx = USERBOT_CLIENT_INDEX
         streamer = _get_streamer(tg_client, client_idx)
@@ -2049,6 +2064,8 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         
         # Fallback thử lần lượt các client còn lại
         candidates = []
+        if user_personal_client and getattr(user_personal_client, "is_connected", False) and tg_client != user_personal_client:
+            candidates.append((-99, user_personal_client))
         if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False) and tg_client != botmod.Userbot:
             candidates.append((USERBOT_CLIENT_INDEX, botmod.Userbot))
         if multi_clients:
@@ -2125,6 +2142,8 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
 
     # Prepare list of clients to try (primary first, then alternatives)
     candidates_to_stream = [(client_idx, tg_client, streamer)]
+    if user_personal_client and getattr(user_personal_client, "is_connected", False) and tg_client != user_personal_client:
+        candidates_to_stream.append((-99, user_personal_client, _get_streamer(user_personal_client, -99)))
     if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False) and tg_client != botmod.Userbot:
         candidates_to_stream.append((USERBOT_CLIENT_INDEX, botmod.Userbot, _get_streamer(botmod.Userbot, USERBOT_CLIENT_INDEX)))
     if multi_clients:
