@@ -132,6 +132,7 @@ class XTAPOMusicApp {
         this.synthTimer = null;
         this.synthTime = 0;
         this.synthDuration = 180;
+        window.player = this;
 
         // Elements
         this.audio = document.getElementById('mainAudio');
@@ -2048,7 +2049,13 @@ class XTAPOMusicApp {
             }
         }
 
-        // Set Audio Source
+        // Set Audio Source - Dừng dứt điểm bài hát cũ trước khi nạp bài mới
+        if (this.audio) {
+            try {
+                this.audio.pause();
+                this.audio.currentTime = 0;
+            } catch (e) {}
+        }
         this.stopAudioSynth();
         this._preloadedTrackUrl = null;
         if (track.previewUrl) {
@@ -2066,6 +2073,28 @@ class XTAPOMusicApp {
 
         // Tự động nạp trước (preload) bài hát kế tiếp sau 1.2s
         setTimeout(() => this.preloadNextTrack(), 1200);
+    }
+
+    playTrackById(trackId) {
+        if (!trackId) return;
+        const album = this.currentAlbum;
+        if (album && album.tracks) {
+            const idx = album.tracks.findIndex(t => String(t.id) === String(trackId));
+            if (idx !== -1) {
+                this.loadTrack(idx, true);
+                return;
+            }
+        }
+        for (let aIdx = 0; aIdx < this.albums.length; aIdx++) {
+            const alb = this.albums[aIdx];
+            if (alb && alb.tracks) {
+                const tIdx = alb.tracks.findIndex(t => String(t.id) === String(trackId));
+                if (tIdx !== -1) {
+                    this.loadAlbum(aIdx, tIdx, true);
+                    return;
+                }
+            }
+        }
     }
 
     preloadCoversForCurrentAlbum() {

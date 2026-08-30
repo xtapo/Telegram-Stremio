@@ -424,13 +424,28 @@ public class XTMediaBrowserService extends MediaBrowserServiceCompat {
 
                 mainHandler.post(() -> {
                     updateMediaMetadata(track);
-                    try {
-                        mediaPlayer.reset();
-                        mediaPlayer.setDataSource(track.streamUrl);
-                        mediaPlayer.prepareAsync();
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error playing track stream: " + e.getMessage());
-                        updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0);
+
+                    // Nếu có WebView (MainActivity) đang mở, ưu tiên phát qua WebView để không bị trùng lặp âm thanh
+                    if (controlListener != null) {
+                        controlListener.onPlayTrackByIndex(index, track.id);
+                        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                            try {
+                                mediaPlayer.stop();
+                                mediaPlayer.reset();
+                            } catch (Exception ignored) {}
+                        }
+                    } else {
+                        // Fallback phát qua MediaPlayer nếu WebView chưa mở
+                        try {
+                            if (mediaPlayer != null) {
+                                mediaPlayer.reset();
+                                mediaPlayer.setDataSource(track.streamUrl);
+                                mediaPlayer.prepareAsync();
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error playing track stream: " + e.getMessage());
+                            updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0);
+                        }
                     }
                 });
             } catch (Exception e) {
@@ -463,6 +478,14 @@ public class XTMediaBrowserService extends MediaBrowserServiceCompat {
     }
 
     public void updateTrack(String title, String artist, String album, String coverUrl, boolean isPlaying) {
+        // Dừng bất kỳ luồng phát độc lập nào của MediaPlayer để tránh phát 2 bài cùng lúc
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            try {
+                mediaPlayer.stop();
+                mediaPlayer.reset();
+            } catch (Exception ignored) {}
+        }
+
         AutoTrack track = new AutoTrack();
         track.id = "web_track_now";
         track.title = title;
