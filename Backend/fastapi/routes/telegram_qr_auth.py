@@ -19,8 +19,9 @@ from pyrogram.errors import (
     SessionPasswordNeeded,
 )
 from pyrogram.handlers import RawUpdateHandler
-from pyrogram.raw.functions.auth import ExportLoginToken
+from pyrogram.raw.functions.auth import ExportLoginToken, ImportLoginToken
 from pyrogram.raw.types.auth import LoginToken, LoginTokenMigrateTo, LoginTokenSuccess
+from pyrogram.session import Auth, Session
 
 from Backend import db
 from Backend.config import Telegram
@@ -37,6 +38,27 @@ _ACTIVE_PHONE_SESSIONS: Dict[str, dict] = {}
 
 # Quản lý các Client Telegram của người dùng sau khi đã đăng nhập thành công: user_id -> Client
 _USER_CLIENT_POOL: Dict[str, Client] = {}
+
+
+async def _migrate_and_import_token(client: Client, migrate_token: LoginTokenMigrateTo):
+    """Di chuyển client sang đúng Data Center (DC) của người dùng và gọi ImportLoginToken"""
+    current_res = migrate_token
+    while isinstance(current_res, LoginTokenMigrateTo):
+        target_dc = current_res.dc_id
+        token = current_res.token
+        LOGGER.info(f"[QR AUTH] Đang di chuyển client sang DC {target_dc} để hoàn tất ImportLoginToken...")
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+        test_mode = await client.storage.test_mode()
+        auth_key = await Auth(client, target_dc, test_mode).create()
+        client.session = Session(client, target_dc, auth_key, test_mode)
+        await client.storage.dc_id(target_dc)
+        await client.storage.auth_key(auth_key)
+        await client.connect()
+        current_res = await client.invoke(ImportLoginToken(token=token))
+    return current_res
 
 
 async def get_user_tg_client(user_id: str) -> Optional[Client]:
@@ -191,6 +213,8 @@ async def init_telegram_qr_login():
                             except_ids=[]
                         )
                     )
+                    if isinstance(login_res, LoginTokenMigrateTo):
+                        login_res = await _migrate_and_import_token(client, login_res)
                     if isinstance(login_res, LoginTokenSuccess):
                         auth_user = getattr(login_res.authorization, "user", None)
                         if auth_user:
@@ -387,6 +411,10 @@ async def check_telegram_qr_status(session_id: str, request: Request):
                 except_ids=[]
             )
         )
+        if isinstance(login_res, LoginTokenMigrateTo):
+            LOGGER.info(f"[QR AUTH POLL] Di chuyển DC {login_res.dc_id} theo yêu cầu của Telegram...")
+            login_res = await _migrate_and_import_token(temp_client, login_res)
+
         if isinstance(login_res, LoginTokenSuccess):
             auth_user = getattr(login_res.authorization, "user", None)
             if auth_user:
