@@ -3118,26 +3118,28 @@ function alertToast(msg) {
     setTimeout(() => el.remove(), 4000);
 }
 
-// ── Real-Time Shazam Stream Recognition Controller ─────────────────────────
-let shazamAbortController = null;
+// ── Real-Time Shazam Polling Recognition Controller ─────────────────────────
+let shazamPollInterval = null;
 let isShazamRunning = false;
+let lastShazamLogCount = 0;
 
 function openShazamModal(totalCount = 0) {
     const modal = document.getElementById('shazam-progress-modal');
     if (!modal) return;
     
     isShazamRunning = true;
+    lastShazamLogCount = 0;
     document.getElementById('shazam-modal-badge').textContent = 'Đang nhận diện...';
     document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0';
-    document.getElementById('shazam-progress-title').textContent = `Chuẩn bị nhận diện ${totalCount} bài hát...`;
+    document.getElementById('shazam-progress-title').textContent = totalCount ? `Chuẩn bị nhận diện ${totalCount} bài hát...` : 'Đang đồng bộ tiến độ...';
     document.getElementById('shazam-progress-percent').textContent = '0%';
     document.getElementById('shazam-progress-fill').style.width = '0%';
-    document.getElementById('shazam-stat-total').textContent = totalCount.toLocaleString();
+    document.getElementById('shazam-stat-total').textContent = totalCount ? totalCount.toLocaleString() : '...';
     document.getElementById('shazam-stat-success').textContent = '0';
     document.getElementById('shazam-stat-failed').textContent = '0';
     document.getElementById('shazam-current-track-name').textContent = 'Đang kết nối bot Telegram...';
     document.getElementById('shazam-log-count').textContent = '0 mục';
-    document.getElementById('shazam-live-logs').innerHTML = '';
+    document.getElementById('shazam-live-logs').innerHTML = '<div class="text-center py-4 text-text-secondary text-[11px]">Đang tải nhật ký nhận diện...</div>';
     
     document.getElementById('shazam-abort-btn').classList.remove('hidden');
     document.getElementById('shazam-finish-btn').classList.add('hidden');
@@ -3149,9 +3151,9 @@ function openShazamModal(totalCount = 0) {
 
 function closeShazamModal() {
     isShazamRunning = false;
-    if (shazamAbortController) {
-        try { shazamAbortController.abort(); } catch (e) {}
-        shazamAbortController = null;
+    if (shazamPollInterval) {
+        clearInterval(shazamPollInterval);
+        shazamPollInterval = null;
     }
     const modal = document.getElementById('shazam-progress-modal');
     if (modal) {
@@ -3160,45 +3162,138 @@ function closeShazamModal() {
     }
 }
 
-function abortShazamProcess() {
-    if (shazamAbortController) {
-        try { shazamAbortController.abort(); } catch (e) {}
-        shazamAbortController = null;
+async function abortShazamProcess() {
+    try {
+        const res = await fetch('/api/music/tracks/shazam/cancel', { method: 'POST' });
+        const data = await res.json();
+        alertToast(data.message || 'Đã gửi yêu cầu dừng.');
+    } catch (e) {
+        alertToast('Lỗi: ' + e.message);
     }
-    isShazamRunning = false;
-    document.getElementById('shazam-modal-badge').textContent = 'Đã dừng';
-    document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0';
-    document.getElementById('shazam-progress-title').textContent = 'Tiến trình nhận diện đã được dừng theo yêu cầu.';
-    document.getElementById('shazam-abort-btn').classList.add('hidden');
-    document.getElementById('shazam-finish-btn').classList.remove('hidden');
-    document.getElementById('shazam-modal-close-icon').classList.remove('hidden');
-    
-    addShazamLog('⚠️ Người dùng đã dừng tiến trình nhận diện Shazam.', 'warn');
-    loadMusicData();
+    pollShazamStatus();
 }
 
-function addShazamLog(htmlContent, type = 'info') {
+function startPollingShazamStatus() {
+    if (shazamPollInterval) clearInterval(shazamPollInterval);
+    pollShazamStatus();
+    shazamPollInterval = setInterval(pollShazamStatus, 800);
+}
+
+async function pollShazamStatus() {
+    try {
+        const res = await fetch('/api/music/tracks/shazam/status');
+        const json = await res.json();
+        if (!res.ok || json.status !== 'success' || !json.data) return;
+
+        const data = json.data;
+        const status = data.status; // idle, running, completed, cancelled, error
+
+        if (status === 'idle') {
+            if (shazamPollInterval) {
+                clearInterval(shazamPollInterval);
+                shazamPollInterval = null;
+            }
+            return;
+        }
+
+        // Update UI
+        const pct = data.percent || 0;
+        document.getElementById('shazam-progress-percent').textContent = `${pct}%`;
+        document.getElementById('shazam-progress-fill').style.width = `${pct}%`;
+        document.getElementById('shazam-stat-total').textContent = (data.total || 0).toLocaleString();
+        document.getElementById('shazam-stat-success').textContent = (data.success_count || 0).toLocaleString();
+        document.getElementById('shazam-stat-failed').textContent = (data.failed_count || 0).toLocaleString();
+
+        if (data.current_track) {
+            document.getElementById('shazam-current-track-name').textContent = data.current_track;
+        }
+
+        if (status === 'running') {
+            document.getElementById('shazam-modal-badge').textContent = 'Đang nhận diện...';
+            document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0';
+            document.getElementById('shazam-progress-title').textContent = `Đang xử lý ${data.current}/${data.total} bài hát (${pct}%)`;
+            document.getElementById('shazam-abort-btn').classList.remove('hidden');
+            document.getElementById('shazam-finish-btn').classList.add('hidden');
+            document.getElementById('shazam-modal-close-icon').classList.add('hidden');
+        } else if (status === 'completed') {
+            document.getElementById('shazam-modal-badge').textContent = 'Hoàn tất';
+            document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0';
+            document.getElementById('shazam-progress-title').textContent = `Hoàn tất! ${data.success_count}/${data.total} bài hát nhận diện thành công.`;
+            document.getElementById('shazam-current-track-name').textContent = 'Đã hoàn tất nhận diện toàn bộ danh sách.';
+            document.getElementById('shazam-abort-btn').classList.add('hidden');
+            document.getElementById('shazam-finish-btn').classList.remove('hidden');
+            document.getElementById('shazam-modal-close-icon').classList.remove('hidden');
+
+            if (shazamPollInterval) {
+                clearInterval(shazamPollInterval);
+                shazamPollInterval = null;
+            }
+            clearBulkSelection();
+            loadMusicData();
+        } else if (status === 'cancelled') {
+            document.getElementById('shazam-modal-badge').textContent = 'Đã dừng';
+            document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0';
+            document.getElementById('shazam-progress-title').textContent = 'Tiến trình nhận diện đã được dừng theo yêu cầu.';
+            document.getElementById('shazam-abort-btn').classList.add('hidden');
+            document.getElementById('shazam-finish-btn').classList.remove('hidden');
+            document.getElementById('shazam-modal-close-icon').classList.remove('hidden');
+
+            if (shazamPollInterval) {
+                clearInterval(shazamPollInterval);
+                shazamPollInterval = null;
+            }
+            loadMusicData();
+        } else if (status === 'error') {
+            document.getElementById('shazam-modal-badge').textContent = 'Lỗi';
+            document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 shrink-0';
+            document.getElementById('shazam-progress-title').textContent = `Lỗi: ${data.error_message || 'Có lỗi xảy ra'}`;
+            document.getElementById('shazam-abort-btn').classList.add('hidden');
+            document.getElementById('shazam-finish-btn').classList.remove('hidden');
+            document.getElementById('shazam-modal-close-icon').classList.remove('hidden');
+
+            if (shazamPollInterval) {
+                clearInterval(shazamPollInterval);
+                shazamPollInterval = null;
+            }
+        }
+
+        // Render Logs
+        if (data.logs && data.logs.length > 0) {
+            renderShazamLogs(data.logs);
+        }
+    } catch (e) {
+        console.warn('Poll shazam status error:', e);
+    }
+}
+
+function renderShazamLogs(logs) {
     const logsContainer = document.getElementById('shazam-live-logs');
     if (!logsContainer) return;
-    
-    const row = document.createElement('div');
-    row.className = 'py-1 px-1.5 rounded-lg flex items-start gap-1.5 transition';
-    if (type === 'success') {
-        row.classList.add('bg-emerald-500/10', 'text-emerald-300');
-    } else if (type === 'warn') {
-        row.classList.add('bg-amber-500/10', 'text-amber-300');
-    } else if (type === 'error') {
-        row.classList.add('bg-red-500/10', 'text-red-300');
-    } else {
-        row.classList.add('text-text-secondary');
-    }
-    row.innerHTML = htmlContent;
-    logsContainer.appendChild(row);
-    logsContainer.scrollTop = logsContainer.scrollHeight;
 
+    if (logs.length === lastShazamLogCount) return;
+    lastShazamLogCount = logs.length;
+
+    logsContainer.innerHTML = '';
+    logs.forEach(l => {
+        const row = document.createElement('div');
+        row.className = 'py-1 px-1.5 rounded-lg flex items-start gap-1.5 transition text-[11px] leading-relaxed';
+        if (l.type === 'success') {
+            row.classList.add('bg-emerald-500/10', 'text-emerald-300');
+        } else if (l.type === 'warn') {
+            row.classList.add('bg-amber-500/10', 'text-amber-300');
+        } else if (l.type === 'error') {
+            row.classList.add('bg-red-500/10', 'text-red-300');
+        } else {
+            row.classList.add('text-text-secondary');
+        }
+        row.innerHTML = `<span class="text-[10px] opacity-60 font-mono shrink-0">[${l.time || ''}]</span> <span>${l.msg}</span>`;
+        logsContainer.appendChild(row);
+    });
+
+    logsContainer.scrollTop = logsContainer.scrollHeight;
     const countSpan = document.getElementById('shazam-log-count');
     if (countSpan) {
-        countSpan.textContent = `${logsContainer.children.length} mục`;
+        countSpan.textContent = `${logs.length} mục`;
     }
 }
 
@@ -3209,120 +3304,24 @@ async function runShazamRecognition(tracks) {
     }
 
     openShazamModal(tracks.length);
-    shazamAbortController = new AbortController();
 
     try {
-        const response = await fetch('/api/music/tracks/shazam', {
+        const response = await fetch('/api/music/tracks/shazam/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tracks }),
-            signal: shazamAbortController.signal
+            body: JSON.stringify({ tracks })
         });
 
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.message || `Lỗi máy chủ (${response.status})`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop(); // Giữ lại phần chưa hoàn chỉnh
-
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const evt = JSON.parse(line.trim());
-                    handleShazamStreamEvent(evt);
-                } catch (jsonErr) {
-                    console.warn('[Shazam Stream JSON Parse Error]', jsonErr, line);
-                }
-            }
-        }
-
-        if (buffer.trim()) {
-            try {
-                const evt = JSON.parse(buffer.trim());
-                handleShazamStreamEvent(evt);
-            } catch (e) {}
+        const data = await response.json();
+        if (response.ok && data.status === 'success') {
+            startPollingShazamStatus();
+        } else {
+            alertToast(data.message || 'Không thể bắt đầu nhận diện Shazam.');
+            pollShazamStatus();
         }
     } catch (err) {
-        if (err.name === 'AbortError') {
-            console.log('[Shazam Stream] Aborted by user');
-        } else {
-            document.getElementById('shazam-modal-badge').textContent = 'Lỗi';
-            document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 shrink-0';
-            addShazamLog(`❌ Lỗi kết nối luồng: ${err.message}`, 'error');
-            document.getElementById('shazam-abort-btn').classList.add('hidden');
-            document.getElementById('shazam-finish-btn').classList.remove('hidden');
-            document.getElementById('shazam-modal-close-icon').classList.remove('hidden');
-        }
-    }
-}
-
-function handleShazamStreamEvent(evt) {
-    if (!evt) return;
-
-    if (evt.type === 'start') {
-        document.getElementById('shazam-progress-title').textContent = `Đang nhận diện 0/${evt.total} bài hát...`;
-        document.getElementById('shazam-stat-total').textContent = (evt.total || 0).toLocaleString();
-        addShazamLog(`<i class="fa-solid fa-play text-indigo-400"></i> ${evt.message || 'Bắt đầu quá trình nhận diện...'}`);
-    } else if (evt.type === 'analyzing') {
-        document.getElementById('shazam-current-track-name').textContent = evt.track_name || '...';
-        document.getElementById('shazam-progress-title').textContent = `Đang phân tích bài ${evt.current}/${evt.total}...`;
-        const pct = evt.percent || 0;
-        document.getElementById('shazam-progress-percent').textContent = `${pct}%`;
-        document.getElementById('shazam-progress-fill').style.width = `${pct}%`;
-        if (evt.success_count !== undefined) document.getElementById('shazam-stat-success').textContent = evt.success_count;
-        if (evt.failed_count !== undefined) document.getElementById('shazam-stat-failed').textContent = evt.failed_count;
-    } else if (evt.type === 'progress') {
-        const pct = evt.percent || 0;
-        document.getElementById('shazam-progress-percent').textContent = `${pct}%`;
-        document.getElementById('shazam-progress-fill').style.width = `${pct}%`;
-        document.getElementById('shazam-progress-title').textContent = `Đã xử lý ${evt.current}/${evt.total} bài hát`;
-        if (evt.success_count !== undefined) document.getElementById('shazam-stat-success').textContent = evt.success_count;
-        if (evt.failed_count !== undefined) document.getElementById('shazam-stat-failed').textContent = evt.failed_count;
-
-        if (evt.status === 'success') {
-            const artistStr = evt.identified_artist ? `<b class="text-white">${escapeHtml(evt.identified_artist)}</b>` : '';
-            const titleStr = evt.identified_title ? `<b class="text-emerald-300">${escapeHtml(evt.identified_title)}</b>` : '';
-            const genreStr = evt.genre ? `<span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px]">${escapeHtml(evt.genre)}</span>` : '';
-            addShazamLog(`✅ #${evt.current} ${titleStr} - ${artistStr} ${genreStr}`, 'success');
-        } else {
-            addShazamLog(`⚠️ #${evt.current} <span class="text-text">${escapeHtml(evt.track_name)}</span>: Không khớp dữ liệu`, 'warn');
-        }
-    } else if (evt.type === 'done') {
-        document.getElementById('shazam-modal-badge').textContent = 'Hoàn tất';
-        document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0';
-        document.getElementById('shazam-progress-percent').textContent = '100%';
-        document.getElementById('shazam-progress-fill').style.width = '100%';
-        document.getElementById('shazam-progress-title').textContent = evt.message || 'Đã hoàn tất nhận diện!';
-        document.getElementById('shazam-current-track-name').textContent = 'Đã hoàn tất nhận diện toàn bộ danh sách.';
-        if (evt.success_count !== undefined) document.getElementById('shazam-stat-success').textContent = evt.success_count;
-        if (evt.failed_count !== undefined) document.getElementById('shazam-stat-failed').textContent = evt.failed_count;
-
-        addShazamLog(`🎉 <b>${evt.message || 'Đã hoàn tất nhận diện!'}</b>`, 'success');
-        document.getElementById('shazam-abort-btn').classList.add('hidden');
-        document.getElementById('shazam-finish-btn').classList.remove('hidden');
-        document.getElementById('shazam-modal-close-icon').classList.remove('hidden');
-
-        // Làm mới dữ liệu và dọn dẹp chọn bài
-        clearBulkSelection();
-        loadMusicData();
-    } else if (evt.type === 'error') {
-        document.getElementById('shazam-modal-badge').textContent = 'Lỗi';
-        document.getElementById('shazam-modal-badge').className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 shrink-0';
-        addShazamLog(`❌ Lỗi: ${evt.message}`, 'error');
-        document.getElementById('shazam-abort-btn').classList.add('hidden');
-        document.getElementById('shazam-finish-btn').classList.remove('hidden');
-        document.getElementById('shazam-modal-close-icon').classList.remove('hidden');
+        alertToast('Lỗi kết nối: ' + err.message);
+        pollShazamStatus();
     }
 }
 
@@ -3357,6 +3356,17 @@ document.addEventListener('DOMContentLoaded', () => {
             alertToast(msg);
         });
     }
+
+    // Kiểm tra xem có tiến trình Shazam nào đang chạy ngầm trên server không
+    fetch('/api/music/tracks/shazam/status')
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok !== false && res.status === 'success' && res.data && res.data.status === 'running') {
+                openShazamModal(res.data.total || 0);
+                startPollingShazamStatus();
+            }
+        })
+        .catch(() => {});
 });
 
 // ── Artist Management Functions ────────────────────────────────────────────────
