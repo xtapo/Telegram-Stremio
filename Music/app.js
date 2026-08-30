@@ -1078,6 +1078,27 @@ class XTAPOMusicApp {
         }
     }
 
+    showManualQr2Fa() {
+        if (this.qr2FaSection) {
+            this.qr2FaSection.style.display = 'block';
+            this.qr2FaSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        if (this.qr2FaInput) {
+            this.qr2FaInput.focus();
+        }
+        if (this._currentQrSessionId) {
+            fetch('/api/music/auth/telegram/qr/check-now', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: this._currentQrSessionId })
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success' && data.user) {
+                    this.handleQrSuccess(data);
+                }
+            }).catch(() => {});
+        }
+    }
+
     async submitQr2Fa() {
         if (!this._currentQrSessionId || !this.qr2FaInput) return;
         const password = this.qr2FaInput.value.trim();

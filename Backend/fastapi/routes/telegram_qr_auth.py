@@ -411,10 +411,61 @@ async def check_telegram_qr_status(session_id: str, request: Request):
     }
 
 
+@qr_auth_router.post("/api/music/auth/telegram/qr/check-now")
+async def trigger_qr_check_now(payload: dict, request: Request):
+    """Kiểm tra tức thì trạng thái sau khi người dùng quét mã trên điện thoại"""
+    session_id = payload.get("session_id", "").strip()
+    sdata = _ACTIVE_QR_SESSIONS.get(session_id)
+    if not sdata or not sdata.get("client"):
+        return {"status": "expired", "message": "Phiên đăng nhập đã hết hạn."}
+
+    temp_client = sdata["client"]
+    try:
+        login_res = await temp_client.invoke(
+            ExportLoginToken(
+                api_id=Telegram.API_ID,
+                api_hash=Telegram.API_HASH,
+                except_ids=[]
+            )
+        )
+        if isinstance(login_res, LoginTokenMigrateTo):
+            login_res = await _migrate_and_import_token(temp_client, login_res)
+
+        if isinstance(login_res, LoginTokenSuccess):
+            auth_user = getattr(login_res.authorization, "user", None)
+            if auth_user:
+                try:
+                    temp_client.storage.user_id = auth_user.id
+                    temp_client.storage.is_bot = False
+                    temp_client.storage.is_authorized = True
+                except Exception:
+                    pass
+            user_data = await _finalize_qr_login(temp_client, auth_user=auth_user)
+            sdata["status"] = "success"
+            sdata["user_data"] = user_data
+
+            user_info = user_data.get("user", {})
+            request.session["music_user_id"] = user_info.get("id")
+            request.session["music_username"] = user_info.get("username")
+            request.session["music_display_name"] = user_info.get("display_name")
+            request.session["music_avatar_url"] = user_info.get("avatar_url")
+            return user_data
+
+    except SessionPasswordNeeded:
+        LOGGER.info(f"[QR CHECK NOW] Tài khoản cần xác thực 2FA (Session: {session_id})")
+        sdata["status"] = "needs_2fa"
+        return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
+    except Exception as e:
+        LOGGER.warning(f"[QR CHECK NOW] Lỗi kiểm tra tức thì: {e}")
+
+    return {"status": sdata.get("status", "pending")}
+
+
 @qr_auth_router.post("/api/music/auth/telegram/qr/2fa")
 async def verify_telegram_qr_2fa(payload: dict, request: Request):
     """
     Xác thực mật khẩu bảo vệ 2 lớp (2FA Cloud Password)
+    Tự động hoàn tất di chuyển Data Center nếu cần trước khi kiểm tra mật khẩu.
     """
     session_id = payload.get("session_id", "").strip()
     password = payload.get("password", "")
@@ -428,6 +479,22 @@ async def verify_telegram_qr_2fa(payload: dict, request: Request):
 
     temp_client = sdata["client"]
     try:
+        # Đảm bảo token và DC đã được đồng bộ
+        try:
+            login_res = await temp_client.invoke(
+                ExportLoginToken(
+                    api_id=Telegram.API_ID,
+                    api_hash=Telegram.API_HASH,
+                    except_ids=[]
+                )
+            )
+            if isinstance(login_res, LoginTokenMigrateTo):
+                await _migrate_and_import_token(temp_client, login_res)
+        except SessionPasswordNeeded:
+            pass
+        except Exception:
+            pass
+
         user_me = await temp_client.check_password(password)
         user_data = await _finalize_qr_login(temp_client, auth_user=user_me)
         
