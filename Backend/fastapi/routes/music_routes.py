@@ -2575,117 +2575,203 @@ async def bulk_identify_shazam(request: Request, _: bool = Depends(require_auth)
             return JSONResponse(status_code=400, content={"status": "error", "message": "No tracks provided"})
         
         from Backend.helper.metadata.audio_fingerprint import recognize_audio_from_telegram
-        
-        client = _get_active_client()
-        success_count = 0
-        albums = await _db_load_library()
-        if not albums:
-            return JSONResponse(status_code=404, content={"status": "error", "message": "Thư viện trống"})
+        from fastapi.responses import StreamingResponse
 
-        for t in tracks:
-            chat_id = t.get("chatId")
-            msg_id = t.get("msgId")
-            
+        async def generate():
             try:
-                chat_id_int = int(chat_id)
-                msg_id_int = int(msg_id)
-            except Exception:
-                continue
+                albums = await _db_load_library()
+                if not albums:
+                    yield json.dumps({"type": "error", "message": "Thư viện nhạc trống"}) + "\n"
+                    return
 
-            fg_res = await recognize_audio_from_telegram(
-                client=None,
-                message=None,
-                is_manual=True,
-                chat_id=chat_id_int,
-                msg_id=msg_id_int,
-            )
-            await asyncio.sleep(0.3)
+                total_tracks = len(tracks)
+                success_count = 0
+                failed_count = 0
 
-            # Tìm thông tin track hiện tại trong thư viện
-            curr_track = None
-            curr_album = None
-            for a in albums:
-                for tr in a.get("tracks", []):
-                    if int(tr.get("chatId", 0)) == chat_id_int and int(tr.get("msgId", 0)) == msg_id_int:
-                        curr_track = tr
-                        curr_album = a
-                        break
-                if curr_track:
-                    break
+                yield json.dumps({
+                    "type": "start",
+                    "total": total_tracks,
+                    "message": f"Bắt đầu nhận diện {total_tracks} bài hát qua Shazam..."
+                }) + "\n"
 
-            # Nếu Shazam âm thanh không nhận diện được (ví dụ file DSD .dff, WAV Lossless), fallback sang tìm kiếm siêu dữ liệu Online (Apple/Deezer)
-            if not fg_res and curr_track:
-                from Backend.helper.metadata.music_scraper import fetch_music_metadata
-                raw_name = curr_track.get("name", "")
-                raw_artist = curr_track.get("artist", "")
-                if raw_artist.lower() in ["unknown artist", "unknown", "va", "various artists"]:
-                    raw_artist = ""
-                scraped = await fetch_music_metadata(
-                    raw_title=raw_name,
-                    raw_artist=raw_artist,
-                    file_name=raw_name
-                )
-                if scraped and scraped.get("title") and scraped.get("artist"):
-                    LOGGER.info(f"[SHAZAM FALLBACK] Nhận diện thành công qua Metadata trực tuyến: {scraped.get('artist')} - {scraped.get('title')}")
-                    fg_res = {
-                        "title": scraped.get("title"),
-                        "artist": scraped.get("artist"),
-                        "album": scraped.get("album"),
-                        "cover_url": scraped.get("cover_url"),
-                        "genre": scraped.get("genre")
-                    }
+                for idx, t in enumerate(tracks, 1):
+                    chat_id = t.get("chatId")
+                    msg_id = t.get("msgId")
+                    orig_name = t.get("name") or f"Bài hát #{msg_id}"
 
-            if fg_res:
-                update_fields = {}
-                if fg_res.get("title"): update_fields["name"] = fg_res["title"]
-                if fg_res.get("artist"): update_fields["artist"] = fg_res["artist"]
-                if fg_res.get("album"): update_fields["album"] = fg_res["album"]
-                if fg_res.get("cover_url"): update_fields["coverUrl"] = fg_res["cover_url"]
-                update_fields["isShazam"] = True
-                
-                if update_fields:
-                    updated = False
+                    try:
+                        chat_id_int = int(chat_id)
+                        msg_id_int = int(msg_id)
+                    except Exception:
+                        failed_count += 1
+                        yield json.dumps({
+                            "type": "progress",
+                            "current": idx,
+                            "total": total_tracks,
+                            "percent": round((idx / total_tracks) * 100),
+                            "track_name": orig_name,
+                            "status": "error",
+                            "message": "ID bài hát không hợp lệ",
+                            "success_count": success_count,
+                            "failed_count": failed_count
+                        }) + "\n"
+                        continue
+
+                    # Tìm thông tin track hiện tại trong thư viện
+                    curr_track = None
+                    curr_album = None
                     for a in albums:
                         for tr in a.get("tracks", []):
                             if int(tr.get("chatId", 0)) == chat_id_int and int(tr.get("msgId", 0)) == msg_id_int:
-                                for k, v in update_fields.items():
-                                    tr[k] = v
-                                updated = True
-                                
-                                new_album_name = update_fields.get("album")
-                                if new_album_name and new_album_name != a.get("title"):
-                                    a["tracks"].remove(tr)
-                                    dest_album = next((al for al in albums if al.get("title") == new_album_name), None)
-                                    if not dest_album:
-                                        import secrets
-                                        import random
-                                        color_preset = random.choice(GLOW_PRESETS)
-                                        dest_album = {
-                                            "id": f"album_{secrets.token_hex(4)}",
-                                            "title": new_album_name,
-                                            "artist": update_fields.get("artist", "").upper(),
-                                            "year": "2026",
-                                            "format": tr.get("format", ""),
-                                            "qualityTier": tr.get("qualityTier", "standard"),
-                                            "publisher": f"{update_fields.get('artist', '') or 'Telegram'}",
-                                            "coverUrl": update_fields.get("coverUrl") or tr.get("coverUrl", ""),
-                                            "glowColors": color_preset,
-                                            "tracks": []
-                                        }
-                                        albums.append(dest_album)
-                                    dest_album["tracks"].append(tr)
-                                
+                                curr_track = tr
+                                curr_album = a
+                                if not t.get("name"):
+                                    orig_name = tr.get("name", orig_name)
                                 break
-                        if updated:
+                        if curr_track:
                             break
-                    if updated:
-                        success_count += 1
-        
-        if success_count > 0:
-            albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-            await _db_save_library(albums)
-            
-        return JSONResponse(content={"status": "success", "count": success_count, "message": f"Đã nhận diện thành công {success_count}/{len(tracks)} bài hát qua Shazam."})
+
+                    yield json.dumps({
+                        "type": "analyzing",
+                        "current": idx,
+                        "total": total_tracks,
+                        "percent": round(((idx - 1) / total_tracks) * 100),
+                        "track_name": orig_name,
+                        "success_count": success_count,
+                        "failed_count": failed_count
+                    }) + "\n"
+
+                    fg_res = await recognize_audio_from_telegram(
+                        client=None,
+                        message=None,
+                        is_manual=True,
+                        chat_id=chat_id_int,
+                        msg_id=msg_id_int,
+                    )
+                    await asyncio.sleep(0.2)
+
+                    # Nếu Shazam âm thanh không nhận diện được (ví dụ file DSD, WAV Lossless), fallback sang tìm kiếm siêu dữ liệu Online (Apple/Deezer)
+                    if not fg_res and curr_track:
+                        from Backend.helper.metadata.music_scraper import fetch_music_metadata
+                        raw_name = curr_track.get("name", "")
+                        raw_artist = curr_track.get("artist", "")
+                        if raw_artist.lower() in ["unknown artist", "unknown", "va", "various artists"]:
+                            raw_artist = ""
+                        scraped = await fetch_music_metadata(
+                            raw_title=raw_name,
+                            raw_artist=raw_artist,
+                            file_name=raw_name
+                        )
+                        if scraped and scraped.get("title") and scraped.get("artist"):
+                            LOGGER.info(f"[SHAZAM FALLBACK] Nhận diện thành công qua Metadata trực tuyến: {scraped.get('artist')} - {scraped.get('title')}")
+                            fg_res = {
+                                "title": scraped.get("title"),
+                                "artist": scraped.get("artist"),
+                                "album": scraped.get("album"),
+                                "cover_url": scraped.get("cover_url"),
+                                "genre": scraped.get("genre")
+                            }
+
+                    if fg_res:
+                        update_fields = {}
+                        if fg_res.get("title"): update_fields["name"] = fg_res["title"]
+                        if fg_res.get("artist"): update_fields["artist"] = fg_res["artist"]
+                        if fg_res.get("album"): update_fields["album"] = fg_res["album"]
+                        if fg_res.get("cover_url"): update_fields["coverUrl"] = fg_res["cover_url"]
+                        update_fields["isShazam"] = True
+                        
+                        if update_fields:
+                            updated = False
+                            for a in albums:
+                                for tr in a.get("tracks", []):
+                                    if int(tr.get("chatId", 0)) == chat_id_int and int(tr.get("msgId", 0)) == msg_id_int:
+                                        for k, v in update_fields.items():
+                                            tr[k] = v
+                                        updated = True
+                                        
+                                        new_album_name = update_fields.get("album")
+                                        if new_album_name and new_album_name != a.get("title"):
+                                            a["tracks"].remove(tr)
+                                            dest_album = next((al for al in albums if al.get("title") == new_album_name), None)
+                                            if not dest_album:
+                                                import secrets
+                                                import random
+                                                color_preset = random.choice(GLOW_PRESETS)
+                                                dest_album = {
+                                                    "id": f"album_{secrets.token_hex(4)}",
+                                                    "title": new_album_name,
+                                                    "artist": update_fields.get("artist", "").upper(),
+                                                    "year": "2026",
+                                                    "format": tr.get("format", ""),
+                                                    "qualityTier": tr.get("qualityTier", "standard"),
+                                                    "publisher": f"{update_fields.get('artist', '') or 'Telegram'}",
+                                                    "coverUrl": update_fields.get("coverUrl") or tr.get("coverUrl", ""),
+                                                    "glowColors": color_preset,
+                                                    "tracks": []
+                                                }
+                                                albums.append(dest_album)
+                                            dest_album["tracks"].append(tr)
+                                        
+                                        break
+                                if updated:
+                                    break
+                            if updated:
+                                success_count += 1
+                        
+                        yield json.dumps({
+                            "type": "progress",
+                            "current": idx,
+                            "total": total_tracks,
+                            "percent": round((idx / total_tracks) * 100),
+                            "track_name": orig_name,
+                            "status": "success",
+                            "identified_title": fg_res.get("title"),
+                            "identified_artist": fg_res.get("artist"),
+                            "genre": fg_res.get("genre"),
+                            "album": fg_res.get("album"),
+                            "cover_url": fg_res.get("cover_url"),
+                            "success_count": success_count,
+                            "failed_count": failed_count
+                        }) + "\n"
+                    else:
+                        failed_count += 1
+                        yield json.dumps({
+                            "type": "progress",
+                            "current": idx,
+                            "total": total_tracks,
+                            "percent": round((idx / total_tracks) * 100),
+                            "track_name": orig_name,
+                            "status": "not_found",
+                            "message": "Không tìm thấy dấu vân tay khớp trên Shazam",
+                            "success_count": success_count,
+                            "failed_count": failed_count
+                        }) + "\n"
+
+                    # Lưu trung gian mỗi 10 bài
+                    if idx % 10 == 0 and success_count > 0:
+                        try:
+                            valid_albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
+                            await _db_save_library(valid_albums)
+                        except Exception:
+                            pass
+
+                # Lưu thư viện cuối cùng
+                if success_count > 0:
+                    albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
+                    await _db_save_library(albums)
+
+                yield json.dumps({
+                    "type": "done",
+                    "total": total_tracks,
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                    "message": f"Hoàn tất nhận diện! {success_count}/{total_tracks} bài hát đã được cập nhật thành công."
+                }) + "\n"
+            except Exception as exc:
+                LOGGER.error(f"[SHAZAM STREAM] Lỗi: {exc}")
+                yield json.dumps({"type": "error", "message": str(exc)}) + "\n"
+
+        return StreamingResponse(generate(), media_type="application/x-ndjson")
     except Exception as e:
         LOGGER.error(f"[SHAZAM API] Lỗi: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
