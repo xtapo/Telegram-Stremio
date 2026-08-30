@@ -513,6 +513,34 @@ class XTAPOMusicApp {
         this.currentUser = null;
         this.favoriteTracks = [];
 
+        // Sleep Timer Elements & State
+        this.sleepTimerBtn = document.getElementById('sleepTimerBtn');
+        this.sleepTimerBtnLabel = document.getElementById('sleepTimerBtnLabel');
+        this.sleepTimerBadge = document.getElementById('sleepTimerBadge');
+        this.topNavSleepBtn = document.getElementById('topNavSleepBtn');
+        this.topNavSleepBadge = document.getElementById('topNavSleepBadge');
+        this.mobileNavSleepTimer = document.getElementById('mobileNavSleepTimer');
+        this.sleepTimerModal = document.getElementById('sleepTimerModal');
+        this.closeSleepTimerModal = document.getElementById('closeSleepTimerModal');
+        this.sleepTimerRunningBox = document.getElementById('sleepTimerRunningBox');
+        this.sleepTimerConfigBox = document.getElementById('sleepTimerConfigBox');
+        this.sleepTimerCountdownDisplay = document.getElementById('sleepTimerCountdownDisplay');
+        this.sleepTimerCountdownSub = document.getElementById('sleepTimerCountdownSub');
+        this.sleepCustomInput = document.getElementById('sleepCustomInput');
+        this.sleepCustomApplyBtn = document.getElementById('sleepCustomApplyBtn');
+        this.sleepFadeOutCheckbox = document.getElementById('sleepFadeOutCheckbox');
+        this.sleepCancelTimerBtn = document.getElementById('sleepCancelTimerBtn');
+        this.sleepExtend5Btn = document.getElementById('sleepExtend5Btn');
+        this.sleepExtend15Btn = document.getElementById('sleepExtend15Btn');
+        this.sleepExtend30Btn = document.getElementById('sleepExtend30Btn');
+
+        this.sleepTimerSeconds = 0;
+        this.sleepTimerTotalSeconds = 0;
+        this.sleepTimerInterval = null;
+        this.sleepTimerMode = null; // 'time' | 'end_of_track' | null
+        this.sleepTimerFadeOut = true;
+        this.sleepTimerOriginalVolume = null;
+
         // Init
         this.init();
     }
@@ -522,6 +550,7 @@ class XTAPOMusicApp {
         this.setupControlEvents();
         this.setupModalEvents();
         this.setupLyricsEvents();
+        this.setupSleepTimerEvents();
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
@@ -2649,6 +2678,12 @@ class XTAPOMusicApp {
         });
 
         this.audio.addEventListener('ended', () => {
+            if (this.sleepTimerMode === 'end_of_track') {
+                this.cancelSleepTimer(true);
+                this.pause();
+                this.showToast('🌙 Hẹn giờ: Đã dừng phát nhạc sau khi hết bài hát. Chúc bạn ngủ ngon! ✨', 5000);
+                return;
+            }
             if (this.repeatMode === 2) { // Repeat one
                 this.audio.currentTime = 0;
                 this.play();
@@ -2979,6 +3014,28 @@ class XTAPOMusicApp {
         this.hamburgerBtn.addEventListener('click', () => this.mobileMenuDrawer.classList.add('open'));
         this.closeMobileMenu.addEventListener('click', () => this.closeMobileDrawer());
         this.mobileMenuBackdrop.addEventListener('click', () => this.closeMobileDrawer());
+
+        // Sleep Timer Modal Triggers
+        const openSleepTimerHandler = () => {
+            this.closeMobileDrawer();
+            this.openSleepTimerModal();
+        };
+        if (this.sleepTimerBtn) this.sleepTimerBtn.addEventListener('click', openSleepTimerHandler);
+        if (this.topNavSleepBtn) this.topNavSleepBtn.addEventListener('click', openSleepTimerHandler);
+        if (this.mobileNavSleepTimer) {
+            this.mobileNavSleepTimer.addEventListener('click', (e) => {
+                e.preventDefault();
+                openSleepTimerHandler();
+            });
+        }
+        if (this.closeSleepTimerModal) {
+            this.closeSleepTimerModal.addEventListener('click', () => this.closeModal(this.sleepTimerModal));
+        }
+        if (this.sleepTimerModal) {
+            this.sleepTimerModal.addEventListener('click', (e) => {
+                if (e.target === this.sleepTimerModal) this.closeModal(this.sleepTimerModal);
+            });
+        }
 
         // Copy All Download Links
         this.copyAllLinksBtn.addEventListener('click', () => {
@@ -6867,6 +6924,242 @@ class XTAPOMusicApp {
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     <span>Tìm Lời Nhạc</span>
                 `;
+            }
+        }
+    }
+
+    // ==========================================================================
+    // SLEEP TIMER (HẸN GIỜ TẮT NHẠC) MANAGER
+    // ==========================================================================
+    setupSleepTimerEvents() {
+        // Preset buttons
+        const presetBtns = document.querySelectorAll('.sleep-preset-btn');
+        presetBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode;
+                if (mode === 'end_of_track') {
+                    this.startSleepTimer(0, true);
+                } else {
+                    const mins = parseInt(btn.dataset.minutes, 10);
+                    if (mins > 0) {
+                        this.startSleepTimer(mins, false);
+                    }
+                }
+                this.closeModal(this.sleepTimerModal);
+            });
+        });
+
+        // Custom minutes input apply
+        if (this.sleepCustomApplyBtn && this.sleepCustomInput) {
+            this.sleepCustomApplyBtn.addEventListener('click', () => {
+                const mins = parseInt(this.sleepCustomInput.value, 10);
+                if (isNaN(mins) || mins <= 0) {
+                    this.showToast('Vui lòng nhập số phút hợp lệ (ví dụ: 15, 30, 45...)');
+                    return;
+                }
+                this.startSleepTimer(mins, false);
+                this.closeModal(this.sleepTimerModal);
+            });
+
+            this.sleepCustomInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    this.sleepCustomApplyBtn.click();
+                }
+            });
+        }
+
+        // Cancel timer button
+        if (this.sleepCancelTimerBtn) {
+            this.sleepCancelTimerBtn.addEventListener('click', () => {
+                this.cancelSleepTimer(false);
+            });
+        }
+
+        // Extend buttons
+        if (this.sleepExtend5Btn) {
+            this.sleepExtend5Btn.addEventListener('click', () => this.addSleepTimerMinutes(5));
+        }
+        if (this.sleepExtend15Btn) {
+            this.sleepExtend15Btn.addEventListener('click', () => this.addSleepTimerMinutes(15));
+        }
+        if (this.sleepExtend30Btn) {
+            this.sleepExtend30Btn.addEventListener('click', () => this.addSleepTimerMinutes(30));
+        }
+
+        // Fade out checkbox
+        if (this.sleepFadeOutCheckbox) {
+            this.sleepFadeOutCheckbox.addEventListener('change', (e) => {
+                this.sleepTimerFadeOut = e.target.checked;
+            });
+        }
+    }
+
+    openSleepTimerModal() {
+        this.updateSleepTimerModalView();
+        this.openModal(this.sleepTimerModal);
+    }
+
+    startSleepTimer(minutes, endOfTrack = false) {
+        // Clear any existing timer interval
+        if (this.sleepTimerInterval) {
+            clearInterval(this.sleepTimerInterval);
+            this.sleepTimerInterval = null;
+        }
+
+        // Restore volume if previous timer was in fade-out
+        if (this.sleepTimerOriginalVolume !== null) {
+            this.audio.volume = this.sleepTimerOriginalVolume;
+            this.volumeSlider.value = this.sleepTimerOriginalVolume;
+            this.sleepTimerOriginalVolume = null;
+            this.updateVolumeIcons();
+        }
+
+        if (endOfTrack) {
+            this.sleepTimerMode = 'end_of_track';
+            this.sleepTimerSeconds = 0;
+            this.sleepTimerTotalSeconds = 0;
+            this.showToast('🌙 Đã hẹn giờ: Dừng phát nhạc sau khi hết bài hát hiện tại.');
+        } else {
+            this.sleepTimerMode = 'time';
+            this.sleepTimerSeconds = minutes * 60;
+            this.sleepTimerTotalSeconds = this.sleepTimerSeconds;
+            this.showToast(`🌙 Đã hẹn giờ: Nhạc sẽ tự tắt sau ${minutes} phút.`);
+
+            this.sleepTimerInterval = setInterval(() => {
+                this.tickSleepTimer();
+            }, 1000);
+        }
+
+        this.updateSleepTimerUI();
+    }
+
+    tickSleepTimer() {
+        if (this.sleepTimerMode !== 'time') return;
+
+        this.sleepTimerSeconds--;
+
+        // Gradual fade-out over the final 30 seconds
+        if (this.sleepTimerFadeOut && this.sleepTimerSeconds <= 30 && this.sleepTimerSeconds > 0 && this.isPlaying) {
+            if (this.sleepTimerOriginalVolume === null) {
+                this.sleepTimerOriginalVolume = parseFloat(this.volumeSlider.value) || 0.85;
+            }
+            const ratio = this.sleepTimerSeconds / 30;
+            const targetVol = Math.max(0, this.sleepTimerOriginalVolume * ratio);
+            this.audio.volume = targetVol;
+            this.volumeSlider.value = targetVol;
+        }
+
+        if (this.sleepTimerSeconds <= 0) {
+            // Timer expired: stop playback and restore original volume for next session
+            this.cancelSleepTimer(true);
+            this.pause();
+            this.showToast('🌙 Hẹn giờ: Đã tự động tắt nhạc. Chúc bạn ngủ ngon! ✨', 6000);
+            return;
+        }
+
+        this.updateSleepTimerUI();
+    }
+
+    cancelSleepTimer(triggeredByTimer = false) {
+        if (this.sleepTimerInterval) {
+            clearInterval(this.sleepTimerInterval);
+            this.sleepTimerInterval = null;
+        }
+
+        if (this.sleepTimerOriginalVolume !== null) {
+            this.audio.volume = this.sleepTimerOriginalVolume;
+            this.volumeSlider.value = this.sleepTimerOriginalVolume;
+            this.sleepTimerOriginalVolume = null;
+            this.updateVolumeIcons();
+        }
+
+        this.sleepTimerMode = null;
+        this.sleepTimerSeconds = 0;
+        this.sleepTimerTotalSeconds = 0;
+
+        this.updateSleepTimerUI();
+
+        if (!triggeredByTimer) {
+            this.showToast('Đã hủy hẹn giờ tắt nhạc.');
+        }
+    }
+
+    addSleepTimerMinutes(extraMinutes) {
+        if (this.sleepTimerMode !== 'time') {
+            this.startSleepTimer(extraMinutes, false);
+            return;
+        }
+
+        // Restore volume if was in fade-out
+        if (this.sleepTimerOriginalVolume !== null) {
+            this.audio.volume = this.sleepTimerOriginalVolume;
+            this.volumeSlider.value = this.sleepTimerOriginalVolume;
+            this.sleepTimerOriginalVolume = null;
+            this.updateVolumeIcons();
+        }
+
+        this.sleepTimerSeconds += extraMinutes * 60;
+        this.sleepTimerTotalSeconds += extraMinutes * 60;
+        this.updateSleepTimerUI();
+        this.showToast(`🌙 Đã cộng thêm +${extraMinutes} phút vào hẹn giờ tắt nhạc.`);
+    }
+
+    updateSleepTimerUI() {
+        const isActive = this.sleepTimerMode !== null;
+
+        // Player Bar Button & Nav Badges
+        if (this.sleepTimerBtn) {
+            this.sleepTimerBtn.classList.toggle('active', isActive);
+        }
+        if (this.topNavSleepBtn) {
+            this.topNavSleepBtn.classList.toggle('active', isActive);
+        }
+        if (this.topNavSleepBadge) {
+            this.topNavSleepBadge.style.display = isActive ? 'block' : 'none';
+        }
+
+        if (this.sleepTimerBadge) {
+            if (isActive) {
+                this.sleepTimerBadge.style.display = 'inline-block';
+                if (this.sleepTimerMode === 'end_of_track') {
+                    this.sleepTimerBadge.textContent = 'Hết bài';
+                } else {
+                    const mins = Math.floor(this.sleepTimerSeconds / 60);
+                    const secs = this.sleepTimerSeconds % 60;
+                    this.sleepTimerBadge.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                }
+            } else {
+                this.sleepTimerBadge.style.display = 'none';
+            }
+        }
+
+        this.updateSleepTimerModalView();
+    }
+
+    updateSleepTimerModalView() {
+        const isActive = this.sleepTimerMode !== null;
+
+        if (this.sleepTimerRunningBox && this.sleepTimerConfigBox) {
+            if (isActive) {
+                this.sleepTimerRunningBox.style.display = 'flex';
+                this.sleepTimerConfigBox.style.display = 'none';
+
+                if (this.sleepTimerCountdownDisplay && this.sleepTimerCountdownSub) {
+                    if (this.sleepTimerMode === 'end_of_track') {
+                        this.sleepTimerCountdownDisplay.textContent = 'HẾT BÀI';
+                        this.sleepTimerCountdownDisplay.style.fontSize = '1.6rem';
+                        this.sleepTimerCountdownSub.textContent = 'Dừng phát khi kết thúc bài hiện tại';
+                    } else {
+                        const mins = Math.floor(this.sleepTimerSeconds / 60);
+                        const secs = this.sleepTimerSeconds % 60;
+                        this.sleepTimerCountdownDisplay.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                        this.sleepTimerCountdownDisplay.style.fontSize = '2.2rem';
+                        this.sleepTimerCountdownSub.textContent = 'Thời gian còn lại';
+                    }
+                }
+            } else {
+                this.sleepTimerRunningBox.style.display = 'none';
+                this.sleepTimerConfigBox.style.display = 'block';
             }
         }
     }

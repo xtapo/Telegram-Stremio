@@ -5104,6 +5104,386 @@ html, body {
     transform: scale(1.03);
 }
 
+/* ─────────────────────────────────────────────────────────────
+   SLEEP TIMER (HẸN GIỜ TẮT NHẠC) STYLES
+   ───────────────────────────────────────────────────────────── */
+.player-sleep-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    position: relative;
+}
+
+.player-sleep-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.player-sleep-btn.active {
+    background: linear-gradient(135deg, rgba(252, 191, 71, 0.25), rgba(245, 158, 11, 0.35));
+    border-color: var(--accent-gold);
+    color: var(--accent-gold);
+    box-shadow: 0 0 16px rgba(252, 191, 71, 0.35);
+}
+
+.sleep-timer-badge {
+    background: var(--accent-gold);
+    color: #0f1117;
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+    animation: pulseGlow 2s infinite ease-in-out;
+}
+
+.sleep-timer-nav-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-gold);
+    box-shadow: 0 0 8px var(--accent-gold);
+    animation: pulseGlow 1.5s infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.75; }
+}
+
+/* Sleep Timer Modal Card */
+.sleep-timer-modal-card {
+    max-width: 480px;
+    width: 90vw;
+    background: rgba(18, 20, 28, 0.95);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px rgba(252, 191, 71, 0.1);
+    padding: 24px;
+}
+
+.sleep-timer-icon-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(252, 191, 71, 0.2), rgba(245, 158, 11, 0.05));
+    border: 1px solid rgba(252, 191, 71, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-gold);
+    flex-shrink: 0;
+}
+
+.sleep-section-title {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+    margin-bottom: 12px;
+}
+
+.sleep-presets-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.sleep-preset-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 6px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    text-align: center;
+}
+
+.sleep-preset-btn:hover {
+    background: rgba(252, 191, 71, 0.15);
+    border-color: var(--accent-gold);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px -4px rgba(252, 191, 71, 0.25);
+}
+
+.sleep-preset-btn .preset-min {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.1;
+}
+
+.sleep-preset-btn .preset-unit {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    font-weight: 600;
+}
+
+.sleep-preset-btn .preset-icon {
+    font-size: 1.15rem;
+    line-height: 1.1;
+}
+
+.sleep-preset-end-track {
+    background: rgba(56, 189, 248, 0.08);
+    border-color: rgba(56, 189, 248, 0.25);
+}
+
+.sleep-preset-end-track:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: #38bdf8;
+    box-shadow: 0 6px 16px -4px rgba(56, 189, 248, 0.3);
+}
+
+/* Custom Minutes Input */
+.sleep-custom-row {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+}
+
+.sleep-custom-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    margin-bottom: 8px;
+}
+
+.sleep-custom-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.sleep-custom-input-group input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 9px 12px;
+    color: #fff;
+    font-size: 0.88rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.sleep-custom-input-group input:focus {
+    border-color: var(--accent-gold);
+}
+
+.sleep-custom-apply-btn {
+    padding: 9px 18px;
+    border-radius: 8px;
+    background: var(--accent-gold);
+    color: #0f1117;
+    font-size: 0.85rem;
+    font-weight: 800;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sleep-custom-apply-btn:hover {
+    background: #f59e0b;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+/* Toggle Switch */
+.sleep-option-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0 4px;
+}
+
+.sleep-toggle-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.sleep-toggle-info .toggle-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.sleep-toggle-info .toggle-desc {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.sleep-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.sleep-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.sleep-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.2);
+    transition: .3s;
+    border-radius: 34px;
+}
+
+.sleep-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+}
+
+.sleep-switch input:checked + .sleep-slider {
+    background-color: var(--accent-gold);
+}
+
+.sleep-switch input:checked + .sleep-slider:before {
+    transform: translateX(20px);
+    background-color: #0f1117;
+}
+
+/* Running Timer View */
+.sleep-timer-running-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0 6px;
+}
+
+.sleep-countdown-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(252, 191, 71, 0.12) 0%, rgba(18, 20, 28, 0.8) 70%);
+    border: 3px solid rgba(252, 191, 71, 0.4);
+    box-shadow: 0 0 30px rgba(252, 191, 71, 0.2), inset 0 0 20px rgba(252, 191, 71, 0.1);
+    margin-bottom: 22px;
+}
+
+.sleep-countdown-val {
+    font-size: 2.2rem;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-gold);
+    letter-spacing: 1px;
+    line-height: 1;
+}
+
+.sleep-countdown-sub {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+.sleep-timer-quick-extend {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.sleep-extend-btn {
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sleep-extend-btn:hover {
+    background: rgba(252, 191, 71, 0.2);
+    border-color: var(--accent-gold);
+    color: var(--accent-gold);
+    transform: translateY(-1px);
+}
+
+.sleep-cancel-timer-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    border-radius: 12px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #f87171;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sleep-cancel-timer-btn:hover {
+    background: #ef4444;
+    color: #fff;
+    border-color: #ef4444;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(239, 68, 68, 0.35);
+}
+
+/* Responsive Sleep Presets */
+@media (max-width: 480px) {
+    .sleep-presets-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .sleep-preset-end-track {
+        grid-column: span 2;
+    }
+}
+
 
 
 
