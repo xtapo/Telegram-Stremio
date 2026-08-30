@@ -316,14 +316,16 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
 async def check_telegram_qr_status(session_id: str, request: Request):
     """
     Thăm dò trạng thái mã QR (Pending, Success, Needs_2FA, Expired)
+    Chủ động kiểm tra ExportLoginToken để phát hiện ngay khi người dùng quét mã / cần nhập 2FA.
     """
     sdata = _ACTIVE_QR_SESSIONS.get(session_id)
-    if not sdata:
+    if not sdata or not sdata.get("client"):
         return {"status": "expired", "message": "Phiên đăng nhập không tồn tại hoặc đã hết hạn."}
 
     if time.time() > sdata.get("expires_at", 0):
         return {"status": "expired", "message": "Mã QR đã hết hạn. Vui lòng làm mới."}
 
+    # Nếu đã thành công trước đó
     if sdata.get("status") == "success" and sdata.get("user_data"):
         user_info = sdata["user_data"].get("user", {})
         request.session["music_user_id"] = user_info.get("id")
@@ -332,11 +334,56 @@ async def check_telegram_qr_status(session_id: str, request: Request):
         request.session["music_avatar_url"] = user_info.get("avatar_url")
         return sdata["user_data"]
 
+    # Nếu đang ở trạng thái cần 2FA
     if sdata.get("status") == "needs_2fa":
         return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
 
+    # Chủ động kiểm tra với Telegram MTProto
+    temp_client = sdata["client"]
+    try:
+        login_res = await temp_client.invoke(
+            ExportLoginToken(
+                api_id=Telegram.API_ID,
+                api_hash=Telegram.API_HASH,
+                except_ids=[]
+            )
+        )
+        if isinstance(login_res, LoginTokenSuccess):
+            auth_user = getattr(login_res.authorization, "user", None)
+            if auth_user:
+                try:
+                    temp_client.storage.user_id = auth_user.id
+                    temp_client.storage.is_bot = False
+                    temp_client.storage.is_authorized = True
+                except Exception:
+                    pass
+            user_data = await _finalize_qr_login(temp_client, auth_user=auth_user)
+            sdata["status"] = "success"
+            sdata["user_data"] = user_data
+
+            user_info = user_data.get("user", {})
+            request.session["music_user_id"] = user_info.get("id")
+            request.session["music_username"] = user_info.get("username")
+            request.session["music_display_name"] = user_info.get("display_name")
+            request.session["music_avatar_url"] = user_info.get("avatar_url")
+            return user_data
+
+        elif isinstance(login_res, LoginToken):
+            return {
+                "status": "pending",
+                "expires_in": max(0, int(sdata.get("expires_at", 0) - time.time()))
+            }
+
+    except SessionPasswordNeeded:
+        LOGGER.info(f"[QR AUTH POLL] Phát hiện tài khoản yêu cầu 2FA (Session: {session_id})")
+        sdata["status"] = "needs_2fa"
+        return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
+
+    except Exception as e:
+        LOGGER.warning(f"[QR AUTH POLL] ExportLoginToken check: {e}")
+
     return {
-        "status": "pending",
+        "status": sdata.get("status", "pending"),
         "expires_in": max(0, int(sdata.get("expires_at", 0) - time.time()))
     }
 

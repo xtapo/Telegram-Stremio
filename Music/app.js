@@ -986,7 +986,7 @@ class XTAPOMusicApp {
         updateCountdown();
         this._qrCountdownTimer = setInterval(updateCountdown, 1000);
 
-        // 2. Status poll loop
+        // 2. Status poll loop (Tốc độ kiểm tra 1.2s)
         this._qrPollTimer = setInterval(async () => {
             if (!this.authModal.classList.contains('open')) {
                 this.stopQrPolling();
@@ -1000,22 +1000,29 @@ class XTAPOMusicApp {
                 if (data.status === 'success' && data.user) {
                     this.handleQrSuccess(data);
                 } else if (data.status === 'needs_2fa') {
-                    if (this.qr2FaSection) this.qr2FaSection.style.display = 'block';
-                    if (this.qrStatusText) this.qrStatusText.textContent = "🔐 Yêu cầu nhập mật khẩu 2FA";
-                    if (this.qr2FaInput) this.qr2FaInput.focus();
+                    if (this.qr2FaSection) {
+                        this.qr2FaSection.style.display = 'block';
+                        this.qr2FaSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                    if (this.qrStatusText) {
+                        this.qrStatusText.innerHTML = '<span style="color:#f59e0b; font-weight:700;">🔐 Đã quét mã! Nhập mật khẩu 2FA bên dưới:</span>';
+                    }
+                    if (this.qr2FaInput && document.activeElement !== this.qr2FaInput) {
+                        this.qr2FaInput.focus();
+                    }
                 } else if (data.status === 'expired') {
                     this.stopQrPolling();
                     if (this.qrExpiredOverlay) this.qrExpiredOverlay.style.display = 'flex';
                     if (this.qrStatusText) this.qrStatusText.textContent = "Mã QR đã hết hạn";
                 } else if (data.status === 'pending') {
-                    if (data.message && this.qrStatusText) {
+                    if (data.message && this.qrStatusText && this.qrStatusText.textContent !== data.message) {
                         this.qrStatusText.textContent = data.message;
                     }
                 }
             } catch (err) {
                 // Ignore transient network glitches in polling
             }
-        }, 1800);
+        }, 1200);
     }
 
     stopQrPolling() {
