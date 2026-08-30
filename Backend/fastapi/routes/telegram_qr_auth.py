@@ -1,37 +1,41 @@
 import asyncio
 import base64
+import logging
 import secrets
 import time
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pyrogram import Client, raw
+from pyrogram.errors import (
+    FloodWait,
+    PasswordHashInvalid,
+    SessionPasswordNeeded,
+)
+from pyrogram.handlers import RawUpdateHandler
 from pyrogram.raw.functions.auth import ExportLoginToken
-from pyrogram.raw.types.auth import LoginToken, LoginTokenSuccess, LoginTokenMigrateTo
-from pyrogram.errors import SessionPasswordNeeded, FloodWait, RPCError, PasswordHashInvalid
+from pyrogram.raw.types.auth import LoginToken, LoginTokenMigrateTo, LoginTokenSuccess
 
 from Backend import db
 from Backend.config import Telegram
-from Backend.logger import LOGGER
 
-qr_auth_router = APIRouter(tags=["Telegram QR Authentication"])
+LOGGER = logging.getLogger(__name__)
 
-# Active temporary QR login sessions: {session_id: {...}}
+qr_auth_router = APIRouter(tags=["Telegram QR Auth"])
+
+# Quản lý các phiên Client tạm thời đang trong quá trình quét QR: session_id -> dict
 _ACTIVE_QR_SESSIONS: Dict[str, dict] = {}
 
-# Active authenticated Telegram User Clients for music streaming: {user_id: Client}
+# Quản lý các Client Telegram của người dùng sau khi đã đăng nhập thành công: user_id -> Client
 _USER_CLIENT_POOL: Dict[str, Client] = {}
-
-
-def get_user_client_pool() -> Dict[str, Client]:
-    return _USER_CLIENT_POOL
 
 
 async def get_user_tg_client(user_id: str) -> Optional[Client]:
     """
-    Lấy hoặc khởi tạo Telegram Client riêng cho người dùng đã đăng nhập.
-    Ưu tiên Client đang chạy trong pool, nếu chưa có thì khởi tạo từ session_string trong DB.
+    Lấy hoặc khởi tạo Telegram Client cho user đã đăng nhập.
+    Nếu Client đã có trong pool và đang kết nối thì trả về ngay.
+    Nếu chưa, nạp session_string từ MongoDB và kết nối.
     """
     if not user_id:
         return None
@@ -46,45 +50,41 @@ async def get_user_tg_client(user_id: str) -> Optional[Client]:
         if not user_doc or not user_doc.get("telegram_session"):
             return None
 
-        session_str = user_doc.get("telegram_session")
-        user_client = Client(
-            name=f"music_user_{user_id}",
+        session_str = user_doc["telegram_session"]
+        new_client = Client(
+            name=f"usr_session_{user_id}",
+            session_string=session_str,
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
-            session_string=session_str,
-            sleep_threshold=20,
-            workers=4,
-            max_concurrent_transmissions=6,
-            no_updates=True,
             in_memory=True,
+            no_updates=True
         )
-        await user_client.start()
-        _USER_CLIENT_POOL[user_id] = user_client
-        LOGGER.info(f"[MUSIC USERBOT] Khởi động thành công User Telegram Client cho user '{user_id}'")
-        return user_client
+        await new_client.connect()
+        _USER_CLIENT_POOL[user_id] = new_client
+        LOGGER.info(f"[USER CLIENT POOL] Đã khởi tạo và kết nối Telegram Client cho user '{user_id}'")
+        return new_client
     except Exception as e:
-        LOGGER.warning(f"[MUSIC USERBOT] Không thể khởi động User Telegram Client cho user '{user_id}': {e}")
+        LOGGER.error(f"[USER CLIENT POOL ERROR] Không thể khởi tạo Telegram Client cho user '{user_id}': {e}")
         return None
 
 
 async def close_user_tg_client(user_id: str):
-    """Dừng và giải phóng client của user khi logout"""
+    """Đóng và xóa client khỏi pool khi user logout"""
     client = _USER_CLIENT_POOL.pop(user_id, None)
-    if client:
+    if client and getattr(client, "is_connected", False):
         try:
-            if getattr(client, "is_connected", False):
-                await client.stop()
-            LOGGER.info(f"[MUSIC USERBOT] Đã dừng Telegram Client của user '{user_id}'")
-        except Exception:
-            pass
+            await client.disconnect()
+            LOGGER.info(f"[USER CLIENT POOL] Đã ngắt kết nối Telegram Client của user '{user_id}'")
+        except Exception as e:
+            LOGGER.warning(f"[USER CLIENT POOL] Lỗi khi disconnect user '{user_id}': {e}")
 
 
 async def _cleanup_expired_qr_sessions():
-    """Tự động dọn dẹp các phiên QR tạm thời đã hết hạn"""
+    """Dọn dẹp các phiên QR session đã hết hạn sau 3 phút"""
     now = time.time()
     expired_ids = [
-        sid for sid, sdata in _ACTIVE_QR_SESSIONS.items()
-        if now > sdata.get("expires_at", 0) + 30
+        sid for sid, data in _ACTIVE_QR_SESSIONS.items()
+        if now - data.get("created_at", 0) > 180
     ]
     for sid in expired_ids:
         sdata = _ACTIVE_QR_SESSIONS.pop(sid, None)
@@ -101,6 +101,7 @@ async def _cleanup_expired_qr_sessions():
 async def init_telegram_qr_login():
     """
     Khởi tạo phiên MTProto tạm thời, gọi ExportLoginToken để lấy mã QR đăng nhập
+    và lắng nghe sự kiện quét mã UpdateLoginToken từ Telegram.
     """
     await _cleanup_expired_qr_sessions()
 
@@ -112,8 +113,7 @@ async def init_telegram_qr_login():
             name=f"qr_temp_{session_id}",
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
-            in_memory=True,
-            no_updates=True
+            in_memory=True
         )
         await temp_client.connect()
 
@@ -129,7 +129,7 @@ async def init_telegram_qr_login():
         if isinstance(res, LoginTokenMigrateTo):
             target_dc = res.dc_id
             LOGGER.info(f"[QR AUTH] Di chuyển MTProto DC sang DC {target_dc}")
-            await temp_client.session.stop()
+            await temp_client.disconnect()
             temp_client.session.dc_id = target_dc
             await temp_client.connect()
             res = await temp_client.invoke(
@@ -157,6 +157,38 @@ async def init_telegram_qr_login():
             "user_data": None
         }
 
+        # Đăng ký Raw Update Handler lắng nghe UpdateLoginToken khi người dùng quét mã trên điện thoại
+        async def on_qr_raw_update(client, update, users, chats):
+            try:
+                if isinstance(update, raw.types.UpdateLoginToken):
+                    LOGGER.info(f"[QR AUTH] Đã nhận tín hiệu quét mã UpdateLoginToken từ Telegram (Session: {session_id})")
+                    login_res = await client.invoke(
+                        ExportLoginToken(
+                            api_id=Telegram.API_ID,
+                            api_hash=Telegram.API_HASH,
+                            except_ids=[]
+                        )
+                    )
+                    if isinstance(login_res, LoginTokenSuccess):
+                        auth_user = getattr(login_res.authorization, "user", None)
+                        if auth_user:
+                            try:
+                                client.storage.user_id = auth_user.id
+                                client.storage.is_bot = False
+                                client.storage.is_authorized = True
+                            except Exception:
+                                pass
+                        user_data = await _finalize_qr_login(client, auth_user=auth_user)
+                        _ACTIVE_QR_SESSIONS[session_id]["status"] = "success"
+                        _ACTIVE_QR_SESSIONS[session_id]["user_data"] = user_data
+            except SessionPasswordNeeded:
+                LOGGER.info(f"[QR AUTH] Tài khoản cần xác thực 2FA (Session: {session_id})")
+                _ACTIVE_QR_SESSIONS[session_id]["status"] = "needs_2fa"
+            except Exception as ex:
+                LOGGER.error(f"[QR RAW UPDATE ERROR] {ex}", exc_info=True)
+
+        temp_client.add_handler(RawUpdateHandler(on_qr_raw_update))
+
         return {
             "status": "success",
             "session_id": session_id,
@@ -183,17 +215,33 @@ async def init_telegram_qr_login():
         )
 
 
-async def _finalize_qr_login(user_client: Client, request: Request) -> dict:
-    """Hoàn tất quá trình đăng nhập, lưu vào MongoDB và thiết lập phiên web"""
-    user_me = await user_client.get_me()
-    session_str = await user_client.export_session_string()
+async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
+    """Hoàn tất quá trình đăng nhập, lưu vào MongoDB và trả về dữ liệu người dùng"""
+    user_me = None
+    try:
+        user_me = await user_client.get_me()
+    except Exception as e:
+        LOGGER.warning(f"[QR AUTH] get_me() exception: {e}")
+
+    if not user_me and auth_user:
+        user_me = auth_user
+
+    if not user_me:
+        raise ValueError("Không thể lấy thông tin người dùng từ Telegram.")
 
     user_id = f"tg_{user_me.id}"
-    first_name = user_me.first_name or ""
-    last_name = user_me.last_name or ""
-    display_name = f"{first_name} {last_name}".strip() or user_me.username or f"User {user_me.id}"
-    username = user_me.username or f"tg_{user_me.id}"
+    first_name = getattr(user_me, "first_name", "") or ""
+    last_name = getattr(user_me, "last_name", "") or ""
+    display_name = f"{first_name} {last_name}".strip() or getattr(user_me, "username", "") or f"User {user_me.id}"
+    username = getattr(user_me, "username", "") or f"tg_{user_me.id}"
     avatar_url = f"https://api.dicebear.com/7.x/bottts/svg?seed={user_me.id}"
+
+    # Export session string
+    session_str = ""
+    try:
+        session_str = await user_client.export_session_string()
+    except Exception as e:
+        LOGGER.warning(f"[QR AUTH] export_session_string failed: {e}")
 
     # Cập nhật thông tin người dùng vào MongoDB
     coll = db.dbs["tracking"]["music_users"]
@@ -214,14 +262,16 @@ async def _finalize_qr_login(user_client: Client, request: Request) -> dict:
         upsert=True
     )
 
+    # Đảm bảo music_user_data được khởi tạo
+    data_coll = db.dbs["tracking"]["music_user_data"]
+    await data_coll.update_one(
+        {"_id": user_id},
+        {"$setOnInsert": {"favorites": [], "playlists": [], "history": [], "settings": {}}},
+        upsert=True
+    )
+
     # Đăng ký Client vào user pool để phục vụ streaming trực tiếp
     _USER_CLIENT_POOL[user_id] = user_client
-
-    # Thiết lập cookie session
-    request.session["music_user_id"] = user_id
-    request.session["music_username"] = username
-    request.session["music_display_name"] = display_name
-    request.session["music_avatar_url"] = avatar_url
 
     LOGGER.info(f"[QR AUTH SUCCESS] Người dùng '{display_name}' (ID: {user_me.id}) đã đăng nhập thành công qua Telegram QR!")
 
@@ -253,45 +303,20 @@ async def check_telegram_qr_status(session_id: str, request: Request):
         return {"status": "expired", "message": "Mã QR đã hết hạn. Vui lòng làm mới."}
 
     if sdata.get("status") == "success" and sdata.get("user_data"):
+        user_info = sdata["user_data"].get("user", {})
+        request.session["music_user_id"] = user_info.get("id")
+        request.session["music_username"] = user_info.get("username")
+        request.session["music_display_name"] = user_info.get("display_name")
+        request.session["music_avatar_url"] = user_info.get("avatar_url")
         return sdata["user_data"]
 
     if sdata.get("status") == "needs_2fa":
         return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
 
-    temp_client = sdata.get("client")
-    if not temp_client:
-        return {"status": "expired", "message": "Phiên làm việc đã bị hủy."}
-
-    try:
-        res = await temp_client.invoke(
-            ExportLoginToken(
-                api_id=Telegram.API_ID,
-                api_hash=Telegram.API_HASH,
-                except_ids=[]
-            )
-        )
-
-        if isinstance(res, LoginTokenSuccess):
-            # Người dùng đã quét và xác nhận thành công trên điện thoại!
-            user_data = await _finalize_qr_login(temp_client, request)
-            sdata["status"] = "success"
-            sdata["user_data"] = user_data
-            return user_data
-
-        elif isinstance(res, LoginToken):
-            sdata["expires_at"] = res.expires
-            return {
-                "status": "pending",
-                "expires_in": max(0, int(res.expires - time.time()))
-            }
-    except SessionPasswordNeeded:
-        sdata["status"] = "needs_2fa"
-        return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
-    except FloodWait as fw:
-        return {"status": "pending", "message": f"Chờ phản hồi Telegram ({fw.value}s)..."}
-    except Exception as e:
-        LOGGER.warning(f"[QR STATUS POLL] {e}")
-        return {"status": "pending", "message": "Đang chờ quét mã..."}
+    return {
+        "status": "pending",
+        "expires_in": max(0, int(sdata.get("expires_at", 0) - time.time()))
+    }
 
 
 @qr_auth_router.post("/api/music/auth/telegram/qr/2fa")
@@ -311,12 +336,20 @@ async def verify_telegram_qr_2fa(payload: dict, request: Request):
 
     temp_client = sdata["client"]
     try:
-        await temp_client.check_password(password)
-        user_data = await _finalize_qr_login(temp_client, request)
+        user_me = await temp_client.check_password(password)
+        user_data = await _finalize_qr_login(temp_client, auth_user=user_me)
+        
+        user_info = user_data.get("user", {})
+        request.session["music_user_id"] = user_info.get("id")
+        request.session["music_username"] = user_info.get("username")
+        request.session["music_display_name"] = user_info.get("display_name")
+        request.session["music_avatar_url"] = user_info.get("avatar_url")
+
         sdata["status"] = "success"
         sdata["user_data"] = user_data
         return user_data
     except PasswordHashInvalid:
         return JSONResponse(status_code=401, content={"status": "error", "message": "Mật khẩu 2FA không chính xác."})
     except Exception as e:
+        LOGGER.error(f"[2FA ERROR] {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"status": "error", "message": f"Lỗi xác thực 2FA: {str(e)}"})
