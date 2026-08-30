@@ -574,7 +574,79 @@ class XTAPOMusicApp {
         } catch (e) {}
     }
 
-    // --- Authentication & User State ---
+    // --- Authentication & User State & Heartbeat Manager ---
+    getDeviceInfo() {
+        const ua = navigator.userAgent || '';
+        let os = 'Unknown OS';
+        let deviceType = 'Desktop';
+        
+        if (/windows nt 10/i.test(ua) || /windows nt 11/i.test(ua) || /windows/i.test(ua)) os = 'Windows';
+        else if (/iphone/i.test(ua)) { os = 'iOS (iPhone)'; deviceType = 'Mobile'; }
+        else if (/ipad/i.test(ua)) { os = 'iPadOS (iPad)'; deviceType = 'Tablet'; }
+        else if (/macintosh|mac os x/i.test(ua)) os = 'macOS';
+        else if (/android/i.test(ua)) { os = 'Android'; deviceType = /mobile/i.test(ua) ? 'Mobile' : 'Tablet'; }
+        else if (/linux/i.test(ua)) os = 'Linux';
+
+        let browser = 'Web Browser';
+        if (/telegram/i.test(ua)) browser = 'Telegram Webview';
+        else if (/edg/i.test(ua)) browser = 'Microsoft Edge';
+        else if (/opr|opera/i.test(ua)) browser = 'Opera';
+        else if (/chrome/i.test(ua) && !/edg/i.test(ua)) browser = 'Google Chrome';
+        else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = 'Apple Safari';
+        else if (/firefox/i.test(ua)) browser = 'Mozilla Firefox';
+
+        const screen = (window.screen && window.screen.width) ? `${window.screen.width}x${window.screen.height}` : '';
+
+        return {
+            os,
+            browser,
+            device_type: deviceType,
+            screen,
+            user_agent: ua
+        };
+    }
+
+    startHeartbeat() {
+        if (this._heartbeatInterval) clearInterval(this._heartbeatInterval);
+        this.sendHeartbeat();
+        this._heartbeatInterval = setInterval(() => {
+            this.sendHeartbeat();
+        }, 30000);
+    }
+
+    stopHeartbeat() {
+        if (this._heartbeatInterval) {
+            clearInterval(this._heartbeatInterval);
+            this._heartbeatInterval = null;
+        }
+    }
+
+    async sendHeartbeat() {
+        if (!this.currentUser) return;
+        try {
+            const track = this.currentTrack || (this.currentAlbum && this.currentAlbum.tracks && this.currentAlbum.tracks[this.currentTrackIndex]);
+            const isAudioPlaying = this.audio && !this.audio.paused && !this.audio.ended && this.audio.currentTime > 0;
+            const playbackState = isAudioPlaying ? 'playing' : (this.audio && this.audio.currentTime > 0 ? 'paused' : 'idle');
+
+            const payload = {
+                device_info: this.getDeviceInfo(),
+                playback_state: playbackState,
+                current_track: track ? {
+                    title: track.title || track.name || '',
+                    artist: track.artist || (this.currentAlbum && this.currentAlbum.artist) || '',
+                    album: (this.currentAlbum && this.currentAlbum.title) || '',
+                    cover_url: track.coverUrl || (this.currentAlbum && this.currentAlbum.coverUrl) || ''
+                } : null
+            };
+
+            await fetch('/api/music/auth/heartbeat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {}
+    }
+
     async fetchUserProfile() {
         try {
             const res = await fetch('/api/music/auth/profile');
@@ -582,6 +654,7 @@ class XTAPOMusicApp {
             if (data.status === 'authenticated' && data.user) {
                 this.currentUser = data.user;
                 this.updateAuthUI(true);
+                this.startHeartbeat();
                 await this.fetchUserFavorites();
                 await this.loadPlaylists(); // Will now fetch user playlists
 
@@ -595,6 +668,7 @@ class XTAPOMusicApp {
                 }
             } else {
                 this.currentUser = null;
+                this.stopHeartbeat();
                 this.updateAuthUI(false);
                 const existingBanner = document.getElementById('channelWarningBanner');
                 if (existingBanner) existingBanner.remove();
@@ -1196,6 +1270,7 @@ class XTAPOMusicApp {
 
     async logoutUser() {
         try {
+            this.stopHeartbeat();
             await fetch('/api/music/auth/logout', { method: 'POST' });
             this.showToast("Đã đăng xuất.");
             this.currentUser = null;
@@ -2558,6 +2633,11 @@ class XTAPOMusicApp {
 
         this.audio.addEventListener('playing', () => {
             this.updateMediaSession();
+            this.sendHeartbeat();
+        });
+
+        this.audio.addEventListener('pause', () => {
+            this.sendHeartbeat();
         });
 
         this.audio.addEventListener('progress', () => {

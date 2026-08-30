@@ -246,8 +246,8 @@
 
     <!-- Content Area: Users Management -->
     <div id="users-view-container" class="space-y-4 mb-8 hidden">
-        <!-- Stats Cards Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- Stats Cards Grid (4 Cards) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
                 <div>
                     <span class="text-xs font-bold uppercase text-text-secondary">Tổng Người Dùng</span>
@@ -257,15 +257,30 @@
                     <i class="fa-solid fa-users"></i>
                 </div>
             </div>
-            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+            
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-emerald-500/30 bg-emerald-500/5">
                 <div>
-                    <span class="text-xs font-bold uppercase text-emerald-400">Đang Hoạt Động</span>
-                    <h3 id="users-stat-active" class="text-2xl font-black text-emerald-400 mt-0.5">0</h3>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span class="text-xs font-bold uppercase text-emerald-400">Đang Online</span>
+                    </div>
+                    <h3 id="users-stat-online" class="text-2xl font-black text-emerald-400 mt-0.5">0</h3>
                 </div>
-                <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg">
-                    <i class="fa-solid fa-user-check"></i>
+                <div class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg border border-emerald-500/30 shadow-lg shadow-emerald-500/20">
+                    <i class="fa-solid fa-signal"></i>
                 </div>
             </div>
+
+            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+                <div>
+                    <span class="text-xs font-bold uppercase text-sky-400">Tài Khoản Hoạt Động</span>
+                    <h3 id="users-stat-active" class="text-2xl font-black text-sky-400 mt-0.5">0</h3>
+                </div>
+                <div class="w-11 h-11 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+            </div>
+
             <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
                 <div>
                     <span class="text-xs font-bold uppercase text-red-400">Đang Bị Khóa</span>
@@ -282,12 +297,18 @@
             <div class="relative w-full sm:w-80">
                 <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary text-xs"></i>
                 <input type="text" id="users-search-input" oninput="filterUsersList(this.value)"
-                       placeholder="Tìm kiếm username, tên hiển thị..." 
+                       placeholder="Tìm kiếm username, tên, IP, thiết bị..." 
                        class="w-full pl-9 pr-4 py-2 rounded-xl bg-surface border border-hairline text-text placeholder-text-secondary text-xs focus:outline-none focus:border-primary transition">
             </div>
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button onclick="fetchMusicUsers()" class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center gap-1.5" title="Làm mới">
-                    <i class="fa-solid fa-rotate-right"></i> Làm Mới
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                <button id="btn-toggle-users-refresh" onclick="toggleUsersAutoRefresh()" 
+                        class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center gap-1.5 border border-hairline" 
+                        title="Tự động cập nhật trạng thái Online và bài hát đang phát">
+                    <span id="users-refresh-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="users-refresh-label">Realtime (10s): BẬT</span>
+                </button>
+                <button onclick="fetchMusicUsers()" class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center gap-1.5 border border-hairline" title="Làm mới ngay">
+                    <i class="fa-solid fa-rotate-right" id="users-refresh-icon"></i> Làm Mới
                 </button>
                 <button onclick="openAddUserModal()" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 transition flex items-center gap-1.5">
                     <i class="fa-solid fa-user-plus"></i> Thêm Người Dùng
@@ -300,13 +321,15 @@
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse text-sm">
                     <thead>
-                        <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase">
-                            <th class="py-3.5 px-4 w-16 text-center">Avatar</th>
-                            <th class="py-3.5 px-4">Tài Khoản</th>
-                            <th class="py-3.5 px-4">Tên Hiển Thị</th>
-                            <th class="py-3.5 px-4 text-center">Dữ Liệu Cá Nhân</th>
-                            <th class="py-3.5 px-4 text-center">Trạng Thái</th>
-                            <th class="py-3.5 px-4">Ngày Tạo</th>
+                        <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase select-none">
+                            <th class="py-3.5 px-4 w-14 text-center">Avatar</th>
+                            <th class="py-3.5 px-4">Tài Khoản & Tên</th>
+                            <th class="py-3.5 px-4 text-center">Trạng Thái Online</th>
+                            <th class="py-3.5 px-4">Thiết Bị / Trình Duyệt</th>
+                            <th class="py-3.5 px-4">Địa Chỉ IP</th>
+                            <th class="py-3.5 px-4">Đang Nghe Gì</th>
+                            <th class="py-3.5 px-4 text-center">Dữ Liệu</th>
+                            <th class="py-3.5 px-4 text-center">Khóa/Mở</th>
                             <th class="py-3.5 px-4 text-right">Thao Tác</th>
                         </tr>
                     </thead>
@@ -1143,53 +1166,144 @@
 
 <!-- Modal 8: Xem Chi Tiết Dữ Liệu User (User Details Modal) -->
 <div id="user-details-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
-    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[90vh] flex flex-col">
+    <div class="glass-panel w-full max-w-3xl rounded-3xl p-6 sm:p-7 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[92vh] flex flex-col">
         <!-- Header -->
         <div class="flex items-center justify-between pb-4 border-b border-hairline shrink-0">
             <div class="flex items-center gap-3.5">
-                <img id="detail-user-avatar" src="" class="w-12 h-12 rounded-full border border-hairline bg-black/20 object-cover">
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h3 id="detail-user-displayname" class="text-base font-extrabold text-text">Tên User</h3>
-                        <span id="detail-user-status-badge"></span>
+                <img id="detail-user-avatar" src="" class="w-13 h-13 rounded-full border-2 border-hairline bg-black/20 object-cover shrink-0">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 id="detail-user-displayname" class="text-base sm:text-lg font-extrabold text-text truncate">Tên User</h3>
+                        <div id="detail-user-status-badge" class="shrink-0"></div>
+                        <div id="detail-user-online-badge" class="shrink-0"></div>
                     </div>
-                    <p id="detail-user-username" class="text-xs text-text-secondary">@username • ID: usr_xxx</p>
+                    <p id="detail-user-username" class="text-xs text-text-secondary font-mono truncate">@username • ID: usr_xxx</p>
                 </div>
             </div>
-            <button onclick="closeUserDetailsModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text">
+            <button onclick="closeUserDetailsModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <!-- Body: Playlists & Favorites -->
-        <div class="flex-1 overflow-y-auto py-4 space-y-5">
-            <!-- Playlists Section -->
-            <div>
-                <div class="flex items-center justify-between mb-2.5">
-                    <h4 class="text-xs font-bold uppercase text-text-secondary flex items-center gap-1.5">
-                        <i class="fa-solid fa-list text-primary"></i> Danh Sách Playlists (<span id="detail-playlists-count">0</span>)
+        <!-- Body: Details Scrollable Area -->
+        <div class="flex-1 overflow-y-auto py-4 space-y-5 pr-1">
+            <!-- Section 1: Live Status & Device / IP Card -->
+            <div class="p-4 rounded-2xl bg-surface/70 border border-hairline space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-2">
+                        <i class="fa-solid fa-satellite-dish text-emerald-400"></i> Thông Tin Kết Nối & Thiết Bị Hiện Tại
                     </h4>
+                    <span id="detail-last-active-time" class="text-[11px] text-text-secondary">Hoạt động: --</span>
                 </div>
-                <div id="detail-playlists-container" class="space-y-2">
-                    <!-- Playlists rendered here -->
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <!-- IP Box -->
+                    <div class="p-3 rounded-xl bg-black/25 border border-hairline">
+                        <span class="text-[10px] uppercase font-bold text-text-secondary block mb-1">
+                            <i class="fa-solid fa-network-wired text-sky-400 mr-1"></i> Địa Chỉ IP
+                        </span>
+                        <div id="detail-ip-address" class="font-mono font-bold text-sky-300 text-xs truncate">--</div>
+                    </div>
+
+                    <!-- OS & Device Box -->
+                    <div class="p-3 rounded-xl bg-black/25 border border-hairline">
+                        <span class="text-[10px] uppercase font-bold text-text-secondary block mb-1">
+                            <i class="fa-solid fa-laptop text-purple-400 mr-1"></i> Hệ Điều Hành
+                        </span>
+                        <div id="detail-device-os" class="font-bold text-text text-xs flex items-center gap-1.5 truncate">
+                            <span id="detail-os-icon"></span>
+                            <span id="detail-os-name">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Browser Box -->
+                    <div class="p-3 rounded-xl bg-black/25 border border-hairline">
+                        <span class="text-[10px] uppercase font-bold text-text-secondary block mb-1">
+                            <i class="fa-solid fa-globe text-amber-400 mr-1"></i> Trình Duyệt
+                        </span>
+                        <div id="detail-device-browser" class="font-bold text-text text-xs flex items-center gap-1.5 truncate">
+                            <span id="detail-browser-icon"></span>
+                            <span id="detail-browser-name">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Screen / Device Type Box -->
+                    <div class="p-3 rounded-xl bg-black/25 border border-hairline">
+                        <span class="text-[10px] uppercase font-bold text-text-secondary block mb-1">
+                            <i class="fa-solid fa-display text-emerald-400 mr-1"></i> Màn Hình / Loại
+                        </span>
+                        <div id="detail-device-screen" class="font-bold text-emerald-400 text-xs truncate">--</div>
+                    </div>
+                </div>
+
+                <!-- Full User Agent Collapsible / Info -->
+                <div class="p-2.5 rounded-xl bg-black/30 border border-hairline/60 text-[11px] text-text-secondary flex items-start gap-2">
+                    <i class="fa-solid fa-circle-info text-primary mt-0.5 shrink-0"></i>
+                    <div class="min-w-0">
+                        <span class="font-bold text-text">User Agent:</span>
+                        <span id="detail-user-agent" class="font-mono text-[10px] break-all block mt-0.5 text-text-secondary/90">--</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Favorites Section -->
-            <div>
-                <div class="flex items-center justify-between mb-2.5">
-                    <h4 class="text-xs font-bold uppercase text-text-secondary flex items-center gap-1.5">
-                        <i class="fa-solid fa-heart text-red-400"></i> Bài Hát Yêu Thích (<span id="detail-favorites-count">0</span>)
+            <!-- Section 2: Live Playback Activity -->
+            <div id="detail-live-activity-card" class="p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 to-primary/10 border border-primary/30 space-y-2">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-2">
+                        <i class="fa-solid fa-music animate-bounce"></i> Hoạt Động Nghe Nhạc Trực Tiếp (Live)
                     </h4>
+                    <span id="detail-playback-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/20 text-primary border border-primary/30">Đang phát</span>
                 </div>
-                <div id="detail-favorites-container" class="space-y-2">
-                    <!-- Favorites rendered here -->
+                <div class="flex items-center gap-3.5 pt-1">
+                    <img id="detail-activity-cover" src="" class="w-12 h-12 rounded-xl object-cover border border-hairline shrink-0 bg-black/20" onerror="this.src='/favicon.png'">
+                    <div class="min-w-0 flex-1">
+                        <h5 id="detail-activity-title" class="font-bold text-sm text-text truncate">Tên bài hát</h5>
+                        <p id="detail-activity-artist" class="text-xs text-text-secondary truncate">Ca sĩ • Album</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Recent Login Sessions History -->
+            <div id="detail-sessions-section" class="p-4 rounded-2xl bg-surface/70 border border-hairline space-y-2">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-sky-400"></i> Lịch Sử Phiên & Thiết Bị Gần Nhất
+                </h4>
+                <div id="detail-sessions-container" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    <!-- Dynamic sessions injected by JS -->
+                </div>
+            </div>
+
+            <!-- Section 4: Playlists & Favorites Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Playlists Column -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold uppercase text-text-secondary flex items-center gap-1.5">
+                            <i class="fa-solid fa-list text-primary"></i> Playlists (<span id="detail-playlists-count">0</span>)
+                        </h4>
+                    </div>
+                    <div id="detail-playlists-container" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        <!-- Playlists rendered here -->
+                    </div>
+                </div>
+
+                <!-- Favorites Column -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold uppercase text-text-secondary flex items-center gap-1.5">
+                            <i class="fa-solid fa-heart text-red-400"></i> Bài Hát Yêu Thích (<span id="detail-favorites-count">0</span>)
+                        </h4>
+                    </div>
+                    <div id="detail-favorites-container" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        <!-- Favorites rendered here -->
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Footer -->
-        <div class="flex items-center justify-end pt-3 border-t border-hairline shrink-0">
+        <div class="flex items-center justify-between pt-3 border-t border-hairline shrink-0">
+            <span class="text-[11px] text-text-secondary" id="detail-user-created-date">Ngày tạo: --</span>
             <button onclick="closeUserDetailsModal()" class="px-5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition">Đóng</button>
         </div>
     </div>
@@ -1941,6 +2055,7 @@ function switchTab(tab) {
     updateSortDropdownUI();
 
     if (tab === 'artists') {
+        stopUsersAutoRefresh();
         document.getElementById('albums-view-container').classList.add('hidden');
         document.getElementById('tracks-view-container').classList.add('hidden');
         document.getElementById('users-view-container').classList.add('hidden');
@@ -1960,7 +2075,9 @@ function switchTab(tab) {
         document.getElementById('users-view-container').classList.remove('hidden');
         document.getElementById('items-count-indicator').textContent = 'Đang quản lý Users';
         fetchMusicUsers();
+        startUsersAutoRefresh();
     } else {
+        stopUsersAutoRefresh();
         document.getElementById('artists-view-container').classList.add('hidden');
         document.getElementById('users-view-container').classList.add('hidden');
         if (tab === 'tracks') updateTrackHeaderSortIcons();
@@ -3717,24 +3834,70 @@ async function bulkAutoFetchArtists() {
 
 // ── User Management Functions ──────────────────────────────────────────────────
 let globalMusicUsers = [];
+let usersAutoRefreshInterval = null;
+let isUsersAutoRefreshEnabled = true;
 
-async function fetchMusicUsers() {
+function formatTimeAgo(timestamp) {
+    if (!timestamp) return 'Chưa từng online';
+    const now = Math.floor(Date.now() / 1000);
+    const diff = Math.max(0, now - Math.floor(timestamp));
+    if (diff < 15) return 'Vừa xong';
+    if (diff < 60) return `${diff} giây trước`;
+    const mins = Math.floor(diff / 60);
+    if (mins < 60) return `${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} ngày trước`;
+    return new Date(timestamp * 1000).toLocaleDateString('vi-VN');
+}
+
+function getDeviceIcon(os) {
+    if (!os) return '<i class="fa-solid fa-laptop text-text-secondary"></i>';
+    const o = os.toLowerCase();
+    if (o.includes('windows')) return '<i class="fa-brands fa-windows text-sky-400"></i>';
+    if (o.includes('ios') || o.includes('iphone') || o.includes('ipad') || o.includes('mac') || o.includes('apple')) return '<i class="fa-brands fa-apple text-slate-300"></i>';
+    if (o.includes('android')) return '<i class="fa-brands fa-android text-emerald-400"></i>';
+    if (o.includes('linux')) return '<i class="fa-brands fa-linux text-amber-400"></i>';
+    return '<i class="fa-solid fa-desktop text-text-secondary"></i>';
+}
+
+function getBrowserIcon(browser) {
+    if (!browser) return '<i class="fa-solid fa-globe text-text-secondary"></i>';
+    const b = browser.toLowerCase();
+    if (b.includes('chrome')) return '<i class="fa-brands fa-chrome text-amber-400"></i>';
+    if (b.includes('safari')) return '<i class="fa-brands fa-safari text-sky-400"></i>';
+    if (b.includes('firefox')) return '<i class="fa-brands fa-firefox-browser text-orange-500"></i>';
+    if (b.includes('edge')) return '<i class="fa-brands fa-edge text-blue-400"></i>';
+    if (b.includes('opera')) return '<i class="fa-brands fa-opera text-red-500"></i>';
+    if (b.includes('telegram')) return '<i class="fa-brands fa-telegram text-sky-400"></i>';
+    return '<i class="fa-solid fa-globe text-primary"></i>';
+}
+
+async function fetchMusicUsers(silent = false) {
+    const refreshIcon = document.getElementById('users-refresh-icon');
+    if (refreshIcon && !silent) refreshIcon.classList.add('animate-spin');
+
     try {
         const res = await fetch('/api/music/admin/users');
         const data = await res.json();
         if (res.ok && data.status === 'success') {
             globalMusicUsers = data.users || [];
             
-            // Cập nhật thống kê
-            const total = globalMusicUsers.length;
-            const active = globalMusicUsers.filter(u => u.is_active !== false).length;
-            const banned = total - active;
+            // Cập nhật 4 thẻ thống kê
+            const stats = data.stats || {};
+            const total = stats.total !== undefined ? stats.total : globalMusicUsers.length;
+            const online = stats.online !== undefined ? stats.online : globalMusicUsers.filter(u => u.is_online).length;
+            const active = stats.active !== undefined ? stats.active : globalMusicUsers.filter(u => u.is_active !== false).length;
+            const banned = stats.banned !== undefined ? stats.banned : (total - active);
 
             const statTotalEl = document.getElementById('users-stat-total');
+            const statOnlineEl = document.getElementById('users-stat-online');
             const statActiveEl = document.getElementById('users-stat-active');
             const statBannedEl = document.getElementById('users-stat-banned');
 
             if (statTotalEl) statTotalEl.textContent = total;
+            if (statOnlineEl) statOnlineEl.textContent = online;
             if (statActiveEl) statActiveEl.textContent = active;
             if (statBannedEl) statBannedEl.textContent = banned;
 
@@ -3742,11 +3905,52 @@ async function fetchMusicUsers() {
             const currentFilter = searchInput ? searchInput.value.trim() : '';
             filterUsersList(currentFilter);
         } else {
-            alertToast(data.message || 'Lỗi tải danh sách người dùng');
+            if (!silent) alertToast(data.message || 'Lỗi tải danh sách người dùng');
         }
     } catch (e) {
         console.error(e);
-        alertToast('Lỗi mạng khi tải users');
+        if (!silent) alertToast('Lỗi mạng khi tải users');
+    } finally {
+        if (refreshIcon && !silent) {
+            setTimeout(() => refreshIcon.classList.remove('animate-spin'), 400);
+        }
+    }
+}
+
+function toggleUsersAutoRefresh() {
+    isUsersAutoRefreshEnabled = !isUsersAutoRefreshEnabled;
+    const dot = document.getElementById('users-refresh-dot');
+    const label = document.getElementById('users-refresh-label');
+
+    if (isUsersAutoRefreshEnabled) {
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        if (label) label.textContent = 'Realtime (10s): BẬT';
+        startUsersAutoRefresh();
+        alertToast('Đã bật tự động làm mới realtime (10 giây)');
+    } else {
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-gray-500';
+        if (label) label.textContent = 'Realtime: TẮT';
+        stopUsersAutoRefresh();
+        alertToast('Đã tắt tự động làm mới');
+    }
+}
+
+function startUsersAutoRefresh() {
+    stopUsersAutoRefresh();
+    if (isUsersAutoRefreshEnabled) {
+        usersAutoRefreshInterval = setInterval(() => {
+            const usersContainer = document.getElementById('users-view-container');
+            if (usersContainer && !usersContainer.classList.contains('hidden')) {
+                fetchMusicUsers(true);
+            }
+        }, 10000);
+    }
+}
+
+function stopUsersAutoRefresh() {
+    if (usersAutoRefreshInterval) {
+        clearInterval(usersAutoRefreshInterval);
+        usersAutoRefreshInterval = null;
     }
 }
 
@@ -3756,11 +3960,21 @@ function filterUsersList(query) {
         return;
     }
     const q = query.toLowerCase();
-    const filtered = globalMusicUsers.filter(u => 
-        (u.username && u.username.toLowerCase().includes(q)) || 
-        (u.display_name && u.display_name.toLowerCase().includes(q)) ||
-        (u._id && u._id.toLowerCase().includes(q))
-    );
+    const filtered = globalMusicUsers.filter(u => {
+        const username = (u.username || '').toLowerCase();
+        const displayName = (u.display_name || '').toLowerCase();
+        const id = (u._id || '').toLowerCase();
+        const ip = (u.last_ip || '').toLowerCase();
+        const devInfo = u.device_info || {};
+        const os = (devInfo.os || '').toLowerCase();
+        const browser = (devInfo.browser || '').toLowerCase();
+        const trackTitle = (u.current_activity && u.current_activity.title ? u.current_activity.title : '').toLowerCase();
+        const trackArtist = (u.current_activity && u.current_activity.artist ? u.current_activity.artist : '').toLowerCase();
+
+        return username.includes(q) || displayName.includes(q) || id.includes(q) || 
+               ip.includes(q) || os.includes(q) || browser.includes(q) || 
+               trackTitle.includes(q) || trackArtist.includes(q);
+    });
     renderUsersTable(filtered);
 }
 
@@ -3770,7 +3984,7 @@ function renderUsersTable(users) {
     tbody.innerHTML = '';
 
     if (users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-10 text-center text-text-secondary text-xs"><i class="fa-solid fa-user-slash text-2xl mb-2 block opacity-40"></i>Không tìm thấy người dùng nào</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="py-12 text-center text-text-secondary text-xs"><i class="fa-solid fa-user-slash text-3xl mb-2 block opacity-30"></i>Không tìm thấy người dùng nào khớp với tìm kiếm</td></tr>';
         return;
     }
 
@@ -3778,11 +3992,7 @@ function renderUsersTable(users) {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-surface-2 transition group';
         
-        const timestamp = u.created_at || u.last_login || Date.now()/1000;
-        const date = new Date(timestamp * 1000).toLocaleDateString('vi-VN', {
-            year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-        });
-
+        // 1. Loại tài khoản Badge
         const isTelegram = u.auth_type === 'telegram_qr' || u.telegram_id || (u._id && String(u._id).startsWith('tg_'));
         const typeBadge = isTelegram
             ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30 text-[10px] font-bold" title="Telegram ID: ${u.telegram_id || u._id}">
@@ -3792,11 +4002,84 @@ function renderUsersTable(users) {
                     <i class="fa-solid fa-key text-[9px]"></i> Mật Khẩu
                </span>`;
 
-        const isActive = u.is_active !== false;
-        const statusBadge = isActive 
-            ? '<span class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-[9px]"></i> Hoạt Động</span>'
-            : '<span class="px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/25 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-ban text-[9px]"></i> Bị Khóa</span>';
+        // 2. Trạng thái Online Badge
+        const isOnline = !!u.is_online;
+        const onlineBadge = isOnline
+            ? `<div class="inline-flex flex-col items-center gap-0.5">
+                   <span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[11px] font-black inline-flex items-center gap-1.5 shadow-sm shadow-emerald-500/20">
+                       <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                       Online
+                   </span>
+                   <span class="text-[10px] text-emerald-400/80 font-medium">Vừa xong</span>
+               </div>`
+            : `<div class="inline-flex flex-col items-center gap-0.5">
+                   <span class="px-2 py-0.5 rounded-full bg-surface-2 text-text-secondary border border-hairline text-[10px] font-medium inline-flex items-center gap-1">
+                       <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
+                       Offline
+                   </span>
+                   <span class="text-[10px] text-text-secondary/70 font-mono">${formatTimeAgo(u.last_seen)}</span>
+               </div>`;
 
+        // 3. Thông tin thiết bị & trình duyệt
+        const devInfo = u.device_info || {};
+        const osName = devInfo.os || 'Không rõ';
+        const browserName = devInfo.browser || 'Trình duyệt';
+        const deviceType = devInfo.device_type || 'Desktop';
+        const osIcon = getDeviceIcon(osName);
+        const browserIcon = getBrowserIcon(browserName);
+        const screenRes = devInfo.screen ? `<span class="text-[9px] text-text-secondary font-mono">${devInfo.screen}</span>` : '';
+
+        const deviceCell = `
+            <div class="space-y-0.5">
+                <div class="flex items-center gap-1.5 text-xs font-bold text-text">
+                    ${osIcon}
+                    <span class="truncate max-w-[130px]" title="${osName}">${osName}</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] text-text-secondary">
+                    ${browserIcon}
+                    <span class="truncate max-w-[110px]" title="${browserName}">${browserName}</span>
+                    ${screenRes ? '• ' + screenRes : ''}
+                </div>
+            </div>
+        `;
+
+        // 4. IP Address
+        const lastIp = u.last_ip || 'Chưa ghi nhận';
+        const ipCell = u.last_ip 
+            ? `<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-sky-500/10 text-sky-300 border border-sky-500/20 text-xs font-mono font-bold" title="IP: ${lastIp}">
+                   <i class="fa-solid fa-network-wired text-[10px] text-sky-400"></i>
+                   <span class="truncate max-w-[110px]">${lastIp}</span>
+               </div>`
+            : `<span class="text-[11px] text-text-secondary italic">--</span>`;
+
+        // 5. Đang Nghe Gì (Live Playback Activity)
+        let liveActivityCell = `<span class="text-[11px] text-text-secondary italic">Không hoạt động</span>`;
+        if (isOnline && u.current_activity) {
+            const act = u.current_activity;
+            const isPlaying = act.state === 'playing';
+            const stateIcon = isPlaying 
+                ? '<span class="inline-flex items-center gap-1 text-emerald-400 font-bold"><i class="fa-solid fa-circle-play text-[10px] animate-pulse"></i> Đang phát</span>'
+                : '<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><i class="fa-solid fa-circle-pause text-[10px]"></i> Tạm dừng</span>';
+            const coverImg = act.cover_url 
+                ? `<img src="${act.cover_url}" class="w-8 h-8 rounded-lg object-cover border border-hairline shrink-0" onerror="this.src='/favicon.png'">`
+                : `<div class="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-music"></i></div>`;
+
+            liveActivityCell = `
+                <div class="flex items-center gap-2 max-w-[190px]">
+                    ${coverImg}
+                    <div class="min-w-0 flex-1">
+                        <div class="font-bold text-xs text-text truncate" title="${act.title}">${act.title || 'Đang nghe nhạc'}</div>
+                        <div class="text-[10px] text-text-secondary truncate" title="${act.artist}">${act.artist || 'Không rõ ca sĩ'}</div>
+                        <div class="text-[9px] mt-0.5">${stateIcon}</div>
+                    </div>
+                </div>
+            `;
+        } else if (isOnline) {
+            liveActivityCell = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface text-text-secondary text-[11px] border border-hairline"><i class="fa-solid fa-compass text-[10px] text-primary"></i> Đang duyệt kho nhạc</span>`;
+        }
+
+        // 6. Tài khoản & Trạng thái Active
+        const isActive = u.is_active !== false;
         const toggleStatusBtn = isActive
             ? `<button onclick="toggleUserStatus('${u._id}')" class="w-8 h-8 rounded-lg bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-black inline-flex items-center justify-center transition" title="Khóa tài khoản này">
                     <i class="fa-solid fa-lock text-xs"></i>
@@ -3814,7 +4097,10 @@ function renderUsersTable(users) {
 
         tr.innerHTML = `
             <td class="py-3.5 px-4 text-center">
-                <img src="${u.avatar_url}" class="w-10 h-10 rounded-full mx-auto bg-black/20 border border-hairline object-cover" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}'">
+                <div class="relative inline-block">
+                    <img src="${u.avatar_url}" class="w-10 h-10 rounded-full mx-auto bg-black/20 border border-hairline object-cover" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}'">
+                    ${isOnline ? '<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-background"></span>' : ''}
+                </div>
             </td>
             <td class="py-3.5 px-4">
                 <div class="flex items-center gap-2">
@@ -3823,8 +4109,17 @@ function renderUsersTable(users) {
                 </div>
                 <div class="text-[10px] text-text-secondary font-mono">${userSubtitle}</div>
             </td>
-            <td class="py-3.5 px-4 text-text font-medium">
-                ${u.display_name || u.username}
+            <td class="py-3.5 px-4 text-center">
+                ${onlineBadge}
+            </td>
+            <td class="py-3.5 px-4">
+                ${deviceCell}
+            </td>
+            <td class="py-3.5 px-4">
+                ${ipCell}
+            </td>
+            <td class="py-3.5 px-4">
+                ${liveActivityCell}
             </td>
             <td class="py-3.5 px-4 text-center">
                 <div class="inline-flex items-center gap-1.5 text-xs">
@@ -3837,20 +4132,16 @@ function renderUsersTable(users) {
                 </div>
             </td>
             <td class="py-3.5 px-4 text-center">
-                ${statusBadge}
-            </td>
-            <td class="py-3.5 px-4 text-xs text-text-secondary">
-                ${date}
+                ${toggleStatusBtn}
             </td>
             <td class="py-3.5 px-4 text-right">
                 <div class="inline-flex items-center gap-1">
-                    <button onclick="openUserDetailsModal('${u._id}')" class="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white inline-flex items-center justify-center transition" title="Xem chi tiết dữ liệu (Playlists, Favorites)">
+                    <button onclick="openUserDetailsModal('${u._id}')" class="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white inline-flex items-center justify-center transition" title="Xem chi tiết kết nối, IP, thiết bị, playlists">
                         <i class="fa-solid fa-eye text-xs"></i>
                     </button>
                     <button onclick="openEditUserModal('${u._id}')" class="w-8 h-8 rounded-lg bg-surface hover:bg-surface-2 text-text inline-flex items-center justify-center transition" title="Sửa thông tin / Đổi mật khẩu">
                         <i class="fa-solid fa-pen-to-square text-xs"></i>
                     </button>
-                    ${toggleStatusBtn}
                     <button onclick="deleteMusicUser('${u._id}', '${u.username}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white inline-flex items-center justify-center transition" title="Xóa người dùng">
                         <i class="fa-solid fa-trash-can text-xs"></i>
                     </button>
@@ -4003,10 +4294,17 @@ async function openUserDetailsModal(userId) {
     document.getElementById('detail-user-username').textContent = '';
     document.getElementById('detail-user-avatar').src = '';
     document.getElementById('detail-user-status-badge').innerHTML = '';
+    document.getElementById('detail-user-online-badge').innerHTML = '';
+    document.getElementById('detail-ip-address').textContent = 'Đang tải...';
+    document.getElementById('detail-device-os').innerHTML = '<span class="text-text-secondary">Đang tải...</span>';
+    document.getElementById('detail-device-browser').innerHTML = '<span class="text-text-secondary">Đang tải...</span>';
+    document.getElementById('detail-device-screen').textContent = '--';
+    document.getElementById('detail-user-agent').textContent = '--';
     document.getElementById('detail-playlists-count').textContent = '0';
     document.getElementById('detail-favorites-count').textContent = '0';
     document.getElementById('detail-playlists-container').innerHTML = '<div class="text-xs text-text-secondary py-4 text-center"><i class="fa-solid fa-spinner animate-spin mr-1"></i> Đang tải dữ liệu...</div>';
     document.getElementById('detail-favorites-container').innerHTML = '';
+    document.getElementById('detail-sessions-container').innerHTML = '';
 
     modal.classList.remove('opacity-0', 'pointer-events-none');
     modal.querySelector('.transform').classList.remove('scale-95');
@@ -4017,7 +4315,7 @@ async function openUserDetailsModal(userId) {
 
         if (res.ok && result.status === 'success') {
             const user = result.user;
-            const data = result.data;
+            const data = result.data || {};
 
             const isTg = user.auth_type === 'telegram_qr' || !!user.telegram_id;
             const hasRealUsername = user.username && !user.username.startsWith('tg_');
@@ -4029,10 +4327,80 @@ async function openUserDetailsModal(userId) {
             document.getElementById('detail-user-username').textContent = usernameDisplay;
             document.getElementById('detail-user-avatar').src = user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
             
+            const createdAtDate = user.created_at ? new Date(user.created_at * 1000).toLocaleString('vi-VN') : 'Không rõ';
+            document.getElementById('detail-user-created-date').textContent = `Ngày tạo tài khoản: ${createdAtDate}`;
+
+            // Status Badge (Active / Banned)
             const isActive = user.is_active !== false;
             document.getElementById('detail-user-status-badge').innerHTML = isActive
                 ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[10px] font-bold">Hoạt Động</span>'
                 : '<span class="px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/25 text-[10px] font-bold">Đang Bị Khóa</span>';
+
+            // Online Badge
+            const isOnline = !!user.is_online;
+            document.getElementById('detail-user-online-badge').innerHTML = isOnline
+                ? '<span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> ĐANG ONLINE</span>'
+                : '<span class="px-2.5 py-0.5 rounded-full bg-surface-2 text-text-secondary border border-hairline text-[10px] font-semibold">OFFLINE</span>';
+
+            document.getElementById('detail-last-active-time').textContent = `Hoạt động gần nhất: ${formatTimeAgo(user.last_seen)}`;
+
+            // Connection & Device Details
+            const devInfo = user.device_info || {};
+            document.getElementById('detail-ip-address').textContent = user.last_ip || 'Chưa ghi nhận';
+            
+            const osName = devInfo.os || 'Không rõ';
+            const osIcon = getDeviceIcon(osName);
+            document.getElementById('detail-device-os').innerHTML = `${osIcon} <span>${osName}</span>`;
+
+            const browserName = devInfo.browser || 'Web Browser';
+            const browserIcon = getBrowserIcon(browserName);
+            document.getElementById('detail-device-browser').innerHTML = `${browserIcon} <span>${browserName}</span>`;
+
+            const screenText = devInfo.screen ? `${devInfo.device_type || 'Desktop'} (${devInfo.screen})` : (devInfo.device_type || 'Desktop');
+            document.getElementById('detail-device-screen').textContent = screenText;
+            document.getElementById('detail-user-agent').textContent = devInfo.user_agent || navigator.userAgent || 'Không có';
+
+            // Live Playback Activity
+            const activityCard = document.getElementById('detail-live-activity-card');
+            const act = user.current_activity;
+            if (isOnline && act) {
+                activityCard.classList.remove('hidden');
+                document.getElementById('detail-activity-title').textContent = act.title || 'Đang nghe nhạc';
+                document.getElementById('detail-activity-artist').textContent = `${act.artist || 'Không rõ'}${act.album ? ' • ' + act.album : ''}`;
+                document.getElementById('detail-activity-cover').src = act.cover_url || '/favicon.png';
+                const isPlaying = act.state === 'playing';
+                const badgeEl = document.getElementById('detail-playback-badge');
+                if (badgeEl) {
+                    badgeEl.className = isPlaying 
+                        ? 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                    badgeEl.textContent = isPlaying ? 'Đang phát' : 'Tạm dừng';
+                }
+            } else {
+                activityCard.classList.add('hidden');
+            }
+
+            // Recent Sessions History
+            const sessions = data.recent_sessions || [];
+            const sessContainer = document.getElementById('detail-sessions-container');
+            const sessSection = document.getElementById('detail-sessions-section');
+            if (sessions.length > 0) {
+                sessSection.classList.remove('hidden');
+                sessContainer.innerHTML = sessions.slice().reverse().map(s => {
+                    const sDate = s.last_active ? new Date(s.last_active * 1000).toLocaleString('vi-VN') : '';
+                    return `
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/25 text-xs text-text border border-hairline/50">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 font-mono font-bold text-[11px] border border-sky-500/20">${s.ip || '127.0.0.1'}</span>
+                                <span class="font-bold text-text-secondary truncate text-xs">${s.device || 'Thiết bị'}</span>
+                            </div>
+                            <span class="text-[10px] text-text-secondary/70 shrink-0">${sDate}</span>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                sessSection.classList.add('hidden');
+            }
 
             // Render Playlists
             const playlists = data.playlists || [];
@@ -4072,38 +4440,32 @@ async function openUserDetailsModal(userId) {
                 favContainer.innerHTML = '<div class="text-xs text-text-secondary py-3 px-4 rounded-xl bg-surface/50 text-center">Người dùng chưa yêu thích bài hát nào.</div>';
             } else {
                 favContainer.innerHTML = `
-                    <div class="p-3.5 rounded-2xl bg-surface border border-hairline">
-                        <div class="flex items-center justify-between text-xs text-text mb-2.5">
-                            <span class="font-bold">Tổng số bài hát yêu thích:</span>
-                            <span class="font-black text-red-400">${favorites.length} bài hát</span>
-                        </div>
-                        <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1 text-xs">
-                            ${favorites.map((f, i) => {
-                                const fDate = f.added_at ? new Date(f.added_at * 1000).toLocaleDateString('vi-VN') : '';
-                                const fTitle = f.title || f.name || `Bài hát #${f.msg_id}`;
-                                const fArtist = f.artist ? `<span class="text-text-secondary font-normal text-[11px]"> • ${f.artist}</span>` : '';
-                                const fCover = f.cover_url 
-                                    ? `<img src="${f.cover_url}" class="w-8 h-8 rounded-lg object-cover border border-hairline shrink-0" onerror="this.style.display='none'">` 
-                                    : `<div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-heart"></i></div>`;
-                                
-                                return `
-                                    <div class="flex items-center justify-between py-2 px-3 rounded-xl bg-black/25 text-text gap-3 hover:bg-surface-2 transition">
-                                        <div class="flex items-center gap-2.5 min-w-0">
-                                            ${fCover}
-                                            <div class="min-w-0">
-                                                <div class="font-bold text-text truncate max-w-[280px] sm:max-w-md text-xs">
-                                                    ${fTitle}${fArtist}
-                                                </div>
-                                                <div class="text-[10px] text-text-secondary font-mono">
-                                                    #${i + 1} • Chat: ${f.chat_id} • Msg: ${f.msg_id}
-                                                </div>
+                    <div class="space-y-1.5 text-xs">
+                        ${favorites.map((f, i) => {
+                            const fDate = f.added_at ? new Date(f.added_at * 1000).toLocaleDateString('vi-VN') : '';
+                            const fTitle = f.title || f.name || `Bài hát #${f.msg_id}`;
+                            const fArtist = f.artist ? `<span class="text-text-secondary font-normal text-[11px]"> • ${f.artist}</span>` : '';
+                            const fCover = f.cover_url 
+                                ? `<img src="${f.cover_url}" class="w-8 h-8 rounded-lg object-cover border border-hairline shrink-0" onerror="this.style.display='none'">` 
+                                : `<div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-heart"></i></div>`;
+                            
+                            return `
+                                <div class="flex items-center justify-between py-2 px-3 rounded-xl bg-black/25 text-text gap-3 hover:bg-surface-2 transition">
+                                    <div class="flex items-center gap-2.5 min-w-0">
+                                        ${fCover}
+                                        <div class="min-w-0">
+                                            <div class="font-bold text-text truncate max-w-[180px] sm:max-w-xs text-xs">
+                                                ${fTitle}${fArtist}
+                                            </div>
+                                            <div class="text-[10px] text-text-secondary font-mono">
+                                                #${i + 1} • Chat: ${f.chat_id} • Msg: ${f.msg_id}
                                             </div>
                                         </div>
-                                        <span class="text-[10px] text-text-secondary/70 shrink-0 font-medium">${fDate}</span>
                                     </div>
-                                `;
-                            }).join('')}
-                        </div>
+                                    <span class="text-[10px] text-text-secondary/70 shrink-0 font-medium">${fDate}</span>
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
                 `;
             }
