@@ -655,8 +655,11 @@ class XTAPOMusicApp {
                     }
                 } else {
                     this.authModal.classList.add('open');
-                    this.switchAuthTab('qr');
-                    this.initTelegramQrLogin();
+                    this.switchAuthTab('phone');
+                    this.stopQrPolling();
+                    if (this.tgPhoneInput) {
+                        setTimeout(() => this.tgPhoneInput.focus(), 150);
+                    }
                 }
             });
         }
@@ -669,18 +672,21 @@ class XTAPOMusicApp {
         }
 
         // Tab Switching
+        if (this.tabPhoneLogin) {
+            this.tabPhoneLogin.addEventListener('click', () => {
+                this.switchAuthTab('phone');
+                this.stopQrPolling();
+                if (this.tgPhoneInput) {
+                    setTimeout(() => this.tgPhoneInput.focus(), 150);
+                }
+            });
+        }
         if (this.tabQrLogin) {
             this.tabQrLogin.addEventListener('click', () => {
                 this.switchAuthTab('qr');
                 if (!this._qrPollTimer && !this.currentUser) {
                     this.initTelegramQrLogin();
                 }
-            });
-        }
-        if (this.tabPhoneLogin) {
-            this.tabPhoneLogin.addEventListener('click', () => {
-                this.switchAuthTab('phone');
-                this.stopQrPolling();
             });
         }
         if (this.tabPwLogin) {
