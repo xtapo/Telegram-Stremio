@@ -102,6 +102,9 @@ async def get_music_profile(request: Request):
             request.session.pop("music_username", None)
             return {"status": "guest", "user": None}
             
+        is_member = user.get("is_channel_member", True)
+        channel_warning = None if is_member else "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin"
+
         return {
             "status": "authenticated", 
             "user": {
@@ -109,7 +112,10 @@ async def get_music_profile(request: Request):
                 "username": user["username"], 
                 "display_name": user.get("display_name", user["username"]),
                 "avatar_url": user.get("avatar_url", ""),
-                "is_active": user.get("is_active", True)
+                "is_active": user.get("is_active", True),
+                "is_channel_member": is_member,
+                "channel_warning": channel_warning,
+                "auth_type": user.get("auth_type", "password")
             }
         }
     except Exception:

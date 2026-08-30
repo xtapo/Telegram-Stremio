@@ -595,10 +595,21 @@ class XTAPOMusicApp {
     updateAuthUI(isLoggedIn) {
         if (isLoggedIn && this.currentUser) {
             this.userAvatarImg.src = this.currentUser.avatar_url;
-            this.userDisplayName.textContent = this.currentUser.display_name || this.currentUser.username;
+            const name = this.currentUser.display_name || this.currentUser.username;
+            if (this.currentUser.is_channel_member === false) {
+                this.userDisplayName.textContent = name + " (Chưa vào Channel)";
+                this.userDisplayName.style.color = "#f59e0b";
+                this.userDisplayName.title = "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin";
+            } else {
+                this.userDisplayName.textContent = name;
+                this.userDisplayName.style.color = "";
+                this.userDisplayName.title = "Tài khoản Telegram: " + name;
+            }
         } else {
             this.userAvatarImg.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=Guest";
             this.userDisplayName.textContent = "Đăng nhập";
+            this.userDisplayName.style.color = "";
+            this.userDisplayName.title = "Đăng nhập tài khoản";
             this.favoriteTracks = [];
             this.updateFavoriteBtnState();
         }
@@ -1068,6 +1079,15 @@ class XTAPOMusicApp {
         this.showToast(`🎉 Đăng nhập Telegram thành công! Chào mừng ${data.user.display_name}!`);
         this.authModal.classList.remove('open');
         if (this.qr2FaInput) this.qr2FaInput.value = '';
+
+        // Kiểm tra và hiển thị cảnh báo nếu chưa tham gia Channel thành viên
+        if (data.is_channel_member === false || data.user?.is_channel_member === false || data.channel_warning) {
+            const warningMsg = data.channel_warning || "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin";
+            setTimeout(() => {
+                alert("⚠️ " + warningMsg);
+                this.showToast("⚠️ " + warningMsg);
+            }, 400);
+        }
 
         await this.fetchUserProfile();
         await this.fetchTelegramAlbums(false);

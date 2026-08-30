@@ -265,6 +265,40 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
     except Exception as e:
         LOGGER.warning(f"[QR AUTH] export_session_string failed: {e}")
 
+    # Kiểm tra xem user có tham gia vào các Channel kho nhạc hay không
+    is_channel_member = True
+    channel_warning = None
+    try:
+        from Backend.fastapi.routes.music_routes import _db_load_library
+        albums_data = await _db_load_library()
+        if albums_data:
+            sample_chat_ids = set()
+            for alb in albums_data:
+                for trk in alb.get("tracks", []):
+                    cid = trk.get("chat_id") or trk.get("telegram_chat_id")
+                    if cid:
+                        sample_chat_ids.add(int(cid))
+                    if len(sample_chat_ids) >= 3:
+                        break
+                if len(sample_chat_ids) >= 3:
+                    break
+            
+            if sample_chat_ids:
+                has_access = False
+                for cid in sample_chat_ids:
+                    try:
+                        await user_client.get_chat(cid)
+                        has_access = True
+                        break
+                    except Exception:
+                        pass
+                
+                if not has_access:
+                    is_channel_member = False
+                    channel_warning = "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin"
+    except Exception as e:
+        LOGGER.warning(f"[QR AUTH] Kiểm tra channel membership: {e}")
+
     # Cập nhật thông tin người dùng vào MongoDB
     coll = db.dbs["tracking"]["music_users"]
     user_doc = {
@@ -275,6 +309,7 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
         "telegram_id": user_me.id,
         "telegram_session": session_str,
         "is_active": True,
+        "is_channel_member": is_channel_member,
         "auth_type": "telegram_qr",
         "last_login": time.time()
     }
@@ -295,11 +330,13 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
     # Đăng ký Client vào user pool để phục vụ streaming trực tiếp
     _USER_CLIENT_POOL[user_id] = user_client
 
-    LOGGER.info(f"[QR AUTH SUCCESS] Người dùng '{display_name}' (ID: {user_me.id}) đã đăng nhập thành công qua Telegram QR!")
+    LOGGER.info(f"[QR AUTH SUCCESS] Người dùng '{display_name}' (ID: {user_me.id}) đã đăng nhập thành công qua Telegram! Channel Member: {is_channel_member}")
 
     return {
         "status": "success",
         "message": f"Chào mừng {display_name}!",
+        "is_channel_member": is_channel_member,
+        "channel_warning": channel_warning,
         "user": {
             "id": user_id,
             "username": username,
@@ -307,6 +344,8 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
             "avatar_url": avatar_url,
             "telegram_id": user_me.id,
             "is_active": True,
+            "is_channel_member": is_channel_member,
+            "channel_warning": channel_warning,
             "auth_type": "telegram_qr"
         }
     }
