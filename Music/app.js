@@ -991,9 +991,10 @@ class XTAPOMusicApp {
                     text: tgUrl,
                     width: 196,
                     height: 196,
+                    typeNumber: 0,
                     colorDark: "#0c1017",
                     colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.M
+                    correctLevel: QRCode.CorrectLevel.L
                 });
             } else {
                 // Fallback SVG / Image nếu QRCode.js chưa tải
