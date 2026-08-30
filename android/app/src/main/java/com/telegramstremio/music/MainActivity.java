@@ -293,6 +293,21 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
         }
+        checkBatteryOptimizations();
+    }
+
+    private void checkBatteryOptimizations() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                    Intent intent = new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void setupBackNavigation() {
@@ -383,7 +398,7 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (wakeLock != null && !wakeLock.isHeld()) {
             try {
-                wakeLock.acquire(10 * 60 * 1000L /* 10 minutes */);
+                wakeLock.acquire();
             } catch (Exception ignored) {
             }
         }
@@ -395,17 +410,17 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        // KHÔNG ngắt WakeLock và KHÔNG pause WebView ở đây để nhạc tiếp tục phát liên tục khi tắt màn hình!
+    }
+
+    @Override
+    protected void onDestroy() {
         if (wakeLock != null && wakeLock.isHeld()) {
             try {
                 wakeLock.release();
             } catch (Exception ignored) {
             }
         }
-        // Notice: We don't call webView.onPause() so HTML5 audio can continue playing seamlessly in background!
-    }
-
-    @Override
-    protected void onDestroy() {
         if (webView != null) {
             webView.destroy();
         }

@@ -556,7 +556,11 @@ public class XTMediaBrowserService extends MediaBrowserServiceCompat {
                     );
 
             Notification notif = builder.build();
-            startForeground(NOTIFICATION_ID, notif);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notif, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notif);
+            }
         } catch (Exception e) {
             Log.w(TAG, "Failed to show notification: " + e.getMessage());
         }
