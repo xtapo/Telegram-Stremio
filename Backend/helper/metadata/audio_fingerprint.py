@@ -126,7 +126,11 @@ async def recognize_audio_from_telegram(
         return None
 
     try:
-        out = await _SHAZAM.recognize_song(file_bytes_data)
+        # Shazamio >= 0.6.0 uses recognize(data)
+        if hasattr(_SHAZAM, "recognize"):
+            out = await _SHAZAM.recognize(file_bytes_data)
+        else:
+            out = await _SHAZAM.recognize_song(file_bytes_data)
         track = out.get("track", {})
         if not track:
             LOGGER.info(f"[SHAZAM] Không nhận diện được bài hát cho: {file_name}")
