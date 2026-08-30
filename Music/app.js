@@ -610,7 +610,15 @@ class XTAPOMusicApp {
             banner = document.createElement('div');
             banner.id = 'channelWarningBanner';
             banner.className = 'channel-warning-banner';
-            document.body.prepend(banner);
+            const topNav = document.getElementById('topNav');
+            const appContainer = document.querySelector('.app-container');
+            if (topNav && topNav.nextSibling) {
+                topNav.parentNode.insertBefore(banner, topNav.nextSibling);
+            } else if (appContainer) {
+                appContainer.prepend(banner);
+            } else {
+                document.body.prepend(banner);
+            }
         }
         banner.innerHTML = `
             <div class="channel-warning-content">
@@ -646,21 +654,28 @@ class XTAPOMusicApp {
         }
     }
 
+    openAuthModal() {
+        if (this.currentUser) {
+            if (confirm("Bạn có muốn đăng xuất không?")) {
+                this.logoutUser();
+            }
+        } else {
+            if (this.authModal) {
+                this.authModal.classList.add('open');
+                this.switchAuthTab('phone');
+                this.stopQrPolling();
+                if (this.tgPhoneInput) {
+                    setTimeout(() => this.tgPhoneInput.focus(), 150);
+                }
+            }
+        }
+    }
+
     setupAuthEvents() {
         if (this.userProfileBtn) {
-            this.userProfileBtn.addEventListener('click', () => {
-                if (this.currentUser) {
-                    if (confirm("Bạn có muốn đăng xuất không?")) {
-                        this.logoutUser();
-                    }
-                } else {
-                    this.authModal.classList.add('open');
-                    this.switchAuthTab('phone');
-                    this.stopQrPolling();
-                    if (this.tgPhoneInput) {
-                        setTimeout(() => this.tgPhoneInput.focus(), 150);
-                    }
-                }
+            this.userProfileBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.openAuthModal();
             });
         }
         
