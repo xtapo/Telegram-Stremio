@@ -181,35 +181,54 @@ async def music_user_heartbeat(payload: dict, request: Request):
             }
 
         coll = db.dbs["tracking"]["music_users"]
+        user_doc = await coll.find_one({"_id": user_id})
         
-        # Session entry cho lịch sử
-        session_entry = {
-            "ip": client_ip,
-            "device": f"{device_details['os']} • {device_details['browser']}",
-            "device_type": device_details["device_type"],
-            "last_active": now
-        }
+        device_str = f"{device_details['os']} • {device_details['browser']}"
+        existing_sessions = (user_doc.get("recent_sessions", []) if user_doc else [])
+        
+        should_add_new_session = False
+        if not existing_sessions:
+            should_add_new_session = True
+        else:
+            last_sess = existing_sessions[-1]
+            # Nếu khác IP, hoặc khác Thiết bị/Trình duyệt, hoặc cách lần trước > 6 tiếng (21600 giây)
+            if last_sess.get("ip") != client_ip or last_sess.get("device") != device_str or (now - last_sess.get("last_active", 0)) > 21600:
+                should_add_new_session = True
 
-        # Cập nhật document user
-        update_data = {
+        update_fields = {
             "last_seen": now,
             "last_ip": client_ip,
             "device_info": device_details,
             "current_activity": current_activity
         }
 
-        await coll.update_one(
-            {"_id": user_id},
-            {
-                "$set": update_data,
-                "$push": {
-                    "recent_sessions": {
-                        "$each": [session_entry],
-                        "$slice": -10  # Giữ lại tối đa 10 phiên gần nhất
+        if should_add_new_session:
+            session_entry = {
+                "ip": client_ip,
+                "device": device_str,
+                "device_type": device_details["device_type"],
+                "last_active": now
+            }
+            await coll.update_one(
+                {"_id": user_id},
+                {
+                    "$set": update_fields,
+                    "$push": {
+                        "recent_sessions": {
+                            "$each": [session_entry],
+                            "$slice": -10  # Giữ lại tối đa 10 phiên gần nhất
+                        }
                     }
                 }
-            }
-        )
+            )
+        else:
+            # Cập nhật thời gian hoạt động của phiên gần nhất nếu cần mà không tạo dòng mới
+            existing_sessions[-1]["last_active"] = now
+            update_fields["recent_sessions"] = existing_sessions[-10:]
+            await coll.update_one(
+                {"_id": user_id},
+                {"$set": update_fields}
+            )
 
         return {"status": "success", "user_id": user_id, "timestamp": now}
     except Exception as e:
@@ -823,6 +842,23 @@ async def admin_get_user_details(user_id: str, _: bool = Depends(require_auth)):
         except Exception:
             pass
 
+        # Lọc và gộp các phiên trùng lặp liên tiếp
+        raw_sessions = user.get("recent_sessions", [])
+        dedup_sessions = []
+        for s in raw_sessions:
+            if not dedup_sessions:
+                dedup_sessions.append(s)
+            else:
+                prev = dedup_sessions[-1]
+                if prev.get("ip") == s.get("ip") and prev.get("device") == s.get("device") and abs(s.get("last_active", 0) - prev.get("last_active", 0)) < 21600:
+                    prev["last_active"] = max(prev.get("last_active", 0), s.get("last_active", 0))
+                else:
+                    dedup_sessions.append(s)
+
+        # Cập nhật lại danh sách đã làm sạch vào database nếu có sự khác biệt
+        if len(dedup_sessions) != len(raw_sessions):
+            await user_coll.update_one({"_id": user_id}, {"$set": {"recent_sessions": dedup_sessions}})
+
         return JSONResponse(status_code=200, content={
             "status": "success",
             "user": user,
@@ -830,7 +866,7 @@ async def admin_get_user_details(user_id: str, _: bool = Depends(require_auth)):
                 "favorites": favorites,
                 "playlists": user_data.get("playlists", []) if user_data else [],
                 "history": user_data.get("history", []) if user_data else [],
-                "recent_sessions": user.get("recent_sessions", [])
+                "recent_sessions": dedup_sessions
             }
         })
     except Exception as e:
