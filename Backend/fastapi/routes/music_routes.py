@@ -2060,7 +2060,10 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
     try:
         file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
     except Exception as e:
-        LOGGER.warning(f"[MUSIC STREAM] Client {client_idx} failed to get file properties for {chat_id}/{msg_id}: {e}, thử các client khác...")
+        if client_idx == -99:
+            LOGGER.info(f"[MUSIC STREAM] Tài khoản cá nhân chưa tham gia Channel riêng tư {chat_id}, tự động chuyển sang Bot Server để stream...")
+        else:
+            LOGGER.warning(f"[MUSIC STREAM] Client {client_idx} failed to get file properties for {chat_id}/{msg_id}: {e}, thử các client khác...")
         
         # Fallback thử lần lượt các client còn lại
         candidates = []
