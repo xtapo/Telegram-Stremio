@@ -102,7 +102,41 @@ async def get_music_profile(request: Request):
             request.session.pop("music_username", None)
             return {"status": "guest", "user": None}
             
-        is_member = user.get("is_channel_member", True)
+        is_member = user.get("is_channel_member")
+        if is_member is None:
+            if user.get("telegram_session"):
+                try:
+                    from Backend.fastapi.routes.telegram_qr_auth import get_user_tg_client
+                    from Backend.fastapi.routes.music_routes import _db_load_library
+                    user_cl = await get_user_tg_client(user_id)
+                    if user_cl:
+                        albums_data = await _db_load_library()
+                        sample_chat_ids = set()
+                        for alb in (albums_data or []):
+                            for trk in alb.get("tracks", []):
+                                cid = trk.get("chat_id") or trk.get("chatId") or trk.get("telegram_chat_id")
+                                if cid:
+                                    sample_chat_ids.add(int(cid))
+                                if len(sample_chat_ids) >= 3:
+                                    break
+                            if len(sample_chat_ids) >= 3:
+                                break
+                        if sample_chat_ids:
+                            has_access = False
+                            for cid in sample_chat_ids:
+                                try:
+                                    await user_cl.get_chat(cid)
+                                    has_access = True
+                                    break
+                                except Exception:
+                                    pass
+                            is_member = has_access
+                            await coll.update_one({"_id": user_id}, {"$set": {"is_channel_member": is_member}})
+                except Exception:
+                    pass
+            if is_member is None:
+                is_member = True
+
         channel_warning = None if is_member else "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin"
 
         return {
@@ -506,11 +540,37 @@ async def admin_get_user_details(user_id: str, _: bool = Depends(require_auth)):
         user.pop("password_hash", None)
         user_data = await data_coll.find_one({"_id": user_id})
         
+        favorites = user_data.get("favorites", []) if user_data else []
+        try:
+            from Backend.fastapi.routes.music_routes import _db_load_library
+            albums = await _db_load_library()
+            if albums:
+                track_lookup = {}
+                for alb in albums:
+                    for trk in alb.get("tracks", []):
+                        cid = str(trk.get("chat_id") or trk.get("chatId") or "")
+                        mid = str(trk.get("msg_id") or trk.get("msgId") or "")
+                        if cid and mid:
+                            track_lookup[f"{cid}_{mid}"] = trk
+                
+                for f in favorites:
+                    key = f"{f.get('chat_id')}_{f.get('msg_id')}"
+                    if key in track_lookup:
+                        matched = track_lookup[key]
+                        if not f.get("title") and not f.get("name"):
+                            f["title"] = matched.get("name") or matched.get("title") or f"Bài #{f.get('msg_id')}"
+                        if not f.get("artist"):
+                            f["artist"] = matched.get("artist") or ""
+                        if not f.get("cover_url"):
+                            f["cover_url"] = matched.get("coverUrl") or matched.get("cover_url") or ""
+        except Exception:
+            pass
+
         return JSONResponse(status_code=200, content={
             "status": "success",
             "user": user,
             "data": {
-                "favorites": user_data.get("favorites", []) if user_data else [],
+                "favorites": favorites,
                 "playlists": user_data.get("playlists", []) if user_data else [],
                 "history": user_data.get("history", []) if user_data else []
             }

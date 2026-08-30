@@ -583,13 +583,43 @@ class XTAPOMusicApp {
                 this.updateAuthUI(true);
                 await this.fetchUserFavorites();
                 await this.loadPlaylists(); // Will now fetch user playlists
+
+                // Kiểm tra và hiển thị cảnh báo nếu chưa tham gia Channel
+                if (data.user.is_channel_member === false || data.user.channel_warning) {
+                    const warningMsg = data.user.channel_warning || "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin";
+                    this.showChannelWarningBanner(warningMsg);
+                } else {
+                    const existingBanner = document.getElementById('channelWarningBanner');
+                    if (existingBanner) existingBanner.remove();
+                }
             } else {
                 this.currentUser = null;
                 this.updateAuthUI(false);
+                const existingBanner = document.getElementById('channelWarningBanner');
+                if (existingBanner) existingBanner.remove();
             }
         } catch (e) {
             console.error("Lỗi lấy thông tin user:", e);
         }
+    }
+
+    showChannelWarningBanner(msg = "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin") {
+        let banner = document.getElementById('channelWarningBanner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'channelWarningBanner';
+            banner.className = 'channel-warning-banner';
+            document.body.prepend(banner);
+        }
+        banner.innerHTML = `
+            <div class="channel-warning-content">
+                <span class="warning-icon">⚠️</span>
+                <span class="warning-text"><b>Cảnh báo:</b> ${msg}</span>
+            </div>
+            <button class="channel-warning-close" onclick="this.parentElement.remove()" title="Đóng">&times;</button>
+        `;
+        banner.style.display = 'flex';
+        this.showToast(`⚠️ ${msg}`, 6000);
     }
 
     updateAuthUI(isLoggedIn) {

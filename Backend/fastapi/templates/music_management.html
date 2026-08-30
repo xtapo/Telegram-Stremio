@@ -3805,16 +3805,23 @@ function renderUsersTable(users) {
                     <i class="fa-solid fa-lock-open text-xs"></i>
                </button>`;
 
+        const isTg = u.auth_type === 'telegram_qr' || !!u.telegram_id;
+        const mainTitle = isTg ? (u.display_name || u.username) : u.username;
+        const hasRealUsername = u.username && !u.username.startsWith('tg_');
+        const userSubtitle = isTg 
+            ? `${hasRealUsername ? '@' + u.username + ' • ' : ''}ID: ${u.telegram_id || u._id}`
+            : `@${u.username}`;
+
         tr.innerHTML = `
             <td class="py-3.5 px-4 text-center">
                 <img src="${u.avatar_url}" class="w-10 h-10 rounded-full mx-auto bg-black/20 border border-hairline object-cover" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}'">
             </td>
             <td class="py-3.5 px-4">
                 <div class="flex items-center gap-2">
-                    <span class="font-bold text-text">${u.username}</span>
+                    <span class="font-bold text-text">${mainTitle}</span>
                     ${typeBadge}
                 </div>
-                <div class="text-[10px] text-text-secondary font-mono">${u._id}</div>
+                <div class="text-[10px] text-text-secondary font-mono">${userSubtitle}</div>
             </td>
             <td class="py-3.5 px-4 text-text font-medium">
                 ${u.display_name || u.username}
@@ -4012,8 +4019,14 @@ async function openUserDetailsModal(userId) {
             const user = result.user;
             const data = result.data;
 
+            const isTg = user.auth_type === 'telegram_qr' || !!user.telegram_id;
+            const hasRealUsername = user.username && !user.username.startsWith('tg_');
+            const usernameDisplay = isTg
+                ? `${hasRealUsername ? '@' + user.username + ' • ' : ''}Telegram ID: ${user.telegram_id || user._id}`
+                : `@${user.username} • ID: ${user._id}`;
+
             document.getElementById('detail-user-displayname').textContent = user.display_name || user.username;
-            document.getElementById('detail-user-username').textContent = `@${user.username} • ID: ${user._id}`;
+            document.getElementById('detail-user-username').textContent = usernameDisplay;
             document.getElementById('detail-user-avatar').src = user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
             
             const isActive = user.is_active !== false;
@@ -4059,18 +4072,34 @@ async function openUserDetailsModal(userId) {
                 favContainer.innerHTML = '<div class="text-xs text-text-secondary py-3 px-4 rounded-xl bg-surface/50 text-center">Người dùng chưa yêu thích bài hát nào.</div>';
             } else {
                 favContainer.innerHTML = `
-                    <div class="p-3 rounded-2xl bg-surface border border-hairline">
-                        <div class="flex items-center justify-between text-xs text-text mb-2">
-                            <span class="font-bold">Tổng số mục yêu thích:</span>
+                    <div class="p-3.5 rounded-2xl bg-surface border border-hairline">
+                        <div class="flex items-center justify-between text-xs text-text mb-2.5">
+                            <span class="font-bold">Tổng số bài hát yêu thích:</span>
                             <span class="font-black text-red-400">${favorites.length} bài hát</span>
                         </div>
-                        <div class="max-h-40 overflow-y-auto space-y-1 pr-1 text-xs">
+                        <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1 text-xs">
                             ${favorites.map((f, i) => {
                                 const fDate = f.added_at ? new Date(f.added_at * 1000).toLocaleDateString('vi-VN') : '';
+                                const fTitle = f.title || f.name || `Bài hát #${f.msg_id}`;
+                                const fArtist = f.artist ? `<span class="text-text-secondary font-normal text-[11px]"> • ${f.artist}</span>` : '';
+                                const fCover = f.cover_url 
+                                    ? `<img src="${f.cover_url}" class="w-8 h-8 rounded-lg object-cover border border-hairline shrink-0" onerror="this.style.display='none'">` 
+                                    : `<div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-heart"></i></div>`;
+                                
                                 return `
-                                    <div class="flex items-center justify-between py-1.5 px-2.5 rounded-lg bg-black/20 text-text-secondary text-[11px]">
-                                        <span>#${i + 1} • Chat: ${f.chat_id}, Msg: ${f.msg_id}</span>
-                                        <span class="text-[10px] text-text-secondary/70">${fDate}</span>
+                                    <div class="flex items-center justify-between py-2 px-3 rounded-xl bg-black/25 text-text gap-3 hover:bg-surface-2 transition">
+                                        <div class="flex items-center gap-2.5 min-w-0">
+                                            ${fCover}
+                                            <div class="min-w-0">
+                                                <div class="font-bold text-text truncate max-w-[280px] sm:max-w-md text-xs">
+                                                    ${fTitle}${fArtist}
+                                                </div>
+                                                <div class="text-[10px] text-text-secondary font-mono">
+                                                    #${i + 1} • Chat: ${f.chat_id} • Msg: ${f.msg_id}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <span class="text-[10px] text-text-secondary/70 shrink-0 font-medium">${fDate}</span>
                                     </div>
                                 `;
                             }).join('')}
