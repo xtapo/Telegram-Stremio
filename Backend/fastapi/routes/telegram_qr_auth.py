@@ -198,49 +198,69 @@ async def init_telegram_qr_login():
             "expires_at": expires_at,
             "status": "pending",
             "created_at": time.time(),
-            "user_data": None,
-            "last_active_check": 0  # Timestamp để throttle active check trong /status
+            "user_data": None
         }
 
-        # Best-effort: Đăng ký Raw Update Handler (có thể hoạt động nếu Dispatcher chạy)
-        async def on_qr_raw_update(client, update, users, chats):
+        # Gán trực tiếp custom handle_updates để bắt mọi dạng UpdateLoginToken từ MTProto
+        async def custom_handle_updates(updates):
             try:
-                if isinstance(update, raw.types.UpdateLoginToken):
-                    LOGGER.info(f"[QR AUTH] Đã nhận tín hiệu quét mã UpdateLoginToken từ Telegram (Session: {session_id})")
-                    login_res = await client.invoke(
+                LOGGER.info(f"[QR MTPROTO] Nhận update từ Telegram: {type(updates)}")
+                is_scanned = False
+                if isinstance(updates, raw.types.UpdateLoginToken):
+                    is_scanned = True
+                elif isinstance(updates, raw.types.UpdateShort) and isinstance(getattr(updates, "update", None), raw.types.UpdateLoginToken):
+                    is_scanned = True
+                elif isinstance(updates, (raw.types.Updates, raw.types.UpdatesCombined)):
+                    for u in getattr(updates, "updates", []):
+                        if isinstance(u, raw.types.UpdateLoginToken):
+                            is_scanned = True
+                            break
+
+                if is_scanned:
+                    LOGGER.info(f"[QR AUTH] 🔥 ĐÃ BẮT ĐƯỢC SỰ KIỆN QUÉT MÃ QR (Session: {session_id})")
+                    sdata = _ACTIVE_QR_SESSIONS.get(session_id)
+                    if not sdata or sdata.get("status") not in ("pending", "needs_2fa"):
+                        return
+
+                    login_res = await temp_client.invoke(
                         ExportLoginToken(
                             api_id=Telegram.API_ID,
                             api_hash=Telegram.API_HASH,
                             except_ids=[]
                         )
                     )
+                    LOGGER.info(f"[QR AUTH] Kết quả sau quét: {type(login_res)}")
                     if isinstance(login_res, LoginTokenMigrateTo):
-                        login_res = await _migrate_and_import_token(client, login_res)
+                        login_res = await _migrate_and_import_token(temp_client, login_res)
+
                     if isinstance(login_res, LoginTokenSuccess):
                         auth_user = getattr(login_res.authorization, "user", None)
                         if auth_user:
                             try:
-                                client.storage.user_id = auth_user.id
-                                client.storage.is_bot = False
-                                client.storage.is_authorized = True
+                                temp_client.storage.user_id = auth_user.id
+                                temp_client.storage.is_bot = False
+                                temp_client.storage.is_authorized = True
                             except Exception:
                                 pass
-                        user_data = await _finalize_qr_login(client, auth_user=auth_user)
-                        _ACTIVE_QR_SESSIONS[session_id]["status"] = "success"
-                        _ACTIVE_QR_SESSIONS[session_id]["user_data"] = user_data
+                        user_data = await _finalize_qr_login(temp_client, auth_user=auth_user)
+                        sdata["status"] = "success"
+                        sdata["user_data"] = user_data
+                        LOGGER.info(f"[QR AUTH] ✅ Đăng nhập thành công!")
             except SessionPasswordNeeded:
-                LOGGER.info(f"[QR AUTH] Tài khoản cần xác thực 2FA (Session: {session_id})")
-                _ACTIVE_QR_SESSIONS[session_id]["status"] = "needs_2fa"
+                LOGGER.info(f"[QR AUTH] 🔐 Tài khoản cần xác thực 2FA (Session: {session_id})")
+                sdata = _ACTIVE_QR_SESSIONS.get(session_id)
+                if sdata:
+                    sdata["status"] = "needs_2fa"
             except Exception as ex:
-                LOGGER.error(f"[QR RAW UPDATE ERROR] {ex}", exc_info=True)
+                LOGGER.error(f"[QR MTPROTO UPDATE ERROR] {ex}", exc_info=True)
+
+        temp_client.handle_updates = custom_handle_updates
+
+        # Đăng ký thêm RawUpdateHandler dự phòng
+        async def on_qr_raw_update(client, update, users, chats):
+            await custom_handle_updates(update)
 
         temp_client.add_handler(RawUpdateHandler(on_qr_raw_update))
-
-        # Thử khởi động Dispatcher (best-effort, không chắc hoạt động cho non-authorized client)
-        try:
-            await temp_client.dispatcher.start()
-        except Exception:
-            pass
 
         return {
             "status": "success",
@@ -426,7 +446,7 @@ async def trigger_qr_check_now(payload: dict, request: Request):
     if not sdata or not sdata.get("client"):
         return {"status": "expired", "message": "Phiên đăng nhập đã hết hạn."}
 
-    # Nếu auto-check đã phát hiện trạng thái, trả về ngay
+    # Nếu đã thành công hoặc đã phát hiện 2FA, trả về ngay
     if sdata.get("status") == "needs_2fa":
         return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
     if sdata.get("status") == "success" and sdata.get("user_data"):
@@ -438,15 +458,16 @@ async def trigger_qr_check_now(payload: dict, request: Request):
         return sdata["user_data"]
 
     temp_client = sdata["client"]
-    original_token = sdata.get("token_bytes")
-    if not original_token:
-        return {"status": "pending"}
-
     try:
-        # Dùng ImportLoginToken với token gốc (KHÔNG gọi ExportLoginToken vì sẽ tạo token mới)
+        LOGGER.info(f"[QR CHECK NOW] Đang kiểm tra trạng thái cho session {session_id}...")
         login_res = await temp_client.invoke(
-            ImportLoginToken(token=original_token)
+            ExportLoginToken(
+                api_id=Telegram.API_ID,
+                api_hash=Telegram.API_HASH,
+                except_ids=[]
+            )
         )
+        LOGGER.info(f"[QR CHECK NOW] Kết quả invoke ExportLoginToken: {type(login_res)}")
         if isinstance(login_res, LoginTokenMigrateTo):
             login_res = await _migrate_and_import_token(temp_client, login_res)
 
@@ -471,11 +492,11 @@ async def trigger_qr_check_now(payload: dict, request: Request):
             return user_data
 
     except SessionPasswordNeeded:
-        LOGGER.info(f"[QR CHECK NOW] Tài khoản cần xác thực 2FA (Session: {session_id})")
+        LOGGER.info(f"[QR CHECK NOW] 🔐 Tài khoản cần xác thực 2FA (Session: {session_id})")
         sdata["status"] = "needs_2fa"
         return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
     except Exception as e:
-        LOGGER.warning(f"[QR CHECK NOW] Lỗi kiểm tra tức thì: {e}")
+        LOGGER.warning(f"[QR CHECK NOW] Lỗi kiểm tra: {e}")
 
     return {"status": sdata.get("status", "pending")}
 
@@ -498,19 +519,21 @@ async def verify_telegram_qr_2fa(payload: dict, request: Request):
 
     temp_client = sdata["client"]
     try:
-        # Đảm bảo token và DC đã được đồng bộ bằng ImportLoginToken (KHÔNG dùng ExportLoginToken)
+        # Nếu chưa di chuyển DC và cần kích hoạt 2FA
         try:
-            original_token = sdata.get("token_bytes")
-            if original_token:
-                login_res = await temp_client.invoke(
-                    ImportLoginToken(token=original_token)
+            login_res = await temp_client.invoke(
+                ExportLoginToken(
+                    api_id=Telegram.API_ID,
+                    api_hash=Telegram.API_HASH,
+                    except_ids=[]
                 )
-                if isinstance(login_res, LoginTokenMigrateTo):
-                    await _migrate_and_import_token(temp_client, login_res)
+            )
+            if isinstance(login_res, LoginTokenMigrateTo):
+                await _migrate_and_import_token(temp_client, login_res)
         except SessionPasswordNeeded:
             pass
-        except Exception:
-            pass
+        except Exception as e:
+            LOGGER.debug(f"[QR 2FA SYNC] {e}")
 
         user_me = await temp_client.check_password(password)
         user_data = await _finalize_qr_login(temp_client, auth_user=user_me)

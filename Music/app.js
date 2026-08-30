@@ -1095,6 +1095,12 @@ class XTAPOMusicApp {
             }).then(r => r.json()).then(data => {
                 if (data.status === 'success' && data.user) {
                     this.handleQrSuccess(data);
+                } else if (data.status === 'needs_2fa') {
+                    if (this.qr2FaSection) this.qr2FaSection.style.display = 'block';
+                    if (this.qrStatusText) {
+                        this.qrStatusText.innerHTML = '<span style="color:#f59e0b; font-weight:700;">🔐 Đã quét mã! Nhập mật khẩu 2FA bên dưới:</span>';
+                    }
+                    if (this.qr2FaInput) this.qr2FaInput.focus();
                 }
             }).catch(() => {});
         }
