@@ -46,18 +46,25 @@ async def _migrate_and_import_token(client: Client, migrate_token: LoginTokenMig
     while isinstance(current_res, LoginTokenMigrateTo):
         target_dc = current_res.dc_id
         token = current_res.token
-        LOGGER.info(f"[QR AUTH] Đang di chuyển client sang DC {target_dc} để hoàn tất ImportLoginToken...")
-        try:
-            await client.disconnect()
-        except Exception:
-            pass
+        LOGGER.info(f"[QR AUTH] 🚀 Di chuyển MTProto Session sang DC {target_dc}...")
+        if client.session:
+            try:
+                await client.session.stop()
+            except Exception as e:
+                LOGGER.debug(f"[QR AUTH] session.stop error: {e}")
+
         test_mode = await client.storage.test_mode()
         auth_key = await Auth(client, target_dc, test_mode).create()
-        client.session = Session(client, target_dc, auth_key, test_mode)
         await client.storage.dc_id(target_dc)
         await client.storage.auth_key(auth_key)
-        await client.connect()
+
+        client.session = Session(client, target_dc, auth_key, test_mode)
+        await client.session.start()
+        client.is_connected = True
+
+        LOGGER.info(f"[QR AUTH] Đã kết nối thành công DC {target_dc}, gửi ImportLoginToken...")
         current_res = await client.invoke(ImportLoginToken(token=token))
+        LOGGER.info(f"[QR AUTH] Kết quả ImportLoginToken trên DC {target_dc}: {type(current_res)}")
     return current_res
 
 
@@ -163,19 +170,22 @@ async def init_telegram_qr_login():
             )
         )
 
-        # Xử lý nếu Telegram yêu cầu chuyển Data Center (DC)
+        # Xử lý nếu Telegram yêu cầu chuyển Data Center (DC) khi tạo QR
         while isinstance(res, LoginTokenMigrateTo):
             target_dc = res.dc_id
             LOGGER.info(f"[QR AUTH] Di chuyển MTProto DC sang DC {target_dc}")
-            try:
-                await temp_client.disconnect()
-            except Exception:
-                pass
-            temp_client.storage.dc_id = target_dc
-            temp_client.storage.auth_key = None
-            temp_client.session.dc_id = target_dc
-            temp_client.session.auth_key = None
-            await temp_client.connect()
+            if temp_client.session:
+                try:
+                    await temp_client.session.stop()
+                except Exception:
+                    pass
+            test_mode = await temp_client.storage.test_mode()
+            auth_key = await Auth(temp_client, target_dc, test_mode).create()
+            await temp_client.storage.dc_id(target_dc)
+            await temp_client.storage.auth_key(auth_key)
+            temp_client.session = Session(temp_client, target_dc, auth_key, test_mode)
+            await temp_client.session.start()
+            temp_client.is_connected = True
             res = await temp_client.invoke(
                 ExportLoginToken(
                     api_id=Telegram.API_ID,
