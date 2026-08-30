@@ -33,6 +33,7 @@ class ByteStreamer:
         self.client = client
         self.client_index = client_index
         self._file_id_cache: Dict[Tuple[int, int], FileId] = {}
+        self._session_lock = asyncio.Lock()
         if client_index >= 0:
             ByteStreamer._instances[client_index] = self
             asyncio.create_task(self._prewarm_sessions())
