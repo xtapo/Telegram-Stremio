@@ -242,7 +242,7 @@ async def init_telegram_qr_login():
 
         temp_client.add_handler(RawUpdateHandler(on_qr_raw_update))
 
-        # Fallback: Auto-check mỗi 3 giây để phát hiện quét mã (phòng trường hợp Dispatcher không nhận được sự kiện)
+        # Fallback: Auto-check mỗi 3 giây bằng ImportLoginToken (KHÔNG gọi ExportLoginToken vì sẽ tạo token mới, hủy token cũ)
         async def _auto_check_qr_scan():
             await asyncio.sleep(5)  # Chờ 5 giây đầu tiên
             while True:
@@ -253,13 +253,10 @@ async def init_telegram_qr_login():
                     break
                 try:
                     cl = sdata.get("client")
-                    if cl and getattr(cl, "is_connected", False):
+                    original_token = sdata.get("token_bytes")
+                    if cl and original_token and getattr(cl, "is_connected", False):
                         check_res = await cl.invoke(
-                            ExportLoginToken(
-                                api_id=Telegram.API_ID,
-                                api_hash=Telegram.API_HASH,
-                                except_ids=[]
-                            )
+                            ImportLoginToken(token=original_token)
                         )
                         if isinstance(check_res, LoginTokenMigrateTo):
                             LOGGER.info(f"[QR AUTO-CHECK] Phát hiện quét mã! Di chuyển DC {check_res.dc_id}...")
@@ -472,14 +469,26 @@ async def trigger_qr_check_now(payload: dict, request: Request):
     if not sdata or not sdata.get("client"):
         return {"status": "expired", "message": "Phiên đăng nhập đã hết hạn."}
 
+    # Nếu auto-check đã phát hiện trạng thái, trả về ngay
+    if sdata.get("status") == "needs_2fa":
+        return {"status": "needs_2fa", "message": "Tài khoản có bật mật khẩu 2 lớp. Vui lòng nhập mật khẩu 2FA."}
+    if sdata.get("status") == "success" and sdata.get("user_data"):
+        user_info = sdata["user_data"].get("user", {})
+        request.session["music_user_id"] = user_info.get("id")
+        request.session["music_username"] = user_info.get("username")
+        request.session["music_display_name"] = user_info.get("display_name")
+        request.session["music_avatar_url"] = user_info.get("avatar_url")
+        return sdata["user_data"]
+
     temp_client = sdata["client"]
+    original_token = sdata.get("token_bytes")
+    if not original_token:
+        return {"status": "pending"}
+
     try:
+        # Dùng ImportLoginToken với token gốc (KHÔNG gọi ExportLoginToken vì sẽ tạo token mới)
         login_res = await temp_client.invoke(
-            ExportLoginToken(
-                api_id=Telegram.API_ID,
-                api_hash=Telegram.API_HASH,
-                except_ids=[]
-            )
+            ImportLoginToken(token=original_token)
         )
         if isinstance(login_res, LoginTokenMigrateTo):
             login_res = await _migrate_and_import_token(temp_client, login_res)
@@ -532,17 +541,15 @@ async def verify_telegram_qr_2fa(payload: dict, request: Request):
 
     temp_client = sdata["client"]
     try:
-        # Đảm bảo token và DC đã được đồng bộ
+        # Đảm bảo token và DC đã được đồng bộ bằng ImportLoginToken (KHÔNG dùng ExportLoginToken)
         try:
-            login_res = await temp_client.invoke(
-                ExportLoginToken(
-                    api_id=Telegram.API_ID,
-                    api_hash=Telegram.API_HASH,
-                    except_ids=[]
+            original_token = sdata.get("token_bytes")
+            if original_token:
+                login_res = await temp_client.invoke(
+                    ImportLoginToken(token=original_token)
                 )
-            )
-            if isinstance(login_res, LoginTokenMigrateTo):
-                await _migrate_and_import_token(temp_client, login_res)
+                if isinstance(login_res, LoginTokenMigrateTo):
+                    await _migrate_and_import_token(temp_client, login_res)
         except SessionPasswordNeeded:
             pass
         except Exception:
