@@ -1954,43 +1954,57 @@ html, body {
         height: clamp(48px, 7vh, 65px);
     }
 
-    /* Bottom Player Bar in Car Mode */
+    /* Bottom Player Bar in Landscape / Car Mode */
     .kmusic-player-bar {
-        height: 68px;
-        padding: 0 12px;
+        height: auto;
+        min-height: 68px;
+        padding: 4px 12px calc(4px + env(safe-area-inset-bottom, 0px));
+        box-sizing: border-box;
     }
 
     .player-bar-inner {
         padding: 0 4px;
-        gap: 10px;
+        gap: 12px;
+        height: 100%;
         grid-template-columns: minmax(130px, 1fr) minmax(220px, 1.8fr) auto;
+        align-items: center;
+    }
+
+    .now-playing-tag {
+        display: none;
     }
 
     .now-playing-title {
         font-size: 0.82rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .now-playing-artist {
-        font-size: 0.7rem;
+        font-size: 0.72rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .main-play-btn {
-        width: 40px;
-        height: 40px;
+        width: 36px;
+        height: 36px;
     }
 
     .step-btn {
-        width: 30px;
-        height: 30px;
+        width: 28px;
+        height: 28px;
     }
 
     .sub-btn {
-        width: 24px;
-        height: 24px;
+        width: 22px;
+        height: 22px;
     }
 
     .control-buttons {
-        gap: 8px;
+        gap: 10px;
     }
 
     .progress-wrapper {
@@ -1998,8 +2012,22 @@ html, body {
     }
 
     .time-label {
-        font-size: 0.7rem;
-        min-width: 32px;
+        font-size: 0.68rem;
+        min-width: 28px;
+    }
+
+    .player-right-options {
+        gap: 6px;
+    }
+
+    .player-lyrics-btn,
+    .meta-drawer-btn {
+        padding: 4px 8px;
+        font-size: 0.72rem;
+    }
+
+    .volume-slider {
+        width: 60px;
     }
 }
 
@@ -2055,12 +2083,15 @@ html, body {
     }
 
     .kmusic-player-bar {
-        height: 62px;
+        height: auto;
+        min-height: 62px;
+        padding: 3px 10px calc(3px + env(safe-area-inset-bottom, 0px));
+        box-sizing: border-box;
     }
 
     .main-play-btn {
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
     }
 }
 
@@ -2267,7 +2298,7 @@ html, body {
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         border-top: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+        padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
         box-sizing: border-box;
     }
     
@@ -2291,16 +2322,24 @@ html, body {
         display: none;
     }
 
-    .current-track-name {
-        font-size: 0.88rem;
+    .now-playing-title {
+        font-size: 0.92rem;
+        font-weight: 700;
+        max-width: 88vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+    }
+
+    .now-playing-artist {
+        font-size: 0.78rem;
+        color: var(--text-muted);
         max-width: 85vw;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    .current-track-artist {
-        font-size: 0.75rem;
+        text-align: center;
     }
     
     .player-core-controls {
@@ -2310,11 +2349,12 @@ html, body {
         gap: 6px;
     }
 
-    .player-btn-row {
+    .control-buttons {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 20px;
+        width: 100%;
     }
 
     .ctrl-btn.main-play-btn {
@@ -2324,6 +2364,7 @@ html, body {
 
     .progress-wrapper {
         gap: 8px;
+        width: 100%;
     }
 
     .time-label {
@@ -2349,11 +2390,13 @@ html, body {
     .album-grid,
     .artist-grid {
         grid-template-columns: 1fr;
+        grid-auto-rows: max-content;
         gap: 10px;
     }
 
     .genre-grid {
         grid-template-columns: repeat(2, 1fr);
+        grid-auto-rows: max-content;
         gap: 10px;
     }
 
@@ -2723,6 +2766,14 @@ html, body {
 }
 
 /* --- Artists & Genres Styling --- */
+.artist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: 14px;
+}
+
 .artist-card-item {
     display: flex;
     align-items: center;
@@ -3530,8 +3581,10 @@ html, body {
 .country-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    grid-auto-rows: max-content;
+    align-content: start;
     gap: 16px;
-    max-height: 65vh;
+    max-height: none;
     overflow-y: auto;
     padding-right: 4px;
 }
@@ -3544,6 +3597,10 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-height: fit-content;
+    height: auto;
+    flex-shrink: 0;
+    box-sizing: border-box;
     cursor: pointer;
     transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
@@ -3814,7 +3871,31 @@ html, body {
 @media (max-width: 768px) {
     .country-grid {
         grid-template-columns: 1fr;
+        grid-auto-rows: max-content;
         gap: 12px;
+        padding-right: 0;
+    }
+
+    .country-card-item {
+        padding: 14px;
+        gap: 10px;
+    }
+
+    .country-flag-badge {
+        font-size: 1.8rem;
+    }
+
+    .country-name {
+        font-size: 1.05rem;
+    }
+
+    .country-sub {
+        font-size: 0.74rem;
+    }
+
+    .country-card-stats {
+        padding: 5px 8px;
+        font-size: 0.72rem;
     }
 }
 

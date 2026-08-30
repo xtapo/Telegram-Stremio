@@ -562,18 +562,18 @@
         <div class="modal-card" style="max-width: 860px; padding: 0; overflow: hidden; max-height: 88vh; display: flex; flex-direction: column;">
             
             <!-- View 1: Tổng Quan Danh Sách Quốc Gia (Country Overview List View) -->
-            <div id="countryListView" style="display: flex; flex-direction: column; height: 100%; padding: 24px; overflow-y: auto;">
-                <div class="modal-header" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 1.4rem;">🗺️</span>
-                        <div>
-                            <h3 style="margin: 0;">Khám Phá Nhạc Theo Quốc Gia & Khu Vực</h3>
-                            <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Phân loại âm nhạc theo từng vùng lãnh thổ, quốc gia và nền văn hóa</p>
+            <div id="countryListView" style="display: flex; flex-direction: column; height: 100%; padding: 20px 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; box-sizing: border-box;">
+                <div class="modal-header" style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
+                        <span style="font-size: 1.3rem; flex-shrink: 0;">🗺️</span>
+                        <div style="min-width: 0; flex: 1;">
+                            <h3 style="margin: 0; font-size: clamp(1rem, 3.8vw, 1.25rem); line-height: 1.25;">Khám Phá Nhạc Theo Quốc Gia & Khu Vực</h3>
+                            <p style="margin: 2px 0 0 0; font-size: 0.78rem; color: var(--text-muted);">Phân loại âm nhạc theo từng vùng lãnh thổ, quốc gia và nền văn hóa</p>
                         </div>
                     </div>
                     <button class="modal-close" id="closeCountryModal">&times;</button>
                 </div>
-                <div class="country-grid" id="countryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; overflow-y: auto; flex: 1; padding-right: 4px;">
+                <div class="country-grid" id="countryGrid">
                     <!-- Populated dynamically by app.js -->
                 </div>
             </div>
