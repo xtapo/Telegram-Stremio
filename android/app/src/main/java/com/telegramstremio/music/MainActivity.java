@@ -125,7 +125,25 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             }
+
+            @Override
+            public void onPlayTrackByIndex(int index, String trackId) {
+                runOnUiThread(() -> {
+                    if (webView != null) {
+                        webView.evaluateJavascript("if (window.player && typeof window.player.playTrackById === 'function') { window.player.playTrackById('" + trackId + "'); }", null);
+                    }
+                });
+            }
         });
+    }
+
+    public class WebAppInterface {
+        @android.webkit.JavascriptInterface
+        public void updateTrackInfo(String title, String artist, String album, String coverUrl, int isPlaying) {
+            if (XTMediaBrowserService.instance != null) {
+                XTMediaBrowserService.instance.updateTrack(title, artist, album, coverUrl, isPlaying == 1);
+            }
+        }
     }
 
     private void initViews() {
@@ -186,6 +204,9 @@ public class MainActivity extends AppCompatActivity {
         // Custom User-Agent tag to identify app
         String defaultUA = settings.getUserAgentString();
         settings.setUserAgentString(defaultUA + " TelegramMusicApp/1.0");
+
+        // Android Bridge for 2-way syncing with Android Auto
+        webView.addJavascriptInterface(new WebAppInterface(), "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override

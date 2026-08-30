@@ -2158,6 +2158,11 @@ class XTAPOMusicApp {
                 artwork: artwork
             });
             navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
+
+            // Sync with Android Auto via Native Bridge
+            if (window.AndroidBridge && typeof window.AndroidBridge.updateTrackInfo === 'function') {
+                window.AndroidBridge.updateTrackInfo(trackName, artistName, albumTitle, fullCoverUrl, this.isPlaying ? 1 : 0);
+            }
         } catch (e) {
             console.warn('Error setting MediaMetadata:', e);
         }
