@@ -991,10 +991,9 @@ class XTAPOMusicApp {
                     text: tgUrl,
                     width: 196,
                     height: 196,
-                    typeNumber: 0,
                     colorDark: "#0c1017",
                     colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.L
+                    correctLevel: QRCode.CorrectLevel.M
                 });
             } else {
                 // Fallback SVG / Image nếu QRCode.js chưa tải
@@ -1076,33 +1075,6 @@ class XTAPOMusicApp {
         if (this._qrCountdownTimer) {
             clearInterval(this._qrCountdownTimer);
             this._qrCountdownTimer = null;
-        }
-    }
-
-    showManualQr2Fa() {
-        if (this.qr2FaSection) {
-            this.qr2FaSection.style.display = 'block';
-            this.qr2FaSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-        if (this.qr2FaInput) {
-            this.qr2FaInput.focus();
-        }
-        if (this._currentQrSessionId) {
-            fetch('/api/music/auth/telegram/qr/check-now', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_id: this._currentQrSessionId })
-            }).then(r => r.json()).then(data => {
-                if (data.status === 'success' && data.user) {
-                    this.handleQrSuccess(data);
-                } else if (data.status === 'needs_2fa') {
-                    if (this.qr2FaSection) this.qr2FaSection.style.display = 'block';
-                    if (this.qrStatusText) {
-                        this.qrStatusText.innerHTML = '<span style="color:#f59e0b; font-weight:700;">🔐 Đã quét mã! Nhập mật khẩu 2FA bên dưới:</span>';
-                    }
-                    if (this.qr2FaInput) this.qr2FaInput.focus();
-                }
-            }).catch(() => {});
         }
     }
 

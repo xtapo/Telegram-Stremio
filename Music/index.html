@@ -17,7 +17,8 @@
     <!-- JSZip for Client-side Zip Packaging & High-Speed Batch Downloads -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Standalone Offline QRCode.js for Instant Telegram QR Render -->
-    <script src="/music/qrcode.min.js?v=1.1"></script>
+    <script src="/music/qrcode.min.js?v=1.0"></script>
+    <script src="/Music/qrcode.min.js?v=1.0"></script>
 </head>
 <body class="kmusic-body">
     <!-- Ambient Dynamic Background Blur (Apple Music Style) -->
@@ -794,11 +795,6 @@
                             </span>
                             <span class="qr-countdown-tag" id="qrCountdownTag">Hết hạn: <b id="qrCountdownSec">--</b>s</span>
                         </div>
-
-                        <!-- Manual 2FA Trigger Button -->
-                        <button type="button" id="btnManualCheck2Fa" onclick="window._musicApp?.showManualQr2Fa()" style="margin-top: 12px; background: rgba(245, 158, 11, 0.1); border: 1px dashed rgba(245, 158, 11, 0.4); border-radius: 10px; color: #f59e0b; padding: 8px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; transition: all 0.2s;">
-                            <i class="fa-solid fa-key"></i> Đã quét mã & cần nhập mật khẩu 2FA? Nhấn vào đây
-                        </button>
                     </div>
 
                     <!-- 2FA Cloud Password Box (Hidden until needed) -->
@@ -1341,6 +1337,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="/Music/app.js?v=3.2"></script>
+    <script src="/Music/app.js?v=3.0"></script>
 </body>
 </html>
