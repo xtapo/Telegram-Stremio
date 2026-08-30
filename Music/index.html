@@ -735,12 +735,16 @@
             <!-- Tab Switcher -->
             <div class="auth-tabs">
                 <button class="auth-tab-btn active" id="tabQrLogin">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-5 0h3v3h-3v-3zm2 5h3v3h-3v-3zm3-2h3v5h-2v-3h-1v-2zm-3-3h2v2h-2v-2z"/></svg>
-                    <span>Quét Mã QR Telegram</span>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-5 0h3v3h-3v-3zm2 5h3v3h-3v-3zm3-2h3v5h-2v-3h-1v-2zm-3-3h2v2h-2v-2z"/></svg>
+                    <span>Quét Mã QR</span>
+                </button>
+                <button class="auth-tab-btn" id="tabPhoneLogin">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    <span>Số Điện Thoại</span>
                 </button>
                 <button class="auth-tab-btn" id="tabPwLogin">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
-                    <span>Tài Khoản / Mật Khẩu</span>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                    <span>Mật Khẩu</span>
                 </button>
             </div>
 
@@ -812,6 +816,74 @@
                     </div>
                 </div>
 
+                <!-- Phone Number Login Pane -->
+                <div id="phoneLoginPane" class="auth-pane" style="display: none;">
+                    <!-- Step 1: Input Phone Number -->
+                    <div id="phoneStepInput" class="phone-stage-card">
+                        <div class="phone-hero-badge">
+                            <i class="fa-solid fa-mobile-screen-button"></i>
+                        </div>
+                        <h4 style="margin: 0 0 6px; font-size: 1.05rem; font-weight: 700; color: #fff; text-align: center;">Đăng Nhập Bằng Số Điện Thoại</h4>
+                        <p style="margin: 0 0 18px; font-size: 0.8rem; color: var(--text-muted); text-align: center; line-height: 1.4;">
+                            Mã xác thực OTP sẽ được gửi trực tiếp đến ứng dụng Telegram của bạn.
+                        </p>
+                        <div class="tg-field-group">
+                            <label>Số điện thoại Telegram</label>
+                            <div class="phone-input-wrap">
+                                <span class="phone-prefix-icon"><i class="fa-solid fa-phone"></i></span>
+                                <input type="tel" id="tgPhoneInput" class="tg-text-input phone-styled-input" placeholder="+84 912 345 678 hoặc 0912345678" autocomplete="tel">
+                            </div>
+                        </div>
+                        <button class="tg-scan-submit-btn" id="btnSendPhoneCode" style="width: 100%; margin-top: 16px; justify-content: center;">
+                            <i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Gửi Mã Xác Thực OTP
+                        </button>
+                    </div>
+
+                    <!-- Step 2: Input OTP Code -->
+                    <div id="phoneStepOtp" class="phone-stage-card" style="display: none;">
+                        <div class="phone-hero-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border-color: rgba(16, 185, 129, 0.3);">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <h4 style="margin: 0 0 6px; font-size: 1.05rem; font-weight: 700; color: #fff; text-align: center;">Nhập Mã Xác Thực OTP</h4>
+                        <p style="margin: 0 0 16px; font-size: 0.8rem; color: var(--text-muted); text-align: center; line-height: 1.4;">
+                            Đã gửi mã đến số <b id="phoneSentTarget" style="color: #38bdf8;">+84...</b>.<br>Vui lòng kiểm tra tin nhắn trong app Telegram.
+                        </p>
+                        <div class="tg-field-group">
+                            <label>Mã xác thực (5 chữ số)</label>
+                            <input type="text" id="tgPhoneOtpInput" class="tg-text-input otp-styled-input" placeholder="1 2 3 4 5" maxlength="7" autocomplete="one-time-code">
+                        </div>
+                        <button class="tg-scan-submit-btn" id="btnVerifyPhoneCode" style="width: 100%; margin-top: 16px; justify-content: center;">
+                            <i class="fa-solid fa-circle-check" style="margin-right: 6px;"></i> Xác Nhận Đăng Nhập
+                        </button>
+                        <div class="phone-resend-row">
+                            <button id="btnResendPhoneCode" class="phone-link-btn" disabled>
+                                <span>Gửi lại mã (<b id="phoneResendCountdown">60</b>s)</span>
+                            </button>
+                            <button id="btnBackToPhoneInput" class="phone-link-btn">
+                                <span>Đổi số khác</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: 2FA Password -->
+                    <div id="phoneStep2Fa" class="qr-2fa-container" style="display: none; margin-top: 0;">
+                        <div class="qr-2fa-header">
+                            <span style="font-size: 1.2rem;">🔐</span>
+                            <div>
+                                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #fff;">Xác Thực Mật Khẩu 2 Lớp (2FA)</h4>
+                                <p style="margin: 2px 0 0; font-size: 0.78rem; color: var(--text-muted);">Tài khoản của bạn đã bật Telegram 2-Step Verification.</p>
+                            </div>
+                        </div>
+                        <div class="tg-field-group" style="margin-top: 12px;">
+                            <label>Mật khẩu 2FA (Cloud Password)</label>
+                            <input type="password" id="phone2FaInput" class="tg-text-input" placeholder="Nhập mật khẩu 2FA..." autocomplete="current-password">
+                        </div>
+                        <button class="tg-scan-submit-btn" id="btnSubmitPhone2Fa" style="width: 100%; margin-top: 12px; justify-content: center;">
+                            Xác Nhận Đăng Nhập
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Username/Password Login Pane -->
                 <div id="pwLoginPane" class="auth-pane" style="display: none;">
                     <div id="loginForm">
@@ -827,7 +899,7 @@
                             Đăng Nhập
                         </button>
                         <p style="text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 16px; line-height: 1.5;">
-                            <i class="fa-solid fa-lock" style="margin-right: 4px;"></i> Khuyên dùng <b>Quét mã QR Telegram</b> để tự động stream nhạc qua tài khoản cá nhân, không bị giới hạn bởi Bot.
+                            <i class="fa-solid fa-lock" style="margin-right: 4px;"></i> Khuyên dùng <b>Quét mã QR</b> hoặc <b>Số Điện Thoại Telegram</b> để tự động stream nhạc qua tài khoản cá nhân, không bị giới hạn bởi Bot.
                         </p>
                     </div>
                 </div>

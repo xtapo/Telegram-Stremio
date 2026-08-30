@@ -11,6 +11,11 @@ from pyrogram import Client, raw
 from pyrogram.errors import (
     FloodWait,
     PasswordHashInvalid,
+    PhoneCodeExpired,
+    PhoneCodeInvalid,
+    PhoneNumberBanned,
+    PhoneNumberInvalid,
+    PhoneNumberUnoccupied,
     SessionPasswordNeeded,
 )
 from pyrogram.handlers import RawUpdateHandler
@@ -22,10 +27,13 @@ from Backend.config import Telegram
 
 LOGGER = logging.getLogger(__name__)
 
-qr_auth_router = APIRouter(tags=["Telegram QR Auth"])
+qr_auth_router = APIRouter(tags=["Telegram Auth"])
 
 # Quản lý các phiên Client tạm thời đang trong quá trình quét QR: session_id -> dict
 _ACTIVE_QR_SESSIONS: Dict[str, dict] = {}
+
+# Quản lý các phiên Client tạm thời đang trong quá trình đăng nhập SĐT: session_id -> dict
+_ACTIVE_PHONE_SESSIONS: Dict[str, dict] = {}
 
 # Quản lý các Client Telegram của người dùng sau khi đã đăng nhập thành công: user_id -> Client
 _USER_CLIENT_POOL: Dict[str, Client] = {}
@@ -353,3 +361,226 @@ async def verify_telegram_qr_2fa(payload: dict, request: Request):
     except Exception as e:
         LOGGER.error(f"[2FA ERROR] {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"status": "error", "message": f"Lỗi xác thực 2FA: {str(e)}"})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ĐĂNG NHẬP THỦ CÔNG BẰNG SỐ ĐIỆN THOẠI (PHONE NUMBER AUTH)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _normalize_phone(raw_phone: str) -> str:
+    """Chuẩn hóa số điện thoại theo định dạng quốc tế E.164 (+84...)"""
+    phone = "".join(c for c in (raw_phone or "").strip() if c.isdigit() or c == "+")
+    if not phone.startswith("+"):
+        if phone.startswith("0"):
+            phone = "+84" + phone[1:]
+        else:
+            phone = "+" + phone
+    return phone
+
+
+async def _cleanup_expired_phone_sessions():
+    """Dọn dẹp các phiên đăng nhập SĐT đã hết hạn sau 10 phút"""
+    now = time.time()
+    expired_ids = [
+        sid for sid, data in _ACTIVE_PHONE_SESSIONS.items()
+        if now - data.get("created_at", 0) > 600
+    ]
+    for sid in expired_ids:
+        sdata = _ACTIVE_PHONE_SESSIONS.pop(sid, None)
+        if sdata and sdata.get("client"):
+            try:
+                cl = sdata["client"]
+                if getattr(cl, "is_connected", False):
+                    await cl.disconnect()
+            except Exception:
+                pass
+
+
+@qr_auth_router.post("/api/music/auth/telegram/phone/send-code")
+async def send_telegram_phone_code(payload: dict):
+    """
+    Bước 1: Gửi mã xác thực OTP tới ứng dụng Telegram (hoặc SMS) theo số điện thoại
+    """
+    await _cleanup_expired_phone_sessions()
+
+    raw_phone = payload.get("phone_number", "").strip()
+    if not raw_phone:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Vui lòng nhập số điện thoại."})
+
+    phone = _normalize_phone(raw_phone)
+    if len(phone) < 8 or len(phone) > 16:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Số điện thoại không hợp lệ (Ví dụ: +84987654321 hoặc 0987654321)."})
+
+    session_id = secrets.token_hex(16)
+    temp_client = None
+
+    try:
+        temp_client = Client(
+            name=f"phone_temp_{session_id}",
+            api_id=Telegram.API_ID,
+            api_hash=Telegram.API_HASH,
+            in_memory=True
+        )
+        await temp_client.connect()
+
+        sent_code = await temp_client.send_code(phone)
+
+        _ACTIVE_PHONE_SESSIONS[session_id] = {
+            "client": temp_client,
+            "phone_number": phone,
+            "phone_code_hash": sent_code.phone_code_hash,
+            "created_at": time.time()
+        }
+
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "phone_number": phone,
+            "message": f"Mã xác thực đã được gửi tới ứng dụng Telegram của số {phone}."
+        }
+    except PhoneNumberInvalid:
+        if temp_client:
+            try: await temp_client.disconnect()
+            except Exception: pass
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Số điện thoại không hợp lệ hoặc chưa đăng ký Telegram."})
+    except PhoneNumberBanned:
+        if temp_client:
+            try: await temp_client.disconnect()
+            except Exception: pass
+        return JSONResponse(status_code=403, content={"status": "error", "message": "Số điện thoại này đã bị Telegram khóa."})
+    except PhoneNumberUnoccupied:
+        if temp_client:
+            try: await temp_client.disconnect()
+            except Exception: pass
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Số điện thoại chưa tạo tài khoản Telegram. Vui lòng đăng ký trước trên điện thoại."})
+    except FloodWait as fw:
+        if temp_client:
+            try: await temp_client.disconnect()
+            except Exception: pass
+        return JSONResponse(status_code=429, content={"status": "error", "message": f"Telegram yêu cầu đợi {fw.value}s trước khi gửi lại mã mới."})
+    except Exception as e:
+        if temp_client:
+            try: await temp_client.disconnect()
+            except Exception: pass
+        LOGGER.error(f"[PHONE AUTH SEND CODE ERROR] {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"status": "error", "message": f"Lỗi gửi mã OTP: {str(e)}"})
+
+
+@qr_auth_router.post("/api/music/auth/telegram/phone/verify-code")
+async def verify_telegram_phone_code(payload: dict, request: Request):
+    """
+    Bước 2: Xác nhận mã OTP để đăng nhập
+    """
+    session_id = payload.get("session_id", "").strip()
+    phone_code = str(payload.get("phone_code", "")).strip().replace(" ", "").replace("-", "")
+
+    if not session_id or not phone_code:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Vui lòng nhập đầy đủ mã xác thực OTP."})
+
+    sdata = _ACTIVE_PHONE_SESSIONS.get(session_id)
+    if not sdata or not sdata.get("client"):
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Phiên đăng nhập đã hết hạn. Vui lòng gửi lại mã."})
+
+    temp_client = sdata["client"]
+    phone = sdata["phone_number"]
+    phone_code_hash = sdata["phone_code_hash"]
+
+    try:
+        user_me = await temp_client.sign_in(
+            phone_number=phone,
+            phone_code_hash=phone_code_hash,
+            phone_code=phone_code
+        )
+
+        user_data = await _finalize_qr_login(temp_client, auth_user=user_me)
+
+        # Lưu session cookie
+        user_info = user_data.get("user", {})
+        request.session["music_user_id"] = user_info.get("id")
+        request.session["music_username"] = user_info.get("username")
+        request.session["music_display_name"] = user_info.get("display_name")
+        request.session["music_avatar_url"] = user_info.get("avatar_url")
+
+        _ACTIVE_PHONE_SESSIONS.pop(session_id, None)
+
+        return user_data
+
+    except SessionPasswordNeeded:
+        # Tài khoản có bật 2FA
+        return {
+            "status": "needs_2fa",
+            "session_id": session_id,
+            "message": "Tài khoản của bạn đã bật xác thực 2 lớp (2FA). Vui lòng nhập mật khẩu Cloud Password."
+        }
+    except PhoneCodeInvalid:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Mã xác thực OTP không chính xác."})
+    except PhoneCodeExpired:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Mã xác thực OTP đã hết hạn. Vui lòng lấy mã mới."})
+    except FloodWait as fw:
+        return JSONResponse(status_code=429, content={"status": "error", "message": f"Telegram yêu cầu đợi {fw.value}s."})
+    except Exception as e:
+        LOGGER.error(f"[PHONE AUTH VERIFY CODE ERROR] {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"status": "error", "message": f"Lỗi xác thực: {str(e)}"})
+
+
+@qr_auth_router.post("/api/music/auth/telegram/phone/2fa")
+async def verify_telegram_phone_2fa(payload: dict, request: Request):
+    """
+    Bước 3: Xác thực mật khẩu 2 lớp cho đăng nhập số điện thoại
+    """
+    session_id = payload.get("session_id", "").strip()
+    password = payload.get("password", "")
+
+    if not session_id or not password:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Vui lòng nhập mật khẩu 2FA."})
+
+    sdata = _ACTIVE_PHONE_SESSIONS.get(session_id)
+    if not sdata or not sdata.get("client"):
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Phiên đăng nhập đã hết hạn."})
+
+    temp_client = sdata["client"]
+
+    try:
+        user_me = await temp_client.check_password(password)
+        user_data = await _finalize_qr_login(temp_client, auth_user=user_me)
+
+        # Lưu session cookie
+        user_info = user_data.get("user", {})
+        request.session["music_user_id"] = user_info.get("id")
+        request.session["music_username"] = user_info.get("username")
+        request.session["music_display_name"] = user_info.get("display_name")
+        request.session["music_avatar_url"] = user_info.get("avatar_url")
+
+        _ACTIVE_PHONE_SESSIONS.pop(session_id, None)
+
+        return user_data
+
+    except PasswordHashInvalid:
+        return JSONResponse(status_code=401, content={"status": "error", "message": "Mật khẩu 2FA không chính xác."})
+    except Exception as e:
+        LOGGER.error(f"[PHONE AUTH 2FA ERROR] {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"status": "error", "message": f"Lỗi xác thực 2FA: {str(e)}"})
+
+
+@qr_auth_router.post("/api/music/auth/telegram/phone/resend-code")
+async def resend_telegram_phone_code(payload: dict):
+    """
+    Gửi lại mã OTP
+    """
+    session_id = payload.get("session_id", "").strip()
+    sdata = _ACTIVE_PHONE_SESSIONS.get(session_id)
+    if not sdata or not sdata.get("client"):
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Phiên làm việc đã hết hạn."})
+
+    temp_client = sdata["client"]
+    phone = sdata["phone_number"]
+    phone_code_hash = sdata["phone_code_hash"]
+
+    try:
+        sent_code = await temp_client.resend_code(phone, phone_code_hash)
+        sdata["phone_code_hash"] = sent_code.phone_code_hash
+        return {"status": "success", "message": f"Đã gửi lại mã xác thực mới tới số {phone}."}
+    except FloodWait as fw:
+        return JSONResponse(status_code=429, content={"status": "error", "message": f"Vui lòng đợi {fw.value}s trước khi gửi lại."})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": f"Không thể gửi lại mã: {str(e)}"})

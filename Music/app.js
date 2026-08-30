@@ -335,10 +335,13 @@ class XTAPOMusicApp {
         this.authModal = document.getElementById('authModal');
         this.closeAuthModal = document.getElementById('closeAuthModal');
         this.tabQrLogin = document.getElementById('tabQrLogin');
+        this.tabPhoneLogin = document.getElementById('tabPhoneLogin');
         this.tabPwLogin = document.getElementById('tabPwLogin');
         this.qrLoginPane = document.getElementById('qrLoginPane');
+        this.phoneLoginPane = document.getElementById('phoneLoginPane');
         this.pwLoginPane = document.getElementById('pwLoginPane');
         
+        // QR Elements
         this.qrCodeContainer = document.getElementById('qrCodeContainer');
         this.qrLoadingSpinner = document.getElementById('qrLoadingSpinner');
         this.qrExpiredOverlay = document.getElementById('qrExpiredOverlay');
@@ -347,10 +350,24 @@ class XTAPOMusicApp {
         this.qrStatusText = document.getElementById('qrStatusText');
         this.qrCountdownTag = document.getElementById('qrCountdownTag');
         this.qrCountdownSec = document.getElementById('qrCountdownSec');
-        
         this.qr2FaSection = document.getElementById('qr2FaSection');
         this.qr2FaInput = document.getElementById('qr2FaInput');
         this.btnSubmit2Fa = document.getElementById('btnSubmit2Fa');
+
+        // Phone Login Elements
+        this.phoneStepInput = document.getElementById('phoneStepInput');
+        this.phoneStepOtp = document.getElementById('phoneStepOtp');
+        this.phoneStep2Fa = document.getElementById('phoneStep2Fa');
+        this.tgPhoneInput = document.getElementById('tgPhoneInput');
+        this.btnSendPhoneCode = document.getElementById('btnSendPhoneCode');
+        this.tgPhoneOtpInput = document.getElementById('tgPhoneOtpInput');
+        this.btnVerifyPhoneCode = document.getElementById('btnVerifyPhoneCode');
+        this.phoneSentTarget = document.getElementById('phoneSentTarget');
+        this.btnResendPhoneCode = document.getElementById('btnResendPhoneCode');
+        this.phoneResendCountdown = document.getElementById('phoneResendCountdown');
+        this.btnBackToPhoneInput = document.getElementById('btnBackToPhoneInput');
+        this.phone2FaInput = document.getElementById('phone2FaInput');
+        this.btnSubmitPhone2Fa = document.getElementById('btnSubmitPhone2Fa');
 
         this.loginForm = document.getElementById('loginForm');
         this.loginSubmitBtn = document.getElementById('loginSubmitBtn');
@@ -362,6 +379,8 @@ class XTAPOMusicApp {
         this._qrCountdownTimer = null;
         this._currentQrSessionId = null;
         this._qrCodeInstance = null;
+        this._currentPhoneSessionId = null;
+        this._phoneResendTimer = null;
 
         // Favorites Modal
         this.navFavorites = document.getElementById('navFavorites');
@@ -608,12 +627,16 @@ class XTAPOMusicApp {
         }
 
         // Tab Switching
-        if (this.tabQrLogin && this.tabPwLogin) {
+        if (this.tabQrLogin && this.tabPhoneLogin && this.tabPwLogin) {
             this.tabQrLogin.addEventListener('click', () => {
                 this.switchAuthTab('qr');
                 if (!this._qrPollTimer && !this.currentUser) {
                     this.initTelegramQrLogin();
                 }
+            });
+            this.tabPhoneLogin.addEventListener('click', () => {
+                this.switchAuthTab('phone');
+                this.stopQrPolling();
             });
             this.tabPwLogin.addEventListener('click', () => {
                 this.switchAuthTab('pw');
@@ -634,6 +657,38 @@ class XTAPOMusicApp {
                 if (e.key === 'Enter') this.submitQr2Fa();
             });
         }
+
+        // Phone Auth Actions
+        if (this.btnSendPhoneCode) {
+            this.btnSendPhoneCode.addEventListener('click', () => this.sendPhoneCode());
+        }
+        if (this.tgPhoneInput) {
+            this.tgPhoneInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.sendPhoneCode();
+            });
+        }
+        if (this.btnVerifyPhoneCode) {
+            this.btnVerifyPhoneCode.addEventListener('click', () => this.verifyPhoneCode());
+        }
+        if (this.tgPhoneOtpInput) {
+            this.tgPhoneOtpInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.verifyPhoneCode();
+            });
+        }
+        if (this.btnResendPhoneCode) {
+            this.btnResendPhoneCode.addEventListener('click', () => this.resendPhoneCode());
+        }
+        if (this.btnBackToPhoneInput) {
+            this.btnBackToPhoneInput.addEventListener('click', () => this.backToPhoneInput());
+        }
+        if (this.btnSubmitPhone2Fa) {
+            this.btnSubmitPhone2Fa.addEventListener('click', () => this.submitPhone2Fa());
+        }
+        if (this.phone2FaInput) {
+            this.phone2FaInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.submitPhone2Fa();
+            });
+        }
         
         if (this.loginSubmitBtn) {
             this.loginSubmitBtn.addEventListener('click', () => this.loginUser());
@@ -650,17 +705,204 @@ class XTAPOMusicApp {
     }
 
     switchAuthTab(tabName) {
-        if (tabName === 'qr') {
-            if (this.tabQrLogin) this.tabQrLogin.classList.add('active');
-            if (this.tabPwLogin) this.tabPwLogin.classList.remove('active');
-            if (this.qrLoginPane) this.qrLoginPane.style.display = 'block';
-            if (this.pwLoginPane) this.pwLoginPane.style.display = 'none';
-        } else {
-            if (this.tabPwLogin) this.tabPwLogin.classList.add('active');
-            if (this.tabQrLogin) this.tabQrLogin.classList.remove('active');
-            if (this.pwLoginPane) this.pwLoginPane.style.display = 'block';
-            if (this.qrLoginPane) this.qrLoginPane.style.display = 'none';
+        // Reset all tabs
+        if (this.tabQrLogin) this.tabQrLogin.classList.toggle('active', tabName === 'qr');
+        if (this.tabPhoneLogin) this.tabPhoneLogin.classList.toggle('active', tabName === 'phone');
+        if (this.tabPwLogin) this.tabPwLogin.classList.toggle('active', tabName === 'pw');
+
+        if (this.qrLoginPane) this.qrLoginPane.style.display = (tabName === 'qr') ? 'block' : 'none';
+        if (this.phoneLoginPane) this.phoneLoginPane.style.display = (tabName === 'phone') ? 'block' : 'none';
+        if (this.pwLoginPane) this.pwLoginPane.style.display = (tabName === 'pw') ? 'block' : 'none';
+    }
+
+    // --- Phone Number Authentication Implementation ---
+    async sendPhoneCode() {
+        if (!this.tgPhoneInput) return;
+        const phone = this.tgPhoneInput.value.trim();
+        if (!phone) return this.showToast("Vui lòng nhập số điện thoại Telegram.");
+
+        if (this.btnSendPhoneCode) {
+            this.btnSendPhoneCode.disabled = true;
+            this.btnSendPhoneCode.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Đang gửi mã OTP...';
         }
+
+        try {
+            const res = await fetch('/api/music/auth/telegram/phone/send-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone_number: phone })
+            });
+            const data = await res.json();
+
+            if (this.btnSendPhoneCode) {
+                this.btnSendPhoneCode.disabled = false;
+                this.btnSendPhoneCode.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Gửi Mã Xác Thực OTP';
+            }
+
+            if (data.status === 'success' && data.session_id) {
+                this._currentPhoneSessionId = data.session_id;
+                this.showToast("✅ Đã gửi mã OTP đến ứng dụng Telegram của bạn!");
+                
+                if (this.phoneSentTarget) this.phoneSentTarget.textContent = data.phone_number || phone;
+                if (this.phoneStepInput) this.phoneStepInput.style.display = 'none';
+                if (this.phoneStepOtp) this.phoneStepOtp.style.display = 'block';
+                if (this.phoneStep2Fa) this.phoneStep2Fa.style.display = 'none';
+                if (this.tgPhoneOtpInput) {
+                    this.tgPhoneOtpInput.value = '';
+                    this.tgPhoneOtpInput.focus();
+                }
+                this.startPhoneResendTimer(60);
+            } else {
+                this.showToast(data.message || "Không thể gửi mã OTP.");
+            }
+        } catch (e) {
+            if (this.btnSendPhoneCode) {
+                this.btnSendPhoneCode.disabled = false;
+                this.btnSendPhoneCode.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right: 6px;"></i> Gửi Mã Xác Thực OTP';
+            }
+            this.showToast("Lỗi kết nối tới máy chủ gửi mã.");
+        }
+    }
+
+    async verifyPhoneCode() {
+        if (!this._currentPhoneSessionId || !this.tgPhoneOtpInput) return;
+        const code = this.tgPhoneOtpInput.value.trim().replace(/\s+/g, '');
+        if (!code) return this.showToast("Vui lòng nhập mã xác thực OTP.");
+
+        if (this.btnVerifyPhoneCode) {
+            this.btnVerifyPhoneCode.disabled = true;
+            this.btnVerifyPhoneCode.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Đang xác thực...';
+        }
+
+        try {
+            const res = await fetch('/api/music/auth/telegram/phone/verify-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: this._currentPhoneSessionId,
+                    phone_code: code
+                })
+            });
+            const data = await res.json();
+
+            if (this.btnVerifyPhoneCode) {
+                this.btnVerifyPhoneCode.disabled = false;
+                this.btnVerifyPhoneCode.innerHTML = '<i class="fa-solid fa-circle-check" style="margin-right: 6px;"></i> Xác Nhận Đăng Nhập';
+            }
+
+            if (data.status === 'success' && data.user) {
+                this.handleQrSuccess(data);
+            } else if (data.status === 'needs_2fa') {
+                if (this.phoneStepOtp) this.phoneStepOtp.style.display = 'none';
+                if (this.phoneStep2Fa) this.phoneStep2Fa.style.display = 'block';
+                if (this.phone2FaInput) {
+                    this.phone2FaInput.value = '';
+                    this.phone2FaInput.focus();
+                }
+                this.showToast("🔐 Tài khoản có bật mật khẩu 2FA. Vui lòng nhập mật khẩu.");
+            } else {
+                this.showToast(data.message || "Mã xác thực OTP không hợp lệ.");
+            }
+        } catch (e) {
+            if (this.btnVerifyPhoneCode) {
+                this.btnVerifyPhoneCode.disabled = false;
+                this.btnVerifyPhoneCode.innerHTML = '<i class="fa-solid fa-circle-check" style="margin-right: 6px;"></i> Xác Nhận Đăng Nhập';
+            }
+            this.showToast("Lỗi kết nối khi xác thực OTP.");
+        }
+    }
+
+    async submitPhone2Fa() {
+        if (!this._currentPhoneSessionId || !this.phone2FaInput) return;
+        const password = this.phone2FaInput.value.trim();
+        if (!password) return this.showToast("Vui lòng nhập mật khẩu 2FA.");
+
+        if (this.btnSubmitPhone2Fa) {
+            this.btnSubmitPhone2Fa.disabled = true;
+            this.btnSubmitPhone2Fa.textContent = "Đang xác thực...";
+        }
+
+        try {
+            const res = await fetch('/api/music/auth/telegram/phone/2fa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: this._currentPhoneSessionId,
+                    password: password
+                })
+            });
+            const data = await res.json();
+
+            if (this.btnSubmitPhone2Fa) {
+                this.btnSubmitPhone2Fa.disabled = false;
+                this.btnSubmitPhone2Fa.textContent = "Xác Nhận Đăng Nhập";
+            }
+
+            if (data.status === 'success' && data.user) {
+                this.handleQrSuccess(data);
+            } else {
+                this.showToast(data.message || "Mật khẩu 2FA không chính xác.");
+            }
+        } catch (e) {
+            if (this.btnSubmitPhone2Fa) {
+                this.btnSubmitPhone2Fa.disabled = false;
+                this.btnSubmitPhone2Fa.textContent = "Xác Nhận Đăng Nhập";
+            }
+            this.showToast("Lỗi kết nối khi xác thực 2FA.");
+        }
+    }
+
+    async resendPhoneCode() {
+        if (!this._currentPhoneSessionId) return;
+
+        try {
+            const res = await fetch('/api/music/auth/telegram/phone/resend-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: this._currentPhoneSessionId })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.showToast("Đã gửi lại mã OTP mới!");
+                this.startPhoneResendTimer(60);
+            } else {
+                this.showToast(data.message || "Chưa thể gửi lại mã lúc này.");
+            }
+        } catch (e) {
+            this.showToast("Lỗi kết nối khi gửi lại mã.");
+        }
+    }
+
+    backToPhoneInput() {
+        if (this._phoneResendTimer) {
+            clearInterval(this._phoneResendTimer);
+            this._phoneResendTimer = null;
+        }
+        if (this.phoneStepInput) this.phoneStepInput.style.display = 'block';
+        if (this.phoneStepOtp) this.phoneStepOtp.style.display = 'none';
+        if (this.phoneStep2Fa) this.phoneStep2Fa.style.display = 'none';
+        if (this.tgPhoneInput) this.tgPhoneInput.focus();
+    }
+
+    startPhoneResendTimer(seconds = 60) {
+        if (this._phoneResendTimer) clearInterval(this._phoneResendTimer);
+        let rem = seconds;
+
+        if (this.btnResendPhoneCode) this.btnResendPhoneCode.disabled = true;
+        if (this.phoneResendCountdown) this.phoneResendCountdown.textContent = rem;
+
+        this._phoneResendTimer = setInterval(() => {
+            rem--;
+            if (this.phoneResendCountdown) this.phoneResendCountdown.textContent = rem;
+            if (rem <= 0) {
+                clearInterval(this._phoneResendTimer);
+                this._phoneResendTimer = null;
+                if (this.btnResendPhoneCode) {
+                    this.btnResendPhoneCode.disabled = false;
+                    this.btnResendPhoneCode.innerHTML = '<span>Gửi lại mã OTP</span>';
+                }
+            }
+        }, 1000);
     }
 
     // --- Telegram MTProto QR Login Implementation ---
