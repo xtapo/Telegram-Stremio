@@ -187,6 +187,16 @@ except Exception:
 
 
 #----- Public routes (no authentication)
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicon.png", include_in_schema=False)
+async def favicon_route():
+    import os
+    from fastapi.responses import FileResponse, Response
+    if os.path.exists("Music/favicon.png"):
+        return FileResponse("Music/favicon.png", media_type="image/png")
+    return Response(status_code=204)
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
     return await login_page(request)

@@ -1255,7 +1255,7 @@
                     <span id="detail-playback-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/20 text-primary border border-primary/30">Đang phát</span>
                 </div>
                 <div class="flex items-center gap-3.5 pt-1">
-                    <img id="detail-activity-cover" src="" class="w-12 h-12 rounded-xl object-cover border border-hairline shrink-0 bg-black/20" onerror="this.src='/favicon.png'">
+                    <img id="detail-activity-cover" src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=300&auto=format&fit=crop" class="w-12 h-12 rounded-xl object-cover border border-hairline shrink-0 bg-black/20" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=300&auto=format&fit=crop'">
                     <div class="min-w-0 flex-1">
                         <h5 id="detail-activity-title" class="font-bold text-sm text-text truncate">Tên bài hát</h5>
                         <p id="detail-activity-artist" class="text-xs text-text-secondary truncate">Ca sĩ • Album</p>
@@ -4060,8 +4060,9 @@ function renderUsersTable(users) {
             const stateIcon = isPlaying 
                 ? '<span class="inline-flex items-center gap-1 text-emerald-400 font-bold"><i class="fa-solid fa-circle-play text-[10px] animate-pulse"></i> Đang phát</span>'
                 : '<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><i class="fa-solid fa-circle-pause text-[10px]"></i> Tạm dừng</span>';
+            const defaultTrackCover = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=300&auto=format&fit=crop';
             const coverImg = act.cover_url 
-                ? `<img src="${act.cover_url}" class="w-8 h-8 rounded-lg object-cover border border-hairline shrink-0" onerror="this.src='/favicon.png'">`
+                ? `<img src="${act.cover_url}" class="w-8 h-8 rounded-lg object-cover border border-hairline shrink-0" onerror="this.onerror=null; this.src='${defaultTrackCover}'">`
                 : `<div class="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-music"></i></div>`;
 
             liveActivityCell = `
@@ -4367,7 +4368,7 @@ async function openUserDetailsModal(userId) {
                 activityCard.classList.remove('hidden');
                 document.getElementById('detail-activity-title').textContent = act.title || 'Đang nghe nhạc';
                 document.getElementById('detail-activity-artist').textContent = `${act.artist || 'Không rõ'}${act.album ? ' • ' + act.album : ''}`;
-                document.getElementById('detail-activity-cover').src = act.cover_url || '/favicon.png';
+                document.getElementById('detail-activity-cover').src = act.cover_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=300&auto=format&fit=crop';
                 const isPlaying = act.state === 'playing';
                 const badgeEl = document.getElementById('detail-playback-badge');
                 if (badgeEl) {
