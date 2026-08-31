@@ -357,19 +357,20 @@ public class MainActivity extends AppCompatActivity {
             finalUrl = finalUrl.substring(0, finalUrl.length() - 1);
         }
 
-        // If user entered only domain (e.g. https://my-server.com), append /music
-        if (!finalUrl.toLowerCase().endsWith("/music") && !finalUrl.toLowerCase().contains("/music/")) {
-            finalUrl = finalUrl + "/music";
-        }
-
-        // On Android TV devices, directly load ultra-lightweight tv.html
+        // Điều hướng thông minh theo loại thiết bị
         if (isAndroidTvDevice()) {
-            if (!finalUrl.toLowerCase().endsWith("tv.html") && !finalUrl.toLowerCase().endsWith("/tv")) {
-                if (finalUrl.endsWith("/music")) {
-                    finalUrl = finalUrl + "/tv.html";
-                } else if (!finalUrl.contains("tv.html")) {
-                    finalUrl = finalUrl + (finalUrl.endsWith("/") ? "tv.html" : "/tv.html");
+            // Trên Android TV: Tải trực tiếp /tv
+            if (!finalUrl.toLowerCase().endsWith("/tv") && !finalUrl.toLowerCase().endsWith("/tv.html")) {
+                if (finalUrl.toLowerCase().endsWith("/music")) {
+                    finalUrl = finalUrl.substring(0, finalUrl.length() - 6) + "/tv";
+                } else {
+                    finalUrl = finalUrl + "/tv";
                 }
+            }
+        } else {
+            // Trên Điện thoại / Tablet: Tải /music
+            if (!finalUrl.toLowerCase().endsWith("/music") && !finalUrl.toLowerCase().contains("/music/")) {
+                finalUrl = finalUrl + "/music";
             }
         }
 
