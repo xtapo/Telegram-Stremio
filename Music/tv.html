@@ -1283,6 +1283,8 @@
             btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
         }
 
+        let streamRetryCount = 0;
+
         audio.addEventListener('play', () => {
             isPlaying = true;
             updatePlayerUI();
@@ -1290,6 +1292,7 @@
 
         audio.addEventListener('playing', () => {
             isPlaying = true;
+            streamRetryCount = 0;
             updatePlayerUI();
         });
 
@@ -1299,14 +1302,31 @@
         });
 
         audio.addEventListener('waiting', () => {
-            // Khi đang nạp đệm dữ liệu, không can thiệp ngắt luồng
-            if (currentTracklist?.[currentPlayingTrackIdx]) {
-                playerTrackTitle.textContent = '⏳ ' + (currentTracklist[currentPlayingTrackIdx].name || 'Đang tải...');
+            const curTr = currentTracklist?.[currentPlayingTrackIdx];
+            if (curTr) {
+                playerTrackTitle.textContent = '⏳ ' + (curTr.name || curTr.title || 'Đang tải nhạc...');
             }
         });
 
         audio.addEventListener('error', (e) => {
             console.warn('[TV Audio] Lỗi luồng nhạc:', e);
+            streamRetryCount++;
+            if (streamRetryCount <= 2) {
+                showToast('🔄 Đang đổi bot Telegram dự phòng & thử tải lại...');
+                setTimeout(() => {
+                    if (audio.src) {
+                        const curUrl = audio.src.split('?')[0] + '?r=' + Date.now();
+                        audio.src = curUrl;
+                        audio.load();
+                        audio.play().catch(() => {});
+                    }
+                }, 1500);
+            } else {
+                showToast('⚠️ Bot Telegram tạm thời bận. Tự động chuyển bài tiếp theo...');
+                setTimeout(() => {
+                    nextTrack();
+                }, 2000);
+            }
         });
 
         audio.addEventListener('timeupdate', () => {
