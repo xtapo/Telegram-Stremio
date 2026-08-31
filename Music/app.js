@@ -558,6 +558,7 @@ class XTAPOMusicApp {
         this.sleepTimerOriginalVolume = null;
 
         // Equalizer 10-Band & Bass Boost Elements & State
+        this.navEqualizer = document.getElementById('navEqualizer');
         this.eqToggleBtn = document.getElementById('eqToggleBtn');
         this.topNavEqBtn = document.getElementById('topNavEqBtn');
         this.topNavEqBadge = document.getElementById('topNavEqBadge');
@@ -3515,7 +3516,7 @@ class XTAPOMusicApp {
         }
 
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal, this.favoritesModal, this.lyricsModal, this.lyricsEditorModal, this.authModal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal, this.favoritesModal, this.lyricsModal, this.lyricsEditorModal, this.authModal, this.sleepTimerModal, this.equalizerModal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -3784,6 +3785,8 @@ class XTAPOMusicApp {
                 this.openModal(this.lyricsModal);
             } else if (view.type === 'tracklist') {
                 this.openModal(this.tracklistModal);
+            } else if (view.type === 'equalizer') {
+                this.openEqualizerModal();
             }
         } catch (e) {
             console.error('Lỗi khi khôi phục Active View:', e);
@@ -3844,6 +3847,10 @@ class XTAPOMusicApp {
             return;
         }
         if (modal === this.lyricsEditorModal && currentHash === 'lyrics-edit') {
+            this.clearHash();
+            return;
+        }
+        if (modal === this.equalizerModal && currentHash === 'equalizer') {
             this.clearHash();
             return;
         }
@@ -3976,6 +3983,8 @@ class XTAPOMusicApp {
             this.saveActiveView({ type: 'search' });
         } else if (modal === this.lyricsModal) {
             this.saveActiveView({ type: 'lyrics' });
+        } else if (modal === this.equalizerModal) {
+            this.saveActiveView({ type: 'equalizer' });
         }
     }
 
@@ -7637,36 +7646,73 @@ class XTAPOMusicApp {
     }
 
     openEqualizerModal() {
+        if (!this.equalizerModal) {
+            this.equalizerModal = document.getElementById('equalizerModal');
+        }
+        if (!this.equalizerModal) return;
+
+        // Close any other open modals to ensure Equalizer is prominently visible
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal, this.favoritesModal, this.lyricsModal, this.lyricsEditorModal, this.authModal, this.sleepTimerModal].forEach(m => {
+            if (m && m !== this.equalizerModal) m.classList.remove('open');
+        });
+
+        this.closeMobileDrawer();
+
         this.initWebAudioAnalyser();
         if (this.audioContext && this.audioContext.state === 'suspended') {
             this.audioContext.resume().catch(() => {});
         }
+
+        this.renderEqualizerSliders();
+        this.updateEqualizerUI();
         this.openModal(this.equalizerModal);
+
+        requestAnimationFrame(() => {
+            this.drawEqCurve();
+        });
         setTimeout(() => this.drawEqCurve(), 50);
+        setTimeout(() => this.drawEqCurve(), 200);
     }
 
     setupEqualizerEvents() {
         // Modal Open Triggers
+        const openEqHandler = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            this.openEqualizerModal();
+        };
+
+        if (this.navEqualizer) {
+            this.navEqualizer.addEventListener('click', openEqHandler);
+        }
         if (this.eqToggleBtn) {
-            this.eqToggleBtn.addEventListener('click', () => {
-                this.openEqualizerModal();
-            });
+            this.eqToggleBtn.addEventListener('click', openEqHandler);
         }
         if (this.topNavEqBtn) {
-            this.topNavEqBtn.addEventListener('click', () => {
-                this.openEqualizerModal();
-            });
+            this.topNavEqBtn.addEventListener('click', openEqHandler);
         }
         if (this.mobileNavEqualizer) {
             this.mobileNavEqualizer.addEventListener('click', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 this.closeMobileDrawer();
                 this.openEqualizerModal();
             });
         }
         if (this.closeEqualizerModal && this.equalizerModal) {
-            this.closeEqualizerModal.addEventListener('click', () => {
+            this.closeEqualizerModal.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 this.closeModal(this.equalizerModal);
+            });
+        }
+        if (this.equalizerModal) {
+            this.equalizerModal.addEventListener('click', (e) => {
+                if (e.target === this.equalizerModal) {
+                    this.closeModal(this.equalizerModal);
+                }
             });
         }
 
@@ -7752,34 +7798,6 @@ class XTAPOMusicApp {
         } catch (e) {}
     }
 
-    updateSleepTimerModalView() {
-        const isActive = this.sleepTimerMode !== null;
-
-        if (this.sleepTimerRunningBox && this.sleepTimerConfigBox) {
-            if (isActive) {
-                this.sleepTimerRunningBox.style.display = 'flex';
-                this.sleepTimerConfigBox.style.display = 'none';
-
-                if (this.sleepTimerCountdownDisplay && this.sleepTimerCountdownSub) {
-                    if (this.sleepTimerMode === 'end_of_track') {
-                        this.sleepTimerCountdownDisplay.textContent = 'HẾT BÀI';
-                        this.sleepTimerCountdownDisplay.style.fontSize = '1.6rem';
-                        this.sleepTimerCountdownSub.textContent = 'Dừng phát khi kết thúc bài hiện tại';
-                    } else {
-                        const mins = Math.floor(this.sleepTimerSeconds / 60);
-                        const secs = this.sleepTimerSeconds % 60;
-                        this.sleepTimerCountdownDisplay.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                        this.sleepTimerCountdownDisplay.style.fontSize = '2.2rem';
-                        this.sleepTimerCountdownSub.textContent = 'Thời gian còn lại';
-                    }
-                }
-            } else {
-                this.sleepTimerRunningBox.style.display = 'none';
-                this.sleepTimerConfigBox.style.display = 'block';
-            }
-        }
-    }
-
     escapeHtml(str) {
         if (!str || typeof str !== 'string') return '';
         return str
@@ -7794,6 +7812,8 @@ class XTAPOMusicApp {
 // Initialize on DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
     window.xtapoApp = new XTAPOMusicApp();
+    window._musicApp = window.xtapoApp;
+    window.player = window.xtapoApp;
 });
 
 

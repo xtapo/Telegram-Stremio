@@ -13,8 +13,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/music/style.css?v=3.0">
-    <link rel="stylesheet" href="/Music/style.css?v=3.0">
+    <link rel="stylesheet" href="/music/style.css?v=3.1">
+    <link rel="stylesheet" href="/Music/style.css?v=3.1">
     <!-- JSZip for Client-side Zip Packaging & High-Speed Batch Downloads -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Standalone Offline QRCode.js for Instant Telegram QR Render -->
@@ -59,12 +59,13 @@
                     <li><a href="#" class="nav-link" id="navGenres">GENRES</a></li>
                     <li><a href="#" class="nav-link" id="navCountries">COUNTRIES</a></li>
                     <li><a href="#" class="nav-link" id="navPlaylists">PLAYLISTS</a></li>
+                    <li><a href="#" class="nav-link" id="navEqualizer" onclick="event.preventDefault(); window.xtapoApp?.openEqualizerModal();">EQUALIZER</a></li>
                     <li><a href="#" class="nav-link" id="navFavorites"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="color: #ef4444; margin-right: 4px; vertical-align: -1px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>YÊU THÍCH</a></li>
                 </ul>
             </nav>
 
             <div class="nav-right">
-                <button class="nav-btn icon-btn" id="topNavEqBtn" title="Bộ chỉnh âm 10-Band & Bass Boost (Equalizer)">
+                <button class="nav-btn icon-btn" id="topNavEqBtn" onclick="window.xtapoApp?.openEqualizerModal();" title="Bộ chỉnh âm 10-Band & Bass Boost (Equalizer)">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="4" y1="21" x2="4" y2="14"></line>
                         <line x1="4" y1="10" x2="4" y2="3"></line>
@@ -318,7 +319,7 @@
                         </button>
 
                         <!-- Equalizer Button -->
-                        <button class="player-eq-btn" id="eqToggleBtn" title="Bộ chỉnh âm 10-Band & Bass Boost (Equalizer)">
+                        <button class="player-eq-btn" id="eqToggleBtn" onclick="window.xtapoApp?.openEqualizerModal();" title="Bộ chỉnh âm 10-Band & Bass Boost (Equalizer)">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="4" y1="21" x2="4" y2="14"></line>
                                 <line x1="4" y1="10" x2="4" y2="3"></line>
@@ -1109,7 +1110,7 @@
                 <li><a href="#" class="mobile-nav-item" id="mobileNavCountries">🗺️ QUỐC GIA (COUNTRIES)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavPlaylists">📑 PLAYLISTS CỦA TÔI</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavFavorites">❤️ BÀI HÁT YÊU THÍCH</a></li>
-                <li><a href="#" class="mobile-nav-item" id="mobileNavEqualizer">🎛️ BỘ CHỈNH ÂM (EQUALIZER)</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavEqualizer" onclick="event.preventDefault(); window.xtapoApp?.openEqualizerModal();">🎛️ BỘ CHỈNH ÂM (EQUALIZER)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavSleepTimer">🌙 HẸN GIỜ TẮT NHẠC</a></li>
             </ul>
             <div class="mobile-menu-footer">
@@ -1509,7 +1510,7 @@ Ví dụ chuẩn LRC:
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                         <span>Reset</span>
                     </button>
-                    <button class="modal-close" id="closeEqualizerModal">&times;</button>
+                    <button class="modal-close" id="closeEqualizerModal" onclick="window.xtapoApp?.closeModal(document.getElementById('equalizerModal'));">&times;</button>
                 </div>
             </div>
 
@@ -1600,6 +1601,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="/Music/app.js?v=3.0"></script>
+    <script src="/Music/app.js?v=3.1"></script>
 </body>
 </html>
