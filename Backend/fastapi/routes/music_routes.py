@@ -598,9 +598,17 @@ async def get_music_player(request: Request):
     return HTMLResponse("<h3>Music Player template not found in /Music/index.html</h3>", status_code=404)
 
 
+@router.get("/tv", response_class=HTMLResponse)
+@router.get("/tv/", response_class=HTMLResponse)
+@router.get("/tv.html", response_class=HTMLResponse)
 @router.get("/music/tv", response_class=HTMLResponse)
+@router.get("/music/tv/", response_class=HTMLResponse)
 @router.get("/music/tv.html", response_class=HTMLResponse)
 @router.get("/music/lite", response_class=HTMLResponse)
+@router.get("/Music/tv", response_class=HTMLResponse)
+@router.get("/Music/tv/", response_class=HTMLResponse)
+@router.get("/Music/tv.html", response_class=HTMLResponse)
+@router.get("/Music/lite", response_class=HTMLResponse)
 async def get_music_tv_player():
     tv_path = os.path.join(MUSIC_DIR, "tv.html")
     if os.path.exists(tv_path):

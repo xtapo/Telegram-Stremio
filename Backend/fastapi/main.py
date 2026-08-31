@@ -187,6 +187,18 @@ except Exception:
 
 
 #----- Public routes (no authentication)
+@app.get("/tv", response_class=HTMLResponse)
+@app.get("/tv/", response_class=HTMLResponse)
+@app.get("/tv.html", response_class=HTMLResponse)
+async def tv_root_route():
+    import os
+    from fastapi.responses import FileResponse, HTMLResponse
+    tv_path = os.path.join("Music", "tv.html")
+    if os.path.exists(tv_path):
+        return FileResponse(tv_path)
+    return HTMLResponse("<h3>TV template not found in /Music/tv.html</h3>", status_code=404)
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 @app.get("/favicon.png", include_in_schema=False)
 async def favicon_route():
