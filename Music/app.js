@@ -541,6 +541,23 @@ class XTAPOMusicApp {
         this.sleepTimerFadeOut = true;
         this.sleepTimerOriginalVolume = null;
 
+        // Smart Mix & Song Radio Elements & State
+        this.navSmartMix = document.getElementById('navSmartMix');
+        this.mobileNavSmartMix = document.getElementById('mobileNavSmartMix');
+        this.smartMixModal = document.getElementById('smartMixModal');
+        this.closeSmartMixModal = document.getElementById('closeSmartMixModal');
+        this.smartSpotlightCover = document.getElementById('smartSpotlightCover');
+        this.smartSpotlightTitle = document.getElementById('smartSpotlightTitle');
+        this.smartSpotlightArtist = document.getElementById('smartSpotlightArtist');
+        this.smartSpotlightPlayBtn = document.getElementById('smartSpotlightPlayBtn');
+        this.smartAutoplayCheckbox = document.getElementById('smartAutoplayCheckbox');
+        this.autoplayBtn = document.getElementById('autoplayBtn');
+        this.autoplayIndicator = document.getElementById('autoplayIndicator');
+        this.songRadioBtn = document.getElementById('songRadioBtn');
+        this.smartMixGrid = document.getElementById('smartMixGrid');
+        this.smartMixArtistChips = document.getElementById('smartMixArtistChips');
+        this.isAutoplay = true;
+
         // Init
         this.init();
     }
@@ -551,6 +568,7 @@ class XTAPOMusicApp {
         this.setupModalEvents();
         this.setupLyricsEvents();
         this.setupSleepTimerEvents();
+        this.setupSmartMixEvents();
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
@@ -2474,6 +2492,10 @@ class XTAPOMusicApp {
             } else {
                 if (this.repeatMode === 1) { // Repeat all
                     this.loadTrack(0, true);
+                } else if (this.isAutoplay) {
+                    // Infinite Autoplay: automatically queue similar tracks from the current/last song
+                    const seedTrack = album.tracks[this.currentTrackIndex] || album.tracks[0];
+                    this.playSongRadio(seedTrack, true);
                 } else {
                     this.loadTrack(0, false);
                     this.pause();
@@ -2763,6 +2785,23 @@ class XTAPOMusicApp {
             }
             this.savePlayerState();
         });
+
+        // Autoplay Mode Toggle
+        if (this.autoplayBtn) {
+            this.autoplayBtn.addEventListener('click', () => this.toggleAutoplay());
+        }
+
+        // Song Radio Button Trigger
+        if (this.songRadioBtn) {
+            this.songRadioBtn.addEventListener('click', () => {
+                const currentTrack = this.getCurrentTrack();
+                if (currentTrack) {
+                    this.playSongRadio(currentTrack, true);
+                } else {
+                    this.openSmartMixModal();
+                }
+            });
+        }
 
         // Volume Control
         this.volumeSlider.addEventListener('input', (e) => {
@@ -3258,6 +3297,7 @@ class XTAPOMusicApp {
             { id: 'mobileNavGenres', action: () => { this.renderGenreGrid(); this.openModal(this.genreModal); } },
             { id: 'mobileNavCountries', action: () => { this.renderCountryGrid(); this.openModal(this.countryModal); } },
             { id: 'mobileNavPlaylists', action: () => { this.loadPlaylists(); this.openModal(this.playlistModal); } },
+            { id: 'mobileNavSmartMix', action: () => this.openSmartMixModal() },
             { id: 'mobileNavFavorites', action: () => this.openFavoritesModal() },
         ];
         mobileLinks.forEach(item => {
@@ -3270,6 +3310,23 @@ class XTAPOMusicApp {
                 });
             }
         });
+
+        // Smart Mix & Playlist Modal Events
+        if (this.navSmartMix && this.smartMixModal) {
+            this.navSmartMix.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navSmartMix);
+                this.openSmartMixModal();
+            });
+        }
+        if (this.closeSmartMixModal && this.smartMixModal) {
+            this.closeSmartMixModal.addEventListener('click', () => this.closeModal(this.smartMixModal));
+        }
+        if (this.smartMixModal) {
+            this.smartMixModal.addEventListener('click', (e) => {
+                if (e.target === this.smartMixModal) this.closeModal(this.smartMixModal);
+            });
+        }
 
         // Playlist Modal Events
         if (this.navPlaylists && this.playlistModal) {
@@ -7161,6 +7218,437 @@ class XTAPOMusicApp {
                 this.sleepTimerRunningBox.style.display = 'none';
                 this.sleepTimerConfigBox.style.display = 'block';
             }
+        }
+    }
+
+    // ==========================================================================
+    // SMART PLAYLIST, SMART MIX & SONG RADIO MANAGER
+    // ==========================================================================
+    getCurrentTrack() {
+        if (!this.currentAlbum || !this.currentAlbum.tracks) return null;
+        return this.currentAlbum.tracks[this.currentTrackIndex] || null;
+    }
+
+    setupSmartMixEvents() {
+        if (this.smartSpotlightPlayBtn) {
+            this.smartSpotlightPlayBtn.addEventListener('click', () => {
+                const currentTrack = this.getCurrentTrack();
+                if (currentTrack) {
+                    this.playSongRadio(currentTrack, true);
+                    this.closeModal(this.smartMixModal);
+                } else {
+                    this.showToast('Chưa có bài hát nào đang phát để tạo Radio.');
+                }
+            });
+        }
+
+        if (this.smartAutoplayCheckbox) {
+            this.smartAutoplayCheckbox.addEventListener('change', (e) => {
+                this.isAutoplay = e.target.checked;
+                this.updateAutoplayUI();
+                this.showToast(this.isAutoplay ? 'Tự động phát thông minh (Infinite Autoplay): BẬT' : 'Tự động phát thông minh: TẮT');
+            });
+        }
+    }
+
+    toggleAutoplay() {
+        this.isAutoplay = !this.isAutoplay;
+        this.updateAutoplayUI();
+        this.showToast(this.isAutoplay ? 'Tự động phát thông minh: BẬT' : 'Tự động phát thông minh: TẮT');
+    }
+
+    updateAutoplayUI() {
+        if (this.autoplayBtn) {
+            this.autoplayBtn.classList.toggle('active', this.isAutoplay);
+            this.autoplayBtn.title = `Tự động phát thông minh khi hết danh sách (Infinite Autoplay): ${this.isAutoplay ? 'BẬT' : 'TẮT'}`;
+        }
+        if (this.autoplayIndicator) {
+            this.autoplayIndicator.textContent = this.isAutoplay ? '∞' : 'OFF';
+        }
+        if (this.smartAutoplayCheckbox) {
+            this.smartAutoplayCheckbox.checked = this.isAutoplay;
+        }
+    }
+
+    openSmartMixModal() {
+        this.renderSmartMixModal();
+        this.openModal(this.smartMixModal);
+    }
+
+    renderSmartMixModal() {
+        // 1. Update Spotlight Card with Current Track
+        const currentTrack = this.getCurrentTrack();
+        if (currentTrack) {
+            if (this.smartSpotlightCover) {
+                this.smartSpotlightCover.src = currentTrack.coverUrl || (this.currentAlbum && this.currentAlbum.coverUrl) || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop';
+            }
+            if (this.smartSpotlightTitle) {
+                this.smartSpotlightTitle.textContent = currentTrack.name || 'Bài hát đang phát';
+            }
+            if (this.smartSpotlightArtist) {
+                const country = this.detectCountryFromTrack(currentTrack);
+                this.smartSpotlightArtist.textContent = `${currentTrack.artist || 'Nghệ sĩ'} • ${country}`;
+            }
+            if (this.smartSpotlightPlayBtn) {
+                this.smartSpotlightPlayBtn.style.display = 'inline-flex';
+            }
+        } else {
+            if (this.smartSpotlightTitle) this.smartSpotlightTitle.textContent = 'Chọn bài hát bất kỳ để tạo Song Radio';
+            if (this.smartSpotlightArtist) this.smartSpotlightArtist.textContent = 'Khám phá luồng bài hát tương đồng theo gu âm nhạc';
+            if (this.smartSpotlightPlayBtn) this.smartSpotlightPlayBtn.style.display = 'none';
+        }
+
+        // 2. Render Curated Smart Mixes Grid
+        this.renderSmartMixGrid();
+
+        // 3. Render Similar Artist Chips
+        this.renderSmartMixArtistChips();
+
+        // 4. Sync Autoplay checkbox
+        if (this.smartAutoplayCheckbox) {
+            this.smartAutoplayCheckbox.checked = this.isAutoplay;
+        }
+    }
+
+    getAllLibraryTracks() {
+        const tracks = [];
+        const seen = new Set();
+        this.getBaseAlbums().forEach(album => {
+            (album.tracks || []).forEach(tr => {
+                const key = tr.msgId ? `id:${tr.msgId}` : `n:${(tr.name || '').toLowerCase()}:${(tr.artist || '').toLowerCase()}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    tracks.push({
+                        ...tr,
+                        coverUrl: tr.coverUrl || album.coverUrl,
+                        albumTitle: album.title || tr.album,
+                        country: tr.country || album.country || this.detectCountryFromTrack(tr)
+                    });
+                }
+            });
+        });
+        return tracks;
+    }
+
+    renderSmartMixGrid() {
+        if (!this.smartMixGrid) return;
+        this.smartMixGrid.innerHTML = '';
+
+        const allTracks = this.getAllLibraryTracks();
+        if (allTracks.length === 0) {
+            this.smartMixGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 30px;">Chưa có bài hát trong thư viện để tạo Smart Mix.</div>`;
+            return;
+        }
+
+        const mixes = [
+            {
+                key: 'for_you',
+                icon: '🔮',
+                name: 'Dành Riêng Cho Bạn',
+                desc: 'Tuyển tập đặc biệt trộn ngẫu nhiên các bản thu thịnh hành & yêu thích.',
+                badge: 'MIX CÁ NHÂN'
+            },
+            {
+                key: 'chill',
+                icon: '☕',
+                name: 'Acoustic & Coffee Chill',
+                desc: 'Những giai điệu êm dịu, mộc mạc, thư giãn cho ngày làm việc & học tập.',
+                badge: 'THƯ GIÃN'
+            },
+            {
+                key: 'midnight',
+                icon: '🌙',
+                name: 'Midnight Ballad',
+                desc: 'Những bản tình ca sâu lắng, hoài niệm & du dương cho đêm khuya.',
+                badge: 'SÂU LẮNG'
+            },
+            {
+                key: 'energy',
+                icon: '⚡',
+                name: 'Energy & Workout Boost',
+                desc: 'Giai điệu EDM, Pop Dance, Remix sôi động tiếp thêm năng lượng đỉnh cao.',
+                badge: 'SÔI ĐỘNG'
+            },
+            {
+                key: 'vpop',
+                icon: '🇻🇳',
+                name: 'V-Pop Hit-Makers',
+                desc: 'Những ca khúc Việt Nam được yêu thích nhất từ các nghệ sĩ V-Pop hàng đầu.',
+                badge: 'VIỆT NAM'
+            },
+            {
+                key: 'global',
+                icon: '🌍',
+                name: 'Global Hits (US-UK & K-Pop)',
+                desc: 'Tuyển tập âm nhạc quốc tế, bảng xếp hạng Billboard, US-UK & K-Pop.',
+                badge: 'QUỐC TẾ'
+            },
+            {
+                key: 'nostalgia',
+                icon: '⏳',
+                name: 'Timeless Nostalgia',
+                desc: 'Những giai điệu bất hủ, nhạc xưa, hoài niệm vượt thời gian.',
+                badge: 'BẤT HỦ'
+            },
+            {
+                key: 'random',
+                icon: '🎲',
+                name: 'Mega Random Shuffle',
+                desc: 'Xáo trộn ngẫu nhiên không giới hạn toàn bộ kho nhạc của bạn.',
+                badge: 'XÁO TRỘN'
+            }
+        ];
+
+        mixes.forEach(mix => {
+            const mixTracks = this.generateSmartMixTracks(mix.key, allTracks);
+            if (mixTracks.length === 0) return;
+
+            const card = document.createElement('div');
+            card.className = 'smart-mix-card';
+            card.innerHTML = `
+                <div class="smart-mix-card-top">
+                    <div class="smart-mix-icon">${mix.icon}</div>
+                    <span class="smart-mix-badge">${mix.badge}</span>
+                </div>
+                <div class="smart-mix-name">${this.escapeHtml(mix.name)}</div>
+                <div class="smart-mix-desc">${this.escapeHtml(mix.desc)}</div>
+                <div class="smart-mix-card-footer">
+                    <span class="smart-mix-track-count">🎵 ${mixTracks.length} bài hát</span>
+                    <button class="smart-mix-play-btn" title="Phát tuyển tập này">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                </div>
+            `;
+
+            card.addEventListener('click', () => {
+                this.playSmartMix(mix.key);
+                this.closeModal(this.smartMixModal);
+            });
+
+            this.smartMixGrid.appendChild(card);
+        });
+    }
+
+    renderSmartMixArtistChips() {
+        if (!this.smartMixArtistChips) return;
+        this.smartMixArtistChips.innerHTML = '';
+
+        const allTracks = this.getAllLibraryTracks();
+        const artistMap = new Map();
+
+        allTracks.forEach(tr => {
+            const a = (tr.artist || 'Nghệ Sĩ').trim();
+            if (!a || a.toLowerCase() === 'various artists' || a.toLowerCase() === 'va') return;
+            if (!artistMap.has(a)) {
+                artistMap.set(a, { name: a, count: 0, sampleTrack: tr });
+            }
+            artistMap.get(a).count++;
+        });
+
+        const topArtists = Array.from(artistMap.values())
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 16);
+
+        if (topArtists.length === 0) {
+            this.smartMixArtistChips.innerHTML = `<span style="font-size: 0.8rem; color: var(--text-muted);">Đang cập nhật nghệ sĩ...</span>`;
+            return;
+        }
+
+        topArtists.forEach(art => {
+            const chip = document.createElement('button');
+            chip.className = 'smart-artist-chip';
+            chip.innerHTML = `
+                <span>🎙️</span>
+                <span>${this.escapeHtml(art.name)}</span>
+                <span style="font-size: 0.7rem; color: var(--accent-cyan); font-weight: 700;">(${art.count})</span>
+            `;
+            chip.addEventListener('click', () => {
+                this.playSongRadio(art.sampleTrack, true);
+                this.closeModal(this.smartMixModal);
+            });
+            this.smartMixArtistChips.appendChild(chip);
+        });
+    }
+
+    generateSmartMixTracks(mixKey, allTracks = null) {
+        const tracks = allTracks || this.getAllLibraryTracks();
+        if (tracks.length === 0) return [];
+
+        let filtered = [];
+        switch (mixKey) {
+            case 'chill':
+                filtered = tracks.filter(t => {
+                    const low = `${t.name} ${t.artist} ${t.albumTitle}`.toLowerCase();
+                    return /acoustic|chill|ballad|indie|mộc|piano|guitar|cafe|nhẹ nhàng|êm dịu|ngủ|sầu|mưa/.test(low);
+                });
+                break;
+            case 'midnight':
+                filtered = tracks.filter(t => {
+                    const low = `${t.name} ${t.artist} ${t.albumTitle}`.toLowerCase();
+                    return /ballad|đêm|tình ca|lofi|trữ tình|buồn|nhớ|cô đơn|yêu|lệ|mưa|khóc|tâm trạng/.test(low);
+                });
+                break;
+            case 'energy':
+                filtered = tracks.filter(t => {
+                    const low = `${t.name} ${t.artist} ${t.albumTitle}`.toLowerCase();
+                    return /remix|edm|dance|vinahouse|club|dj|bass|energy|workout|rap|hiphop|bốc/.test(low);
+                });
+                break;
+            case 'vpop':
+                filtered = tracks.filter(t => {
+                    return (t.country === 'Việt Nam') || this.detectCountryFromTrack(t) === 'Việt Nam';
+                });
+                break;
+            case 'global':
+                filtered = tracks.filter(t => {
+                    const c = t.country || this.detectCountryFromTrack(t);
+                    return c === 'Âu Mỹ' || c === 'Hàn Quốc' || c === 'Nhật Bản' || c === 'Quốc Tế';
+                });
+                break;
+            case 'nostalgia':
+                filtered = tracks.filter(t => {
+                    const low = `${t.name} ${t.artist} ${t.albumTitle}`.toLowerCase();
+                    return /xưa|vàng|bất hủ|bolero|pre-1975|hoài niệm|classic|oldies|nostalgia|trịnh công sơn|lam phương|ngô thụy miên/.test(low);
+                });
+                break;
+            case 'for_you':
+            case 'random':
+            default:
+                filtered = [...tracks];
+                break;
+        }
+
+        // If specific mood filter returned too few, mix in random library tracks to make a rich playlist
+        if (filtered.length < 5) {
+            filtered = [...tracks];
+        }
+
+        // Shuffle
+        const shuffled = [...filtered].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, 35);
+    }
+
+    playSmartMix(mixKey, autoPlay = true) {
+        const tracks = this.generateSmartMixTracks(mixKey);
+        if (tracks.length === 0) {
+            this.showToast('Chưa đủ bài hát để tạo tuyển tập này.');
+            return;
+        }
+
+        const mixMeta = {
+            for_you: { title: 'Smart Mix: Dành Riêng Cho Bạn 🔮', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop' },
+            chill: { title: 'Smart Mix: Acoustic & Coffee Chill ☕', cover: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=1000&auto=format&fit=crop' },
+            midnight: { title: 'Smart Mix: Midnight Ballad 🌙', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop' },
+            energy: { title: 'Smart Mix: Energy & Workout Boost ⚡', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1000&auto=format&fit=crop' },
+            vpop: { title: 'Smart Mix: V-Pop Hit-Makers 🇻🇳', cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&w=1000&auto=format&fit=crop' },
+            global: { title: 'Smart Mix: Global Hits (US-UK & K-Pop) 🌍', cover: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?q=80&w=1000&auto=format&fit=crop' },
+            nostalgia: { title: 'Smart Mix: Timeless Nostalgia ⏳', cover: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=80&w=1000&auto=format&fit=crop' },
+            random: { title: 'Smart Mix: Mega Random Shuffle 🎲', cover: 'https://images.unsplash.com/photo-1487180144351-b8472da7d491?q=80&w=1000&auto=format&fit=crop' }
+        };
+
+        const meta = mixMeta[mixKey] || { title: 'Smart Playlist 🔮', cover: tracks[0].coverUrl };
+
+        const smartAlbum = {
+            id: `smartmix_${mixKey}_${Date.now()}`,
+            title: meta.title,
+            artist: 'XTAPO Smart Recommendation',
+            year: new Date().getFullYear(),
+            coverUrl: meta.cover,
+            company: 'AI Smart Playlist',
+            isHiRes: false,
+            tracks: tracks
+        };
+
+        this.setVirtualAlbum(smartAlbum, 0, autoPlay);
+        if (autoPlay) {
+            this.showToast(`✨ Đang phát "${meta.title}" (${tracks.length} bài hát)`);
+        }
+    }
+
+    playSongRadio(seedTrack = null, autoPlay = true) {
+        const target = seedTrack || this.getCurrentTrack();
+        if (!target) {
+            this.showToast('Vui lòng chọn hoặc phát một bài hát trước để tạo Song Radio.');
+            return;
+        }
+
+        const allTracks = this.getAllLibraryTracks();
+        if (allTracks.length === 0) {
+            this.showToast('Kho nhạc đang trống.');
+            return;
+        }
+
+        const targetArtist = (target.artist || '').toLowerCase().trim();
+        const targetCountry = (target.country || this.detectCountryFromTrack(target) || '').toLowerCase().trim();
+        const targetName = (target.name || '').toLowerCase().trim();
+
+        // Similarity Scoring Algorithm
+        const scoredTracks = allTracks.map(t => {
+            let score = 0;
+            const a = (t.artist || '').toLowerCase().trim();
+            const c = (t.country || this.detectCountryFromTrack(t) || '').toLowerCase().trim();
+            const n = (t.name || '').toLowerCase().trim();
+
+            // Ignore exact same track for seed comparison
+            if (n === targetName && a === targetArtist) {
+                return { track: t, score: 999 };
+            }
+
+            // Same artist: +60 points
+            if (a && targetArtist && (a === targetArtist || a.includes(targetArtist) || targetArtist.includes(a))) {
+                score += 60;
+            }
+
+            // Same country: +25 points
+            if (c && targetCountry && c === targetCountry) {
+                score += 25;
+            }
+
+            // Common words / style overlap in song title
+            const targetWords = targetName.split(/\s+/).filter(w => w.length > 2);
+            targetWords.forEach(w => {
+                if (n.includes(w)) score += 10;
+            });
+
+            // Add slight randomness (+0..15) for variety
+            score += Math.random() * 15;
+
+            return { track: t, score };
+        });
+
+        // Sort descending by score
+        scoredTracks.sort((a, b) => b.score - a.score);
+
+        // Take top 30 similar tracks (ensuring seed track is first)
+        const radioTracks = [];
+        radioTracks.push(target);
+
+        const seenKeys = new Set([target.msgId ? `id:${target.msgId}` : `n:${targetName}:${targetArtist}`]);
+
+        scoredTracks.forEach(item => {
+            if (radioTracks.length >= 30) return;
+            const t = item.track;
+            const key = t.msgId ? `id:${t.msgId}` : `n:${(t.name || '').toLowerCase()}:${(t.artist || '').toLowerCase()}`;
+            if (!seenKeys.has(key)) {
+                seenKeys.add(key);
+                radioTracks.push(t);
+            }
+        });
+
+        const radioAlbum = {
+            id: `song_radio_${Date.now()}`,
+            title: `Song Radio: ${target.name}`,
+            artist: `Gợi ý theo ${target.artist || 'bài hát này'}`,
+            year: new Date().getFullYear(),
+            coverUrl: target.coverUrl || (this.currentAlbum && this.currentAlbum.coverUrl) || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop',
+            company: 'Infinite Song Radio',
+            isHiRes: false,
+            tracks: radioTracks
+        };
+
+        this.setVirtualAlbum(radioAlbum, 0, autoPlay);
+        if (autoPlay) {
+            this.showToast(`⚡ Đang phát Song Radio: "${target.name}" (${radioTracks.length} bài tương đồng)`);
         }
     }
 
