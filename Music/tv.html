@@ -706,7 +706,11 @@
             <!-- PANEL 1: Navigation Menu (Như Desktop) -->
             <nav class="tv-col-nav" id="navMenuCol">
                 <div class="tv-nav-title">DANH MỤC NHẠC</div>
-                <div class="tv-nav-item focusable active" data-tab="albums" tabindex="0">
+                <div class="tv-nav-item focusable active" data-tab="favorites" tabindex="0">
+                    <span class="nav-icon">❤️</span>
+                    <span>YÊU THÍCH</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="albums" tabindex="0">
                     <span class="nav-icon">💿</span>
                     <span>ALBUMS</span>
                 </div>
@@ -729,10 +733,6 @@
                 <div class="tv-nav-item focusable" data-tab="playlists" tabindex="0">
                     <span class="nav-icon">📑</span>
                     <span>PLAYLISTS</span>
-                </div>
-                <div class="tv-nav-item focusable" data-tab="favorites" tabindex="0">
-                    <span class="nav-icon">❤️</span>
-                    <span>YÊU THÍCH</span>
                 </div>
                 <div class="tv-nav-item focusable" data-tab="all-musics" tabindex="0">
                     <span class="nav-icon">🎵</span>
@@ -827,7 +827,7 @@
 
         // Global State
         let rawAlbums = [];
-        let currentTab = 'albums';
+        let currentTab = 'favorites';
         let currentItems = [];
         let currentPage = 1;
         let selectedItemIdx = 0;
@@ -1010,15 +1010,23 @@
                     }];
                 }
             } else if (currentTab === 'favorites') {
+                const favList = userFavorites.map((fav, i) => ({
+                    id: fav.msg_id || i + 1,
+                    name: fav.title || fav.name || 'Bài hát yêu thích',
+                    artist: fav.artist || 'Nghệ sĩ',
+                    duration: fav.duration || '0:00',
+                    url: fav.url || fav.stream_url || (fav.chat_id && fav.msg_id ? `/api/music/stream/${fav.chat_id}/${fav.msg_id}` : null),
+                    cover: fav.cover_url || fav.coverUrl || '/music/icon-192.png'
+                }));
                 currentItems = [{
                     type: 'favorites',
                     id: 'fav',
                     title: 'Bài Hát Yêu Thích',
-                    sub: `${userFavorites.length} bài đã lưu`,
-                    cover: '/music/icon-192.png',
+                    sub: `${favList.length} bài đã lưu`,
+                    cover: favList[0]?.cover || '/music/icon-192.png',
                     year: 'Yêu Thích',
                     badge: 'FAVORITES',
-                    tracks: userFavorites
+                    tracks: favList
                 }];
             } else if (currentTab === 'all-musics') {
                 const allT = rawAlbums.flatMap(a => a.tracks || []);
@@ -1044,16 +1052,16 @@
             if (currentPage < 1) currentPage = 1;
 
             const tabNames = {
+                'favorites': 'YÊU THÍCH',
                 'albums': 'ALBUMS',
                 'hires': 'HI-RES AUDIO',
                 'artists': 'NGHỆ SĨ',
                 'genres': 'THỂ LOẠI',
                 'countries': 'QUỐC GIA',
                 'playlists': 'PLAYLISTS',
-                'favorites': 'YÊU THÍCH',
                 'all-musics': 'TẤT CẢ BÀI'
             };
-            const currentTabName = tabNames[currentTab] || 'ALBUMS';
+            const currentTabName = tabNames[currentTab] || 'YÊU THÍCH';
             activeCategoryBadge.textContent = currentTabName;
             itemsCategoryTitle.textContent = `${currentTabName} (${total})`;
             pageInfoText.textContent = `Trang ${currentPage} / ${totalPages}`;
@@ -1164,7 +1172,7 @@
             if (!currentTracklist || !currentTracklist[idx]) return;
             currentPlayingTrackIdx = idx;
             const track = currentTracklist[idx];
-            const url = track.url || track.stream_url || track.previewUrl;
+            const url = track.url || track.stream_url || track.previewUrl || (track.chat_id && track.msg_id ? `/api/music/stream/${track.chat_id}/${track.msg_id}` : null);
             if (!url) return;
 
             audio.src = url;
@@ -1253,7 +1261,7 @@
                     const data = await res.json();
                     if (data && data.status === 'authenticated' && data.user) {
                         currentUser = data.user;
-                        showAuthenticatedApp();
+                        await showAuthenticatedApp();
                         return;
                     }
                 }
@@ -1278,7 +1286,7 @@
             initQrLogin();
         }
 
-        function showAuthenticatedApp() {
+        async function showAuthenticatedApp() {
             tvLoginScreen.style.display = 'none';
             tvMainWorkspace.style.display = 'flex';
             tvPlayerBar.style.display = 'flex';
@@ -1292,10 +1300,10 @@
                 qrPollInterval = null;
             }
 
-            // Tải thư viện nhạc khi đã đăng nhập
-            loadUserFavorites();
+            // Tải yêu thích và playlists trước, sau đó nạp thư viện và mở tab Yêu Thích mặc định
+            await loadUserFavorites();
             loadUserPlaylists();
-            fetchLibrary();
+            await fetchLibrary('favorites');
         }
 
         async function initQrLogin() {
@@ -1342,7 +1350,7 @@
                         qrPollInterval = null;
                         currentUser = data.user;
                         showToast(`🎉 Đăng nhập thành công: ${currentUser?.display_name || currentUser?.username}!`);
-                        showAuthenticatedApp();
+                        await showAuthenticatedApp();
                     } else if (data.status === 'expired') {
                         clearInterval(qrPollInterval);
                         qrStatusText.textContent = '⚠️ Mã QR đã hết hạn. Bấm "Đổi Mã Khác".';
@@ -1380,8 +1388,8 @@
             } catch (e) {}
         }
 
-        // Tải thư viện nhạc khi đã đăng nhập
-        async function fetchLibrary() {
+        // Tải thư viện nhạc khi đã đăng nhập (mặc định tab Yêu Thích)
+        async function fetchLibrary(initialTab = 'favorites') {
             try {
                 const res = await fetch('/api/music/albums');
                 if (res.ok) {
@@ -1394,8 +1402,7 @@
                 console.log('Lỗi fetch library');
             }
 
-            buildCategoryData();
-            renderItems();
+            switchTab(initialTab || 'favorites');
 
             setTimeout(() => {
                 const first = document.querySelector('.tv-card-item') || document.querySelector('.tv-nav-item');
