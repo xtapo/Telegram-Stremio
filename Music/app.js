@@ -7310,7 +7310,7 @@ class XTAPOMusicApp {
         }
     }
 
-    getAllLibraryTracks() {
+    getAllFlatTracks() {
         const tracks = [];
         const seen = new Set();
         this.getBaseAlbums().forEach(album => {
@@ -7334,7 +7334,7 @@ class XTAPOMusicApp {
         if (!this.smartMixGrid) return;
         this.smartMixGrid.innerHTML = '';
 
-        const allTracks = this.getAllLibraryTracks();
+        const allTracks = this.getAllFlatTracks();
         if (allTracks.length === 0) {
             this.smartMixGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 30px;">Chưa có bài hát trong thư viện để tạo Smart Mix.</div>`;
             return;
@@ -7433,7 +7433,7 @@ class XTAPOMusicApp {
         if (!this.smartMixArtistChips) return;
         this.smartMixArtistChips.innerHTML = '';
 
-        const allTracks = this.getAllLibraryTracks();
+        const allTracks = this.getAllFlatTracks();
         const artistMap = new Map();
 
         allTracks.forEach(tr => {
@@ -7471,7 +7471,7 @@ class XTAPOMusicApp {
     }
 
     generateSmartMixTracks(mixKey, allTracks = null) {
-        const tracks = allTracks || this.getAllLibraryTracks();
+        const tracks = allTracks || this.getAllFlatTracks();
         if (tracks.length === 0) return [];
 
         let filtered = [];
@@ -7572,7 +7572,7 @@ class XTAPOMusicApp {
             return;
         }
 
-        const allTracks = this.getAllLibraryTracks();
+        const allTracks = this.getAllFlatTracks();
         if (allTracks.length === 0) {
             this.showToast('Kho nhạc đang trống.');
             return;
