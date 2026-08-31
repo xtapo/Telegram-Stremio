@@ -608,6 +608,8 @@ class XTAPOMusicApp {
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
+        this.setupTvMode();
+        this.setupSpatialNavigation();
         this.setupKeyboardShortcuts();
         
         // 1. Tải song song thông tin User, Thư viện Albums Telegram và Metadata nghệ sĩ
@@ -2901,8 +2903,8 @@ class XTAPOMusicApp {
         });
 
         const draw = () => {
-            // Tắt hoàn toàn trên di động hoặc khi tab bị ẩn để giải phóng GPU/CPU 100%
-            if (isMobileScreen() || document.hidden) {
+            // Tắt hoàn toàn trên di động, TV Lite hoặc khi tab bị ẩn để giải phóng GPU/CPU 100%
+            if (isMobileScreen() || document.hidden || this.isTvMode) {
                 if (this.visualizerAnimationId) {
                     cancelAnimationFrame(this.visualizerAnimationId);
                     this.visualizerAnimationId = null;
@@ -4177,6 +4179,258 @@ class XTAPOMusicApp {
         this.searchResults.appendChild(frag);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // ANDROID TV LITE & SPATIAL NAVIGATION D-PAD ENGINE
+    // ─────────────────────────────────────────────────────────────
+    setupTvMode() {
+        this.topNavTvBtn = document.getElementById('topNavTvBtn');
+        this.topNavTvBadge = document.getElementById('topNavTvBadge');
+        this.isTvMode = false;
+
+        const ua = navigator.userAgent || '';
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTvQuery = urlParams.get('tv') === '1' || urlParams.get('mode') === 'tv' || urlParams.get('lite') === '1';
+        const isTvUa = /AndroidTV|SmartTV|BRAVIA|GoogleTV|MiTV|AFTT|AFTM|HFS|Shield|CrKey|TelegramMusicTV|Large Screen|Leanback/i.test(ua);
+        const savedTv = localStorage.getItem('xtapo_tv_mode') === 'true';
+
+        if (this.topNavTvBtn) {
+            this.topNavTvBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.toggleTvMode();
+            });
+        }
+
+        // Tạo sẵn HUD Helper cho Remote TV nếu chưa có
+        let hud = document.getElementById('tvHudHelper');
+        if (!hud) {
+            hud = document.createElement('div');
+            hud.id = 'tvHudHelper';
+            hud.className = 'tv-hud-helper';
+            hud.innerHTML = `
+                <span>📺 <b>Chế độ TV Lite:</b></span>
+                <span><span class="tv-hud-key">▲▼◀▶</span> Di chuyển</span>
+                <span><span class="tv-hud-key">OK</span> Chọn</span>
+                <span><span class="tv-hud-key">Back</span> Đóng</span>
+            `;
+            document.body.appendChild(hud);
+        }
+
+        if (isTvQuery || isTvUa || savedTv) {
+            this.enableTvMode(false);
+        }
+    }
+
+    enableTvMode(notify = true) {
+        this.isTvMode = true;
+        document.body.classList.add('tv-mode', 'tv-lite');
+        if (this.topNavTvBtn) this.topNavTvBtn.classList.add('active');
+        if (this.topNavTvBadge) this.topNavTvBadge.style.display = 'inline-block';
+        try { localStorage.setItem('xtapo_tv_mode', 'true'); } catch (e) {}
+
+        // Tắt animation visualizer ngay lập tức
+        if (this.visualizerAnimationId) {
+            cancelAnimationFrame(this.visualizerAnimationId);
+            this.visualizerAnimationId = null;
+        }
+
+        if (notify) {
+            this.showTvHudHelper();
+            this.showToast('📺 Đã bật Chế độ Android TV Siêu Nhẹ (Zero Lag & D-Pad Remote)');
+        }
+    }
+
+    disableTvMode() {
+        this.isTvMode = false;
+        document.body.classList.remove('tv-mode', 'tv-lite');
+        if (this.topNavTvBtn) this.topNavTvBtn.classList.remove('active');
+        if (this.topNavTvBadge) this.topNavTvBadge.style.display = 'none';
+        try { localStorage.setItem('xtapo_tv_mode', 'false'); } catch (e) {}
+        this.showToast('🖥️ Đã chuyển về Giao diện Chuẩn');
+    }
+
+    toggleTvMode() {
+        if (this.isTvMode) {
+            this.disableTvMode();
+        } else {
+            this.enableTvMode(true);
+        }
+    }
+
+    showTvHudHelper() {
+        const hud = document.getElementById('tvHudHelper');
+        if (hud) {
+            hud.classList.add('show');
+            setTimeout(() => hud.classList.remove('show'), 3500);
+        }
+    }
+
+    // --- Spatial D-Pad Remote Navigation Engine ---
+    setupSpatialNavigation() {
+        const focusableSelector = [
+            'button:not([disabled]):not([style*="display: none"])',
+            'a[href]:not([style*="display: none"])',
+            'input:not([type="hidden"]):not([disabled])',
+            'select:not([disabled])',
+            'textarea:not([disabled])',
+            '[tabindex]:not([tabindex="-1"]):not([disabled])',
+            '.track-item:not([style*="display: none"])',
+            '.album-card:not([style*="display: none"])',
+            '.artist-card:not([style*="display: none"])',
+            '.genre-card:not([style*="display: none"])',
+            '.country-card:not([style*="display: none"])',
+            '.playlist-card:not([style*="display: none"])',
+            '.nav-link:not([style*="display: none"])',
+            '.nav-btn:not([style*="display: none"])',
+            '.ctrl-btn:not([style*="display: none"])',
+            '.fav-item:not([style*="display: none"])',
+            '.eq-preset-btn:not([style*="display: none"])',
+            '.tab-btn:not([style*="display: none"])'
+        ].join(', ');
+
+        const getVisibleElements = () => {
+            // Nếu có Modal đang mở, chỉ điều hướng bên trong Modal đó
+            const openModal = document.querySelector('.modal.open, .full-modal.open, .drawer.open, .auth-modal-overlay.open, .search-modal.open, .album-modal.open, .artist-modal.open, .genre-modal.open, .country-modal.open, .playlist-modal.open, .lyrics-modal.open, .equalizer-modal-overlay.open, .sleep-timer-modal-overlay.open');
+            const root = openModal || document.body;
+
+            const all = Array.from(root.querySelectorAll(focusableSelector));
+            return all.filter(el => {
+                const rect = el.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) return false;
+                const style = window.getComputedStyle(el);
+                if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') return false;
+                return true;
+            });
+        };
+
+        const getCenter = (el) => {
+            const rect = el.getBoundingClientRect();
+            return {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+                rect
+            };
+        };
+
+        const navigateDirection = (direction) => {
+            const elements = getVisibleElements();
+            if (!elements || elements.length === 0) return;
+
+            let currentEl = document.activeElement;
+            if (!currentEl || currentEl === document.body || !elements.includes(currentEl)) {
+                // Tự động focus vào phần tử đầu tiên hợp lý (Bài hát đang phát, hoặc Play button, hoặc Nav link)
+                const preferred = elements.find(el => el.classList.contains('playing') || el.id === 'playBtn' || el.id === 'navMusics') || elements[0];
+                if (preferred) {
+                    preferred.focus();
+                    preferred.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }
+                return;
+            }
+
+            const current = getCenter(currentEl);
+            let bestCandidate = null;
+            let minScore = Infinity;
+
+            for (const candidate of elements) {
+                if (candidate === currentEl) continue;
+                const cand = getCenter(candidate);
+                const dx = cand.x - current.x;
+                const dy = cand.y - current.y;
+
+                let isValidDirection = false;
+                let primaryDist = 0;
+                let orthoDist = 0;
+
+                if (direction === 'up') {
+                    if (dy < -6) {
+                        isValidDirection = true;
+                        primaryDist = -dy;
+                        orthoDist = Math.abs(dx);
+                    }
+                } else if (direction === 'down') {
+                    if (dy > 6) {
+                        isValidDirection = true;
+                        primaryDist = dy;
+                        orthoDist = Math.abs(dx);
+                    }
+                } else if (direction === 'left') {
+                    if (dx < -6) {
+                        isValidDirection = true;
+                        primaryDist = -dx;
+                        orthoDist = Math.abs(dy);
+                    }
+                } else if (direction === 'right') {
+                    if (dx > 6) {
+                        isValidDirection = true;
+                        primaryDist = dx;
+                        orthoDist = Math.abs(dy);
+                    }
+                }
+
+                if (isValidDirection) {
+                    // Trọng số: ưu tiên hướng chính (primary) hơn hướng vuông góc (ortho)
+                    const score = primaryDist + orthoDist * 2.2;
+                    if (score < minScore) {
+                        minScore = score;
+                        bestCandidate = candidate;
+                    }
+                }
+            }
+
+            if (bestCandidate) {
+                bestCandidate.focus();
+                bestCandidate.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+            }
+        };
+
+        // Bắt các sự kiện điều hướng D-Pad
+        window.addEventListener('keydown', (e) => {
+            const isTyping = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
+            
+            // Xử lý Media Keys trên Remote TV
+            if (e.code === 'MediaPlayPause' || e.code === 'MediaPlay' || e.code === 'MediaPause' || e.keyCode === 179 || e.keyCode === 126 || e.keyCode === 127) {
+                e.preventDefault();
+                this.togglePlay();
+                return;
+            }
+            if (e.code === 'MediaTrackNext' || e.keyCode === 87) {
+                e.preventDefault();
+                this.nextTrack();
+                return;
+            }
+            if (e.code === 'MediaTrackPrevious' || e.keyCode === 88) {
+                e.preventDefault();
+                this.prevTrack();
+                return;
+            }
+
+            // D-Pad Arrows Navigation
+            const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+            if (isArrowKey) {
+                // Tự động bật chế độ TV Lite nếu phát hiện thao tác D-Pad trên màn hình lớn
+                if (!this.isTvMode && window.innerWidth >= 900) {
+                    this.enableTvMode(true);
+                }
+
+                if (!isTyping) {
+                    e.preventDefault();
+                    if (e.key === 'ArrowUp') navigateDirection('up');
+                    else if (e.key === 'ArrowDown') navigateDirection('down');
+                    else if (e.key === 'ArrowLeft') navigateDirection('left');
+                    else if (e.key === 'ArrowRight') navigateDirection('right');
+                    return;
+                }
+            }
+
+            // OK / Enter trên Remote TV
+            if (e.key === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13 || e.keyCode === 23) {
+                if (!isTyping && document.activeElement && document.activeElement !== document.body) {
+                    e.preventDefault();
+                    document.activeElement.click();
+                }
+            }
+        }, { passive: false });
+    }
+
     // --- Keyboard Shortcuts ---
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
@@ -4189,30 +4443,36 @@ class XTAPOMusicApp {
             if (e.code === 'Space') {
                 e.preventDefault();
                 this.togglePlay();
-            } else if (e.code === 'ArrowRight') {
-                e.preventDefault();
-                this.nextTrack();
-            } else if (e.code === 'ArrowLeft') {
-                e.preventDefault();
-                this.prevTrack();
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
                 this.openModal(this.searchModal);
                 setTimeout(() => this.searchInput.focus(), 100);
-            } else if (e.key === 'Escape') {
-                this.closeModal(this.albumModal);
-                this.closeModal(this.searchModal);
-                this.closeModal(this.tgModal);
-                this.closeModal(this.playlistModal);
-                this.closeModal(this.addToPlaylistModal);
-                this.closeModal(this.artistModal);
-                this.closeModal(this.genreModal);
-                this.closeModal(this.countryModal);
-                this.closeModal(this.tracklistModal);
-                this.closeModal(this.lyricsModal);
-                this.closeModal(this.lyricsEditorModal);
-                this.metaDrawer.classList.remove('open');
-                this.closeMobileDrawer();
+            } else if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27 || e.keyCode === 4 || e.keyCode === 111) {
+                // Đóng các modal đang mở
+                const openModals = [
+                    this.albumModal, this.searchModal, this.tgModal, this.playlistModal,
+                    this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal,
+                    this.tracklistModal, this.lyricsModal, this.lyricsEditorModal,
+                    this.equalizerModal, this.sleepTimerModal, this.authModal, this.favoritesModal
+                ];
+                let hasClosed = false;
+                for (const m of openModals) {
+                    if (m && (m.classList.contains('open') || m.style.display === 'flex' || m.style.display === 'block')) {
+                        this.closeModal(m);
+                        hasClosed = true;
+                    }
+                }
+                if (this.metaDrawer && this.metaDrawer.classList.contains('open')) {
+                    this.metaDrawer.classList.remove('open');
+                    hasClosed = true;
+                }
+                if (this.mobileMenuDrawer && this.mobileMenuDrawer.classList.contains('open')) {
+                    this.closeMobileDrawer();
+                    hasClosed = true;
+                }
+                if (hasClosed) {
+                    e.preventDefault();
+                }
             }
         });
     }

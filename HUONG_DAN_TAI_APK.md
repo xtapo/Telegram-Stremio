@@ -53,11 +53,26 @@ git push
 4. Tích chọn **"Nguồn không xác định" (Unknown sources)**.
 5. Cắm điện thoại vào màn hình xe qua cổng USB hoặc kết nối Android Auto không dây: **XT-Music** sẽ xuất hiện trên danh sách ứng dụng giải trí của xe, hỗ trợ bấm chuyển bài ngay trên vô lăng!
 
+## 📺 Cách Sử Dụng Trên Android TV / Google TV / TV Box (Bản Cấu Hình Yếu)
+
+Ứng dụng **XT-Music** đã được tích hợp chuẩn **Leanback Launcher** và chế độ **TV Lite Siêu Nhẹ**:
+
+1. Cài đặt file `XT-Music.apk` lên Android TV (qua USB, ứng dụng *Send Files to TV*, hoặc trình duyệt trên TV).
+2. Icon **XT-Music** sẽ xuất hiện trực tiếp trên màn hình chính (Home Launcher) của Android TV / Google TV.
+3. **Điều khiển hoàn toàn bằng Remote TV (D-Pad)**:
+   - **4 phím mũi tên (▲ ▼ ◀ ▶)**: Di chuyển giữa các bài hát, album, danh mục, thanh điều khiển.
+   - **Phím OK / Enter**: Chọn phát nhạc hoặc mở menu.
+   - **Phím Back / Quay lại**: Đóng cửa sổ popup, thoát mục hoặc quay về danh sách.
+   - **Phím Media trên Remote (Play / Pause / Next / Prev)**: Điều khiển phát nhạc trực tiếp tức thì.
+4. **Tự động kích hoạt TV Lite Mode**:
+   - Khi chạy trên Android TV hoặc màn hình lớn, app tự động tắt toàn bộ hiệu ứng nặng (`backdrop-filter: blur`, visualizer canvas, đồ họa xoay 3D) giúp thiết bị RAM 1GB - 2GB chạy mượt mà, phản hồi ngay lập tức và không giật lag.
+
 ---
 
 ## 🎧 Tính Năng Nổi Bật của Ứng Dụng APK
+- ✅ **Hỗ trợ Android TV / Google TV**: Hiển thị trên màn hình chính Leanback, điều khiển 100% bằng Remote TV D-Pad.
+- ✅ **Chế độ TV Lite (Zero Lag)**: Tối ưu triệt để cho TV và TV Box cấu hình yếu.
 - ✅ **Hỗ trợ Android Auto**: Hiển thị trên màn hình xe ô tô, điều khiển qua phím vô lăng.
-- ✅ **Phát nhạc nền (Background Playback)**: Nhạc vẫn phát mượt mà khi bạn khóa màn hình hoặc dùng ứng dụng khác (Facebook, lướt web, v.v.).
-- ✅ **MediaSession Controls**: Hiển thị tên bài hát, ảnh bìa album và các nút Next/Previous/Pause trên màn hình khóa.
+- ✅ **Phát nhạc nền (Background Playback)**: Nhạc vẫn phát mượt mà khi bạn khóa màn hình hoặc dùng ứng dụng khác.
+- ✅ **MediaSession Controls**: Hiển thị tên bài hát, ảnh bìa album và các nút Next/Previous/Pause trên màn hình khóa / remote.
 - ✅ **Giao diện tối (Dark Mode)**: Tương thích hoàn hảo với giao diện người dùng hiện đại của Web Player.
-- ✅ **Điều hướng mượt mà**: Phím Back hỗ trợ quay lại trang trước, nhấn 2 lần liên tiếp để thoát ứng dụng.

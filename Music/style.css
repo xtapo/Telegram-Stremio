@@ -6065,6 +6065,253 @@ html, body {
     }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   ANDROID TV LITE & 10-FOOT UI MODE (TỐI ƯU CỰC ĐỘ CHO TV YẾU)
+   ───────────────────────────────────────────────────────────── */
+
+/* TV Mode Badge & TopNav Toggle Button */
+.tv-toggle-btn {
+    position: relative;
+    color: var(--text-secondary);
+}
+
+.tv-toggle-btn.active {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.18);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.tv-mode-badge {
+    position: absolute;
+    top: -5px;
+    right: -8px;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #0f1117;
+    font-size: 0.58rem;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+/* ─── TV LITE MODE ROOT STYLES (body.tv-mode or body.tv-lite) ─── */
+body.tv-mode,
+body.tv-lite {
+    background: #090c10 !important;
+    color: #f0f6fc !important;
+    overflow-x: hidden !important;
+    font-size: 18px !important;
+}
+
+/* Triệt tiêu 100% Backdrop Filter & Blur để không ngốn GPU trên chip yếu */
+body.tv-mode *,
+body.tv-lite * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    text-shadow: none !important;
+}
+
+/* Tắt Visualizer Canvas 60fps & Dynamic Blur Backdrop */
+body.tv-mode .dynamic-backdrop,
+body.tv-lite .dynamic-backdrop {
+    background: #090c10 !important;
+}
+
+body.tv-mode .backdrop-art,
+body.tv-mode .backdrop-glow,
+body.tv-mode .backdrop-overlay,
+body.tv-mode .visualizer-container,
+body.tv-lite .backdrop-art,
+body.tv-lite .backdrop-glow,
+body.tv-lite .backdrop-overlay,
+body.tv-lite .visualizer-container {
+    display: none !important;
+}
+
+/* Đĩa than ở chế độ TV: Tĩnh, rõ nét, không quay 3D ngốn CPU */
+body.tv-mode .vinyl-disc,
+body.tv-lite .vinyl-disc {
+    animation: none !important;
+    transform: translateX(45px) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+}
+
+body.tv-mode .vinyl-stage,
+body.tv-lite .vinyl-stage {
+    perspective: none !important;
+}
+
+/* Tối ưu thanh điều hướng TopNav cho TV */
+body.tv-mode .top-nav,
+body.tv-lite .top-nav {
+    height: 74px;
+    padding: 0 32px;
+    background: #11141c !important;
+    border-bottom: 2px solid #21262d !important;
+}
+
+body.tv-mode .brand-text,
+body.tv-lite .brand-text {
+    font-size: 1.35rem;
+}
+
+body.tv-mode .nav-link,
+body.tv-lite .nav-link {
+    font-size: 0.95rem;
+    padding: 10px 18px;
+    border-radius: 8px;
+}
+
+/* Tối ưu Lưới và Khoảng cách Hero */
+body.tv-mode .kmusic-hero,
+body.tv-lite .kmusic-hero {
+    padding: 24px 32px 140px 32px;
+    min-height: calc(100vh - 74px);
+}
+
+body.tv-mode .kmusic-album-title,
+body.tv-lite .kmusic-album-title {
+    font-size: 2.2rem;
+    line-height: 1.25;
+}
+
+body.tv-mode .kmusic-artist-name,
+body.tv-lite .kmusic-artist-name {
+    font-size: 1.3rem;
+    margin-bottom: 14px;
+}
+
+/* Tracklist 10-Foot UI: Cao hơn, chữ to, độ tương phản sắc nét */
+body.tv-mode .tracklist-container,
+body.tv-lite .tracklist-container {
+    background: #11141c !important;
+    border: 1px solid #21262d !important;
+    border-radius: 14px;
+    padding: 16px;
+}
+
+body.tv-mode .track-item,
+body.tv-lite .track-item {
+    padding: 14px 18px;
+    margin-bottom: 6px;
+    border-radius: 10px;
+    background: #161b22;
+    border: 1px solid #21262d;
+    font-size: 1.05rem;
+}
+
+body.tv-mode .track-item:hover,
+body.tv-lite .track-item:hover {
+    background: #1f242c;
+}
+
+body.tv-mode .track-title,
+body.tv-lite .track-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+body.tv-mode .track-artist,
+body.tv-lite .track-artist {
+    font-size: 0.95rem;
+    color: #8b949e;
+}
+
+body.tv-mode .track-duration,
+body.tv-lite .track-duration {
+    font-size: 0.95rem;
+}
+
+/* Player Bar 10-Foot UI */
+body.tv-mode .kmusic-player-bar,
+body.tv-lite .kmusic-player-bar {
+    height: 100px;
+    padding: 0 32px;
+    background: #11141c !important;
+    border-top: 2px solid #21262d !important;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.7) !important;
+}
+
+body.tv-mode .now-playing-title,
+body.tv-lite .now-playing-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+body.tv-mode .now-playing-artist,
+body.tv-lite .now-playing-artist {
+    font-size: 1rem;
+}
+
+body.tv-mode .ctrl-btn,
+body.tv-lite .ctrl-btn {
+    width: 46px;
+    height: 46px;
+}
+
+body.tv-mode .play-btn-main,
+body.tv-lite .play-btn-main {
+    width: 58px;
+    height: 58px;
+}
+
+/* ─── HIỆU ỨNG FOCUS D-PAD CHO REMOTE TV (SPATIAL NAVIGATION HIGHLIGHT) ─── */
+body.tv-mode :focus,
+body.tv-mode :focus-visible,
+body.tv-mode .tv-focused,
+body.tv-lite :focus,
+body.tv-lite :focus-visible,
+body.tv-lite .tv-focused {
+    outline: 4px solid #f59e0b !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.85) !important;
+    background-color: rgba(245, 158, 11, 0.16) !important;
+    transform: scale(1.025) !important;
+    transition: transform 0.12s ease, outline 0.12s ease !important;
+    z-index: 1000 !important;
+}
+
+/* Thanh thông báo hỗ trợ Remote TV */
+.tv-hud-helper {
+    position: fixed;
+    bottom: 110px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid #f59e0b;
+    border-radius: 30px;
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #f8fafc;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(245, 158, 11, 0.4);
+    z-index: 9999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.tv-hud-helper.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-6px);
+}
+
+.tv-hud-key {
+    background: #334155;
+    color: #f59e0b;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    border: 1px solid #475569;
+}
+
+
 
 
 

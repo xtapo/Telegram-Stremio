@@ -13,6 +13,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.text.TextUtils;
+import android.app.UiModeManager;
+import android.content.res.Configuration;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.webkit.ConsoleMessage;
@@ -201,9 +204,17 @@ public class MainActivity extends AppCompatActivity {
         }
         CookieManager.getInstance().setAcceptCookie(true);
 
-        // Custom User-Agent tag to identify app
+        // Custom User-Agent tag to identify app & Android TV
         String defaultUA = settings.getUserAgentString();
-        settings.setUserAgentString(defaultUA + " TelegramMusicApp/1.0");
+        boolean isTV = isAndroidTvDevice();
+        String tvTag = isTV ? " TelegramMusicTV/1.0 AndroidTV Leanback" : " TelegramMusicApp/1.0";
+        settings.setUserAgentString(defaultUA + tvTag);
+
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        if (isTV) {
+            webView.requestFocus();
+        }
 
         // Android Bridge for 2-way syncing with Android Auto
         webView.addJavascriptInterface(new WebAppInterface(), "AndroidBridge");
@@ -411,6 +422,64 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         // KHÔNG ngắt WakeLock và KHÔNG pause WebView ở đây để nhạc tiếp tục phát liên tục khi tắt màn hình!
+    }
+
+    private boolean isAndroidTvDevice() {
+        try {
+            UiModeManager uiModeManager = (UiModeManager) getSystemService(Context.UI_MODE_SERVICE);
+            if (uiModeManager != null && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION) {
+                return true;
+            }
+            PackageManager pm = getPackageManager();
+            if (pm != null && (pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || pm.hasSystemFeature("android.hardware.type.television"))) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            int keyCode = event.getKeyCode();
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                case KeyEvent.KEYCODE_HEADSETHOOK:
+                    if (webView != null) {
+                        webView.evaluateJavascript("window.player?.togglePlay();", null);
+                        return true;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_PLAY:
+                    if (webView != null) {
+                        webView.evaluateJavascript("if (window.player && !window.player.isPlaying) window.player.togglePlay();", null);
+                        return true;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_PAUSE:
+                    if (webView != null) {
+                        webView.evaluateJavascript("if (window.player && window.player.isPlaying) window.player.togglePlay();", null);
+                        return true;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_NEXT:
+                case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                    if (webView != null) {
+                        webView.evaluateJavascript("window.player?.nextTrack();", null);
+                        return true;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+                case KeyEvent.KEYCODE_MEDIA_REWIND:
+                    if (webView != null) {
+                        webView.evaluateJavascript("window.player?.prevTrack();", null);
+                        return true;
+                    }
+                    break;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
