@@ -176,26 +176,14 @@ try:
     import os
     if os.path.exists("Music"):
         app.mount("/Music", StaticFiles(directory="Music"), name="music_static")
-except Exception as e:
-    LOGGER.warning(f"Failed to mount /Music static directory: {e}")
-
-try:
-    from Backend.fastapi.routes.music_auth import auth_router as music_auth_router
-    app.include_router(music_auth_router)
-except Exception as e:
-    LOGGER.error(f"Failed to include music_auth_router: {e}", exc_info=True)
-
-try:
     from Backend.fastapi.routes.music_routes import router as music_router
-    app.include_router(music_router)
-except Exception as e:
-    LOGGER.error(f"Failed to include music_router: {e}", exc_info=True)
-
-try:
+    from Backend.fastapi.routes.music_auth import auth_router as music_auth_router
     from Backend.fastapi.routes.telegram_qr_auth import qr_auth_router
     app.include_router(qr_auth_router)
-except Exception as e:
-    LOGGER.error(f"Failed to include qr_auth_router: {e}", exc_info=True)
+    app.include_router(music_auth_router)
+    app.include_router(music_router)
+except Exception:
+    pass
 
 
 #----- Public routes (no authentication)
