@@ -888,6 +888,7 @@
                             <div class="tv-showcase-actions">
                                 <button class="tv-btn tv-btn-play focusable" id="btnPlayAll" tabindex="0">▶ Phát Tất Cả</button>
                                 <button class="tv-btn focusable" id="btnShuffle" tabindex="0">🔀 Trộn Bài</button>
+                                <button class="tv-btn focusable" id="btnShowcaseCreatePl" tabindex="0" title="Tạo playlist mới">➕ Tạo Playlist</button>
                                 <button class="tv-btn focusable" id="btnShowcaseFav" tabindex="0" title="Yêu thích bài hát này">❤️ Yêu Thích</button>
                                 <button class="tv-btn focusable" id="btnShowcasePlaylist" tabindex="0" title="Thêm vào Playlist">➕ Playlist</button>
                                 <button class="tv-btn focusable" id="btnShowcaseDeletePl" tabindex="0" title="Xóa playlist này" style="display: none; color: #f87171; border-color: rgba(248, 113, 113, 0.4);">🗑️ Xóa Playlist</button>
@@ -1016,6 +1017,7 @@
         const showcaseBadge = document.getElementById('showcaseBadge');
         const btnPlayAll = document.getElementById('btnPlayAll');
         const btnShuffle = document.getElementById('btnShuffle');
+        const btnShowcaseCreatePl = document.getElementById('btnShowcaseCreatePl');
         const btnShowcaseFav = document.getElementById('btnShowcaseFav');
         const btnShowcasePlaylist = document.getElementById('btnShowcasePlaylist');
         const btnShowcaseDeletePl = document.getElementById('btnShowcaseDeletePl');
@@ -1384,37 +1386,37 @@
                     tracks: map[name].tracks
                 }));
             } else if (currentTab === 'playlists') {
-                const list = (userPlaylists || []).map(pl => ({
-                    type: 'playlist',
-                    id: pl.id || pl._id,
-                    title: pl.name || 'Playlist',
-                    sub: `${pl.tracks ? pl.tracks.length : 0} bài hát`,
-                    cover: (pl.tracks && pl.tracks[0] && (pl.tracks[0].cover_url || pl.tracks[0].coverUrl || pl.tracks[0].cover)) || '/music/icon-192.png',
-                    year: 'Playlist',
-                    badge: 'PLAYLIST',
-                    tracks: (pl.tracks || []).map((tr, idx) => ({
-                        ...tr,
-                        id: tr.msg_id || tr.id || idx + 1,
-                        name: tr.title || tr.name || 'Bài hát',
-                        artist: tr.artist || 'Nghệ sĩ',
-                        duration: tr.duration || '0:00',
-                        url: tr.url || tr.stream_url || (tr.chat_id && tr.msg_id ? `/api/music/stream/${tr.chat_id}/${tr.msg_id}` : null),
-                        cover: tr.cover_url || tr.coverUrl || tr.cover || '/music/icon-192.png'
-                    }))
-                }));
-                currentItems = [
-                    {
-                        type: 'create_playlist',
-                        id: '__create_new_pl__',
-                        title: '➕ Tạo Playlist Mới',
-                        sub: 'Bấm để tạo danh sách phát',
+                if (userPlaylists && userPlaylists.length > 0) {
+                    currentItems = userPlaylists.map(pl => ({
+                        type: 'playlist',
+                        id: pl.id || pl._id,
+                        title: pl.name || 'Playlist',
+                        sub: `${pl.tracks ? pl.tracks.length : 0} bài hát`,
+                        cover: (pl.tracks && pl.tracks[0] && (pl.tracks[0].cover_url || pl.tracks[0].coverUrl || pl.tracks[0].cover)) || '/music/icon-192.png',
+                        year: 'Playlist',
+                        badge: 'PLAYLIST',
+                        tracks: (pl.tracks || []).map((tr, idx) => ({
+                            ...tr,
+                            id: tr.msg_id || tr.id || idx + 1,
+                            name: tr.title || tr.name || 'Bài hát',
+                            artist: tr.artist || 'Nghệ sĩ',
+                            duration: tr.duration || '0:00',
+                            url: tr.url || tr.stream_url || (tr.chat_id && tr.msg_id ? `/api/music/stream/${tr.chat_id}/${tr.msg_id}` : null),
+                            cover: tr.cover_url || tr.coverUrl || tr.cover || '/music/icon-192.png'
+                        }))
+                    }));
+                } else {
+                    currentItems = [{
+                        type: 'empty_playlist',
+                        id: '__empty_pl__',
+                        title: 'Chưa có Playlist nào',
+                        sub: 'Bấm "➕ Tạo Playlist" bên phải để tạo mới',
                         cover: '/music/icon-192.png',
-                        year: 'Tạo mới',
-                        badge: 'MỚI',
+                        year: 'Playlist',
+                        badge: 'TRỐNG',
                         tracks: []
-                    },
-                    ...list
-                ];
+                    }];
+                }
             } else if (currentTab === 'favorites') {
                 const favList = userFavorites.map((fav, i) => ({
                     id: fav.msg_id || i + 1,
@@ -1521,11 +1523,6 @@
             const item = currentItems[idx];
             if (!item) return;
 
-            if (item.type === 'create_playlist') {
-                openCreatePlaylistModal();
-                return;
-            }
-
             selectedItemIdx = idx;
             currentActiveGroup = item;
             currentTracklist = item.tracks || [];
@@ -1541,7 +1538,10 @@
             showcaseBadge.textContent = item.badge || 'LOSSLESS';
 
             if (btnShowcaseDeletePl) {
-                btnShowcaseDeletePl.style.display = (item.type === 'playlist' && item.id !== 'demo-pl') ? 'inline-flex' : 'none';
+                btnShowcaseDeletePl.style.display = (item.type === 'playlist' && item.id !== '__empty_pl__') ? 'inline-flex' : 'none';
+            }
+            if (btnShowcaseCreatePl) {
+                btnShowcaseCreatePl.style.display = (currentTab === 'playlists') ? 'inline-flex' : 'inline-flex';
             }
 
             updatePlayerFavButton();
@@ -1729,7 +1729,7 @@
             nextTrack();
         });
 
-        function switchTab(tabKey) {
+        async function switchTab(tabKey) {
             currentTab = tabKey;
             currentPage = 1;
             selectedItemIdx = 0;
@@ -1737,6 +1737,12 @@
             document.querySelectorAll('.tv-nav-item').forEach(nav => {
                 nav.classList.toggle('active', nav.dataset.tab === tabKey);
             });
+
+            if (tabKey === 'playlists') {
+                await loadUserPlaylists();
+            } else if (tabKey === 'favorites') {
+                await loadUserFavorites();
+            }
 
             buildCategoryData();
             renderItems();
@@ -1952,6 +1958,7 @@
         });
 
         // Playlist Buttons & Modal Listeners
+        if (btnShowcaseCreatePl) btnShowcaseCreatePl.addEventListener('click', openCreatePlaylistModal);
         if (btnPlayerAddToPlaylist) btnPlayerAddToPlaylist.addEventListener('click', () => openAddToPlaylistModal());
         if (btnShowcasePlaylist) btnShowcasePlaylist.addEventListener('click', () => {
             const tr = currentTracklist?.[currentPlayingTrackIdx] || currentActiveGroup?.tracks?.[0] || currentActiveGroup;
