@@ -583,10 +583,32 @@ async def music_management_page(request: Request, _: bool = Depends(require_auth
 @router.get("/music", response_class=HTMLResponse)
 @router.get("/music/", response_class=HTMLResponse)
 async def get_music_player(request: Request):
+    tv_param = request.query_params.get("tv") == "1" or request.query_params.get("mode") == "tv" or request.query_params.get("lite") == "1"
+    ua = (request.headers.get("user-agent") or "").lower()
+    is_tv_ua = any(k in ua for k in ["androidtv", "smarttv", "bravia", "googletv", "mitv", "aftt", "aftm", "shield", "crkey", "telegrammusictv", "leanback"])
+
+    tv_path = os.path.join(MUSIC_DIR, "tv.html")
     index_path = os.path.join(MUSIC_DIR, "index.html")
+
+    if (tv_param or is_tv_ua) and os.path.exists(tv_path):
+        return FileResponse(tv_path)
+
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return HTMLResponse("<h3>Music Player template not found in /Music/index.html</h3>", status_code=404)
+
+
+@router.get("/music/tv", response_class=HTMLResponse)
+@router.get("/music/tv.html", response_class=HTMLResponse)
+@router.get("/music/lite", response_class=HTMLResponse)
+async def get_music_tv_player():
+    tv_path = os.path.join(MUSIC_DIR, "tv.html")
+    if os.path.exists(tv_path):
+        return FileResponse(tv_path)
+    index_path = os.path.join(MUSIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return HTMLResponse("<h3>TV Lite template not found</h3>", status_code=404)
 
 
 @router.get("/music/{filename:path}")
@@ -597,6 +619,11 @@ async def get_music_static_file(filename: str):
     """
     if not filename or filename.strip("/") in ["", "index.html"]:
         return FileResponse(os.path.join(MUSIC_DIR, "index.html"))
+
+    if filename.strip("/") in ["tv", "tv.html", "lite"]:
+        tv_path = os.path.join(MUSIC_DIR, "tv.html")
+        if os.path.exists(tv_path):
+            return FileResponse(tv_path)
 
     clean_name = filename.lstrip("/")
     file_path = os.path.join(MUSIC_DIR, clean_name)

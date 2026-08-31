@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XTAPO MUSIC - Android TV Lite</title>
+    <style>
+        /* ─── RESET & ULTRA-FAST SYSTEM FONTS (ZERO EXTERNAL REQUESTS) ─── */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: #0b0e14;
+            color: #f1f5f9;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-size: 18px;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* ─── 10-FOOT UI LAYOUT (16:9 TV) ─── */
+        .tv-app {
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Top Bar */
+        .tv-topbar {
+            height: 60px;
+            background: #131722;
+            border-bottom: 2px solid #232936;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            flex-shrink: 0;
+        }
+
+        .tv-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 800;
+            color: #f59e0b;
+            letter-spacing: 0.5px;
+        }
+
+        .tv-badge {
+            background: #232936;
+            color: #38bdf8;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+        }
+
+        .tv-top-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* Main Workspace (Left Albums / Right Tracklist + Player) */
+        .tv-main {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
+
+        /* Left Column: Albums Grid / Categories */
+        .tv-col-left {
+            width: 38%;
+            background: #0f131c;
+            border-right: 2px solid #232936;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .tv-section-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #94a3b8;
+            letter-spacing: 1px;
+            margin-bottom: 14px;
+            text-transform: uppercase;
+        }
+
+        .tv-album-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .tv-album-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            background: #161b26;
+            border: 2px solid #232936;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+
+        .tv-album-card.active {
+            border-color: #f59e0b;
+            background: #1e2433;
+        }
+
+        .tv-album-cover {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: #232936;
+            flex-shrink: 0;
+        }
+
+        .tv-album-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .tv-album-name {
+            font-size: 17px;
+            font-weight: 700;
+            color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-album-artist {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Right Column: Tracklist & Big Player Bar */
+        .tv-col-right {
+            width: 62%;
+            display: flex;
+            flex-direction: column;
+            background: #0b0e14;
+            overflow: hidden;
+        }
+
+        /* Tracklist Area */
+        .tv-tracklist-wrap {
+            flex: 1;
+            padding: 20px 28px;
+            overflow-y: auto;
+        }
+
+        .tv-track-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            background: #131722;
+            border: 2px solid #1e2433;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .tv-track-item.playing {
+            border-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.15);
+        }
+
+        .tv-track-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            overflow: hidden;
+        }
+
+        .tv-track-num {
+            font-size: 16px;
+            font-weight: 700;
+            color: #64748b;
+            width: 28px;
+        }
+
+        .tv-track-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #f1f5f9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-track-dur {
+            font-size: 15px;
+            font-weight: 600;
+            color: #94a3b8;
+            flex-shrink: 0;
+            margin-left: 16px;
+        }
+
+        /* Bottom Player Area */
+        .tv-player-bar {
+            height: 110px;
+            background: #131722;
+            border-top: 2px solid #232936;
+            display: flex;
+            align-items: center;
+            padding: 0 28px;
+            gap: 24px;
+            flex-shrink: 0;
+        }
+
+        .tv-player-cover {
+            width: 68px;
+            height: 68px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: #232936;
+            flex-shrink: 0;
+        }
+
+        .tv-player-meta {
+            width: 240px;
+            overflow: hidden;
+        }
+
+        .tv-player-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-player-artist {
+            font-size: 14px;
+            color: #f59e0b;
+            margin-top: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-player-controls {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .tv-btn {
+            background: #1e2433;
+            color: #f8fafc;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            padding: 10px 18px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            outline: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tv-btn-play {
+            background: #f59e0b;
+            color: #0f131c;
+            border-color: #d97706;
+            font-size: 17px;
+            padding: 12px 24px;
+        }
+
+        .tv-progress-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .tv-progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #232936;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .tv-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #f59e0b;
+        }
+
+        .tv-time-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        /* ─── D-PAD REMOTE FOCUS INDICATOR (NEON YELLOW BORDER) ─── */
+        .focusable:focus,
+        .focusable.focused {
+            outline: 4px solid #f59e0b !important;
+            outline-offset: 2px !important;
+            background-color: rgba(245, 158, 11, 0.25) !important;
+            border-color: #f59e0b !important;
+            transform: scale(1.02) !important;
+            z-index: 100 !important;
+        }
+
+        /* Remote Helper Bar at bottom */
+        .tv-remote-hint {
+            font-size: 13px;
+            color: #64748b;
+            padding: 4px 8px;
+            background: #0f131c;
+            border-radius: 6px;
+            display: flex;
+            gap: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="tv-app">
+        <!-- Top Bar -->
+        <header class="tv-topbar">
+            <div class="tv-brand">
+                <span>🎵 XTAPO MUSIC TV</span>
+                <span class="tv-badge">TV LITE • 0% LAG</span>
+            </div>
+            <div class="tv-top-actions">
+                <div class="tv-remote-hint">
+                    <span>🎮 <b>Remote:</b> ▲▼◀▶ Di chuyển</span>
+                    <span><b>OK:</b> Chọn / Phát</span>
+                    <span><b>Back:</b> Thoát</span>
+                </div>
+                <button class="tv-btn focusable" id="btnReloadLibrary" tabindex="0">🔄 Tải Lại</button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="tv-main">
+            <!-- Left: Albums List -->
+            <section class="tv-col-left" id="albumListCol">
+                <div class="tv-section-title">ALBUMS / DANH MỤC (<span id="albumCount">0</span>)</div>
+                <div class="tv-album-list" id="albumContainer">
+                    <!-- Album items injected by JS -->
+                </div>
+            </section>
+
+            <!-- Right: Tracklist & Player -->
+            <section class="tv-col-right">
+                <div class="tv-tracklist-wrap" id="tracklistWrap">
+                    <div class="tv-section-title" id="currentAlbumHeader">DANH SÁCH BÀI HÁT</div>
+                    <div id="trackContainer">
+                        <!-- Track items injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Bottom Player -->
+                <div class="tv-player-bar">
+                    <img src="/music/icon-192.png" id="playerCoverImg" class="tv-player-cover" alt="Cover">
+                    <div class="tv-player-meta">
+                        <div class="tv-player-title" id="playerTrackTitle">Chưa phát bài hát nào</div>
+                        <div class="tv-player-artist" id="playerArtistName">XTAPO MUSIC TV</div>
+                    </div>
+
+                    <div class="tv-player-controls">
+                        <button class="tv-btn focusable" id="btnPrev" tabindex="0" title="Bài trước">⏮ Trước</button>
+                        <button class="tv-btn tv-btn-play focusable" id="btnPlay" tabindex="0" title="Phát / Dừng">▶ Phát</button>
+                        <button class="tv-btn focusable" id="btnNext" tabindex="0" title="Bài tiếp">Tiếp ⏭</button>
+                    </div>
+
+                    <div class="tv-progress-wrap">
+                        <div class="tv-progress-bar">
+                            <div class="tv-progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="tv-time-row">
+                            <span id="timeCur">0:00</span>
+                            <span id="timeDur">0:00</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Native Standard HTML5 Audio (Zero AudioContext overhead) -->
+    <audio id="audioPlayer" preload="auto"></audio>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // ─── DEMO FALLBACK DATABASE (Nếu offline / chưa có server) ───
+        const DEMO_ALBUMS = [
+            {
+                id: "demo-1",
+                title: "LITTLE MISS TWAIN (HI-RES)",
+                artist: "SHANIA TWAIN",
+                coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300&auto=format&fit=crop",
+                tracks: [
+                    { id: 1, name: "Any Man of Mine", duration: "4:07", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+                    { id: 2, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
+                    { id: 3, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
+                    { id: 4, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" },
+                    { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3" }
+                ]
+            },
+            {
+                id: "demo-2",
+                title: "COME ON OVER (SPECIAL)",
+                artist: "SHANIA TWAIN",
+                coverUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=300&auto=format&fit=crop",
+                tracks: [
+                    { id: 6, name: "Love Gets Me Every Time", duration: "3:33", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3" },
+                    { id: 7, name: "Don't Be Stupid", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3" },
+                    { id: 8, name: "Honey, I'm Home", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" }
+                ]
+            }
+        ];
+
+        // State
+        let albums = [...DEMO_ALBUMS];
+        let currentAlbumIdx = 0;
+        let currentTrackIdx = 0;
+        let isPlaying = false;
+
+        // Elements
+        const audio = document.getElementById('audioPlayer');
+        const albumContainer = document.getElementById('albumContainer');
+        const trackContainer = document.getElementById('trackContainer');
+        const albumCountEl = document.getElementById('albumCount');
+        const currentAlbumHeader = document.getElementById('currentAlbumHeader');
+        const playerCoverImg = document.getElementById('playerCoverImg');
+        const playerTrackTitle = document.getElementById('playerTrackTitle');
+        const playerArtistName = document.getElementById('playerArtistName');
+        const btnPlay = document.getElementById('btnPlay');
+        const btnPrev = document.getElementById('btnPrev');
+        const btnNext = document.getElementById('btnNext');
+        const btnReload = document.getElementById('btnReloadLibrary');
+        const progressFill = document.getElementById('progressFill');
+        const timeCur = document.getElementById('timeCur');
+        const timeDur = document.getElementById('timeDur');
+
+        // Format Seconds to MM:SS
+        function formatTime(sec) {
+            if (isNaN(sec) || sec < 0) return '0:00';
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // Render Albums List
+        function renderAlbums() {
+            albumContainer.innerHTML = '';
+            albumCountEl.textContent = albums.length;
+
+            albums.forEach((alb, idx) => {
+                const card = document.createElement('div');
+                card.className = `tv-album-card focusable ${idx === currentAlbumIdx ? 'active' : ''}`;
+                card.tabIndex = 0;
+                card.dataset.idx = idx;
+
+                const cover = alb.coverUrl || alb.cover || '/music/icon-192.png';
+                card.innerHTML = `
+                    <img src="${cover}" class="tv-album-cover" alt="" onerror="this.src='/music/icon-192.png'">
+                    <div class="tv-album-info">
+                        <div class="tv-album-name">${alb.title || 'Album'}</div>
+                        <div class="tv-album-artist">${alb.artist || 'Nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài</div>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    selectAlbum(idx);
+                });
+
+                albumContainer.appendChild(card);
+            });
+        }
+
+        // Render Tracks of Selected Album
+        function renderTracks() {
+            trackContainer.innerHTML = '';
+            const alb = albums[currentAlbumIdx];
+            if (!alb || !alb.tracks) return;
+
+            currentAlbumHeader.textContent = `${alb.title} (${alb.tracks.length} bài hát)`;
+
+            alb.tracks.forEach((tr, idx) => {
+                const isCur = (currentAlbumIdx === currentAlbumIdx && idx === currentTrackIdx && isPlaying);
+                const item = document.createElement('div');
+                item.className = `tv-track-item focusable ${isCur ? 'playing' : ''}`;
+                item.tabIndex = 0;
+                item.dataset.idx = idx;
+
+                const name = tr.name || tr.title || 'Bài hát';
+                const dur = tr.duration || formatTime(tr.duration_sec) || '0:00';
+
+                item.innerHTML = `
+                    <div class="tv-track-left">
+                        <span class="tv-track-num">${idx + 1}</span>
+                        <span class="tv-track-title">${name}</span>
+                    </div>
+                    <span class="tv-track-dur">${dur}</span>
+                `;
+
+                item.addEventListener('click', () => {
+                    playTrack(currentAlbumIdx, idx);
+                });
+
+                trackContainer.appendChild(item);
+            });
+        }
+
+        function selectAlbum(idx) {
+            currentAlbumIdx = idx;
+            document.querySelectorAll('.tv-album-card').forEach((c, i) => {
+                c.classList.toggle('active', i === idx);
+            });
+            renderTracks();
+        }
+
+        function playTrack(albumIdx, trackIdx) {
+            currentAlbumIdx = albumIdx;
+            currentTrackIdx = trackIdx;
+
+            const alb = albums[albumIdx];
+            if (!alb || !alb.tracks || !alb.tracks[trackIdx]) return;
+
+            const track = alb.tracks[trackIdx];
+            const url = track.url || track.stream_url || track.previewUrl;
+            if (!url) return;
+
+            audio.src = url;
+            audio.play().then(() => {
+                isPlaying = true;
+                updatePlayerUI();
+            }).catch(e => {
+                console.log('Play error:', e);
+            });
+
+            updatePlayerUI();
+            renderTracks();
+        }
+
+        function togglePlay() {
+            if (audio.paused) {
+                if (!audio.src && albums[currentAlbumIdx]?.tracks?.length > 0) {
+                    playTrack(currentAlbumIdx, currentTrackIdx);
+                } else {
+                    audio.play().then(() => {
+                        isPlaying = true;
+                        updatePlayerUI();
+                    }).catch(console.error);
+                }
+            } else {
+                audio.pause();
+                isPlaying = false;
+                updatePlayerUI();
+            }
+        }
+
+        function nextTrack() {
+            const alb = albums[currentAlbumIdx];
+            if (!alb || !alb.tracks) return;
+            let nextIdx = currentTrackIdx + 1;
+            if (nextIdx >= alb.tracks.length) {
+                nextIdx = 0;
+            }
+            playTrack(currentAlbumIdx, nextIdx);
+        }
+
+        function prevTrack() {
+            const alb = albums[currentAlbumIdx];
+            if (!alb || !alb.tracks) return;
+            let prevIdx = currentTrackIdx - 1;
+            if (prevIdx < 0) {
+                prevIdx = alb.tracks.length - 1;
+            }
+            playTrack(currentAlbumIdx, prevIdx);
+        }
+
+        function updatePlayerUI() {
+            const alb = albums[currentAlbumIdx];
+            const track = alb?.tracks?.[currentTrackIdx];
+
+            if (track) {
+                playerTrackTitle.textContent = track.name || track.title || 'Đang phát';
+                playerArtistName.textContent = alb.artist || track.artist || 'XTAPO MUSIC';
+                playerCoverImg.src = alb.coverUrl || alb.cover || '/music/icon-192.png';
+            }
+
+            btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
+        }
+
+        // Audio Event Listeners
+        audio.addEventListener('play', () => {
+            isPlaying = true;
+            updatePlayerUI();
+        });
+
+        audio.addEventListener('pause', () => {
+            isPlaying = false;
+            updatePlayerUI();
+        });
+
+        audio.addEventListener('timeupdate', () => {
+            if (audio.duration) {
+                const pct = (audio.currentTime / audio.duration) * 100;
+                progressFill.style.width = `${pct}%`;
+                timeCur.textContent = formatTime(audio.currentTime);
+                timeDur.textContent = formatTime(audio.duration);
+            }
+        });
+
+        audio.addEventListener('ended', () => {
+            nextTrack();
+        });
+
+        // Fetch Live Telegram Library
+        async function fetchLibrary() {
+            try {
+                const res = await fetch('/api/music/albums');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.status === 'success' && data.albums && data.albums.length > 0) {
+                        albums = data.albums;
+                    }
+                }
+            } catch (err) {
+                console.log('Using local/demo storage');
+            }
+            renderAlbums();
+            renderTracks();
+            updatePlayerUI();
+
+            // Auto focus first album
+            setTimeout(() => {
+                const first = document.querySelector('.tv-album-card');
+                if (first) first.focus();
+            }, 100);
+        }
+
+        // Button Clicks
+        btnPlay.addEventListener('click', togglePlay);
+        btnNext.addEventListener('click', nextTrack);
+        btnPrev.addEventListener('click', prevTrack);
+        btnReload.addEventListener('click', fetchLibrary);
+
+        // ─── PURE REMOTE D-PAD SPATIAL NAVIGATION (0ms LATENCY) ───
+        function getFocusableElements() {
+            return Array.from(document.querySelectorAll('.focusable:not([disabled])')).filter(el => {
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            });
+        }
+
+        function getCenter(el) {
+            const r = el.getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+
+        function navigate(dir) {
+            const elements = getFocusableElements();
+            if (elements.length === 0) return;
+
+            let cur = document.activeElement;
+            if (!cur || !elements.includes(cur)) {
+                elements[0].focus();
+                return;
+            }
+
+            const curC = getCenter(cur);
+            let best = null;
+            let minScore = Infinity;
+
+            for (const cand of elements) {
+                if (cand === cur) continue;
+                const candC = getCenter(cand);
+                const dx = candC.x - curC.x;
+                const dy = candC.y - curC.y;
+
+                let valid = false;
+                let prim = 0;
+                let orth = 0;
+
+                if (dir === 'up' && dy < -8) {
+                    valid = true; prim = -dy; orth = Math.abs(dx);
+                } else if (dir === 'down' && dy > 8) {
+                    valid = true; prim = dy; orth = Math.abs(dx);
+                } else if (dir === 'left' && dx < -8) {
+                    valid = true; prim = -dx; orth = Math.abs(dy);
+                } else if (dir === 'right' && dx > 8) {
+                    valid = true; prim = dx; orth = Math.abs(dy);
+                }
+
+                if (valid) {
+                    const score = prim + orth * 2.2;
+                    if (score < minScore) {
+                        minScore = score;
+                        best = cand;
+                    }
+                }
+            }
+
+            if (best) {
+                best.focus();
+                best.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            // Media Keys on TV Remote
+            if (['MediaPlayPause', 'MediaPlay', 'MediaPause'].includes(e.code) || [179, 126, 127].includes(e.keyCode)) {
+                e.preventDefault();
+                togglePlay();
+                return;
+            }
+            if (e.code === 'MediaTrackNext' || e.keyCode === 87) {
+                e.preventDefault();
+                nextTrack();
+                return;
+            }
+            if (e.code === 'MediaTrackPrevious' || e.keyCode === 88) {
+                e.preventDefault();
+                prevTrack();
+                return;
+            }
+
+            // D-Pad Navigation
+            if (e.key === 'ArrowUp') { e.preventDefault(); navigate('up'); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); navigate('down'); }
+            else if (e.key === 'ArrowLeft') { e.preventDefault(); navigate('left'); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); navigate('right'); }
+            else if (e.key === 'Enter' || e.keyCode === 13 || e.keyCode === 23) {
+                if (document.activeElement && document.activeElement !== document.body) {
+                    e.preventDefault();
+                    document.activeElement.click();
+                }
+            }
+        });
+
+        // Initialize
+        fetchLibrary();
+    })();
+    </script>
+</body>
+</html>

@@ -358,8 +358,19 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // If user entered only domain (e.g. https://my-server.com), append /music
-        if (!finalUrl.toLowerCase().endsWith("/music")) {
+        if (!finalUrl.toLowerCase().endsWith("/music") && !finalUrl.toLowerCase().contains("/music/")) {
             finalUrl = finalUrl + "/music";
+        }
+
+        // On Android TV devices, directly load ultra-lightweight tv.html
+        if (isAndroidTvDevice()) {
+            if (!finalUrl.toLowerCase().endsWith("tv.html") && !finalUrl.toLowerCase().endsWith("/tv")) {
+                if (finalUrl.endsWith("/music")) {
+                    finalUrl = finalUrl + "/tv.html";
+                } else if (!finalUrl.contains("tv.html")) {
+                    finalUrl = finalUrl + (finalUrl.endsWith("/") ? "tv.html" : "/tv.html");
+                }
+            }
         }
 
         errorLayout.setVisibility(View.GONE);
