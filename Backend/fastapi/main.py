@@ -182,8 +182,8 @@ try:
     app.include_router(qr_auth_router)
     app.include_router(music_auth_router)
     app.include_router(music_router)
-except Exception:
-    pass
+except Exception as e:
+    LOGGER.error(f"[Music] Lỗi nạp router nhạc: {e}", exc_info=True)
 
 
 #----- Public routes (no authentication)
@@ -201,9 +201,15 @@ async def tv_root_route():
 
 @app.get("/favicon.ico", include_in_schema=False)
 @app.get("/favicon.png", include_in_schema=False)
-async def favicon_route():
+@app.get("/icon-192.png", include_in_schema=False)
+@app.get("/icon-512.png", include_in_schema=False)
+async def favicon_route(request: Request):
     import os
     from fastapi.responses import FileResponse, Response
+    fname = os.path.basename(request.url.path) or "favicon.png"
+    target = os.path.join("Music", fname)
+    if os.path.exists(target):
+        return FileResponse(target, media_type="image/png")
     if os.path.exists("Music/favicon.png"):
         return FileResponse("Music/favicon.png", media_type="image/png")
     return Response(status_code=204)

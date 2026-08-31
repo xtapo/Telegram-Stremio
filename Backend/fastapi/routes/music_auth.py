@@ -2,7 +2,7 @@ import re
 import time
 import secrets
 from fastapi import APIRouter, Request, HTTPException, Depends
-from fastapi.responses import JSONResponse, Response as PlainResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response as PlainResponse
 from Backend import db
 from Backend.helper.passwords import hash_password, verify_password
 from Backend.fastapi.security.credentials import require_auth
