@@ -1580,7 +1580,11 @@
                 `;
 
                 item.addEventListener('click', () => {
-                    playTrack(idx);
+                    if (idx === currentPlayingTrackIdx && audio.src) {
+                        togglePlay();
+                    } else {
+                        playTrack(idx);
+                    }
                 });
 
                 trackContainer.appendChild(item);
@@ -1616,6 +1620,8 @@
             isPlaying = true;
             updatePlayerUI();
             renderTracklist();
+            const trName = track.name || track.title || 'bài hát';
+            showToast(`▶ Đang phát: ${trName}`);
         }
 
         function togglePlay() {
@@ -1626,12 +1632,16 @@
                     audio.play().then(() => {
                         isPlaying = true;
                         updatePlayerUI();
+                        renderTracklist();
+                        showToast('▶ Tiếp tục phát');
                     }).catch(console.error);
                 }
             } else {
                 audio.pause();
                 isPlaying = false;
                 updatePlayerUI();
+                renderTracklist();
+                showToast('⏸ Đã tạm dừng');
             }
         }
 
@@ -2068,6 +2078,8 @@
         }
 
         window.addEventListener('keydown', (e) => {
+            const isTyping = document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+
             // Đóng Modal khi bấm ESC hoặc phím Back trên TV Remote
             if (e.key === 'Escape' || e.keyCode === 27 || e.keyCode === 10009 || e.keyCode === 461) {
                 const openModal = document.querySelector('.tv-modal-overlay[style*="display: flex"]');
@@ -2078,29 +2090,40 @@
                 }
             }
 
-            // Media Keys on TV Remote
-            if (['MediaPlayPause', 'MediaPlay', 'MediaPause'].includes(e.code) || [179, 126, 127].includes(e.keyCode)) {
+            // 1. Phím Phát / Dừng (Play / Pause) toàn cục trên mọi loại Remote TV
+            const isPlayPauseKey = (
+                ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'Play', 'Pause'].includes(e.code) ||
+                [179, 126, 127, 85, 19, 86, 130, 415, 10252].includes(e.keyCode) ||
+                (!isTyping && (e.code === 'Space' || e.keyCode === 32 || e.key === 'p' || e.key === 'P' || e.key === 'k' || e.key === 'K' || e.key === '0' || e.key === '5'))
+            );
+
+            if (isPlayPauseKey) {
                 e.preventDefault();
                 togglePlay();
                 return;
             }
-            if (e.code === 'MediaTrackNext' || e.keyCode === 87) {
+
+            // 2. Phím Chuyển Bài Tiếp (Next)
+            if (['MediaTrackNext', 'TrackNext'].includes(e.code) || e.keyCode === 87 || (!isTyping && (e.key === 'n' || e.key === 'N'))) {
                 e.preventDefault();
                 nextTrack();
                 return;
             }
-            if (e.code === 'MediaTrackPrevious' || e.keyCode === 88) {
+
+            // 3. Phím Quay Lại Bài Trước (Previous)
+            if (['MediaTrackPrevious', 'TrackPrevious'].includes(e.code) || e.keyCode === 88 || (!isTyping && (e.key === 'b' || e.key === 'B'))) {
                 e.preventDefault();
                 prevTrack();
                 return;
             }
-            // Fast-Forward / Rewind Media Keys on Remote
-            if (['MediaFastForward', 'FastForward'].includes(e.code) || e.keyCode === 228 || e.key === 'KeyL') {
+
+            // 4. Phím Tua nhanh / Tua lùi (Fast-Forward / Rewind)
+            if (['MediaFastForward', 'FastForward'].includes(e.code) || e.keyCode === 228 || (!isTyping && (e.key === 'l' || e.key === 'L'))) {
                 e.preventDefault();
                 seek(10);
                 return;
             }
-            if (['MediaRewind', 'Rewind'].includes(e.code) || e.keyCode === 227 || e.key === 'KeyJ') {
+            if (['MediaRewind', 'Rewind'].includes(e.code) || e.keyCode === 227 || (!isTyping && (e.key === 'j' || e.key === 'J'))) {
                 e.preventDefault();
                 seek(-10);
                 return;
@@ -2160,6 +2183,19 @@
                 }
             }
         });
+
+        // Expose player controller cho Android TV WebView & Remote Dispatch
+        window.player = {
+            togglePlay: togglePlay,
+            playTrack: playTrack,
+            nextTrack: nextTrack,
+            prevTrack: prevTrack,
+            seek: seek,
+            seekToPercent: seekToPercent,
+            toggleFavorite: toggleFavorite,
+            get isPlaying() { return isPlaying; },
+            get audio() { return audio; }
+        };
 
         // Initialize: Kiểm tra trạng thái đăng nhập
         checkUserProfile();
