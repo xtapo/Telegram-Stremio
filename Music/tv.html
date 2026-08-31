@@ -669,6 +669,104 @@
             z-index: 10000;
             display: none;
         }
+
+        /* ─── TV MODAL DIALOG (PLAYLIST & INPUT) ─── */
+        .tv-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.82);
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tv-modal-card {
+            background: #151b28;
+            border: 2px solid #2d3748;
+            border-radius: 16px;
+            width: 520px;
+            max-width: 90vw;
+            padding: 24px 28px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .tv-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #242f42;
+            padding-bottom: 12px;
+        }
+
+        .tv-modal-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #f59e0b;
+        }
+
+        .tv-modal-sub {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-top: -8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-modal-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .tv-modal-item {
+            background: #1e2638;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            outline: none;
+            color: #f8fafc;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.15s ease;
+        }
+
+        .tv-modal-input {
+            width: 100%;
+            background: #0b0e14;
+            border: 2px solid #334155;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 15px;
+            color: #f8fafc;
+            outline: none;
+            font-weight: 600;
+            box-sizing: border-box;
+        }
+
+        .tv-modal-input:focus {
+            border-color: #f59e0b;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+        }
+
+        .tv-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -790,6 +888,9 @@
                             <div class="tv-showcase-actions">
                                 <button class="tv-btn tv-btn-play focusable" id="btnPlayAll" tabindex="0">▶ Phát Tất Cả</button>
                                 <button class="tv-btn focusable" id="btnShuffle" tabindex="0">🔀 Trộn Bài</button>
+                                <button class="tv-btn focusable" id="btnShowcaseFav" tabindex="0" title="Yêu thích bài hát này">❤️ Yêu Thích</button>
+                                <button class="tv-btn focusable" id="btnShowcasePlaylist" tabindex="0" title="Thêm vào Playlist">➕ Playlist</button>
+                                <button class="tv-btn focusable" id="btnShowcaseDeletePl" tabindex="0" title="Xóa playlist này" style="display: none; color: #f87171; border-color: rgba(248, 113, 113, 0.4);">🗑️ Xóa Playlist</button>
                             </div>
                         </div>
                     </div>
@@ -816,6 +917,8 @@
                 <button class="tv-btn tv-btn-play focusable" id="btnPlay" tabindex="0" title="Phát / Dừng">▶ Phát</button>
                 <button class="tv-btn focusable" id="btnSeekFwd" tabindex="0" title="Tua nhanh 10 giây">10s ⏩</button>
                 <button class="tv-btn focusable" id="btnNext" tabindex="0" title="Bài tiếp">⏭</button>
+                <button class="tv-btn focusable" id="btnPlayerFav" tabindex="0" title="Yêu thích bài đang phát" style="font-size: 16px;">🤍</button>
+                <button class="tv-btn focusable" id="btnPlayerAddToPlaylist" tabindex="0" title="Thêm bài đang phát vào Playlist">➕ Playlist</button>
             </div>
 
             <div class="tv-progress-wrap">
@@ -828,6 +931,41 @@
                 </div>
             </div>
         </footer>
+    </div>
+
+    <!-- MODAL 1: Thêm Vào Playlist -->
+    <div class="tv-modal-overlay" id="modalAddToPlaylist">
+        <div class="tv-modal-card">
+            <div class="tv-modal-header">
+                <div class="tv-modal-title">📑 THÊM VÀO PLAYLIST</div>
+                <button class="tv-btn focusable" id="btnCloseAddToPl" tabindex="0" style="padding: 4px 10px;">✕ Đóng</button>
+            </div>
+            <div class="tv-modal-sub" id="addToPlTrackName">Bài hát: --</div>
+            <div class="tv-modal-list" id="modalPlaylistList">
+                <!-- Playlists populated dynamically -->
+            </div>
+            <div class="tv-modal-actions">
+                <button class="tv-btn tv-btn-play focusable" id="btnOpenCreatePl" tabindex="0">➕ Tạo Playlist Mới</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: Tạo Playlist Mới -->
+    <div class="tv-modal-overlay" id="modalCreatePlaylist">
+        <div class="tv-modal-card">
+            <div class="tv-modal-header">
+                <div class="tv-modal-title">✨ TẠO PLAYLIST MỚI</div>
+                <button class="tv-btn focusable" id="btnCloseCreatePl" tabindex="0" style="padding: 4px 10px;">✕ Đóng</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label style="font-size: 13px; color: #94a3b8; font-weight: 600;">Tên Playlist:</label>
+                <input type="text" class="tv-modal-input focusable" id="inputNewPlName" placeholder="Nhập tên Playlist (VD: Nhạc Chill, Acoustic...)" tabindex="0">
+            </div>
+            <div class="tv-modal-actions">
+                <button class="tv-btn focusable" id="btnCancelCreatePl" tabindex="0">Hủy</button>
+                <button class="tv-btn tv-btn-play focusable" id="btnSubmitCreatePl" tabindex="0">✓ Tạo Ngay</button>
+            </div>
+        </div>
     </div>
 
     <!-- Toast Notification -->
@@ -878,6 +1016,9 @@
         const showcaseBadge = document.getElementById('showcaseBadge');
         const btnPlayAll = document.getElementById('btnPlayAll');
         const btnShuffle = document.getElementById('btnShuffle');
+        const btnShowcaseFav = document.getElementById('btnShowcaseFav');
+        const btnShowcasePlaylist = document.getElementById('btnShowcasePlaylist');
+        const btnShowcaseDeletePl = document.getElementById('btnShowcaseDeletePl');
         const currentTracklistHeader = document.getElementById('currentTracklistHeader');
         const trackContainer = document.getElementById('trackContainer');
 
@@ -889,10 +1030,24 @@
         const btnNext = document.getElementById('btnNext');
         const btnSeekBack = document.getElementById('btnSeekBack');
         const btnSeekFwd = document.getElementById('btnSeekFwd');
+        const btnPlayerFav = document.getElementById('btnPlayerFav');
+        const btnPlayerAddToPlaylist = document.getElementById('btnPlayerAddToPlaylist');
         const tvProgressBar = document.getElementById('tvProgressBar');
         const progressFill = document.getElementById('progressFill');
         const timeCur = document.getElementById('timeCur');
         const timeDur = document.getElementById('timeDur');
+
+        const modalAddToPlaylist = document.getElementById('modalAddToPlaylist');
+        const btnCloseAddToPl = document.getElementById('btnCloseAddToPl');
+        const modalPlaylistList = document.getElementById('modalPlaylistList');
+        const btnOpenCreatePl = document.getElementById('btnOpenCreatePl');
+        const addToPlTrackName = document.getElementById('addToPlTrackName');
+
+        const modalCreatePlaylist = document.getElementById('modalCreatePlaylist');
+        const btnCloseCreatePl = document.getElementById('btnCloseCreatePl');
+        const inputNewPlName = document.getElementById('inputNewPlName');
+        const btnCancelCreatePl = document.getElementById('btnCancelCreatePl');
+        const btnSubmitCreatePl = document.getElementById('btnSubmitCreatePl');
 
         const tvUserInfo = document.getElementById('tvUserInfo');
         const tvUserAvatar = document.getElementById('tvUserAvatar');
@@ -919,28 +1074,226 @@
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
-        // ─── TUA NHANH / TUA LÙI (SEEKING LOGIC) ───
-        function seek(deltaSec) {
-            if (!audio.duration || isNaN(audio.duration)) return;
-            let target = audio.currentTime + deltaSec;
-            if (target < 0) target = 0;
-            if (target > audio.duration) target = audio.duration - 1;
-            audio.currentTime = target;
-
-            const pct = (target / audio.duration) * 100;
-            progressFill.style.width = `${pct}%`;
-            timeCur.textContent = formatTime(target);
-            showToast(`${deltaSec > 0 ? '⏩ Tua tới +' : '⏪ Tua lùi '}${Math.abs(deltaSec)}s (${formatTime(target)})`);
+        // ─── FAVORITES & PLAYLISTS HELPERS ───
+        function isTrackInFavorites(track) {
+            if (!track || !userFavorites) return false;
+            const cid = track.chat_id;
+            const mid = track.msg_id || track.id;
+            if (cid && mid) {
+                return userFavorites.some(f => String(f.chat_id) === String(cid) && String(f.msg_id) === String(mid));
+            }
+            const name = (track.name || track.title || '').trim().toLowerCase();
+            return userFavorites.some(f => (f.title || f.name || '').trim().toLowerCase() === name);
         }
 
-        function seekToPercent(pct) {
-            if (!audio.duration || isNaN(audio.duration)) return;
-            pct = Math.max(0, Math.min(1, pct));
-            const target = pct * audio.duration;
-            audio.currentTime = target;
-            progressFill.style.width = `${pct * 100}%`;
-            timeCur.textContent = formatTime(target);
-            showToast(`⏩ Nhảy tới ${formatTime(target)}`);
+        function updatePlayerFavButton() {
+            const currentTrack = currentTracklist?.[currentPlayingTrackIdx];
+            const isFav = isTrackInFavorites(currentTrack);
+            if (btnPlayerFav) {
+                btnPlayerFav.textContent = isFav ? '❤️' : '🤍';
+                btnPlayerFav.title = isFav ? 'Đã yêu thích (Bấm để bỏ thích)' : 'Bấm để thêm vào yêu thích';
+            }
+            if (btnShowcaseFav) {
+                btnShowcaseFav.textContent = isFav ? '❤️ Đã Thích' : '🤍 Yêu Thích';
+            }
+        }
+
+        async function toggleFavorite(track) {
+            if (!track) {
+                track = currentTracklist?.[currentPlayingTrackIdx];
+            }
+            if (!track) return;
+
+            let cid = track.chat_id;
+            let mid = track.msg_id || track.id;
+            if (!cid || !mid) {
+                const url = track.url || track.stream_url || '';
+                const m = url.match(/\/api\/music\/stream\/([^\/]+)\/([^\/]+)/);
+                if (m) {
+                    cid = m[1];
+                    mid = m[2];
+                }
+            }
+
+            const payload = {
+                chat_id: cid || 0,
+                msg_id: mid || 0,
+                name: track.name || track.title || 'Bài hát',
+                artist: track.artist || 'XTAPO Music',
+                cover_url: track.cover || track.cover_url || '/music/icon-192.png'
+            };
+
+            try {
+                const res = await fetch('/api/music/user/favorites/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    showToast(data.is_favorite ? '❤️ Đã thêm vào bài hát yêu thích' : '🤍 Đã xóa khỏi danh sách yêu thích');
+                    await loadUserFavorites();
+                    updatePlayerFavButton();
+                    if (currentTab === 'favorites') {
+                        buildCategoryData();
+                        renderItems();
+                    }
+                } else {
+                    showToast(data.message || 'Lỗi cập nhật yêu thích.');
+                }
+            } catch(e) {
+                showToast('Lỗi kết nối: ' + e.message);
+            }
+        }
+
+        let targetTrackForPlaylist = null;
+
+        function openAddToPlaylistModal(track) {
+            targetTrackForPlaylist = track || currentTracklist?.[currentPlayingTrackIdx] || (currentActiveGroup?.tracks?.[0]) || currentActiveGroup;
+            if (!targetTrackForPlaylist) {
+                showToast('Chưa chọn bài hát nào để thêm.');
+                return;
+            }
+
+            const name = targetTrackForPlaylist.name || targetTrackForPlaylist.title || 'Bài hát';
+            if (addToPlTrackName) addToPlTrackName.textContent = `Bài hát: ${name}`;
+
+            if (modalPlaylistList) {
+                modalPlaylistList.innerHTML = '';
+                if (!userPlaylists || userPlaylists.length === 0) {
+                    modalPlaylistList.innerHTML = '<div style="color: #94a3b8; padding: 12px; font-size: 14px;">Chưa có playlist nào. Hãy bấm "Tạo Playlist Mới" bên dưới.</div>';
+                } else {
+                    userPlaylists.forEach((pl) => {
+                        const item = document.createElement('div');
+                        item.className = 'tv-modal-item focusable';
+                        item.tabIndex = 0;
+                        item.innerHTML = `
+                            <span>📁 ${pl.name || 'Playlist'}</span>
+                            <span style="color: #f59e0b; font-size: 13px;">${(pl.tracks || []).length} bài</span>
+                        `;
+                        item.addEventListener('click', () => {
+                            addTrackToPlaylist(pl, targetTrackForPlaylist);
+                        });
+                        modalPlaylistList.appendChild(item);
+                    });
+                }
+            }
+
+            if (modalAddToPlaylist) modalAddToPlaylist.style.display = 'flex';
+            setTimeout(() => {
+                const first = modalPlaylistList?.querySelector('.focusable') || btnOpenCreatePl || btnCloseAddToPl;
+                if (first) first.focus();
+            }, 100);
+        }
+
+        async function addTrackToPlaylist(playlist, track) {
+            const tracks = playlist.tracks || [];
+            const trackObj = {
+                id: track.msg_id || track.id || Date.now(),
+                chat_id: track.chat_id || 0,
+                msg_id: track.msg_id || track.id || 0,
+                name: track.name || track.title || 'Bài hát',
+                artist: track.artist || 'Nghệ sĩ',
+                duration: track.duration || '0:00',
+                url: track.url || track.stream_url || (track.chat_id && track.msg_id ? `/api/music/stream/${track.chat_id}/${track.msg_id}` : null),
+                cover: track.cover || track.cover_url || '/music/icon-192.png'
+            };
+
+            const exists = tracks.some(t => String(t.id) === String(trackObj.id) || (t.name === trackObj.name && t.artist === trackObj.artist));
+            if (exists) {
+                showToast(`ℹ️ Bài hát đã có sẵn trong "${playlist.name}"`);
+                closeAllModals();
+                return;
+            }
+
+            tracks.push(trackObj);
+
+            try {
+                const res = await fetch(`/api/music/user/playlists/${playlist.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tracks })
+                });
+                if (res.ok) {
+                    showToast(`🎉 Đã thêm vào playlist "${playlist.name}"!`);
+                    await loadUserPlaylists();
+                    if (currentTab === 'playlists') {
+                        buildCategoryData();
+                        renderItems();
+                    }
+                }
+            } catch(e) {
+                showToast('Lỗi cập nhật playlist');
+            }
+            closeAllModals();
+        }
+
+        function openCreatePlaylistModal() {
+            closeAllModals();
+            if (inputNewPlName) inputNewPlName.value = '';
+            if (modalCreatePlaylist) modalCreatePlaylist.style.display = 'flex';
+            setTimeout(() => {
+                if (inputNewPlName) inputNewPlName.focus();
+            }, 100);
+        }
+
+        async function submitCreatePlaylist() {
+            const name = inputNewPlName?.value.trim();
+            if (!name) {
+                showToast('Vui lòng nhập tên Playlist');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/music/user/playlists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    showToast(`🎉 Đã tạo playlist "${name}"!`);
+                    await loadUserPlaylists();
+                    closeAllModals();
+                    if (targetTrackForPlaylist) {
+                        const newPl = (userPlaylists || []).find(p => p.name === name) || data.playlist;
+                        if (newPl) await addTrackToPlaylist(newPl, targetTrackForPlaylist);
+                    }
+                    if (currentTab === 'playlists') {
+                        buildCategoryData();
+                        renderItems();
+                    }
+                } else {
+                    showToast(data.message || 'Lỗi tạo playlist');
+                }
+            } catch(e) {
+                showToast('Lỗi: ' + e.message);
+            }
+        }
+
+        async function deleteCurrentPlaylist() {
+            if (!currentActiveGroup || currentActiveGroup.type !== 'playlist') return;
+            const plId = currentActiveGroup.id;
+            const plName = currentActiveGroup.title;
+
+            if (!confirm(`Bạn có chắc muốn xóa playlist "${plName}" không?`)) return;
+
+            try {
+                const res = await fetch(`/api/music/user/playlists/${plId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast(`🗑️ Đã xóa playlist "${plName}"`);
+                    await loadUserPlaylists();
+                    buildCategoryData();
+                    renderItems();
+                }
+            } catch(e) {
+                showToast('Lỗi xóa playlist');
+            }
+        }
+
+        function closeAllModals() {
+            if (modalAddToPlaylist) modalAddToPlaylist.style.display = 'none';
+            if (modalCreatePlaylist) modalCreatePlaylist.style.display = 'none';
         }
 
         // ─── PHÂN LOẠI DỮ LIỆU TỪ RAW ALBUMS ───
@@ -948,34 +1301,35 @@
             if (currentTab === 'albums') {
                 currentItems = rawAlbums.map(alb => ({
                     type: 'album',
-                    id: alb.id || alb.title,
-                    title: alb.title || 'Album',
-                    sub: `${alb.artist || 'Nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài`,
+                    id: alb.id,
+                    title: alb.title || 'Unknown Album',
+                    sub: `${alb.artist || 'Nhiều nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài`,
                     cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
                     year: alb.year || '2026',
-                    badge: alb.is_hires ? 'HI-RES' : 'LOSSLESS',
-                    tracks: alb.tracks || [],
-                    raw: alb
+                    badge: alb.quality_tier ? alb.quality_tier.toUpperCase() : 'HI-RES',
+                    tracks: alb.tracks || []
                 }));
             } else if (currentTab === 'hires') {
-                const hires = rawAlbums.filter(a => a.is_hires || (a.title && /hi-res|lossless|24bit|flac|dsd/i.test(a.title)));
-                currentItems = (hires.length > 0 ? hires : rawAlbums).map(alb => ({
+                const filtered = rawAlbums.filter(a => {
+                    const q = (a.quality_tier || '').toLowerCase();
+                    return q.includes('hi-res') || q.includes('lossless') || (a.badge && a.badge.toLowerCase().includes('hi-res'));
+                });
+                currentItems = filtered.map(alb => ({
                     type: 'album',
-                    id: alb.id || alb.title,
-                    title: alb.title || 'Album',
-                    sub: `${alb.artist || 'Nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài`,
+                    id: alb.id,
+                    title: alb.title,
+                    sub: `${alb.artist} • ${alb.tracks ? alb.tracks.length : 0} bài`,
                     cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
                     year: alb.year || '2026',
                     badge: 'HI-RES AUDIO',
-                    tracks: alb.tracks || [],
-                    raw: alb
+                    tracks: alb.tracks || []
                 }));
             } else if (currentTab === 'artists') {
                 const map = {};
                 rawAlbums.forEach(alb => {
-                    const art = (alb.artist || 'Nghệ sĩ khác').trim();
+                    const art = (alb.artist || 'Nghệ sĩ').trim();
                     if (!map[art]) {
-                        map[art] = { name: art, cover: alb.coverUrl || alb.cover, tracks: [], albums: 0 };
+                        map[art] = { name: art, cover: alb.coverUrl || alb.cover, albums: 0, tracks: [] };
                     }
                     map[art].albums += 1;
                     if (alb.tracks) map[art].tracks.push(...alb.tracks);
@@ -1030,32 +1384,42 @@
                     tracks: map[name].tracks
                 }));
             } else if (currentTab === 'playlists') {
-                if (userPlaylists.length > 0) {
-                    currentItems = userPlaylists.map(pl => ({
-                        type: 'playlist',
-                        id: pl.id || pl._id,
-                        title: pl.name || 'Playlist',
-                        sub: `${pl.tracks ? pl.tracks.length : 0} bài hát`,
-                        cover: pl.coverUrl || '/music/icon-192.png',
-                        year: 'Playlist',
-                        badge: 'PLAYLIST',
-                        tracks: pl.tracks || []
-                    }));
-                } else {
-                    currentItems = [{
-                        type: 'playlist',
-                        id: 'demo-pl',
-                        title: 'Playlist Mặc Định',
-                        sub: 'Danh sách phát cá nhân',
+                const list = (userPlaylists || []).map(pl => ({
+                    type: 'playlist',
+                    id: pl.id || pl._id,
+                    title: pl.name || 'Playlist',
+                    sub: `${pl.tracks ? pl.tracks.length : 0} bài hát`,
+                    cover: (pl.tracks && pl.tracks[0] && (pl.tracks[0].cover_url || pl.tracks[0].coverUrl || pl.tracks[0].cover)) || '/music/icon-192.png',
+                    year: 'Playlist',
+                    badge: 'PLAYLIST',
+                    tracks: (pl.tracks || []).map((tr, idx) => ({
+                        ...tr,
+                        id: tr.msg_id || tr.id || idx + 1,
+                        name: tr.title || tr.name || 'Bài hát',
+                        artist: tr.artist || 'Nghệ sĩ',
+                        duration: tr.duration || '0:00',
+                        url: tr.url || tr.stream_url || (tr.chat_id && tr.msg_id ? `/api/music/stream/${tr.chat_id}/${tr.msg_id}` : null),
+                        cover: tr.cover_url || tr.coverUrl || tr.cover || '/music/icon-192.png'
+                    }))
+                }));
+                currentItems = [
+                    {
+                        type: 'create_playlist',
+                        id: '__create_new_pl__',
+                        title: '➕ Tạo Playlist Mới',
+                        sub: 'Bấm để tạo danh sách phát',
                         cover: '/music/icon-192.png',
-                        year: '2026',
-                        badge: 'PLAYLIST',
+                        year: 'Tạo mới',
+                        badge: 'MỚI',
                         tracks: []
-                    }];
-                }
+                    },
+                    ...list
+                ];
             } else if (currentTab === 'favorites') {
                 const favList = userFavorites.map((fav, i) => ({
                     id: fav.msg_id || i + 1,
+                    chat_id: fav.chat_id,
+                    msg_id: fav.msg_id,
                     name: fav.title || fav.name || 'Bài hát yêu thích',
                     artist: fav.artist || 'Nghệ sĩ',
                     duration: fav.duration || '0:00',
@@ -1154,10 +1518,15 @@
 
         // ─── CHỌN ITEM VÀ HIỂN THỊ DANH SÁCH BÀI HÁT (PANEL 3) ───
         function selectItem(idx) {
-            selectedItemIdx = idx;
             const item = currentItems[idx];
             if (!item) return;
 
+            if (item.type === 'create_playlist') {
+                openCreatePlaylistModal();
+                return;
+            }
+
+            selectedItemIdx = idx;
             currentActiveGroup = item;
             currentTracklist = item.tracks || [];
 
@@ -1171,6 +1540,11 @@
             showcaseYear.textContent = item.year || '2026';
             showcaseBadge.textContent = item.badge || 'LOSSLESS';
 
+            if (btnShowcaseDeletePl) {
+                btnShowcaseDeletePl.style.display = (item.type === 'playlist' && item.id !== 'demo-pl') ? 'inline-flex' : 'none';
+            }
+
+            updatePlayerFavButton();
             renderTracklist();
         }
 
@@ -1180,12 +1554,13 @@
             currentTracklistHeader.textContent = `DANH SÁCH BÀI HÁT (${currentTracklist.length} BÀI)`;
 
             if (currentTracklist.length === 0) {
-                trackContainer.innerHTML = '<div style="padding: 20px; color: #64748b; font-size: 15px;">Chưa có bài hát nào trong mục này.</div>';
+                trackContainer.innerHTML = '<div style="padding: 20px; color: #64748b; font-size: 15px;">Chưa có bài hát nào trong mục này. Bấm "➕ Playlist" để thêm bài hát vào đây.</div>';
                 return;
             }
 
             currentTracklist.forEach((tr, idx) => {
                 const isCur = (isPlaying && idx === currentPlayingTrackIdx);
+                const isFav = isTrackInFavorites(tr);
                 const item = document.createElement('div');
                 item.className = `tv-track-item focusable ${isCur ? 'playing' : ''}`;
                 item.tabIndex = 0;
@@ -1194,11 +1569,12 @@
                 const name = tr.name || tr.title || 'Bài hát';
                 const dur = tr.duration || formatTime(tr.duration_sec) || '0:00';
                 const art = tr.artist ? ` • ${tr.artist}` : '';
+                const favIcon = isFav ? '<span style="color: #ef4444; margin-left: 6px; font-size: 13px;">❤️</span>' : '';
 
                 item.innerHTML = `
                     <div class="tv-track-left">
                         <span class="tv-track-num">${idx + 1}</span>
-                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: normal;">${art}</span></span>
+                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: normal;">${art}</span>${favIcon}</span>
                     </div>
                     <span class="tv-track-dur">${dur}</span>
                 `;
@@ -1281,6 +1657,7 @@
                 playerCoverImg.src = currentActiveGroup?.cover || '/music/icon-192.png';
             }
             btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
+            updatePlayerFavButton();
         }
 
         let streamRetryCount = 0;
@@ -1404,7 +1781,7 @@
 
             // Tải yêu thích và playlists trước, sau đó nạp thư viện và mở tab Yêu Thích mặc định
             await loadUserFavorites();
-            loadUserPlaylists();
+            await loadUserPlaylists();
             await fetchLibrary('favorites');
         }
 
@@ -1557,6 +1934,43 @@
         if (btnSeekBack) btnSeekBack.addEventListener('click', () => seek(-10));
         if (btnSeekFwd) btnSeekFwd.addEventListener('click', () => seek(10));
 
+        // Favorite Buttons
+        if (btnPlayerFav) btnPlayerFav.addEventListener('click', () => toggleFavorite());
+        if (btnShowcaseFav) btnShowcaseFav.addEventListener('click', () => {
+            const tr = currentTracklist?.[currentPlayingTrackIdx] || currentActiveGroup?.tracks?.[0] || currentActiveGroup;
+            toggleFavorite(tr);
+        });
+
+        // Playlist Buttons & Modal Listeners
+        if (btnPlayerAddToPlaylist) btnPlayerAddToPlaylist.addEventListener('click', () => openAddToPlaylistModal());
+        if (btnShowcasePlaylist) btnShowcasePlaylist.addEventListener('click', () => {
+            const tr = currentTracklist?.[currentPlayingTrackIdx] || currentActiveGroup?.tracks?.[0] || currentActiveGroup;
+            openAddToPlaylistModal(tr);
+        });
+        if (btnShowcaseDeletePl) btnShowcaseDeletePl.addEventListener('click', deleteCurrentPlaylist);
+
+        if (btnCloseAddToPl) btnCloseAddToPl.addEventListener('click', closeAllModals);
+        if (btnOpenCreatePl) btnOpenCreatePl.addEventListener('click', openCreatePlaylistModal);
+        if (btnCloseCreatePl) btnCloseCreatePl.addEventListener('click', closeAllModals);
+        if (btnCancelCreatePl) btnCancelCreatePl.addEventListener('click', closeAllModals);
+        if (btnSubmitCreatePl) btnSubmitCreatePl.addEventListener('click', submitCreatePlaylist);
+        if (inputNewPlName) {
+            inputNewPlName.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') submitCreatePlaylist();
+            });
+        }
+
+        if (modalAddToPlaylist) {
+            modalAddToPlaylist.addEventListener('click', (e) => {
+                if (e.target === modalAddToPlaylist) closeAllModals();
+            });
+        }
+        if (modalCreatePlaylist) {
+            modalCreatePlaylist.addEventListener('click', (e) => {
+                if (e.target === modalCreatePlaylist) closeAllModals();
+            });
+        }
+
         if (tvProgressBar) {
             tvProgressBar.addEventListener('click', (e) => {
                 const rect = tvProgressBar.getBoundingClientRect();
@@ -1589,7 +2003,11 @@
         // ─── D-PAD REMOTE SPATIAL NAVIGATION ───
         function getFocusableElements() {
             const root = document.body;
-            return Array.from(root.querySelectorAll('.focusable:not([disabled]):not([style*="display: none"])')).filter(el => {
+            // Nếu có modal đang mở, chỉ focus vào các nút trong modal
+            const openModal = document.querySelector('.tv-modal-overlay[style*="display: flex"]');
+            const searchRoot = openModal || root;
+
+            return Array.from(searchRoot.querySelectorAll('.focusable:not([disabled]):not([style*="display: none"])')).filter(el => {
                 const rect = el.getBoundingClientRect();
                 return rect.width > 0 && rect.height > 0;
             });
@@ -1650,6 +2068,16 @@
         }
 
         window.addEventListener('keydown', (e) => {
+            // Đóng Modal khi bấm ESC hoặc phím Back trên TV Remote
+            if (e.key === 'Escape' || e.keyCode === 27 || e.keyCode === 10009 || e.keyCode === 461) {
+                const openModal = document.querySelector('.tv-modal-overlay[style*="display: flex"]');
+                if (openModal) {
+                    e.preventDefault();
+                    closeAllModals();
+                    return;
+                }
+            }
+
             // Media Keys on TV Remote
             if (['MediaPlayPause', 'MediaPlay', 'MediaPause'].includes(e.code) || [179, 126, 127].includes(e.keyCode)) {
                 e.preventDefault();
