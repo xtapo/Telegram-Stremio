@@ -434,6 +434,66 @@
             gap: 8px;
         }
 
+        /* Album Showcase Banner for TV */
+        .tv-showcase-banner {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            background: linear-gradient(135deg, #161c28, #10141f);
+            border: 2px solid #232a38;
+            border-radius: 16px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+        }
+
+        .tv-showcase-cover {
+            width: 100px;
+            height: 100px;
+            border-radius: 12px;
+            object-fit: cover;
+            border: 2px solid #f59e0b;
+            background: #232936;
+            flex-shrink: 0;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+
+        .tv-showcase-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .tv-showcase-tags {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .tv-showcase-tag {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+
+        .tv-showcase-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #f8fafc;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-showcase-artist {
+            font-size: 16px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
         .tv-toast {
             position: fixed;
             top: 24px;
@@ -468,6 +528,7 @@
                 </div>
                 <button class="tv-btn tv-btn-login focusable" id="btnOpenQrLogin" tabindex="0">📲 Đăng Nhập QR</button>
                 <button class="tv-btn focusable" id="btnReloadLibrary" tabindex="0">🔄 Tải Lại</button>
+                <button class="tv-btn focusable" id="btnSwitchDesktop" tabindex="0" title="Chuyển về giao diện máy tính">🖥️ Bản Desktop</button>
             </div>
         </header>
 
@@ -484,6 +545,19 @@
             <!-- Right: Tracklist & Player -->
             <section class="tv-col-right">
                 <div class="tv-tracklist-wrap" id="tracklistWrap">
+                    <!-- Album Showcase Banner -->
+                    <div class="tv-showcase-banner">
+                        <img src="/music/icon-192.png" id="showcaseCover" class="tv-showcase-cover" alt="">
+                        <div class="tv-showcase-info">
+                            <div class="tv-showcase-tags">
+                                <span class="tv-showcase-tag">HI-RES AUDIO</span>
+                                <span class="tv-showcase-tag" id="showcaseYear">2026</span>
+                            </div>
+                            <div class="tv-showcase-title" id="showcaseTitle">Đang tải album...</div>
+                            <div class="tv-showcase-artist" id="showcaseArtist">XTAPO MUSIC TV</div>
+                        </div>
+                    </div>
+
                     <div class="tv-section-title" id="currentAlbumHeader">DANH SÁCH BÀI HÁT</div>
                     <div id="trackContainer">
                         <!-- Track items injected by JS -->
@@ -697,6 +771,18 @@
             document.querySelectorAll('.tv-album-card').forEach((c, i) => {
                 c.classList.toggle('active', i === idx);
             });
+            const alb = albums[idx];
+            if (alb) {
+                const cover = alb.coverUrl || alb.cover || '/music/icon-192.png';
+                const scCover = document.getElementById('showcaseCover');
+                const scTitle = document.getElementById('showcaseTitle');
+                const scArtist = document.getElementById('showcaseArtist');
+                const scYear = document.getElementById('showcaseYear');
+                if (scCover) scCover.src = cover;
+                if (scTitle) scTitle.textContent = alb.title || 'Album';
+                if (scArtist) scArtist.textContent = (alb.artist || 'XTAPO MUSIC') + ' • ' + (alb.tracks ? alb.tracks.length : 0) + ' bài hát';
+                if (scYear) scYear.textContent = alb.year || 'HI-RES';
+            }
             renderTracks();
         }
 
@@ -922,6 +1008,13 @@
         btnCloseQrModal.addEventListener('click', closeQrLogin);
         btnRefreshQr.addEventListener('click', openQrLogin);
         btnTvLogout.addEventListener('click', logoutUser);
+
+        const btnSwitchDesktop = document.getElementById('btnSwitchDesktop');
+        if (btnSwitchDesktop) {
+            btnSwitchDesktop.addEventListener('click', () => {
+                window.location.href = '/music';
+            });
+        }
 
         // ─── PURE REMOTE D-PAD SPATIAL NAVIGATION (0ms LATENCY) ───
         function getFocusableElements() {

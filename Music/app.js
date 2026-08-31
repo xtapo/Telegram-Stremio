@@ -4185,74 +4185,22 @@ class XTAPOMusicApp {
     setupTvMode() {
         this.topNavTvBtn = document.getElementById('topNavTvBtn');
         this.topNavTvBadge = document.getElementById('topNavTvBadge');
-        this.isTvMode = false;
 
         const ua = navigator.userAgent || '';
         const urlParams = new URLSearchParams(window.location.search);
         const isTvQuery = urlParams.get('tv') === '1' || urlParams.get('mode') === 'tv' || urlParams.get('lite') === '1';
-        const isTvUa = /AndroidTV|SmartTV|BRAVIA|GoogleTV|MiTV|AFTT|AFTM|HFS|Shield|CrKey|TelegramMusicTV|Large Screen|Leanback/i.test(ua);
-        const savedTv = localStorage.getItem('xtapo_tv_mode') === 'true';
+        const isTvUa = /AndroidTV|SmartTV|BRAVIA|GoogleTV|MiTV|AFTT|AFTM|HFS|Shield|CrKey|TelegramMusicTV|Leanback/i.test(ua);
 
         if (this.topNavTvBtn) {
             this.topNavTvBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                this.toggleTvMode();
+                window.location.href = '/music/tv.html';
             });
         }
 
-        // Tạo sẵn HUD Helper cho Remote TV nếu chưa có
-        let hud = document.getElementById('tvHudHelper');
-        if (!hud) {
-            hud = document.createElement('div');
-            hud.id = 'tvHudHelper';
-            hud.className = 'tv-hud-helper';
-            hud.innerHTML = `
-                <span>📺 <b>Chế độ TV Lite:</b></span>
-                <span><span class="tv-hud-key">▲▼◀▶</span> Di chuyển</span>
-                <span><span class="tv-hud-key">OK</span> Chọn</span>
-                <span><span class="tv-hud-key">Back</span> Đóng</span>
-            `;
-            document.body.appendChild(hud);
-        }
-
-        if (isTvQuery || isTvUa || savedTv) {
-            this.enableTvMode(false);
-        }
-    }
-
-    enableTvMode(notify = true) {
-        this.isTvMode = true;
-        document.body.classList.add('tv-mode', 'tv-lite');
-        if (this.topNavTvBtn) this.topNavTvBtn.classList.add('active');
-        if (this.topNavTvBadge) this.topNavTvBadge.style.display = 'inline-block';
-        try { localStorage.setItem('xtapo_tv_mode', 'true'); } catch (e) {}
-
-        // Tắt animation visualizer ngay lập tức
-        if (this.visualizerAnimationId) {
-            cancelAnimationFrame(this.visualizerAnimationId);
-            this.visualizerAnimationId = null;
-        }
-
-        if (notify) {
-            this.showTvHudHelper();
-            this.showToast('📺 Đã bật Chế độ Android TV Siêu Nhẹ (Zero Lag & D-Pad Remote)');
-        }
-    }
-
-    disableTvMode() {
-        this.isTvMode = false;
-        document.body.classList.remove('tv-mode', 'tv-lite');
-        if (this.topNavTvBtn) this.topNavTvBtn.classList.remove('active');
-        if (this.topNavTvBadge) this.topNavTvBadge.style.display = 'none';
-        try { localStorage.setItem('xtapo_tv_mode', 'false'); } catch (e) {}
-        this.showToast('🖥️ Đã chuyển về Giao diện Chuẩn');
-    }
-
-    toggleTvMode() {
-        if (this.isTvMode) {
-            this.disableTvMode();
-        } else {
-            this.enableTvMode(true);
+        // Nếu phát hiện thiết bị Android TV khi mở index.html, tự động chuyển ngay sang tv.html
+        if (isTvQuery || isTvUa) {
+            window.location.replace('/music/tv.html');
         }
     }
 
