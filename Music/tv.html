@@ -1219,14 +1219,25 @@
             const url = track.url || track.stream_url || track.previewUrl || (track.chat_id && track.msg_id ? `/api/music/stream/${track.chat_id}/${track.msg_id}` : null);
             if (!url) return;
 
-            audio.src = url;
-            audio.play().then(() => {
-                isPlaying = true;
-                updatePlayerUI();
-            }).catch(e => {
-                console.log('Play catch:', e);
-            });
+            try {
+                audio.pause();
+                audio.currentTime = 0;
+            } catch(e) {}
 
+            audio.src = url;
+            audio.load();
+
+            const p = audio.play();
+            if (p !== undefined) {
+                p.then(() => {
+                    isPlaying = true;
+                    updatePlayerUI();
+                }).catch(e => {
+                    console.log('Play catch:', e);
+                });
+            }
+
+            isPlaying = true;
             updatePlayerUI();
             renderTracklist();
         }
@@ -1272,43 +1283,14 @@
             btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
         }
 
-        const preloaderAudio = new Audio();
-        preloaderAudio.preload = 'auto';
-
-        function preloadNextTrack() {
-            if (!currentTracklist || currentTracklist.length <= 1) return;
-            const nextIdx = (currentPlayingTrackIdx + 1) % currentTracklist.length;
-            const nextTr = currentTracklist[nextIdx];
-            if (!nextTr) return;
-            const nextUrl = nextTr.url || nextTr.stream_url || nextTr.previewUrl || (nextTr.chat_id && nextTr.msg_id ? `/api/music/stream/${nextTr.chat_id}/${nextTr.msg_id}` : null);
-            if (nextUrl && preloaderAudio.src !== nextUrl) {
-                preloaderAudio.src = nextUrl;
-                preloaderAudio.load();
-            }
-        }
-
-        // Watchdog chống nghẽn đệm trên Smart TV
-        let bufferWatchdogTimer = null;
-        function resetBufferWatchdog() {
-            if (bufferWatchdogTimer) clearTimeout(bufferWatchdogTimer);
-            if (!isPlaying) return;
-            bufferWatchdogTimer = setTimeout(() => {
-                if (isPlaying && audio.paused && !audio.ended) {
-                    audio.play().catch(() => {});
-                }
-            }, 2500);
-        }
-
         audio.addEventListener('play', () => {
             isPlaying = true;
             updatePlayerUI();
-            setTimeout(preloadNextTrack, 1500);
         });
 
         audio.addEventListener('playing', () => {
             isPlaying = true;
             updatePlayerUI();
-            if (bufferWatchdogTimer) clearTimeout(bufferWatchdogTimer);
         });
 
         audio.addEventListener('pause', () => {
@@ -1317,24 +1299,14 @@
         });
 
         audio.addEventListener('waiting', () => {
-            playerTrackTitle.textContent = '⏳ ' + (currentTracklist?.[currentPlayingTrackIdx]?.name || 'Đang tải đệm...');
-            resetBufferWatchdog();
-        });
-
-        audio.addEventListener('stalled', () => {
-            resetBufferWatchdog();
+            // Khi đang nạp đệm dữ liệu, không can thiệp ngắt luồng
+            if (currentTracklist?.[currentPlayingTrackIdx]) {
+                playerTrackTitle.textContent = '⏳ ' + (currentTracklist[currentPlayingTrackIdx].name || 'Đang tải...');
+            }
         });
 
         audio.addEventListener('error', (e) => {
-            console.warn('[TV Audio] Lỗi mạng khi stream bài, tự động kết nối lại:', e);
-            if (isPlaying && audio.src) {
-                const curPos = audio.currentTime;
-                setTimeout(() => {
-                    audio.load();
-                    if (curPos > 0) audio.currentTime = curPos;
-                    audio.play().catch(() => {});
-                }, 1000);
-            }
+            console.warn('[TV Audio] Lỗi luồng nhạc:', e);
         });
 
         audio.addEventListener('timeupdate', () => {
