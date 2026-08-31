@@ -834,7 +834,7 @@
     <div class="tv-toast" id="tvToast"></div>
 
     <!-- Native HTML5 Audio Player -->
-    <audio id="audioPlayer" preload="auto"></audio>
+    <audio id="audioPlayer" preload="auto" playsinline webkit-playsinline></audio>
 
     <script>
     (function() {
@@ -1547,8 +1547,10 @@
         }
 
         btnReload.addEventListener('click', () => {
-            if (currentUser) fetchLibrary();
-            else checkUserProfile();
+            showToast('🔄 Đang tải lại toàn bộ trang...');
+            setTimeout(() => {
+                window.location.reload();
+            }, 300);
         });
         btnRefreshQr.addEventListener('click', initQrLogin);
         btnTvLogout.addEventListener('click', logoutUser);

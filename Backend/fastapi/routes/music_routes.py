@@ -1955,12 +1955,14 @@ async def _file_range_gen(file_path: str, start: int, length: int, chunk_size: i
                     break
                 remaining -= len(chunk)
                 yield chunk
+                await asyncio.sleep(0)
     except Exception as e:
         LOGGER.warning(f"[MUSIC CACHE] Lỗi đọc file cache {file_path}: {e}")
 
 
 async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mime_type: str, total_size: int, start_offset: int):
-    tmp_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.tmp")
+    rand_suffix = secrets.token_hex(4)
+    tmp_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}_{rand_suffix}.tmp")
     dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
     json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")
     
@@ -1990,6 +1992,7 @@ async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mi
                             pass
                         tmp_file = None
             yield chunk
+            await asyncio.sleep(0)
     finally:
         if tmp_file:
             try:
@@ -2007,7 +2010,10 @@ async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mi
                     with open(json_path, "w", encoding="utf-8") as jf:
                         json.dump(meta, jf)
                     if os.path.exists(dat_path):
-                        os.remove(dat_path)
+                        try:
+                            os.remove(dat_path)
+                        except Exception:
+                            pass
                     os.replace(tmp_path, dat_path)
                     LOGGER.info(f"[MUSIC CACHE] Đã cache thành công bài hát {cache_key} ({_format_size(total_size)})")
                     asyncio.create_task(asyncio.to_thread(_clean_audio_cache))
