@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>XTAPO MUSIC - Android TV Lite</title>
     <style>
-        /* ─── RESET & ULTRA-FAST SYSTEM FONTS (ZERO EXTERNAL REQUESTS) ─── */
+        /* ─── RESET & TV ULTRA-FAST FONTS ─── */
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -14,10 +14,10 @@
         }
 
         body {
-            background-color: #0b0e14;
+            background-color: #080b11;
             color: #f1f5f9;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            font-size: 18px;
+            font-size: 16px;
             overflow: hidden;
             width: 100vw;
             height: 100vh;
@@ -25,7 +25,7 @@
             -webkit-user-select: none;
         }
 
-        /* ─── 10-FOOT UI LAYOUT (16:9 TV) ─── */
+        /* ─── 10-FOOT TV 3-PANEL LAYOUT ─── */
         .tv-app {
             display: flex;
             flex-direction: column;
@@ -35,32 +35,33 @@
 
         /* Top Bar */
         .tv-topbar {
-            height: 64px;
-            background: #131722;
-            border-bottom: 2px solid #232936;
+            height: 60px;
+            background: #0f141f;
+            border-bottom: 2px solid #1f2736;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 32px;
+            padding: 0 24px;
             flex-shrink: 0;
+            z-index: 10;
         }
 
         .tv-brand {
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 800;
             color: #f59e0b;
             letter-spacing: 0.5px;
         }
 
         .tv-badge {
-            background: #232936;
+            background: #1e2638;
             color: #38bdf8;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
-            padding: 3px 10px;
+            padding: 3px 8px;
             border-radius: 6px;
             border: 1px solid #334155;
         }
@@ -68,97 +69,216 @@
         .tv-top-actions {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 12px;
         }
 
         .tv-user-info {
             display: none;
             align-items: center;
-            gap: 10px;
-            background: #1a2230;
+            gap: 8px;
+            background: #1a2233;
             border: 1px solid #334155;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 14px;
+            padding: 3px 10px;
+            border-radius: 16px;
+            font-size: 13px;
             font-weight: 700;
             color: #f8fafc;
         }
 
         .tv-user-avatar {
-            width: 28px;
-            height: 28px;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
             object-fit: cover;
             border: 1px solid #f59e0b;
         }
 
-        /* Main Workspace (Left Albums / Right Tracklist + Player) */
+        /* Main 3-Panel Workspace */
         .tv-main {
             display: flex;
             flex: 1;
-            height: calc(100vh - 64px);
+            height: calc(100vh - 60px - 100px);
             overflow: hidden;
         }
 
-        /* Left Column: Albums Grid / Categories */
-        .tv-col-left {
-            width: 38%;
-            background: #0f131c;
-            border-right: 2px solid #232936;
+        /* ── PANEL 1: LEFT NAVIGATION MENU (DẠNG MENU NHƯ DESKTOP) ── */
+        .tv-col-nav {
+            width: 220px;
+            min-width: 220px;
+            background: #0b0f17;
+            border-right: 2px solid #1c2433;
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 16px 10px;
+            gap: 8px;
             overflow-y: auto;
-        }
-
-        .tv-section-title {
-            font-size: 16px;
-            font-weight: 800;
-            color: #94a3b8;
-            letter-spacing: 1px;
-            margin-bottom: 14px;
-            text-transform: uppercase;
-        }
-
-        .tv-album-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .tv-album-card {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 12px 16px;
-            background: #161b26;
-            border: 2px solid #232936;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: transform 0.1s ease;
-        }
-
-        .tv-album-card.active {
-            border-color: #f59e0b;
-            background: #1e2433;
-        }
-
-        .tv-album-cover {
-            width: 60px;
-            height: 60px;
-            border-radius: 8px;
-            object-fit: cover;
-            background: #232936;
             flex-shrink: 0;
         }
 
-        .tv-album-info {
+        .tv-nav-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #64748b;
+            letter-spacing: 1px;
+            padding: 0 10px 4px 10px;
+            text-transform: uppercase;
+        }
+
+        .tv-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: transparent;
+            color: #cbd5e1;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .tv-nav-item .nav-icon {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .tv-nav-item:hover,
+        .tv-nav-item.active {
+            background: #1a2233;
+            color: #f59e0b;
+            border-color: #334155;
+        }
+
+        .tv-nav-item.active {
+            border-color: #f59e0b;
+            color: #f8fafc;
+            background: rgba(245, 158, 11, 0.15);
+        }
+
+        /* ── PANEL 2: CATEGORY ITEMS LIST (PHÂN TRANG SIÊU NHẸ) ── */
+        .tv-col-items {
+            width: 360px;
+            min-width: 340px;
+            background: #0e131d;
+            border-right: 2px solid #1c2433;
+            display: flex;
+            flex-direction: column;
+            padding: 14px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .tv-items-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 0 4px;
+        }
+
+        .tv-items-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: #94a3b8;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+
+        /* Pagination Controls */
+        .tv-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #141b27;
+            border: 1px solid #232d40;
+            border-radius: 8px;
+            padding: 4px 8px;
+            margin-bottom: 10px;
+            gap: 6px;
+        }
+
+        .tv-page-btn {
+            background: #1c2433;
+            color: #f8fafc;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .tv-page-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .tv-page-info {
+            font-size: 12px;
+            font-weight: 700;
+            color: #f59e0b;
+        }
+
+        .tv-items-scroll {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .tv-card-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: #141a26;
+            border: 2px solid #20293a;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+        }
+
+        .tv-card-item.active {
+            border-color: #f59e0b;
+            background: #1e2638;
+        }
+
+        .tv-card-cover {
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            object-fit: cover;
+            background: #232d40;
+            flex-shrink: 0;
+            border: 1px solid #334155;
+        }
+
+        .tv-card-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #1e293b;
+            flex-shrink: 0;
+            border: 1px solid #f59e0b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .tv-card-info {
             flex: 1;
             overflow: hidden;
         }
 
-        .tv-album-name {
-            font-size: 17px;
+        .tv-card-title {
+            font-size: 15px;
             font-weight: 700;
             color: #f8fafc;
             white-space: nowrap;
@@ -166,40 +286,113 @@
             text-overflow: ellipsis;
         }
 
-        .tv-album-artist {
-            font-size: 14px;
+        .tv-card-sub {
+            font-size: 12px;
             color: #94a3b8;
-            margin-top: 4px;
+            margin-top: 2px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
-        /* Right Column: Tracklist & Big Player Bar */
+        /* ── PANEL 3: RIGHT TRACKLIST & SHOWCASE ── */
         .tv-col-right {
-            width: 62%;
+            flex: 1;
             display: flex;
             flex-direction: column;
-            background: #0b0e14;
+            background: #080b11;
             overflow: hidden;
         }
 
-        /* Tracklist Area */
         .tv-tracklist-wrap {
             flex: 1;
-            padding: 20px 28px;
+            padding: 16px 24px;
             overflow-y: auto;
+        }
+
+        .tv-showcase-banner {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: linear-gradient(135deg, #131926, #0d121c);
+            border: 2px solid #1e2738;
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 14px;
+        }
+
+        .tv-showcase-cover {
+            width: 84px;
+            height: 84px;
+            border-radius: 10px;
+            object-fit: cover;
+            border: 2px solid #f59e0b;
+            background: #1e2638;
+            flex-shrink: 0;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+        }
+
+        .tv-showcase-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .tv-showcase-tags {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .tv-showcase-tag {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+
+        .tv-showcase-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #f8fafc;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-showcase-artist {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 3px;
+        }
+
+        .tv-showcase-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .tv-section-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: #94a3b8;
+            letter-spacing: 0.8px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
         }
 
         .tv-track-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 14px 18px;
-            background: #131722;
-            border: 2px solid #1e2433;
-            border-radius: 10px;
-            margin-bottom: 8px;
+            padding: 11px 16px;
+            background: #111723;
+            border: 2px solid #1a2333;
+            border-radius: 8px;
+            margin-bottom: 6px;
             cursor: pointer;
         }
 
@@ -211,19 +404,19 @@
         .tv-track-left {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
             overflow: hidden;
         }
 
         .tv-track-num {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 700;
             color: #64748b;
-            width: 28px;
+            width: 24px;
         }
 
         .tv-track-title {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             color: #f1f5f9;
             white-space: nowrap;
@@ -232,41 +425,43 @@
         }
 
         .tv-track-dur {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 600;
             color: #94a3b8;
             flex-shrink: 0;
-            margin-left: 16px;
+            margin-left: 12px;
         }
 
-        /* Bottom Player Area */
+        /* ── BOTTOM PLAYER BAR (100px) ── */
         .tv-player-bar {
-            height: 110px;
-            background: #131722;
-            border-top: 2px solid #232936;
+            height: 100px;
+            background: #0f1420;
+            border-top: 2px solid #1f2736;
             display: flex;
             align-items: center;
-            padding: 0 28px;
-            gap: 24px;
+            padding: 0 24px;
+            gap: 20px;
             flex-shrink: 0;
+            z-index: 10;
         }
 
         .tv-player-cover {
-            width: 68px;
-            height: 68px;
+            width: 60px;
+            height: 60px;
             border-radius: 8px;
             object-fit: cover;
-            background: #232936;
+            background: #1e2638;
             flex-shrink: 0;
+            border: 1px solid #334155;
         }
 
         .tv-player-meta {
-            width: 240px;
+            width: 220px;
             overflow: hidden;
         }
 
         .tv-player-title {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
             color: #f8fafc;
             white-space: nowrap;
@@ -275,9 +470,9 @@
         }
 
         .tv-player-artist {
-            font-size: 14px;
+            font-size: 13px;
             color: #f59e0b;
-            margin-top: 3px;
+            margin-top: 2px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -286,16 +481,16 @@
         .tv-player-controls {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 10px;
         }
 
         .tv-btn {
-            background: #1e2433;
+            background: #192130;
             color: #f8fafc;
-            border: 2px solid #334155;
-            border-radius: 10px;
-            padding: 10px 18px;
-            font-size: 15px;
+            border: 2px solid #2d3748;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 14px;
             font-weight: 700;
             cursor: pointer;
             outline: none;
@@ -307,15 +502,16 @@
 
         .tv-btn-play {
             background: #f59e0b;
-            color: #0f131c;
+            color: #0b0e14;
             border-color: #d97706;
-            font-size: 17px;
-            padding: 12px 24px;
+            font-size: 15px;
+            padding: 10px 18px;
+            font-weight: 800;
         }
 
         .tv-btn-login {
             background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: #0f131c;
+            color: #0b0e14;
             border-color: #f59e0b;
             font-weight: 800;
         }
@@ -324,14 +520,14 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
         }
 
         .tv-progress-bar {
             width: 100%;
-            height: 8px;
-            background: #232936;
-            border-radius: 4px;
+            height: 6px;
+            background: #1c2433;
+            border-radius: 3px;
             overflow: hidden;
             position: relative;
         }
@@ -345,15 +541,15 @@
         .tv-time-row {
             display: flex;
             justify-content: space-between;
-            font-size: 13px;
+            font-size: 12px;
             color: #94a3b8;
             font-weight: 600;
         }
 
-        /* ─── D-PAD REMOTE FOCUS INDICATOR (NEON YELLOW BORDER) ─── */
+        /* ─── D-PAD REMOTE FOCUS INDICATOR ─── */
         .focusable:focus,
         .focusable.focused {
-            outline: 4px solid #f59e0b !important;
+            outline: 3px solid #f59e0b !important;
             outline-offset: 2px !important;
             background-color: rgba(245, 158, 11, 0.25) !important;
             border-color: #f59e0b !important;
@@ -361,7 +557,7 @@
             z-index: 100 !important;
         }
 
-        /* ─── QR LOGIN MODAL FOR TV ─── */
+        /* Modal Overlay for QR */
         .tv-modal-overlay {
             position: fixed;
             top: 0;
@@ -380,130 +576,63 @@
         }
 
         .tv-modal-card {
-            background: #131722;
+            background: #111722;
             border: 2px solid #f59e0b;
-            border-radius: 20px;
-            padding: 36px 40px;
-            max-width: 520px;
+            border-radius: 18px;
+            padding: 30px;
+            max-width: 480px;
             width: 90%;
             text-align: center;
-            box-shadow: 0 16px 50px rgba(0,0,0,0.8), 0 0 30px rgba(245, 158, 11, 0.3);
+            box-shadow: 0 16px 50px rgba(0,0,0,0.8);
         }
 
         .tv-modal-title {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 800;
             color: #f8fafc;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .tv-modal-sub {
-            font-size: 15px;
+            font-size: 14px;
             color: #94a3b8;
-            line-height: 1.5;
-            margin-bottom: 24px;
+            line-height: 1.4;
+            margin-bottom: 18px;
         }
 
         .tv-qr-box {
             background: #fff;
-            padding: 14px;
-            border-radius: 16px;
+            padding: 12px;
+            border-radius: 14px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            min-width: 250px;
-            min-height: 250px;
+            margin-bottom: 16px;
         }
 
         .tv-qr-img {
-            width: 240px;
-            height: 240px;
+            width: 220px;
+            height: 220px;
             display: block;
         }
 
         .tv-qr-status {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             color: #38bdf8;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        /* Album Showcase Banner for TV */
-        .tv-showcase-banner {
-            display: flex;
-            align-items: center;
-            gap: 24px;
-            background: linear-gradient(135deg, #161c28, #10141f);
-            border: 2px solid #232a38;
-            border-radius: 16px;
-            padding: 20px 24px;
-            margin-bottom: 20px;
-        }
-
-        .tv-showcase-cover {
-            width: 100px;
-            height: 100px;
-            border-radius: 12px;
-            object-fit: cover;
-            border: 2px solid #f59e0b;
-            background: #232936;
-            flex-shrink: 0;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-        }
-
-        .tv-showcase-info {
-            flex: 1;
-            overflow: hidden;
-        }
-
-        .tv-showcase-tags {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 6px;
-        }
-
-        .tv-showcase-tag {
-            background: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
-            font-size: 12px;
-            font-weight: 800;
-            padding: 2px 8px;
-            border-radius: 4px;
-            border: 1px solid rgba(245, 158, 11, 0.4);
-        }
-
-        .tv-showcase-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #f8fafc;
-            line-height: 1.2;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .tv-showcase-artist {
-            font-size: 16px;
-            color: #94a3b8;
-            margin-top: 4px;
+            margin-bottom: 18px;
         }
 
         .tv-toast {
             position: fixed;
-            top: 24px;
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: #1e2433;
+            background: #1a2233;
             border: 2px solid #f59e0b;
-            border-radius: 30px;
-            padding: 10px 24px;
-            font-size: 16px;
+            border-radius: 24px;
+            padding: 8px 20px;
+            font-size: 14px;
             font-weight: 700;
             color: #f8fafc;
             box-shadow: 0 8px 30px rgba(0,0,0,0.8);
@@ -518,13 +647,13 @@
         <header class="tv-topbar">
             <div class="tv-brand">
                 <span>🎵 XTAPO MUSIC TV</span>
-                <span class="tv-badge">TV LITE • 0% LAG</span>
+                <span class="tv-badge" id="activeCategoryBadge">ALBUMS</span>
             </div>
             <div class="tv-top-actions">
                 <div class="tv-user-info" id="tvUserInfo">
                     <img src="" id="tvUserAvatar" class="tv-user-avatar" alt="">
                     <span id="tvUserName">User</span>
-                    <button class="tv-btn focusable" id="btnTvLogout" tabindex="0" style="padding: 4px 10px; font-size: 12px; margin-left: 6px;">Đăng Xuất</button>
+                    <button class="tv-btn focusable" id="btnTvLogout" tabindex="0" style="padding: 3px 8px; font-size: 11px; margin-left: 4px;">Đăng Xuất</button>
                 </div>
                 <button class="tv-btn tv-btn-login focusable" id="btnOpenQrLogin" tabindex="0">📲 Đăng Nhập QR</button>
                 <button class="tv-btn focusable" id="btnReloadLibrary" tabindex="0">🔄 Tải Lại</button>
@@ -532,64 +661,116 @@
             </div>
         </header>
 
-        <!-- Main Workspace -->
+        <!-- Main 3-Panel Workspace -->
         <main class="tv-main">
-            <!-- Left: Albums List -->
-            <section class="tv-col-left" id="albumListCol">
-                <div class="tv-section-title">ALBUMS / DANH MỤC (<span id="albumCount">0</span>)</div>
-                <div class="tv-album-list" id="albumContainer">
-                    <!-- Album items injected by JS -->
+            <!-- PANEL 1: Navigation Menu (Như Desktop) -->
+            <nav class="tv-col-nav" id="navMenuCol">
+                <div class="tv-nav-title">DANH MỤC NHẠC</div>
+                <div class="tv-nav-item focusable active" data-tab="albums" tabindex="0">
+                    <span class="nav-icon">💿</span>
+                    <span>ALBUMS</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="hires" tabindex="0">
+                    <span class="nav-icon">🌟</span>
+                    <span>HI-RES</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="artists" tabindex="0">
+                    <span class="nav-icon">🎙️</span>
+                    <span>NGHỆ SĨ</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="genres" tabindex="0">
+                    <span class="nav-icon">🎸</span>
+                    <span>THỂ LOẠI</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="countries" tabindex="0">
+                    <span class="nav-icon">🌍</span>
+                    <span>QUỐC GIA</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="playlists" tabindex="0">
+                    <span class="nav-icon">📑</span>
+                    <span>PLAYLISTS</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="favorites" tabindex="0">
+                    <span class="nav-icon">❤️</span>
+                    <span>YÊU THÍCH</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="all-musics" tabindex="0">
+                    <span class="nav-icon">🎵</span>
+                    <span>TẤT CẢ BÀI</span>
+                </div>
+            </nav>
+
+            <!-- PANEL 2: Category Items List (Phân trang mượt mà 0% lag) -->
+            <section class="tv-col-items" id="itemsCol">
+                <div class="tv-items-header">
+                    <div class="tv-items-title" id="itemsCategoryTitle">ALBUMS (0)</div>
+                </div>
+
+                <!-- Phân trang -->
+                <div class="tv-pagination" id="paginationBar">
+                    <button class="tv-page-btn focusable" id="btnPrevPage" tabindex="0">❮ Trước</button>
+                    <span class="tv-page-info" id="pageInfoText">Trang 1 / 1</span>
+                    <button class="tv-page-btn focusable" id="btnNextPage" tabindex="0">Sau ❯</button>
+                </div>
+
+                <!-- Danh sách card items được giới hạn theo trang -->
+                <div class="tv-items-scroll" id="itemsContainer">
+                    <!-- Dynamic items -->
                 </div>
             </section>
 
-            <!-- Right: Tracklist & Player -->
-            <section class="tv-col-right">
+            <!-- PANEL 3: Tracklist & Showcase -->
+            <section class="tv-col-right" id="rightCol">
                 <div class="tv-tracklist-wrap" id="tracklistWrap">
-                    <!-- Album Showcase Banner -->
+                    <!-- Showcase Banner -->
                     <div class="tv-showcase-banner">
                         <img src="/music/icon-192.png" id="showcaseCover" class="tv-showcase-cover" alt="">
                         <div class="tv-showcase-info">
                             <div class="tv-showcase-tags">
-                                <span class="tv-showcase-tag">HI-RES AUDIO</span>
+                                <span class="tv-showcase-tag" id="showcaseBadge">HI-RES AUDIO</span>
                                 <span class="tv-showcase-tag" id="showcaseYear">2026</span>
                             </div>
-                            <div class="tv-showcase-title" id="showcaseTitle">Đang tải album...</div>
+                            <div class="tv-showcase-title" id="showcaseTitle">Đang tải danh sách...</div>
                             <div class="tv-showcase-artist" id="showcaseArtist">XTAPO MUSIC TV</div>
+                            <div class="tv-showcase-actions">
+                                <button class="tv-btn tv-btn-play focusable" id="btnPlayAll" tabindex="0">▶ Phát Tất Cả</button>
+                                <button class="tv-btn focusable" id="btnShuffle" tabindex="0">🔀 Trộn Bài</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="tv-section-title" id="currentAlbumHeader">DANH SÁCH BÀI HÁT</div>
+                    <div class="tv-section-title" id="currentTracklistHeader">DANH SÁCH BÀI HÁT</div>
                     <div id="trackContainer">
-                        <!-- Track items injected by JS -->
-                    </div>
-                </div>
-
-                <!-- Bottom Player -->
-                <div class="tv-player-bar">
-                    <img src="/music/icon-192.png" id="playerCoverImg" class="tv-player-cover" alt="Cover">
-                    <div class="tv-player-meta">
-                        <div class="tv-player-title" id="playerTrackTitle">Chưa phát bài hát nào</div>
-                        <div class="tv-player-artist" id="playerArtistName">XTAPO MUSIC TV</div>
-                    </div>
-
-                    <div class="tv-player-controls">
-                        <button class="tv-btn focusable" id="btnPrev" tabindex="0" title="Bài trước">⏮ Trước</button>
-                        <button class="tv-btn tv-btn-play focusable" id="btnPlay" tabindex="0" title="Phát / Dừng">▶ Phát</button>
-                        <button class="tv-btn focusable" id="btnNext" tabindex="0" title="Bài tiếp">Tiếp ⏭</button>
-                    </div>
-
-                    <div class="tv-progress-wrap">
-                        <div class="tv-progress-bar">
-                            <div class="tv-progress-fill" id="progressFill"></div>
-                        </div>
-                        <div class="tv-time-row">
-                            <span id="timeCur">0:00</span>
-                            <span id="timeDur">0:00</span>
-                        </div>
+                        <!-- Tracks -->
                     </div>
                 </div>
             </section>
         </main>
+
+        <!-- Bottom Player Bar -->
+        <footer class="tv-player-bar">
+            <img src="/music/icon-192.png" id="playerCoverImg" class="tv-player-cover" alt="Cover">
+            <div class="tv-player-meta">
+                <div class="tv-player-title" id="playerTrackTitle">Chưa phát bài hát nào</div>
+                <div class="tv-player-artist" id="playerArtistName">XTAPO MUSIC TV</div>
+            </div>
+
+            <div class="tv-player-controls">
+                <button class="tv-btn focusable" id="btnPrev" tabindex="0" title="Bài trước">⏮</button>
+                <button class="tv-btn tv-btn-play focusable" id="btnPlay" tabindex="0" title="Phát / Dừng">▶ Phát</button>
+                <button class="tv-btn focusable" id="btnNext" tabindex="0" title="Bài tiếp">⏭</button>
+            </div>
+
+            <div class="tv-progress-wrap">
+                <div class="tv-progress-bar">
+                    <div class="tv-progress-fill" id="progressFill"></div>
+                </div>
+                <div class="tv-time-row">
+                    <span id="timeCur">0:00</span>
+                    <span id="timeDur">0:00</span>
+                </div>
+            </div>
+        </footer>
     </div>
 
     <!-- QR Login Modal for TV -->
@@ -597,16 +778,13 @@
         <div class="tv-modal-card">
             <div class="tv-modal-title">📲 Quét Mã QR Để Đăng Nhập TV</div>
             <div class="tv-modal-sub">Mở ứng dụng hoặc camera trên điện thoại (đã đăng nhập tài khoản) và quét mã QR này:</div>
-
             <div class="tv-qr-box">
                 <img id="qrCodeImg" class="tv-qr-img" src="" alt="QR Code">
             </div>
-
             <div class="tv-qr-status" id="qrStatusText">
                 <span>⏳ Đang chờ xác nhận từ điện thoại...</span>
             </div>
-
-            <div style="display: flex; gap: 14px; justify-content: center;">
+            <div style="display: flex; gap: 12px; justify-content: center;">
                 <button class="tv-btn focusable" id="btnRefreshQr" tabindex="0">🔄 Đổi Mã Khác</button>
                 <button class="tv-btn focusable" id="btnCloseQrModal" tabindex="0">Đóng (Back)</button>
             </div>
@@ -616,73 +794,87 @@
     <!-- Toast Notification -->
     <div class="tv-toast" id="tvToast"></div>
 
-    <!-- Native Standard HTML5 Audio (Zero AudioContext overhead) -->
+    <!-- Native Standard HTML5 Audio -->
     <audio id="audioPlayer" preload="auto"></audio>
 
     <script>
     (function() {
         'use strict';
 
-        // ─── DEMO FALLBACK DATABASE (Nếu offline / chưa có server) ───
+        const PAGE_SIZE = 25; // Số lượng album/ca sĩ mỗi trang để bảo đảm 0% lag trên TV
+
+        // Demo Fallback Data
         const DEMO_ALBUMS = [
             {
                 id: "demo-1",
                 title: "LITTLE MISS TWAIN (HI-RES)",
                 artist: "SHANIA TWAIN",
+                genre: "Country / Pop",
+                country: "US-UK",
+                is_hires: true,
                 coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300&auto=format&fit=crop",
                 tracks: [
-                    { id: 1, name: "Any Man of Mine", duration: "4:07", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
-                    { id: 2, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
-                    { id: 3, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
-                    { id: 4, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" },
-                    { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3" }
-                ]
-            },
-            {
-                id: "demo-2",
-                title: "COME ON OVER (SPECIAL)",
-                artist: "SHANIA TWAIN",
-                coverUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=300&auto=format&fit=crop",
-                tracks: [
-                    { id: 6, name: "Love Gets Me Every Time", duration: "3:33", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3" },
-                    { id: 7, name: "Don't Be Stupid", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3" },
-                    { id: 8, name: "Honey, I'm Home", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" }
+                    { id: 1, name: "Any Man of Mine", artist: "SHANIA TWAIN", duration: "4:07", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+                    { id: 2, name: "That Don't Impress Me Much", artist: "SHANIA TWAIN", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
+                    { id: 3, name: "Man! I Feel Like a Woman!", artist: "SHANIA TWAIN", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
+                    { id: 4, name: "You're Still the One", artist: "SHANIA TWAIN", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" }
                 ]
             }
         ];
 
-        // State
-        let albums = [...DEMO_ALBUMS];
-        let currentAlbumIdx = 0;
-        let currentTrackIdx = 0;
+        // Global State
+        let rawAlbums = [...DEMO_ALBUMS];
+        let currentTab = 'albums'; // 'albums', 'hires', 'artists', 'genres', 'countries', 'playlists', 'favorites', 'all-musics'
+        let currentItems = [];
+        let currentPage = 1;
+        let selectedItemIdx = 0;
+        let currentActiveGroup = null; // Group or Album selected
+        let currentTracklist = [];
+        let currentPlayingTrackIdx = 0;
         let isPlaying = false;
         let currentUser = null;
+        let userFavorites = [];
+        let userPlaylists = [];
         let qrPollInterval = null;
         let currentQrToken = null;
 
         // Elements
         const audio = document.getElementById('audioPlayer');
-        const albumContainer = document.getElementById('albumContainer');
+        const activeCategoryBadge = document.getElementById('activeCategoryBadge');
+        const itemsCategoryTitle = document.getElementById('itemsCategoryTitle');
+        const itemsContainer = document.getElementById('itemsContainer');
+        const paginationBar = document.getElementById('paginationBar');
+        const pageInfoText = document.getElementById('pageInfoText');
+        const btnPrevPage = document.getElementById('btnPrevPage');
+        const btnNextPage = document.getElementById('btnNextPage');
+        
+        const showcaseCover = document.getElementById('showcaseCover');
+        const showcaseTitle = document.getElementById('showcaseTitle');
+        const showcaseArtist = document.getElementById('showcaseArtist');
+        const showcaseYear = document.getElementById('showcaseYear');
+        const showcaseBadge = document.getElementById('showcaseBadge');
+        const btnPlayAll = document.getElementById('btnPlayAll');
+        const btnShuffle = document.getElementById('btnShuffle');
+        const currentTracklistHeader = document.getElementById('currentTracklistHeader');
         const trackContainer = document.getElementById('trackContainer');
-        const albumCountEl = document.getElementById('albumCount');
-        const currentAlbumHeader = document.getElementById('currentAlbumHeader');
+
         const playerCoverImg = document.getElementById('playerCoverImg');
         const playerTrackTitle = document.getElementById('playerTrackTitle');
         const playerArtistName = document.getElementById('playerArtistName');
         const btnPlay = document.getElementById('btnPlay');
         const btnPrev = document.getElementById('btnPrev');
         const btnNext = document.getElementById('btnNext');
-        const btnReload = document.getElementById('btnReloadLibrary');
         const progressFill = document.getElementById('progressFill');
         const timeCur = document.getElementById('timeCur');
         const timeDur = document.getElementById('timeDur');
 
-        // Auth Elements
         const tvUserInfo = document.getElementById('tvUserInfo');
         const tvUserAvatar = document.getElementById('tvUserAvatar');
         const tvUserName = document.getElementById('tvUserName');
         const btnOpenQrLogin = document.getElementById('btnOpenQrLogin');
         const btnTvLogout = document.getElementById('btnTvLogout');
+        const btnReload = document.getElementById('btnReloadLibrary');
+        const btnSwitchDesktop = document.getElementById('btnSwitchDesktop');
         const qrModal = document.getElementById('qrModal');
         const qrCodeImg = document.getElementById('qrCodeImg');
         const qrStatusText = document.getElementById('qrStatusText');
@@ -693,10 +885,9 @@
         function showToast(msg) {
             tvToast.textContent = msg;
             tvToast.style.display = 'block';
-            setTimeout(() => { tvToast.style.display = 'none'; }, 3500);
+            setTimeout(() => { tvToast.style.display = 'none'; }, 3000);
         }
 
-        // Format Seconds to MM:SS
         function formatTime(sec) {
             if (isNaN(sec) || sec < 0) return '0:00';
             const m = Math.floor(sec / 60);
@@ -704,44 +895,245 @@
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
-        // Render Albums List
-        function renderAlbums() {
-            albumContainer.innerHTML = '';
-            albumCountEl.textContent = albums.length;
+        // ─── PHÂN LOẠI DỮ LIỆU TỪ RAW ALBUMS ───
+        function buildCategoryData() {
+            if (currentTab === 'albums') {
+                currentItems = rawAlbums.map(alb => ({
+                    type: 'album',
+                    id: alb.id || alb.title,
+                    title: alb.title || 'Album',
+                    sub: `${alb.artist || 'Nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài`,
+                    cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
+                    year: alb.year || '2026',
+                    badge: alb.is_hires ? 'HI-RES' : 'LOSSLESS',
+                    tracks: alb.tracks || [],
+                    raw: alb
+                }));
+            } else if (currentTab === 'hires') {
+                const hires = rawAlbums.filter(a => a.is_hires || (a.title && /hi-res|lossless|24bit|flac|dsd/i.test(a.title)));
+                currentItems = (hires.length > 0 ? hires : rawAlbums).map(alb => ({
+                    type: 'album',
+                    id: alb.id || alb.title,
+                    title: alb.title || 'Album',
+                    sub: `${alb.artist || 'Nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài`,
+                    cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
+                    year: alb.year || '2026',
+                    badge: 'HI-RES AUDIO',
+                    tracks: alb.tracks || [],
+                    raw: alb
+                }));
+            } else if (currentTab === 'artists') {
+                const map = {};
+                rawAlbums.forEach(alb => {
+                    const art = (alb.artist || 'Nghệ sĩ khác').trim();
+                    if (!map[art]) {
+                        map[art] = { name: art, cover: alb.coverUrl || alb.cover, tracks: [], albums: 0 };
+                    }
+                    map[art].albums += 1;
+                    if (alb.tracks) map[art].tracks.push(...alb.tracks);
+                });
+                currentItems = Object.keys(map).sort().map(name => ({
+                    type: 'artist',
+                    id: name,
+                    title: name,
+                    sub: `${map[name].albums} Albums • ${map[name].tracks.length} bài`,
+                    cover: map[name].cover || '/music/icon-192.png',
+                    isAvatar: true,
+                    year: 'Nghệ Sĩ',
+                    badge: 'ARTIST',
+                    tracks: map[name].tracks
+                }));
+            } else if (currentTab === 'genres') {
+                const map = {};
+                rawAlbums.forEach(alb => {
+                    const g = (alb.genre || (alb.tracks && alb.tracks[0] && alb.tracks[0].genre) || 'Khác').trim();
+                    if (!map[g]) {
+                        map[g] = { name: g, cover: alb.coverUrl || alb.cover, tracks: [] };
+                    }
+                    if (alb.tracks) map[g].tracks.push(...alb.tracks);
+                });
+                currentItems = Object.keys(map).sort().map(name => ({
+                    type: 'genre',
+                    id: name,
+                    title: name,
+                    sub: `${map[name].tracks.length} bài hát`,
+                    cover: map[name].cover || '/music/icon-192.png',
+                    year: 'Thể Loại',
+                    badge: 'GENRE',
+                    tracks: map[name].tracks
+                }));
+            } else if (currentTab === 'countries') {
+                const map = {};
+                rawAlbums.forEach(alb => {
+                    const c = (alb.country || (alb.tracks && alb.tracks[0] && alb.tracks[0].country) || 'Việt Nam').trim();
+                    if (!map[c]) {
+                        map[c] = { name: c, cover: alb.coverUrl || alb.cover, tracks: [] };
+                    }
+                    if (alb.tracks) map[c].tracks.push(...alb.tracks);
+                });
+                currentItems = Object.keys(map).sort().map(name => ({
+                    type: 'country',
+                    id: name,
+                    title: name,
+                    sub: `${map[name].tracks.length} bài hát`,
+                    cover: map[name].cover || '/music/icon-192.png',
+                    year: 'Quốc Gia',
+                    badge: 'COUNTRY',
+                    tracks: map[name].tracks
+                }));
+            } else if (currentTab === 'playlists') {
+                if (userPlaylists.length > 0) {
+                    currentItems = userPlaylists.map(pl => ({
+                        type: 'playlist',
+                        id: pl.id || pl._id,
+                        title: pl.name || 'Playlist',
+                        sub: `${pl.tracks ? pl.tracks.length : 0} bài hát`,
+                        cover: pl.coverUrl || '/music/icon-192.png',
+                        year: 'Playlist',
+                        badge: 'PLAYLIST',
+                        tracks: pl.tracks || []
+                    }));
+                } else {
+                    currentItems = [{
+                        type: 'playlist',
+                        id: 'demo-pl',
+                        title: 'Playlist Mặc Định',
+                        sub: 'Tất cả bài yêu thích',
+                        cover: '/music/icon-192.png',
+                        year: '2026',
+                        badge: 'PLAYLIST',
+                        tracks: rawAlbums.flatMap(a => a.tracks || []).slice(0, 50)
+                    }];
+                }
+            } else if (currentTab === 'favorites') {
+                const favTracks = userFavorites.length > 0 ? userFavorites : rawAlbums.flatMap(a => a.tracks || []).slice(0, 20);
+                currentItems = [{
+                    type: 'favorites',
+                    id: 'fav',
+                    title: 'Bài Hát Yêu Thích',
+                    sub: `${favTracks.length} bài đã lưu`,
+                    cover: '/music/icon-192.png',
+                    year: 'Yêu Thích',
+                    badge: 'FAVORITES',
+                    tracks: favTracks
+                }];
+            } else if (currentTab === 'all-musics') {
+                const allT = rawAlbums.flatMap(a => a.tracks || []);
+                currentItems = [{
+                    type: 'all',
+                    id: 'all',
+                    title: 'Tất Cả Bài Hát',
+                    sub: `Tổng cộng ${allT.length} bài hát trong kho`,
+                    cover: '/music/icon-192.png',
+                    year: 'Toàn Bộ',
+                    badge: 'ALL MUSICS',
+                    tracks: allT
+                }];
+            }
+        }
 
-            albums.forEach((alb, idx) => {
+        // ─── RENDER PANEL 2: ITEMS LIST WITH PAGINATION (MAX 25 ITEMS) ───
+        function renderItems() {
+            itemsContainer.innerHTML = '';
+            const total = currentItems.length;
+            const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const tabNames = {
+                'albums': 'ALBUMS',
+                'hires': 'HI-RES AUDIO',
+                'artists': 'NGHỆ SĨ',
+                'genres': 'THỂ LOẠI',
+                'countries': 'QUỐC GIA',
+                'playlists': 'PLAYLISTS',
+                'favorites': 'YÊU THÍCH',
+                'all-musics': 'TẤT CẢ BÀI'
+            };
+            const currentTabName = tabNames[currentTab] || 'ALBUMS';
+            activeCategoryBadge.textContent = currentTabName;
+            itemsCategoryTitle.textContent = `${currentTabName} (${total})`;
+            pageInfoText.textContent = `Trang ${currentPage} / ${totalPages}`;
+
+            btnPrevPage.disabled = (currentPage <= 1);
+            btnNextPage.disabled = (currentPage >= totalPages);
+
+            const startIdx = (currentPage - 1) * PAGE_SIZE;
+            const pageItems = currentItems.slice(startIdx, startIdx + PAGE_SIZE);
+
+            pageItems.forEach((item, idx) => {
+                const absoluteIdx = startIdx + idx;
                 const card = document.createElement('div');
-                card.className = `tv-album-card focusable ${idx === currentAlbumIdx ? 'active' : ''}`;
+                card.className = `tv-card-item focusable ${absoluteIdx === selectedItemIdx ? 'active' : ''}`;
                 card.tabIndex = 0;
-                card.dataset.idx = idx;
+                card.dataset.idx = absoluteIdx;
 
-                const cover = alb.coverUrl || alb.cover || '/music/icon-192.png';
+                const coverSrc = item.cover || '/music/icon-192.png';
+                const avatarHtml = item.isAvatar
+                    ? `<img src="${coverSrc}" class="tv-card-avatar" alt="" onerror="this.src='/music/icon-192.png'">`
+                    : `<img src="${coverSrc}" class="tv-card-cover" alt="" onerror="this.src='/music/icon-192.png'">`;
+
                 card.innerHTML = `
-                    <img src="${cover}" class="tv-album-cover" alt="" onerror="this.src='/music/icon-192.png'">
-                    <div class="tv-album-info">
-                        <div class="tv-album-name">${alb.title || 'Album'}</div>
-                        <div class="tv-album-artist">${alb.artist || 'Nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài</div>
+                    ${avatarHtml}
+                    <div class="tv-card-info">
+                        <div class="tv-card-title">${item.title}</div>
+                        <div class="tv-card-sub">${item.sub}</div>
                     </div>
                 `;
 
                 card.addEventListener('click', () => {
-                    selectAlbum(idx);
+                    selectItem(absoluteIdx);
                 });
 
-                albumContainer.appendChild(card);
+                itemsContainer.appendChild(card);
             });
+
+            // If selected item is within this page, or auto select first on page
+            if (pageItems.length > 0) {
+                if (selectedItemIdx < startIdx || selectedItemIdx >= startIdx + pageItems.length) {
+                    selectItem(startIdx);
+                } else {
+                    selectItem(selectedItemIdx);
+                }
+            }
         }
 
-        // Render Tracks of Selected Album
-        function renderTracks() {
+        // ─── CHỌN ITEM VÀ HIỂN THỊ DANH SÁCH BÀI HÁT (PANEL 3) ───
+        function selectItem(idx) {
+            selectedItemIdx = idx;
+            const item = currentItems[idx];
+            if (!item) return;
+
+            currentActiveGroup = item;
+            currentTracklist = item.tracks || [];
+
+            // Update active state in panel 2
+            document.querySelectorAll('.tv-card-item').forEach(c => {
+                c.classList.toggle('active', parseInt(c.dataset.idx) === idx);
+            });
+
+            // Update Showcase Banner
+            showcaseCover.src = item.cover || '/music/icon-192.png';
+            showcaseTitle.textContent = item.title;
+            showcaseArtist.textContent = item.sub;
+            showcaseYear.textContent = item.year || '2026';
+            showcaseBadge.textContent = item.badge || 'LOSSLESS';
+
+            renderTracklist();
+        }
+
+        // ─── RENDER PANEL 3: DANH SÁCH BÀI HÁT ───
+        function renderTracklist() {
             trackContainer.innerHTML = '';
-            const alb = albums[currentAlbumIdx];
-            if (!alb || !alb.tracks) return;
+            currentTracklistHeader.textContent = `DANH SÁCH BÀI HÁT (${currentTracklist.length} BÀI)`;
 
-            currentAlbumHeader.textContent = `${alb.title} (${alb.tracks.length} bài hát)`;
+            if (currentTracklist.length === 0) {
+                trackContainer.innerHTML = '<div style="padding: 20px; color: #64748b; font-size: 15px;">Không có bài hát nào trong mục này.</div>';
+                return;
+            }
 
-            alb.tracks.forEach((tr, idx) => {
-                const isCur = (currentAlbumIdx === currentAlbumIdx && idx === currentTrackIdx && isPlaying);
+            currentTracklist.forEach((tr, idx) => {
+                const isCur = (isPlaying && idx === currentPlayingTrackIdx);
                 const item = document.createElement('div');
                 item.className = `tv-track-item focusable ${isCur ? 'playing' : ''}`;
                 item.tabIndex = 0;
@@ -749,51 +1141,29 @@
 
                 const name = tr.name || tr.title || 'Bài hát';
                 const dur = tr.duration || formatTime(tr.duration_sec) || '0:00';
+                const art = tr.artist ? ` • ${tr.artist}` : '';
 
                 item.innerHTML = `
                     <div class="tv-track-left">
                         <span class="tv-track-num">${idx + 1}</span>
-                        <span class="tv-track-title">${name}</span>
+                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: normal;">${art}</span></span>
                     </div>
                     <span class="tv-track-dur">${dur}</span>
                 `;
 
                 item.addEventListener('click', () => {
-                    playTrack(currentAlbumIdx, idx);
+                    playTrack(idx);
                 });
 
                 trackContainer.appendChild(item);
             });
         }
 
-        function selectAlbum(idx) {
-            currentAlbumIdx = idx;
-            document.querySelectorAll('.tv-album-card').forEach((c, i) => {
-                c.classList.toggle('active', i === idx);
-            });
-            const alb = albums[idx];
-            if (alb) {
-                const cover = alb.coverUrl || alb.cover || '/music/icon-192.png';
-                const scCover = document.getElementById('showcaseCover');
-                const scTitle = document.getElementById('showcaseTitle');
-                const scArtist = document.getElementById('showcaseArtist');
-                const scYear = document.getElementById('showcaseYear');
-                if (scCover) scCover.src = cover;
-                if (scTitle) scTitle.textContent = alb.title || 'Album';
-                if (scArtist) scArtist.textContent = (alb.artist || 'XTAPO MUSIC') + ' • ' + (alb.tracks ? alb.tracks.length : 0) + ' bài hát';
-                if (scYear) scYear.textContent = alb.year || 'HI-RES';
-            }
-            renderTracks();
-        }
-
-        function playTrack(albumIdx, trackIdx) {
-            currentAlbumIdx = albumIdx;
-            currentTrackIdx = trackIdx;
-
-            const alb = albums[albumIdx];
-            if (!alb || !alb.tracks || !alb.tracks[trackIdx]) return;
-
-            const track = alb.tracks[trackIdx];
+        // ─── AUDIO PLAYBACK LOGIC ───
+        function playTrack(idx) {
+            if (!currentTracklist || !currentTracklist[idx]) return;
+            currentPlayingTrackIdx = idx;
+            const track = currentTracklist[idx];
             const url = track.url || track.stream_url || track.previewUrl;
             if (!url) return;
 
@@ -802,17 +1172,17 @@
                 isPlaying = true;
                 updatePlayerUI();
             }).catch(e => {
-                console.log('Play error:', e);
+                console.log('Audio play catch:', e);
             });
 
             updatePlayerUI();
-            renderTracks();
+            renderTracklist();
         }
 
         function togglePlay() {
             if (audio.paused) {
-                if (!audio.src && albums[currentAlbumIdx]?.tracks?.length > 0) {
-                    playTrack(currentAlbumIdx, currentTrackIdx);
+                if (!audio.src && currentTracklist.length > 0) {
+                    playTrack(0);
                 } else {
                     audio.play().then(() => {
                         isPlaying = true;
@@ -827,49 +1197,32 @@
         }
 
         function nextTrack() {
-            const alb = albums[currentAlbumIdx];
-            if (!alb || !alb.tracks) return;
-            let nextIdx = currentTrackIdx + 1;
-            if (nextIdx >= alb.tracks.length) {
-                nextIdx = 0;
-            }
-            playTrack(currentAlbumIdx, nextIdx);
+            if (!currentTracklist || currentTracklist.length === 0) return;
+            let nextIdx = currentPlayingTrackIdx + 1;
+            if (nextIdx >= currentTracklist.length) nextIdx = 0;
+            playTrack(nextIdx);
         }
 
         function prevTrack() {
-            const alb = albums[currentAlbumIdx];
-            if (!alb || !alb.tracks) return;
-            let prevIdx = currentTrackIdx - 1;
-            if (prevIdx < 0) {
-                prevIdx = alb.tracks.length - 1;
-            }
-            playTrack(currentAlbumIdx, prevIdx);
+            if (!currentTracklist || currentTracklist.length === 0) return;
+            let prevIdx = currentPlayingTrackIdx - 1;
+            if (prevIdx < 0) prevIdx = currentTracklist.length - 1;
+            playTrack(prevIdx);
         }
 
         function updatePlayerUI() {
-            const alb = albums[currentAlbumIdx];
-            const track = alb?.tracks?.[currentTrackIdx];
-
+            const track = currentTracklist?.[currentPlayingTrackIdx];
             if (track) {
                 playerTrackTitle.textContent = track.name || track.title || 'Đang phát';
-                playerArtistName.textContent = alb.artist || track.artist || 'XTAPO MUSIC';
-                playerCoverImg.src = alb.coverUrl || alb.cover || '/music/icon-192.png';
+                playerArtistName.textContent = track.artist || currentActiveGroup?.title || 'XTAPO MUSIC';
+                playerCoverImg.src = currentActiveGroup?.cover || '/music/icon-192.png';
             }
-
             btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
         }
 
-        // Audio Event Listeners
-        audio.addEventListener('play', () => {
-            isPlaying = true;
-            updatePlayerUI();
-        });
-
-        audio.addEventListener('pause', () => {
-            isPlaying = false;
-            updatePlayerUI();
-        });
-
+        // Audio events
+        audio.addEventListener('play', () => { isPlaying = true; updatePlayerUI(); });
+        audio.addEventListener('pause', () => { isPlaying = false; updatePlayerUI(); });
         audio.addEventListener('timeupdate', () => {
             if (audio.duration) {
                 const pct = (audio.currentTime / audio.duration) * 100;
@@ -878,12 +1231,23 @@
                 timeDur.textContent = formatTime(audio.duration);
             }
         });
+        audio.addEventListener('ended', () => { nextTrack(); });
 
-        audio.addEventListener('ended', () => {
-            nextTrack();
-        });
+        // ─── CHUYỂN MENU TAB (PANEL 1) ───
+        function switchTab(tabKey) {
+            currentTab = tabKey;
+            currentPage = 1;
+            selectedItemIdx = 0;
 
-        // ─── AUTH & QR CODE TRANSFER LOGIC ───
+            document.querySelectorAll('.tv-nav-item').forEach(nav => {
+                nav.classList.toggle('active', nav.dataset.tab === tabKey);
+            });
+
+            buildCategoryData();
+            renderItems();
+        }
+
+        // ─── AUTH & QR CODE LOGIN ───
         async function checkUserProfile() {
             try {
                 const res = await fetch('/api/music/auth/profile');
@@ -895,15 +1259,35 @@
                         tvUserName.textContent = currentUser.display_name || currentUser.username;
                         tvUserAvatar.src = currentUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
                         btnOpenQrLogin.style.display = 'none';
+                        loadUserFavorites();
+                        loadUserPlaylists();
                     } else {
                         currentUser = null;
                         tvUserInfo.style.display = 'none';
                         btnOpenQrLogin.style.display = 'inline-flex';
                     }
                 }
-            } catch (e) {
-                console.log('Profile check static mode');
-            }
+            } catch (e) {}
+        }
+
+        async function loadUserFavorites() {
+            try {
+                const res = await fetch('/api/music/user/favorites');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.favorites) userFavorites = data.favorites;
+                }
+            } catch (e) {}
+        }
+
+        async function loadUserPlaylists() {
+            try {
+                const res = await fetch('/api/music/user/playlists');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.playlists) userPlaylists = data.playlists;
+                }
+            } catch (e) {}
         }
 
         async function openQrLogin() {
@@ -914,7 +1298,7 @@
             try {
                 const res = await fetch('/api/music/auth/tv/qr-init', { method: 'POST' });
                 if (!res.ok) {
-                    qrStatusText.innerHTML = '<span style="color: #f87171;">⚠️ Máy chủ backend chưa được cập nhật bản mới.<br><span style="font-size: 13px; color: #94a3b8;">Vui lòng chạy git pull & khởi động lại server.</span></span>';
+                    qrStatusText.innerHTML = '<span style="color: #f87171;">⚠️ Máy chủ backend chưa cập nhật API TV QR.<br>Vui lòng khởi động lại server.</span>';
                     return;
                 }
                 const data = await res.json();
@@ -924,10 +1308,10 @@
                     qrStatusText.innerHTML = '<span>⏳ Đang chờ xác nhận từ điện thoại...</span>';
                     startQrPolling();
                 } else {
-                    qrStatusText.textContent = data.message || 'Lỗi tạo mã QR. Vui lòng thử lại.';
+                    qrStatusText.textContent = data.message || 'Lỗi tạo mã QR.';
                 }
             } catch (e) {
-                qrStatusText.innerHTML = '<span style="color: #f87171;">Lỗi kết nối máy chủ: ' + e.message + '</span>';
+                qrStatusText.innerHTML = '<span style="color: #f87171;">Lỗi kết nối: ' + e.message + '</span>';
             }
 
             setTimeout(() => {
@@ -963,7 +1347,7 @@
                         await fetchLibrary();
                     } else if (data.status === 'expired') {
                         clearInterval(qrPollInterval);
-                        qrStatusText.textContent = '⚠️ Mã QR đã hết hạn. Bấm "Đổi Mã Khác" để tạo lại.';
+                        qrStatusText.textContent = '⚠️ Mã QR đã hết hạn. Bấm "Đổi Mã Khác".';
                     }
                 } catch (e) {}
             }, 1500);
@@ -986,24 +1370,61 @@
                 if (res.ok) {
                     const data = await res.json();
                     if (data && data.status === 'success' && data.albums && data.albums.length > 0) {
-                        albums = data.albums;
+                        rawAlbums = data.albums;
                     }
                 }
             } catch (err) {
-                console.log('Using local/demo storage');
+                console.log('Using fallback local albums');
             }
-            renderAlbums();
-            renderTracks();
-            updatePlayerUI();
 
-            // Auto focus first album
+            buildCategoryData();
+            renderItems();
+
             setTimeout(() => {
-                const first = document.querySelector('.tv-album-card');
+                const first = document.querySelector('.tv-card-item') || document.querySelector('.tv-nav-item');
                 if (first) first.focus();
             }, 100);
         }
 
-        // Button Clicks
+        // ─── BUTTON LISTENERS ───
+        document.querySelectorAll('.tv-nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                switchTab(item.dataset.tab);
+            });
+        });
+
+        btnPrevPage.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                renderItems();
+                const first = document.querySelector('.tv-card-item');
+                if (first) first.focus();
+            }
+        });
+
+        btnNextPage.addEventListener('click', () => {
+            const totalPages = Math.ceil(currentItems.length / PAGE_SIZE);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderItems();
+                const first = document.querySelector('.tv-card-item');
+                if (first) first.focus();
+            }
+        });
+
+        btnPlayAll.addEventListener('click', () => {
+            if (currentTracklist.length > 0) playTrack(0);
+        });
+
+        btnShuffle.addEventListener('click', () => {
+            if (currentTracklist.length > 0) {
+                currentTracklist.sort(() => Math.random() - 0.5);
+                renderTracklist();
+                playTrack(0);
+                showToast('🔀 Đã trộn ngẫu nhiên danh sách!');
+            }
+        });
+
         btnPlay.addEventListener('click', togglePlay);
         btnNext.addEventListener('click', nextTrack);
         btnPrev.addEventListener('click', prevTrack);
@@ -1013,14 +1434,13 @@
         btnRefreshQr.addEventListener('click', openQrLogin);
         btnTvLogout.addEventListener('click', logoutUser);
 
-        const btnSwitchDesktop = document.getElementById('btnSwitchDesktop');
         if (btnSwitchDesktop) {
             btnSwitchDesktop.addEventListener('click', () => {
                 window.location.href = '/music';
             });
         }
 
-        // ─── PURE REMOTE D-PAD SPATIAL NAVIGATION (0ms LATENCY) ───
+        // ─── D-PAD REMOTE SPATIAL NAVIGATION (TV REMOTE CONTROL) ───
         function getFocusableElements() {
             const root = qrModal.classList.contains('open') ? qrModal : document.body;
             return Array.from(root.querySelectorAll('.focusable:not([disabled]):not([style*="display: none"])')).filter(el => {
@@ -1058,18 +1478,18 @@
                 let prim = 0;
                 let orth = 0;
 
-                if (dir === 'up' && dy < -8) {
+                if (dir === 'up' && dy < -6) {
                     valid = true; prim = -dy; orth = Math.abs(dx);
-                } else if (dir === 'down' && dy > 8) {
+                } else if (dir === 'down' && dy > 6) {
                     valid = true; prim = dy; orth = Math.abs(dx);
-                } else if (dir === 'left' && dx < -8) {
+                } else if (dir === 'left' && dx < -6) {
                     valid = true; prim = -dx; orth = Math.abs(dy);
-                } else if (dir === 'right' && dx > 8) {
+                } else if (dir === 'right' && dx > 6) {
                     valid = true; prim = dx; orth = Math.abs(dy);
                 }
 
                 if (valid) {
-                    const score = prim + orth * 2.2;
+                    const score = prim + orth * 2.0;
                     if (score < minScore) {
                         minScore = score;
                         best = cand;
@@ -1101,13 +1521,25 @@
                 return;
             }
 
-            // Back key closes modal if open
+            // Back / Esc Key
             if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27 || e.keyCode === 4) {
                 if (qrModal.classList.contains('open')) {
                     e.preventDefault();
                     closeQrLogin();
                     return;
                 }
+            }
+
+            // Page Navigation (Chuyển trang nhanh bằng nút Channel Up/Down)
+            if (e.key === 'PageUp' || e.keyCode === 33) {
+                e.preventDefault();
+                btnPrevPage.click();
+                return;
+            }
+            if (e.key === 'PageDown' || e.keyCode === 34) {
+                e.preventDefault();
+                btnNextPage.click();
+                return;
             }
 
             // D-Pad Navigation
