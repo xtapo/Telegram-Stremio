@@ -118,6 +118,22 @@ const ALBUMS_DATABASE = [
     }
 ];
 
+// --- Equalizer Audiophile Presets (10-Band) ---
+const EQ_PRESETS = {
+    flat: { name: "Flat (Chuẩn)", gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], bass: 0, preamp: 0 },
+    bass_boost: { name: "Bass Boost", gains: [6, 5.5, 4, 2, 0, 0, 0, 1, 2, 2.5], bass: 6, preamp: -2 },
+    bass_reducer: { name: "Bass Reducer", gains: [-6, -5, -4, -2.5, 0, 0, 1, 2, 2.5, 3], bass: 0, preamp: 0 },
+    rock: { name: "Rock / Metal", gains: [5, 4, 2, 0, -1.5, -0.5, 2, 4, 5, 5.5], bass: 3, preamp: -1.5 },
+    pop: { name: "Pop", gains: [1.5, 2.5, 3.5, 2, 0, 1, 2.5, 3.5, 3, 2], bass: 2, preamp: -1 },
+    edm: { name: "EDM / Dance", gains: [6.5, 5.5, 3, 0, 1, 2, 3, 4.5, 6, 6], bass: 5, preamp: -2 },
+    vocal: { name: "Vocal Booster", gains: [-2, -2, -1, 1, 3.5, 4.5, 4, 2, 1, 0], bass: 0, preamp: -0.5 },
+    jazz: { name: "Jazz", gains: [3.5, 3, 1.5, 1.5, -1, -1, 1, 2.5, 3.5, 4], bass: 2, preamp: -0.5 },
+    acoustic: { name: "Acoustic", gains: [3, 2, 1.5, 1, 1.5, 1.5, 2.5, 3.5, 3, 2], bass: 1, preamp: 0 },
+    treble: { name: "Treble Booster", gains: [-3, -2, -1, 0, 0.5, 2, 4, 6, 7.5, 8], bass: 0, preamp: -1 },
+    rnb: { name: "R&B / Soul", gains: [5, 4.5, 2.5, 1, -0.5, 1.5, 2, 3, 3.5, 3], bass: 4, preamp: -1.5 },
+    custom: { name: "Tùy Chỉnh", gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], bass: 0, preamp: 0 }
+};
+
 // --- App State ---
 class XTAPOMusicApp {
     constructor() {
@@ -541,6 +557,40 @@ class XTAPOMusicApp {
         this.sleepTimerFadeOut = true;
         this.sleepTimerOriginalVolume = null;
 
+        // Equalizer 10-Band & Bass Boost Elements & State
+        this.eqToggleBtn = document.getElementById('eqToggleBtn');
+        this.topNavEqBtn = document.getElementById('topNavEqBtn');
+        this.topNavEqBadge = document.getElementById('topNavEqBadge');
+        this.mobileNavEqualizer = document.getElementById('mobileNavEqualizer');
+        this.eqActiveDot = document.getElementById('eqActiveDot');
+        this.equalizerModal = document.getElementById('equalizerModal');
+        this.closeEqualizerModal = document.getElementById('closeEqualizerModal');
+        this.eqPowerCheckbox = document.getElementById('eqPowerCheckbox');
+        this.eqPowerLabel = document.getElementById('eqPowerLabel');
+        this.eqResetBtn = document.getElementById('eqResetBtn');
+        this.eqPresetsContainer = document.getElementById('eqPresetsContainer');
+        this.eqCurveCanvas = document.getElementById('eqCurveCanvas');
+        this.eqCurveCtx = this.eqCurveCanvas ? this.eqCurveCanvas.getContext('2d') : null;
+        this.eqBandsBoard = document.getElementById('eqBandsBoard');
+        this.bassBoostSlider = document.getElementById('bassBoostSlider');
+        this.bassBoostValBadge = document.getElementById('bassBoostValBadge');
+        this.preampSlider = document.getElementById('preampSlider');
+        this.preampValBadge = document.getElementById('preampValBadge');
+
+        this.eqFrequencies = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+        this.eqBandLabels = ['32Hz', '64Hz', '125Hz', '250Hz', '500Hz', '1kHz', '2kHz', '4kHz', '8kHz', '16kHz'];
+        this.eqFilterNodes = [];
+        this.bassBoostNode = null;
+        this.preampGainNode = null;
+        this.eqEnabled = true;
+        this.eqCurrentPreset = 'flat';
+        this.eqBandsGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        this.eqBassBoost = 0;
+        this.eqPreamp = 0;
+
+        // Load saved Equalizer state
+        this.loadEqualizerSettings();
+
         // Init
         this.init();
     }
@@ -551,6 +601,9 @@ class XTAPOMusicApp {
         this.setupModalEvents();
         this.setupLyricsEvents();
         this.setupSleepTimerEvents();
+        this.setupEqualizerEvents();
+        this.renderEqualizerSliders();
+        this.updateEqualizerUI();
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
@@ -2395,9 +2448,8 @@ class XTAPOMusicApp {
 
             if (!this.audioSourceNode && this.audio) {
                 this.audioSourceNode = this.audioContext.createMediaElementSource(this.audio);
-                this.audioSourceNode.connect(this.analyser);
-                this.analyser.connect(this.audioContext.destination);
-                console.log('[XTAPO Visualizer] Đã kết nối Web Audio Analyser thời gian thực thành công!');
+                this.initEqualizerAudioGraph();
+                console.log('[XTAPO Visualizer & Equalizer] Đã kết nối Web Audio Pipeline thời gian thực thành công!');
             }
         } catch (err) {
             console.warn('[XTAPO Visualizer] MediaElementSource note:', err);
@@ -7134,6 +7186,570 @@ class XTAPOMusicApp {
         }
 
         this.updateSleepTimerModalView();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // EQUALIZER 10-BAND & BASS BOOST AUDIO ENGINE & CONTROLLER
+    // ─────────────────────────────────────────────────────────────
+
+    initEqualizerAudioGraph() {
+        if (!this.audioContext || !this.audioSourceNode) return;
+
+        try {
+            // 1. Create Preamp GainNode
+            this.preampGainNode = this.audioContext.createGain();
+            
+            // 2. Create Bass Boost BiquadFilterNode (Lowshelf @ 80Hz)
+            this.bassBoostNode = this.audioContext.createBiquadFilter();
+            this.bassBoostNode.type = 'lowshelf';
+            this.bassBoostNode.frequency.value = 80;
+            this.bassBoostNode.gain.value = 0;
+
+            // 3. Create 10-Band EQ Filter Nodes
+            this.eqFilterNodes = [];
+            for (let i = 0; i < this.eqFrequencies.length; i++) {
+                const filter = this.audioContext.createBiquadFilter();
+                const freq = this.eqFrequencies[i];
+                filter.frequency.value = freq;
+
+                if (i === 0) {
+                    filter.type = 'lowshelf';
+                } else if (i === this.eqFrequencies.length - 1) {
+                    filter.type = 'highshelf';
+                } else {
+                    filter.type = 'peaking';
+                    filter.Q.value = 1.4;
+                }
+                filter.gain.value = 0;
+                this.eqFilterNodes.push(filter);
+            }
+
+            // 4. Connect Audio Pipeline:
+            // audioSourceNode -> preampGainNode -> bassBoostNode -> eqFilterNodes[0] -> ... -> eqFilterNodes[9] -> analyser -> destination
+            let lastNode = this.audioSourceNode;
+            
+            lastNode.connect(this.preampGainNode);
+            lastNode = this.preampGainNode;
+
+            lastNode.connect(this.bassBoostNode);
+            lastNode = this.bassBoostNode;
+
+            for (let i = 0; i < this.eqFilterNodes.length; i++) {
+                lastNode.connect(this.eqFilterNodes[i]);
+                lastNode = this.eqFilterNodes[i];
+            }
+
+            lastNode.connect(this.analyser);
+            this.analyser.connect(this.audioContext.destination);
+
+            // 5. Apply saved Equalizer settings to audio graph
+            this.applyEqualizerAudioSettings();
+        } catch (err) {
+            console.error('[XTAPO Equalizer] Lỗi kết nối audio graph:', err);
+        }
+    }
+
+    applyEqualizerAudioSettings() {
+        if (!this.audioContext) return;
+        const now = this.audioContext.currentTime;
+
+        // 1. Preamp Gain
+        if (this.preampGainNode) {
+            const targetDb = this.eqEnabled ? this.eqPreamp : 0;
+            const targetGain = Math.pow(10, targetDb / 20);
+            try {
+                this.preampGainNode.gain.cancelScheduledValues(now);
+                this.preampGainNode.gain.linearRampToValueAtTime(targetGain, now + 0.05);
+            } catch (e) {
+                this.preampGainNode.gain.value = targetGain;
+            }
+        }
+
+        // 2. Bass Boost Gain
+        if (this.bassBoostNode) {
+            const targetBassDb = this.eqEnabled ? this.eqBassBoost : 0;
+            try {
+                this.bassBoostNode.gain.cancelScheduledValues(now);
+                this.bassBoostNode.gain.linearRampToValueAtTime(targetBassDb, now + 0.05);
+            } catch (e) {
+                this.bassBoostNode.gain.value = targetBassDb;
+            }
+        }
+
+        // 3. 10-Band EQ Filters
+        if (this.eqFilterNodes && this.eqFilterNodes.length > 0) {
+            for (let i = 0; i < this.eqFilterNodes.length; i++) {
+                const targetBandDb = this.eqEnabled ? (this.eqBandsGains[i] || 0) : 0;
+                try {
+                    this.eqFilterNodes[i].gain.cancelScheduledValues(now);
+                    this.eqFilterNodes[i].gain.linearRampToValueAtTime(targetBandDb, now + 0.05);
+                } catch (e) {
+                    this.eqFilterNodes[i].gain.value = targetBandDb;
+                }
+            }
+        }
+
+        this.drawEqCurve();
+    }
+
+    setEqBandGain(bandIdx, gainDb, fromUser = true) {
+        if (bandIdx < 0 || bandIdx >= this.eqFrequencies.length) return;
+        const clampedDb = Math.max(-12, Math.min(12, parseFloat(gainDb) || 0));
+        this.eqBandsGains[bandIdx] = clampedDb;
+
+        if (fromUser) {
+            this.eqCurrentPreset = 'custom';
+            this.updatePresetPillsUI();
+        }
+
+        // Update single slider value badge & color
+        const valBadge = document.getElementById(`eqBandVal_${bandIdx}`);
+        if (valBadge) {
+            const prefix = clampedDb > 0 ? '+' : '';
+            valBadge.textContent = `${prefix}${clampedDb.toFixed(1)}`;
+            valBadge.classList.toggle('boost', clampedDb > 0);
+            valBadge.classList.toggle('cut', clampedDb < 0);
+        }
+
+        this.applyEqualizerAudioSettings();
+        this.saveEqualizerSettings();
+    }
+
+    setBassBoost(gainDb, fromUser = true) {
+        const clampedDb = Math.max(0, Math.min(12, parseFloat(gainDb) || 0));
+        this.eqBassBoost = clampedDb;
+
+        if (fromUser && this.eqCurrentPreset !== 'custom') {
+            this.eqCurrentPreset = 'custom';
+            this.updatePresetPillsUI();
+        }
+
+        if (this.bassBoostSlider) {
+            this.bassBoostSlider.value = clampedDb;
+        }
+        if (this.bassBoostValBadge) {
+            const prefix = clampedDb > 0 ? '+' : '';
+            this.bassBoostValBadge.textContent = `${prefix}${clampedDb.toFixed(1)} dB`;
+        }
+
+        this.applyEqualizerAudioSettings();
+        this.saveEqualizerSettings();
+    }
+
+    setPreamp(gainDb, fromUser = true) {
+        const clampedDb = Math.max(-12, Math.min(12, parseFloat(gainDb) || 0));
+        this.eqPreamp = clampedDb;
+
+        if (fromUser && this.eqCurrentPreset !== 'custom') {
+            this.eqCurrentPreset = 'custom';
+            this.updatePresetPillsUI();
+        }
+
+        if (this.preampSlider) {
+            this.preampSlider.value = clampedDb;
+        }
+        if (this.preampValBadge) {
+            const prefix = clampedDb > 0 ? '+' : '';
+            this.preampValBadge.textContent = `${prefix}${clampedDb.toFixed(1)} dB`;
+        }
+
+        this.applyEqualizerAudioSettings();
+        this.saveEqualizerSettings();
+    }
+
+    setEqPower(enabled) {
+        this.eqEnabled = !!enabled;
+        
+        // Update power toggle switch and labels
+        if (this.eqPowerCheckbox) this.eqPowerCheckbox.checked = this.eqEnabled;
+        if (this.eqPowerLabel) {
+            this.eqPowerLabel.textContent = this.eqEnabled ? 'BẬT' : 'TẮT';
+            this.eqPowerLabel.classList.toggle('off', !this.eqEnabled);
+        }
+
+        const modalBody = this.equalizerModal ? this.equalizerModal.querySelector('.eq-modal-body') : null;
+        if (modalBody) {
+            modalBody.classList.toggle('disabled', !this.eqEnabled);
+        }
+
+        this.updateEqualizerButtonBadges();
+        this.applyEqualizerAudioSettings();
+        this.saveEqualizerSettings();
+        this.showToast(this.eqEnabled ? "Bộ chỉnh âm Equalizer: ĐÃ BẬT" : "Bộ chỉnh âm Equalizer: ĐÃ TẮT (Bypass)");
+    }
+
+    applyEqPreset(presetKey) {
+        const preset = EQ_PRESETS[presetKey];
+        if (!preset) return;
+
+        this.eqCurrentPreset = presetKey;
+        this.eqBandsGains = [...preset.gains];
+        this.eqBassBoost = preset.bass !== undefined ? preset.bass : 0;
+        this.eqPreamp = preset.preamp !== undefined ? preset.preamp : 0;
+
+        // Update UI Sliders
+        for (let i = 0; i < this.eqFrequencies.length; i++) {
+            const slider = document.getElementById(`eqSlider_${i}`);
+            if (slider) slider.value = this.eqBandsGains[i];
+            const valBadge = document.getElementById(`eqBandVal_${i}`);
+            if (valBadge) {
+                const gain = this.eqBandsGains[i];
+                const prefix = gain > 0 ? '+' : '';
+                valBadge.textContent = `${prefix}${gain.toFixed(1)}`;
+                valBadge.classList.toggle('boost', gain > 0);
+                valBadge.classList.toggle('cut', gain < 0);
+            }
+        }
+
+        if (this.bassBoostSlider) this.bassBoostSlider.value = this.eqBassBoost;
+        if (this.bassBoostValBadge) {
+            const prefix = this.eqBassBoost > 0 ? '+' : '';
+            this.bassBoostValBadge.textContent = `${prefix}${this.eqBassBoost.toFixed(1)} dB`;
+        }
+
+        if (this.preampSlider) this.preampSlider.value = this.eqPreamp;
+        if (this.preampValBadge) {
+            const prefix = this.eqPreamp > 0 ? '+' : '';
+            this.preampValBadge.textContent = `${prefix}${this.eqPreamp.toFixed(1)} dB`;
+        }
+
+        this.updatePresetPillsUI();
+        this.applyEqualizerAudioSettings();
+        this.saveEqualizerSettings();
+        this.showToast(`Đã áp dụng cấu hình âm thanh: ${preset.name}`);
+    }
+
+    resetEqualizer() {
+        this.applyEqPreset('flat');
+        this.showToast('Đã đặt lại bộ chỉnh âm về Flat (0 dB)');
+    }
+
+    updatePresetPillsUI() {
+        if (!this.eqPresetsContainer) return;
+        const pills = this.eqPresetsContainer.querySelectorAll('.eq-preset-pill');
+        pills.forEach(pill => {
+            const key = pill.getAttribute('data-preset');
+            pill.classList.toggle('active', key === this.eqCurrentPreset);
+        });
+    }
+
+    updateEqualizerButtonBadges() {
+        const isActive = this.eqEnabled;
+        if (this.eqToggleBtn) this.eqToggleBtn.classList.toggle('active', isActive);
+        if (this.eqActiveDot) this.eqActiveDot.style.display = isActive ? 'inline-block' : 'none';
+        if (this.topNavEqBtn) this.topNavEqBtn.classList.toggle('active', isActive);
+        if (this.topNavEqBadge) this.topNavEqBadge.style.display = isActive ? 'block' : 'none';
+    }
+
+    renderEqualizerSliders() {
+        if (!this.eqBandsBoard) return;
+        this.eqBandsBoard.innerHTML = '';
+
+        this.eqFrequencies.forEach((freq, i) => {
+            const gain = this.eqBandsGains[i] || 0;
+            const label = this.eqBandLabels[i];
+            const prefix = gain > 0 ? '+' : '';
+
+            const col = document.createElement('div');
+            col.className = 'eq-band-col';
+            col.innerHTML = `
+                <span class="eq-band-val ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}" id="eqBandVal_${i}">${prefix}${gain.toFixed(1)}</span>
+                <div class="eq-slider-vertical-wrap">
+                    <input type="range" class="eq-vertical-slider" id="eqSlider_${i}" min="-12" max="12" step="0.5" value="${gain}" orient="vertical" aria-label="${label}">
+                </div>
+                <span class="eq-band-label">${label}</span>
+            `;
+
+            const slider = col.querySelector(`#eqSlider_${i}`);
+            if (slider) {
+                slider.addEventListener('input', (e) => {
+                    this.initWebAudioAnalyser();
+                    this.setEqBandGain(i, e.target.value, true);
+                });
+            }
+
+            this.eqBandsBoard.appendChild(col);
+        });
+    }
+
+    updateEqualizerUI() {
+        if (this.eqPowerCheckbox) this.eqPowerCheckbox.checked = this.eqEnabled;
+        if (this.eqPowerLabel) {
+            this.eqPowerLabel.textContent = this.eqEnabled ? 'BẬT' : 'TẮT';
+            this.eqPowerLabel.classList.toggle('off', !this.eqEnabled);
+        }
+
+        const modalBody = this.equalizerModal ? this.equalizerModal.querySelector('.eq-modal-body') : null;
+        if (modalBody) {
+            modalBody.classList.toggle('disabled', !this.eqEnabled);
+        }
+
+        if (this.bassBoostSlider) this.bassBoostSlider.value = this.eqBassBoost;
+        if (this.bassBoostValBadge) {
+            const prefix = this.eqBassBoost > 0 ? '+' : '';
+            this.bassBoostValBadge.textContent = `${prefix}${this.eqBassBoost.toFixed(1)} dB`;
+        }
+
+        if (this.preampSlider) this.preampSlider.value = this.eqPreamp;
+        if (this.preampValBadge) {
+            const prefix = this.eqPreamp > 0 ? '+' : '';
+            this.preampValBadge.textContent = `${prefix}${this.eqPreamp.toFixed(1)} dB`;
+        }
+
+        this.updatePresetPillsUI();
+        this.updateEqualizerButtonBadges();
+        this.drawEqCurve();
+    }
+
+    drawEqCurve() {
+        if (!this.eqCurveCanvas) {
+            this.eqCurveCanvas = document.getElementById('eqCurveCanvas');
+            if (this.eqCurveCanvas) this.eqCurveCtx = this.eqCurveCanvas.getContext('2d');
+        }
+        if (!this.eqCurveCanvas || !this.eqCurveCtx) return;
+
+        const canvas = this.eqCurveCanvas;
+        const ctx = this.eqCurveCtx;
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width || 680;
+        const height = rect.height || 120;
+
+        if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+        }
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, width, height);
+
+        const midY = height / 2;
+        const maxDb = 12;
+
+        // Draw background grid lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+
+        // +6dB and -6dB lines
+        const yPlus6 = midY - (6 / maxDb) * (height / 2 - 10);
+        const yMinus6 = midY + (6 / maxDb) * (height / 2 - 10);
+        ctx.beginPath();
+        ctx.moveTo(0, yPlus6);
+        ctx.lineTo(width, yPlus6);
+        ctx.moveTo(0, yMinus6);
+        ctx.lineTo(width, yMinus6);
+        ctx.stroke();
+
+        // 0dB Center zero line
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, midY);
+        ctx.lineTo(width, midY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Compute 10-band coordinate points
+        const points = [];
+        const numBands = this.eqFrequencies.length;
+        const paddingX = 26;
+        const availableW = width - paddingX * 2;
+
+        for (let i = 0; i < numBands; i++) {
+            const x = paddingX + (i / (numBands - 1)) * availableW;
+            const rawGain = this.eqEnabled ? (this.eqBandsGains[i] || 0) : 0;
+            
+            // Factor in Bass Boost on low frequency curve
+            let extraBass = 0;
+            if (this.eqEnabled && this.eqBassBoost > 0) {
+                if (i === 0) extraBass = this.eqBassBoost * 0.95;
+                else if (i === 1) extraBass = this.eqBassBoost * 0.8;
+                else if (i === 2) extraBass = this.eqBassBoost * 0.45;
+                else if (i === 3) extraBass = this.eqBassBoost * 0.15;
+            }
+
+            const totalGain = Math.max(-12, Math.min(12, rawGain + extraBass));
+            const y = midY - (totalGain / maxDb) * (height / 2 - 12);
+            points.push({ x, y, gain: totalGain });
+        }
+
+        // Draw Spline Curve
+        if (points.length > 0) {
+            // 1. Shaded Gradient Fill Underneath
+            const areaGradient = ctx.createLinearGradient(0, 0, 0, height);
+            if (this.eqEnabled) {
+                areaGradient.addColorStop(0, 'rgba(245, 158, 11, 0.35)');
+                areaGradient.addColorStop(0.5, 'rgba(56, 189, 248, 0.18)');
+                areaGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+            } else {
+                areaGradient.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+                areaGradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(points[0].x, points[0].y);
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const xc = (points[i].x + points[i + 1].x) / 2;
+                const yc = (points[i].y + points[i + 1].y) / 2;
+                ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+            }
+            ctx.quadraticCurveTo(points[points.length - 1].x, points[points.length - 1].y, width, midY);
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.closePath();
+            ctx.fillStyle = areaGradient;
+            ctx.fill();
+
+            // 2. Neon Glowing Curve Line
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(points[0].x, points[0].y);
+            for (let i = 0; i < points.length - 1; i++) {
+                const xc = (points[i].x + points[i + 1].x) / 2;
+                const yc = (points[i].y + points[i + 1].y) / 2;
+                ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+            }
+            ctx.lineTo(width, midY);
+
+            ctx.strokeStyle = this.eqEnabled ? '#fbbf24' : 'rgba(255, 255, 255, 0.35)';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = this.eqEnabled ? 'rgba(251, 191, 36, 0.85)' : 'transparent';
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // 3. Draw Control Point Nodes
+            points.forEach(pt => {
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = this.eqEnabled ? '#ffffff' : 'rgba(255, 255, 255, 0.6)';
+                ctx.fill();
+                ctx.strokeStyle = this.eqEnabled ? '#f59e0b' : 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
+
+        ctx.restore();
+    }
+
+    openEqualizerModal() {
+        this.initWebAudioAnalyser();
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => {});
+        }
+        this.openModal(this.equalizerModal);
+        setTimeout(() => this.drawEqCurve(), 50);
+    }
+
+    setupEqualizerEvents() {
+        // Modal Open Triggers
+        if (this.eqToggleBtn) {
+            this.eqToggleBtn.addEventListener('click', () => {
+                this.openEqualizerModal();
+            });
+        }
+        if (this.topNavEqBtn) {
+            this.topNavEqBtn.addEventListener('click', () => {
+                this.openEqualizerModal();
+            });
+        }
+        if (this.mobileNavEqualizer) {
+            this.mobileNavEqualizer.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.closeMobileDrawer();
+                this.openEqualizerModal();
+            });
+        }
+        if (this.closeEqualizerModal && this.equalizerModal) {
+            this.closeEqualizerModal.addEventListener('click', () => {
+                this.closeModal(this.equalizerModal);
+            });
+        }
+
+        // Power Switch Toggle
+        if (this.eqPowerCheckbox) {
+            this.eqPowerCheckbox.addEventListener('change', (e) => {
+                this.initWebAudioAnalyser();
+                this.setEqPower(e.target.checked);
+            });
+        }
+
+        // Reset Button
+        if (this.eqResetBtn) {
+            this.eqResetBtn.addEventListener('click', () => {
+                this.initWebAudioAnalyser();
+                this.resetEqualizer();
+            });
+        }
+
+        // Presets Buttons
+        if (this.eqPresetsContainer) {
+            this.eqPresetsContainer.addEventListener('click', (e) => {
+                const pill = e.target.closest('.eq-preset-pill');
+                if (!pill) return;
+                const presetKey = pill.getAttribute('data-preset');
+                if (presetKey) {
+                    this.initWebAudioAnalyser();
+                    this.applyEqPreset(presetKey);
+                }
+            });
+        }
+
+        // Bass Boost Slider
+        if (this.bassBoostSlider) {
+            this.bassBoostSlider.addEventListener('input', (e) => {
+                this.initWebAudioAnalyser();
+                this.setBassBoost(e.target.value, true);
+            });
+        }
+
+        // Preamp Slider
+        if (this.preampSlider) {
+            this.preampSlider.addEventListener('input', (e) => {
+                this.initWebAudioAnalyser();
+                this.setPreamp(e.target.value, true);
+            });
+        }
+
+        // Window resize canvas redraw
+        window.addEventListener('resize', () => {
+            if (this.equalizerModal && this.equalizerModal.classList.contains('open')) {
+                this.drawEqCurve();
+            }
+        });
+    }
+
+    saveEqualizerSettings() {
+        try {
+            const data = {
+                enabled: this.eqEnabled,
+                preset: this.eqCurrentPreset,
+                gains: this.eqBandsGains,
+                bass: this.eqBassBoost,
+                preamp: this.eqPreamp
+            };
+            localStorage.setItem('xtapo_eq_settings', JSON.stringify(data));
+        } catch (e) {}
+    }
+
+    loadEqualizerSettings() {
+        try {
+            const saved = localStorage.getItem('xtapo_eq_settings');
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.enabled !== undefined) this.eqEnabled = !!data.enabled;
+                if (data.preset) this.eqCurrentPreset = data.preset;
+                if (Array.isArray(data.gains) && data.gains.length === 10) {
+                    this.eqBandsGains = data.gains.map(v => parseFloat(v) || 0);
+                }
+                if (data.bass !== undefined) this.eqBassBoost = parseFloat(data.bass) || 0;
+                if (data.preamp !== undefined) this.eqPreamp = parseFloat(data.preamp) || 0;
+            }
+        } catch (e) {}
     }
 
     updateSleepTimerModalView() {

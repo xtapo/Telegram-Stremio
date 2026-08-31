@@ -64,6 +64,20 @@
             </nav>
 
             <div class="nav-right">
+                <button class="nav-btn icon-btn" id="topNavEqBtn" title="Bộ chỉnh âm 10-Band & Bass Boost (Equalizer)">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="4" y1="21" x2="4" y2="14"></line>
+                        <line x1="4" y1="10" x2="4" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12" y2="3"></line>
+                        <line x1="20" y1="21" x2="20" y2="16"></line>
+                        <line x1="20" y1="12" x2="20" y2="3"></line>
+                        <circle cx="4" cy="12" r="2"></circle>
+                        <circle cx="12" cy="10" r="2"></circle>
+                        <circle cx="20" cy="14" r="2"></circle>
+                    </svg>
+                    <span class="eq-nav-badge" id="topNavEqBadge" style="display:none;"></span>
+                </button>
                 <button class="nav-btn icon-btn" id="topNavSleepBtn" title="Hẹn giờ tắt nhạc (Sleep Timer)">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -301,6 +315,23 @@
                                 <line x1="12" y1="19" x2="12" y2="22"></line>
                             </svg>
                             <span>Lời Nhạc</span>
+                        </button>
+
+                        <!-- Equalizer Button -->
+                        <button class="player-eq-btn" id="eqToggleBtn" title="Bộ chỉnh âm 10-Band & Bass Boost (Equalizer)">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="4" y1="21" x2="4" y2="14"></line>
+                                <line x1="4" y1="10" x2="4" y2="3"></line>
+                                <line x1="12" y1="21" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12" y2="3"></line>
+                                <line x1="20" y1="21" x2="20" y2="16"></line>
+                                <line x1="20" y1="12" x2="20" y2="3"></line>
+                                <circle cx="4" cy="12" r="2"></circle>
+                                <circle cx="12" cy="10" r="2"></circle>
+                                <circle cx="20" cy="14" r="2"></circle>
+                            </svg>
+                            <span>Equalizer</span>
+                            <span class="eq-active-dot" id="eqActiveDot" style="display:none;"></span>
                         </button>
 
                         <!-- Sleep Timer Button -->
@@ -1078,6 +1109,7 @@
                 <li><a href="#" class="mobile-nav-item" id="mobileNavCountries">🗺️ QUỐC GIA (COUNTRIES)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavPlaylists">📑 PLAYLISTS CỦA TÔI</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavFavorites">❤️ BÀI HÁT YÊU THÍCH</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavEqualizer">🎛️ BỘ CHỈNH ÂM (EQUALIZER)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavSleepTimer">🌙 HẸN GIỜ TẮT NHẠC</a></li>
             </ul>
             <div class="mobile-menu-footer">
@@ -1431,6 +1463,131 @@ Ví dụ chuẩn LRC:
                             <input type="checkbox" id="sleepFadeOutCheckbox" checked>
                             <span class="sleep-slider round"></span>
                         </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Equalizer 10-Band & Bass Boost Modal -->
+    <div class="modal-overlay" id="equalizerModal">
+        <div class="modal-card equalizer-modal-card">
+            <div class="modal-header eq-modal-header">
+                <div class="eq-header-left">
+                    <div class="eq-header-icon-wrap">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="4" y1="21" x2="4" y2="14"></line>
+                            <line x1="4" y1="10" x2="4" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12" y2="3"></line>
+                            <line x1="20" y1="21" x2="20" y2="16"></line>
+                            <line x1="20" y1="12" x2="20" y2="3"></line>
+                            <circle cx="4" cy="12" r="2"></circle>
+                            <circle cx="12" cy="10" r="2"></circle>
+                            <circle cx="20" cy="14" r="2"></circle>
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; font-family: var(--font-heading);">Bộ Chỉnh Âm 10-Band</h3>
+                            <span class="badge-tag accent-tag" style="font-size: 0.68rem; padding: 2px 6px;">AUDIOPHILE EQ</span>
+                        </div>
+                        <p style="margin: 3px 0 0; font-size: 0.8rem; color: var(--text-muted);">Cân bằng dải tần số 10-Band, Bass Boost & Preamp</p>
+                    </div>
+                </div>
+
+                <div class="eq-header-right">
+                    <!-- Power Switch Toggle -->
+                    <div class="eq-power-toggle-wrap" title="Bật/Tắt Equalizer">
+                        <span class="eq-power-label" id="eqPowerLabel">BẬT</span>
+                        <label class="eq-switch">
+                            <input type="checkbox" id="eqPowerCheckbox" checked>
+                            <span class="eq-slider round"></span>
+                        </label>
+                    </div>
+                    <button class="eq-reset-btn" id="eqResetBtn" title="Đặt lại dải tần phẳng (Flat)">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                        <span>Reset</span>
+                    </button>
+                    <button class="modal-close" id="closeEqualizerModal">&times;</button>
+                </div>
+            </div>
+
+            <div class="eq-modal-body">
+                <!-- Presets Horizontal Scrollable Pill Bar -->
+                <div class="eq-presets-section">
+                    <span class="eq-section-title">CẤU HÌNH CÓ SẴN (PRESETS):</span>
+                    <div class="eq-presets-scroll" id="eqPresetsContainer">
+                        <button class="eq-preset-pill active" data-preset="flat">Flat (Chuẩn)</button>
+                        <button class="eq-preset-pill" data-preset="bass_boost">🔥 Bass Boost</button>
+                        <button class="eq-preset-pill" data-preset="bass_reducer">🔉 Bass Reducer</button>
+                        <button class="eq-preset-pill" data-preset="rock">🎸 Rock / Metal</button>
+                        <button class="eq-preset-pill" data-preset="pop">🎤 Pop</button>
+                        <button class="eq-preset-pill" data-preset="edm">⚡ EDM / Dance</button>
+                        <button class="eq-preset-pill" data-preset="vocal">🎙️ Vocal Booster</button>
+                        <button class="eq-preset-pill" data-preset="jazz">🎷 Jazz</button>
+                        <button class="eq-preset-pill" data-preset="acoustic">🎻 Acoustic</button>
+                        <button class="eq-preset-pill" data-preset="treble">✨ Treble Booster</button>
+                        <button class="eq-preset-pill" data-preset="rnb">🍷 R&B / Soul</button>
+                        <button class="eq-preset-pill" data-preset="custom">🛠️ Tùy Chỉnh</button>
+                    </div>
+                </div>
+
+                <!-- Interactive Real-time Frequency Response Canvas Graph -->
+                <div class="eq-graph-container">
+                    <canvas id="eqCurveCanvas" width="680" height="120"></canvas>
+                    <div class="eq-graph-grid-labels">
+                        <span>+12 dB</span>
+                        <span>0 dB</span>
+                        <span>-12 dB</span>
+                    </div>
+                </div>
+
+                <!-- 10-Band Sliders Board -->
+                <div class="eq-bands-board" id="eqBandsBoard">
+                    <!-- Band items populated by app.js or initial markup -->
+                </div>
+
+                <!-- Sound Enhancements Row: Bass Boost & Preamp -->
+                <div class="eq-fx-row">
+                    <!-- Bass Boost Control Card -->
+                    <div class="eq-fx-card">
+                        <div class="eq-fx-header">
+                            <div class="eq-fx-icon" style="color: #f59e0b; background: rgba(245, 158, 11, 0.15);">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                                </svg>
+                            </div>
+                            <div class="eq-fx-info">
+                                <span class="eq-fx-name">BASS BOOST (ÂM TRẦM)</span>
+                                <span class="eq-fx-desc">Tăng cường sub-bass 80Hz uy lực</span>
+                            </div>
+                            <span class="eq-fx-val-badge" id="bassBoostValBadge">+0.0 dB</span>
+                        </div>
+                        <div class="eq-fx-slider-wrap">
+                            <input type="range" class="eq-fx-slider" id="bassBoostSlider" min="0" max="12" step="0.5" value="0">
+                        </div>
+                    </div>
+
+                    <!-- Preamp Gain Control Card -->
+                    <div class="eq-fx-card">
+                        <div class="eq-fx-header">
+                            <div class="eq-fx-icon" style="color: #38bdf8; background: rgba(56, 189, 248, 0.15);">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                                </svg>
+                            </div>
+                            <div class="eq-fx-info">
+                                <span class="eq-fx-name">PREAMP (TIỀN KHUẾCH ĐẠI)</span>
+                                <span class="eq-fx-desc">Cân bằng tín hiệu tổng, chống vỡ tiếng</span>
+                            </div>
+                            <span class="eq-fx-val-badge" id="preampValBadge">0.0 dB</span>
+                        </div>
+                        <div class="eq-fx-slider-wrap">
+                            <input type="range" class="eq-fx-slider" id="preampSlider" min="-12" max="12" step="0.5" value="0">
+                        </div>
                     </div>
                 </div>
             </div>
