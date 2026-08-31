@@ -2151,11 +2151,11 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         "token": "music-player",
     }
 
-    # Tính toán số lượng worker song song và prefetch dựa trên số lượng bot clients
+    # Tính toán số lượng worker song song và prefetch cho audio stream chống giật lag
     token_count = len(multi_clients) - 1 if multi_clients else 0
     parallelism, prefetch_count = get_parallel_prefetch(token_count)
-    parallelism = max(1, parallelism)
-    prefetch_count = max(3, prefetch_count)  # Đảm bảo tối thiểu 3 chunks prefetch để nhạc không bị vấp
+    parallelism = max(2 if token_count > 0 else 1, parallelism)
+    prefetch_count = max(10, prefetch_count)  # Tải trước 10MB để âm thanh luôn liền mạch 100% không bị vấp
 
     extra_clients_for_stream = []
     if parallelism > 1 and len(multi_clients) > 1:

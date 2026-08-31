@@ -601,22 +601,37 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 6px;
         }
 
         .tv-progress-bar {
             width: 100%;
-            height: 6px;
+            height: 10px;
             background: #1c2433;
-            border-radius: 3px;
+            border-radius: 5px;
             overflow: hidden;
             position: relative;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.15s ease;
+        }
+
+        .tv-progress-bar:hover,
+        .tv-progress-bar:focus,
+        .tv-progress-bar.focused {
+            height: 14px;
+            border-color: #f59e0b;
+            background: #242f42;
+            outline: 3px solid #f59e0b !important;
+            outline-offset: 2px !important;
         }
 
         .tv-progress-fill {
             height: 100%;
             width: 0%;
-            background: #f59e0b;
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+            border-radius: 4px;
+            transition: width 0.1s linear;
         }
 
         .tv-time-row {
@@ -797,12 +812,14 @@
 
             <div class="tv-player-controls">
                 <button class="tv-btn focusable" id="btnPrev" tabindex="0" title="Bài trước">⏮</button>
+                <button class="tv-btn focusable" id="btnSeekBack" tabindex="0" title="Tua lùi 10 giây">⏪ 10s</button>
                 <button class="tv-btn tv-btn-play focusable" id="btnPlay" tabindex="0" title="Phát / Dừng">▶ Phát</button>
+                <button class="tv-btn focusable" id="btnSeekFwd" tabindex="0" title="Tua nhanh 10 giây">10s ⏩</button>
                 <button class="tv-btn focusable" id="btnNext" tabindex="0" title="Bài tiếp">⏭</button>
             </div>
 
             <div class="tv-progress-wrap">
-                <div class="tv-progress-bar">
+                <div class="tv-progress-bar focusable" id="tvProgressBar" tabindex="0" role="slider" aria-label="Thanh tua bài hát" title="Dùng phím Trái / Phải để tua bài">
                     <div class="tv-progress-fill" id="progressFill"></div>
                 </div>
                 <div class="tv-time-row">
@@ -870,6 +887,9 @@
         const btnPlay = document.getElementById('btnPlay');
         const btnPrev = document.getElementById('btnPrev');
         const btnNext = document.getElementById('btnNext');
+        const btnSeekBack = document.getElementById('btnSeekBack');
+        const btnSeekFwd = document.getElementById('btnSeekFwd');
+        const tvProgressBar = document.getElementById('tvProgressBar');
         const progressFill = document.getElementById('progressFill');
         const timeCur = document.getElementById('timeCur');
         const timeDur = document.getElementById('timeDur');
@@ -897,6 +917,30 @@
             const m = Math.floor(sec / 60);
             const s = Math.floor(sec % 60);
             return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // ─── TUA NHANH / TUA LÙI (SEEKING LOGIC) ───
+        function seek(deltaSec) {
+            if (!audio.duration || isNaN(audio.duration)) return;
+            let target = audio.currentTime + deltaSec;
+            if (target < 0) target = 0;
+            if (target > audio.duration) target = audio.duration - 1;
+            audio.currentTime = target;
+
+            const pct = (target / audio.duration) * 100;
+            progressFill.style.width = `${pct}%`;
+            timeCur.textContent = formatTime(target);
+            showToast(`${deltaSec > 0 ? '⏩ Tua tới +' : '⏪ Tua lùi '}${Math.abs(deltaSec)}s (${formatTime(target)})`);
+        }
+
+        function seekToPercent(pct) {
+            if (!audio.duration || isNaN(audio.duration)) return;
+            pct = Math.max(0, Math.min(1, pct));
+            const target = pct * audio.duration;
+            audio.currentTime = target;
+            progressFill.style.width = `${pct * 100}%`;
+            timeCur.textContent = formatTime(target);
+            showToast(`⏩ Nhảy tới ${formatTime(target)}`);
         }
 
         // ─── PHÂN LOẠI DỮ LIỆU TỪ RAW ALBUMS ───
@@ -1228,8 +1272,71 @@
             btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
         }
 
-        audio.addEventListener('play', () => { isPlaying = true; updatePlayerUI(); });
-        audio.addEventListener('pause', () => { isPlaying = false; updatePlayerUI(); });
+        const preloaderAudio = new Audio();
+        preloaderAudio.preload = 'auto';
+
+        function preloadNextTrack() {
+            if (!currentTracklist || currentTracklist.length <= 1) return;
+            const nextIdx = (currentPlayingTrackIdx + 1) % currentTracklist.length;
+            const nextTr = currentTracklist[nextIdx];
+            if (!nextTr) return;
+            const nextUrl = nextTr.url || nextTr.stream_url || nextTr.previewUrl || (nextTr.chat_id && nextTr.msg_id ? `/api/music/stream/${nextTr.chat_id}/${nextTr.msg_id}` : null);
+            if (nextUrl && preloaderAudio.src !== nextUrl) {
+                preloaderAudio.src = nextUrl;
+                preloaderAudio.load();
+            }
+        }
+
+        // Watchdog chống nghẽn đệm trên Smart TV
+        let bufferWatchdogTimer = null;
+        function resetBufferWatchdog() {
+            if (bufferWatchdogTimer) clearTimeout(bufferWatchdogTimer);
+            if (!isPlaying) return;
+            bufferWatchdogTimer = setTimeout(() => {
+                if (isPlaying && audio.paused && !audio.ended) {
+                    audio.play().catch(() => {});
+                }
+            }, 2500);
+        }
+
+        audio.addEventListener('play', () => {
+            isPlaying = true;
+            updatePlayerUI();
+            setTimeout(preloadNextTrack, 1500);
+        });
+
+        audio.addEventListener('playing', () => {
+            isPlaying = true;
+            updatePlayerUI();
+            if (bufferWatchdogTimer) clearTimeout(bufferWatchdogTimer);
+        });
+
+        audio.addEventListener('pause', () => {
+            isPlaying = false;
+            updatePlayerUI();
+        });
+
+        audio.addEventListener('waiting', () => {
+            playerTrackTitle.textContent = '⏳ ' + (currentTracklist?.[currentPlayingTrackIdx]?.name || 'Đang tải đệm...');
+            resetBufferWatchdog();
+        });
+
+        audio.addEventListener('stalled', () => {
+            resetBufferWatchdog();
+        });
+
+        audio.addEventListener('error', (e) => {
+            console.warn('[TV Audio] Lỗi mạng khi stream bài, tự động kết nối lại:', e);
+            if (isPlaying && audio.src) {
+                const curPos = audio.currentTime;
+                setTimeout(() => {
+                    audio.load();
+                    if (curPos > 0) audio.currentTime = curPos;
+                    audio.play().catch(() => {});
+                }, 1000);
+            }
+        });
+
         audio.addEventListener('timeupdate', () => {
             if (audio.duration) {
                 const pct = (audio.currentTime / audio.duration) * 100;
@@ -1238,7 +1345,10 @@
                 timeDur.textContent = formatTime(audio.duration);
             }
         });
-        audio.addEventListener('ended', () => { nextTrack(); });
+
+        audio.addEventListener('ended', () => {
+            nextTrack();
+        });
 
         function switchTab(tabKey) {
             currentTab = tabKey;
@@ -1452,6 +1562,18 @@
         btnPlay.addEventListener('click', togglePlay);
         btnNext.addEventListener('click', nextTrack);
         btnPrev.addEventListener('click', prevTrack);
+        if (btnSeekBack) btnSeekBack.addEventListener('click', () => seek(-10));
+        if (btnSeekFwd) btnSeekFwd.addEventListener('click', () => seek(10));
+
+        if (tvProgressBar) {
+            tvProgressBar.addEventListener('click', (e) => {
+                const rect = tvProgressBar.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const pct = clickX / rect.width;
+                seekToPercent(pct);
+            });
+        }
+
         btnReload.addEventListener('click', () => {
             if (currentUser) fetchLibrary();
             else checkUserProfile();
@@ -1534,6 +1656,7 @@
         }
 
         window.addEventListener('keydown', (e) => {
+            // Media Keys on TV Remote
             if (['MediaPlayPause', 'MediaPlay', 'MediaPause'].includes(e.code) || [179, 126, 127].includes(e.keyCode)) {
                 e.preventDefault();
                 togglePlay();
@@ -1547,6 +1670,48 @@
             if (e.code === 'MediaTrackPrevious' || e.keyCode === 88) {
                 e.preventDefault();
                 prevTrack();
+                return;
+            }
+            // Fast-Forward / Rewind Media Keys on Remote
+            if (['MediaFastForward', 'FastForward'].includes(e.code) || e.keyCode === 228 || e.key === 'KeyL') {
+                e.preventDefault();
+                seek(10);
+                return;
+            }
+            if (['MediaRewind', 'Rewind'].includes(e.code) || e.keyCode === 227 || e.key === 'KeyJ') {
+                e.preventDefault();
+                seek(-10);
+                return;
+            }
+
+            // Khi đang focus vào thanh tua tiến trình (Progress Bar)
+            if (document.activeElement === tvProgressBar) {
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    seek(-10);
+                    return;
+                }
+                if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    seek(10);
+                    return;
+                }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    togglePlay();
+                    return;
+                }
+            }
+
+            // Tua nhanh bằng Shift + Mũi tên Trái / Phải
+            if (e.shiftKey && e.key === 'ArrowRight') {
+                e.preventDefault();
+                seek(10);
+                return;
+            }
+            if (e.shiftKey && e.key === 'ArrowLeft') {
+                e.preventDefault();
+                seek(-10);
                 return;
             }
 
