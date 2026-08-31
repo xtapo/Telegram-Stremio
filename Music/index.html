@@ -78,7 +78,7 @@
                     </svg>
                 </button>
                 <!-- User Profile / Login -->
-                <button class="nav-btn user-profile-btn tv-focusable" id="userProfileBtn" tabindex="0" role="button" onclick="window._musicApp?.openAuthModal()" title="Tài khoản / Đăng nhập">
+                <button class="nav-btn user-profile-btn tv-focusable" id="userProfileBtn" tabindex="0" role="button" onclick="(window.xtapoApp || window._musicApp)?.openAuthModal()" title="Tài khoản / Đăng nhập">
                     <img id="userAvatarImg" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Guest" alt="Guest" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px;">
                     <span id="userDisplayName">Đăng nhập</span>
                 </button>

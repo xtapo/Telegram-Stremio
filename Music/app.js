@@ -558,6 +558,10 @@ class XTAPOMusicApp {
         this.smartMixArtistChips = document.getElementById('smartMixArtistChips');
         this.isAutoplay = true;
 
+        // Expose globally for inline and external triggers
+        window.xtapoApp = this;
+        window._musicApp = this;
+
         // Init
         this.init();
     }
@@ -3050,9 +3054,26 @@ class XTAPOMusicApp {
         if (this.drawerBackdrop) this.drawerBackdrop.addEventListener('click', closeDrawer);
 
         // Mobile Menu Drawer
-        this.hamburgerBtn.addEventListener('click', () => this.mobileMenuDrawer.classList.add('open'));
-        this.closeMobileMenu.addEventListener('click', () => this.closeMobileDrawer());
-        this.mobileMenuBackdrop.addEventListener('click', () => this.closeMobileDrawer());
+        if (this.hamburgerBtn) {
+            const handleHamburger = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleMobileDrawer();
+            };
+            this.hamburgerBtn.addEventListener('click', handleHamburger);
+        }
+        if (this.closeMobileMenu) {
+            this.closeMobileMenu.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.closeMobileDrawer();
+            });
+        }
+        if (this.mobileMenuBackdrop) {
+            this.mobileMenuBackdrop.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.closeMobileDrawer();
+            });
+        }
 
         // Sleep Timer Modal Triggers
         const openSleepTimerHandler = () => {
@@ -3997,8 +4018,26 @@ class XTAPOMusicApp {
         if (activeLink) activeLink.classList.add('active');
     }
 
+    openMobileDrawer() {
+        if (this.mobileMenuDrawer) {
+            this.mobileMenuDrawer.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
     closeMobileDrawer() {
-        if (this.mobileMenuDrawer) this.mobileMenuDrawer.classList.remove('open');
+        if (this.mobileMenuDrawer) {
+            this.mobileMenuDrawer.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+    }
+
+    toggleMobileDrawer() {
+        if (this.mobileMenuDrawer && this.mobileMenuDrawer.classList.contains('open')) {
+            this.closeMobileDrawer();
+        } else {
+            this.openMobileDrawer();
+        }
     }
 
     renderAlbumGrid() {
