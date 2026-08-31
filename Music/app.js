@@ -7691,6 +7691,27 @@ class XTAPOMusicApp {
         }
     }
 
+    openMobileDrawer() {
+        if (this.mobileMenuDrawer) {
+            this.mobileMenuDrawer.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    closeMobileDrawer() {
+        if (this.mobileMenuDrawer) {
+            this.mobileMenuDrawer.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+    }
+
+    toggleMobileDrawer() {
+        if (this.mobileMenuDrawer) {
+            const isOpen = this.mobileMenuDrawer.classList.toggle('open');
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+        }
+    }
+
     escapeHtml(str) {
         if (!str || typeof str !== 'string') return '';
         return str

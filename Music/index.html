@@ -13,13 +13,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/music/style.css?v=3.0">
-    <link rel="stylesheet" href="/Music/style.css?v=3.0">
+    <link rel="stylesheet" href="style.css?v=3.1">
     <!-- JSZip for Client-side Zip Packaging & High-Speed Batch Downloads -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Standalone Offline QRCode.js for Instant Telegram QR Render -->
-    <script src="/music/qrcode.min.js?v=1.0"></script>
-    <script src="/Music/qrcode.min.js?v=1.0"></script>
+    <script src="qrcode.min.js?v=1.0"></script>
 </head>
 <body class="kmusic-body">
     <!-- Ambient Dynamic Background Blur (Apple Music Style) -->
@@ -91,6 +89,59 @@
                 </button>
             </div>
         </header>
+
+        <!-- Mobile Menu Drawer -->
+        <aside class="mobile-menu-drawer" id="mobileMenuDrawer">
+            <div class="mobile-menu-backdrop" id="mobileMenuBackdrop" onclick="(window.xtapoApp || window._musicApp)?.closeMobileDrawer?.() || (document.getElementById('mobileMenuDrawer').classList.remove('open'), document.body.style.overflow='');"></div>
+            <div class="mobile-menu-panel">
+                <div class="mobile-menu-header">
+                    <span class="brand-text" style="font-size:1.1rem;">XTAPO <span class="brand-highlight">MUSIC</span></span>
+                    <button class="mobile-menu-close" id="closeMobileMenu" onclick="(window.xtapoApp || window._musicApp)?.closeMobileDrawer?.() || (document.getElementById('mobileMenuDrawer').classList.remove('open'), document.body.style.overflow='');" aria-label="Đóng menu">&times;</button>
+                </div>
+                <nav class="mobile-menu-nav">
+                    <a href="#" class="mobile-menu-item active" id="mobileNavMusics" onclick="document.getElementById('navMusics')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                        TẤT CẢ BÀI HÁT
+                    </a>
+                    <a href="#" class="mobile-menu-item" id="mobileNavHires" onclick="document.getElementById('navHires')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                        HI-RES LOSSLESS
+                    </a>
+                    <a href="#" class="mobile-menu-item" id="mobileNavAlbums" onclick="document.getElementById('navAlbums')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                        ALBUMS
+                    </a>
+                    <a href="#" class="mobile-menu-item" id="mobileNavArtists" onclick="document.getElementById('navArtists')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        ARTISTS
+                    </a>
+                    <a href="#" class="mobile-menu-item" id="mobileNavGenres" onclick="document.getElementById('navGenres')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+                        GENRES
+                    </a>
+                    <a href="#" class="mobile-menu-item" id="mobileNavCountries" onclick="document.getElementById('navCountries')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        COUNTRIES
+                    </a>
+                    <a href="#" class="mobile-menu-item" id="mobileNavPlaylists" onclick="document.getElementById('navPlaylists')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        PLAYLISTS
+                    </a>
+                    <div class="mobile-menu-divider"></div>
+                    <a href="#" class="mobile-menu-item" id="mobileNavSmartMix" onclick="document.getElementById('navSmartMix')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--accent-cyan)" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        <span style="color: var(--accent-cyan);">✨ SMART MIX</span>
+                    </a>
+                    <a href="#" class="mobile-menu-item" id="mobileNavFavorites" onclick="document.getElementById('navFavorites')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#ef4444" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                        <span style="color: #ef4444;">❤ YÊU THÍCH</span>
+                    </a>
+                </nav>
+                <div class="mobile-menu-footer">
+                    <small style="color: var(--text-muted); font-size: 0.75rem;">XTAPO MUSIC v3.1 &bull; Hi-Res Audio</small>
+                </div>
+            </div>
+        </aside>
 
         <!-- Main Hero Player Section -->
         <main class="kmusic-hero">
@@ -1531,6 +1582,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="/Music/app.js?v=3.0"></script>
+    <script src="app.js?v=3.1"></script>
 </body>
 </html>
