@@ -13,11 +13,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.1">
+    <link rel="stylesheet" href="/music/style.css?v=3.0">
+    <link rel="stylesheet" href="/Music/style.css?v=3.0">
     <!-- JSZip for Client-side Zip Packaging & High-Speed Batch Downloads -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Standalone Offline QRCode.js for Instant Telegram QR Render -->
-    <script src="qrcode.min.js?v=1.0"></script>
+    <script src="/music/qrcode.min.js?v=1.0"></script>
+    <script src="/Music/qrcode.min.js?v=1.0"></script>
 </head>
 <body class="kmusic-body">
     <!-- Ambient Dynamic Background Blur (Apple Music Style) -->
@@ -57,7 +59,6 @@
                     <li><a href="#" class="nav-link" id="navGenres">GENRES</a></li>
                     <li><a href="#" class="nav-link" id="navCountries">COUNTRIES</a></li>
                     <li><a href="#" class="nav-link" id="navPlaylists">PLAYLISTS</a></li>
-                    <li><a href="#" class="nav-link" id="navSmartMix"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--accent-cyan); margin-right: 4px; vertical-align: -1px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>SMART MIX</a></li>
                     <li><a href="#" class="nav-link" id="navFavorites"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="color: #ef4444; margin-right: 4px; vertical-align: -1px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>YÊU THÍCH</a></li>
                 </ul>
             </nav>
@@ -76,7 +77,7 @@
                     </svg>
                 </button>
                 <!-- User Profile / Login -->
-                <button class="nav-btn user-profile-btn tv-focusable" id="userProfileBtn" tabindex="0" role="button" onclick="(window.xtapoApp || window._musicApp)?.openAuthModal()" title="Tài khoản / Đăng nhập">
+                <button class="nav-btn user-profile-btn tv-focusable" id="userProfileBtn" tabindex="0" role="button" onclick="window._musicApp?.openAuthModal()" title="Tài khoản / Đăng nhập">
                     <img id="userAvatarImg" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Guest" alt="Guest" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px;">
                     <span id="userDisplayName">Đăng nhập</span>
                 </button>
@@ -89,59 +90,6 @@
                 </button>
             </div>
         </header>
-
-        <!-- Mobile Menu Drawer -->
-        <aside class="mobile-menu-drawer" id="mobileMenuDrawer">
-            <div class="mobile-menu-backdrop" id="mobileMenuBackdrop" onclick="(window.xtapoApp || window._musicApp)?.closeMobileDrawer?.() || (document.getElementById('mobileMenuDrawer').classList.remove('open'), document.body.style.overflow='');"></div>
-            <div class="mobile-menu-panel">
-                <div class="mobile-menu-header">
-                    <span class="brand-text" style="font-size:1.1rem;">XTAPO <span class="brand-highlight">MUSIC</span></span>
-                    <button class="mobile-menu-close" id="closeMobileMenu" onclick="(window.xtapoApp || window._musicApp)?.closeMobileDrawer?.() || (document.getElementById('mobileMenuDrawer').classList.remove('open'), document.body.style.overflow='');" aria-label="Đóng menu">&times;</button>
-                </div>
-                <nav class="mobile-menu-nav">
-                    <a href="#" class="mobile-menu-item active" id="mobileNavMusics" onclick="document.getElementById('navMusics')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                        TẤT CẢ BÀI HÁT
-                    </a>
-                    <a href="#" class="mobile-menu-item" id="mobileNavHires" onclick="document.getElementById('navHires')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                        HI-RES LOSSLESS
-                    </a>
-                    <a href="#" class="mobile-menu-item" id="mobileNavAlbums" onclick="document.getElementById('navAlbums')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-                        ALBUMS
-                    </a>
-                    <a href="#" class="mobile-menu-item" id="mobileNavArtists" onclick="document.getElementById('navArtists')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        ARTISTS
-                    </a>
-                    <a href="#" class="mobile-menu-item" id="mobileNavGenres" onclick="document.getElementById('navGenres')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
-                        GENRES
-                    </a>
-                    <a href="#" class="mobile-menu-item" id="mobileNavCountries" onclick="document.getElementById('navCountries')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                        COUNTRIES
-                    </a>
-                    <a href="#" class="mobile-menu-item" id="mobileNavPlaylists" onclick="document.getElementById('navPlaylists')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                        PLAYLISTS
-                    </a>
-                    <div class="mobile-menu-divider"></div>
-                    <a href="#" class="mobile-menu-item" id="mobileNavSmartMix" onclick="document.getElementById('navSmartMix')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--accent-cyan)" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                        <span style="color: var(--accent-cyan);">✨ SMART MIX</span>
-                    </a>
-                    <a href="#" class="mobile-menu-item" id="mobileNavFavorites" onclick="document.getElementById('navFavorites')?.click(); (window.xtapoApp || window._musicApp)?.closeMobileDrawer?.();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#ef4444" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                        <span style="color: #ef4444;">❤ YÊU THÍCH</span>
-                    </a>
-                </nav>
-                <div class="mobile-menu-footer">
-                    <small style="color: var(--text-muted); font-size: 0.75rem;">XTAPO MUSIC v3.1 &bull; Hi-Res Audio</small>
-                </div>
-            </div>
-        </aside>
 
         <!-- Main Hero Player Section -->
         <main class="kmusic-hero">
@@ -340,27 +288,11 @@
                                 </svg>
                                 <span class="repeat-indicator" id="repeatIndicator"></span>
                             </button>
-
-                            <!-- Smart Autoplay Infinite Button -->
-                            <button class="ctrl-btn sub-btn active" id="autoplayBtn" title="Tự động phát thông minh khi hết danh sách (Infinite Autoplay): BẬT">
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M18.178 8c5.096 0 5.096 8 0 8-2.673 0-4.66-2.667-6.178-5.333C10.482 8 8.495 5.333 5.822 5.333c-5.096 0-5.096 8 0 8 2.673 0 4.66-2.667 6.178-5.333C13.518 10.667 15.505 13.333 18.178 13.333z"/>
-                                </svg>
-                                <span class="autoplay-indicator" id="autoplayIndicator">∞</span>
-                            </button>
                         </div>
                     </div>
 
                     <!-- Right: Volume & Options -->
                     <div class="player-right-options">
-                        <!-- Song Radio Button -->
-                        <button class="player-radio-btn" id="songRadioBtn" title="Phát Radio thông minh từ bài hát này (Smart Song Radio)">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                            </svg>
-                            <span>Song Radio</span>
-                        </button>
-
                         <!-- Lyrics Realtime Button -->
                         <button class="player-lyrics-btn" id="lyricsToggleBtn" title="Lời bài hát đồng bộ (Karaoke / Spotify Style)">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -749,76 +681,6 @@
                 </div>
             </div>
 
-    <!-- Smart Mix & Similar Recommendations Modal (Gợi Ý & Radio Tương Đồng) -->
-    <div class="modal-overlay" id="smartMixModal">
-        <div class="modal-card smart-mix-modal-card">
-            <div class="modal-header smart-mix-header">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div class="smart-mix-icon-badge">
-                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; font-family: var(--font-heading);">Smart Playlist & Song Radio</h3>
-                        <p style="margin: 3px 0 0; font-size: 0.8rem; color: var(--text-muted);">Tuyển tập thông minh & luồng nhạc tương đồng theo gu của bạn</p>
-                    </div>
-                </div>
-                <button class="modal-close" id="closeSmartMixModal">&times;</button>
-            </div>
-
-            <div class="smart-mix-modal-body">
-                <!-- Current Track Song Radio Spotlight Card -->
-                <div class="smart-spotlight-card" id="smartSpotlightCard">
-                    <div class="smart-spotlight-left">
-                        <img id="smartSpotlightCover" src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop" alt="Current Track">
-                        <div class="smart-spotlight-info">
-                            <span class="smart-spotlight-tag">⚡ SONG RADIO TỪ BÀI ĐANG PHÁT</span>
-                            <h4 class="smart-spotlight-title" id="smartSpotlightTitle">Tên bài hát</h4>
-                            <p class="smart-spotlight-artist" id="smartSpotlightArtist">Ca sĩ • Quốc gia</p>
-                        </div>
-                    </div>
-                    <button class="smart-spotlight-play-btn" id="smartSpotlightPlayBtn" title="Tạo luồng radio 25 bài tương đồng với bài này">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                        <span>Phát Radio Bài Này</span>
-                    </button>
-                </div>
-
-                <!-- Autoplay Switch Banner -->
-                <div class="smart-autoplay-banner">
-                    <div class="smart-autoplay-info">
-                        <span class="smart-autoplay-title">♾️ Tự Động Phát Thông Minh (Infinite Autoplay)</span>
-                        <span class="smart-autoplay-desc">Khi phát hết album hoặc playlist, tự động tìm và phát nối tiếp các bài hát tương đồng tiếp theo.</span>
-                    </div>
-                    <label class="sleep-switch">
-                        <input type="checkbox" id="smartAutoplayCheckbox" checked>
-                        <span class="sleep-slider round"></span>
-                    </label>
-                </div>
-
-                <!-- Curated Smart Mixes Section -->
-                <div class="smart-section-header">
-                    <div>
-                        <span class="smart-section-title">🔮 Tuyển Tập Thông Minh Đề Xuất</span>
-                        <span class="smart-section-sub">Tự động chọn lọc theo tâm trạng, thể loại và ca sĩ từ kho nhạc của bạn</span>
-                    </div>
-                </div>
-
-                <div class="smart-mix-grid" id="smartMixGrid">
-                    <!-- Populated dynamically: For You, Night Chill, Acoustic, Deep Ballad, Workout EDM, V-Pop, US-UK, Nostalgia -->
-                </div>
-
-                <!-- Similar Artists Radio Section -->
-                <div class="smart-section-header" style="margin-top: 24px;">
-                    <div>
-                        <span class="smart-section-title">🎙️ Radio Theo Nghệ Sĩ</span>
-                        <span class="smart-section-sub">Nghe luồng bài hát của ca sĩ cùng các nghệ sĩ có phong cách tương tự</span>
-                    </div>
-                </div>
-                <div class="smart-artists-chips-row" id="smartMixArtistChips">
-                    <!-- Populated dynamically with artist chips -->
-                </div>
-            </div>
         </div>
     </div>
 
@@ -1215,7 +1077,6 @@
                 <li><a href="#" class="mobile-nav-item" id="mobileNavGenres">🏷️ THỂ LOẠI (GENRES)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavCountries">🗺️ QUỐC GIA (COUNTRIES)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavPlaylists">📑 PLAYLISTS CỦA TÔI</a></li>
-                <li><a href="#" class="mobile-nav-item" id="mobileNavSmartMix">✨ SMART PLAYLIST & MIX</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavFavorites">❤️ BÀI HÁT YÊU THÍCH</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavSleepTimer">🌙 HẸN GIỜ TẮT NHẠC</a></li>
             </ul>
@@ -1582,6 +1443,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="app.js?v=3.1"></script>
+    <script src="/Music/app.js?v=3.0"></script>
 </body>
 </html>
