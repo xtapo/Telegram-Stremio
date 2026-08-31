@@ -881,3 +881,370 @@ async def delete_music_user(user_id: str, _: bool = Depends(require_auth)):
         return JSONResponse(status_code=200, content={"status": "success", "message": "Đã xóa user và dữ liệu thành công."})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 📺 TV QR LOGIN & PHONE-TO-TV AUTHENTICATION TRANSFER
+# ─────────────────────────────────────────────────────────────────────────────
+_TV_QR_SESSIONS: dict = {}
+
+
+@auth_router.post("/api/music/auth/tv/qr-init")
+async def init_tv_qr_session(request: Request):
+    """Khởi tạo phiên đăng nhập QR dành cho Android TV / Smart TV"""
+    token = f"tv_{secrets.token_urlsafe(20)}"
+    base_url = str(request.base_url).rstrip("/")
+    transfer_url = f"{base_url}/music/transfer?token={token}"
+    
+    _TV_QR_SESSIONS[token] = {
+        "created_at": time.time(),
+        "status": "pending",
+        "user_id": None,
+        "username": None,
+        "user": None
+    }
+    
+    # Dọn dẹp các phiên QR cũ quá 10 phút
+    now = time.time()
+    for old_tok in list(_TV_QR_SESSIONS.keys()):
+        if now - _TV_QR_SESSIONS[old_tok].get("created_at", 0) > 600:
+            _TV_QR_SESSIONS.pop(old_tok, None)
+
+    import urllib.parse
+    qr_img_url = f"https://api.qrserver.com/v1/create-qr-code/?size=350x350&margin=12&data={urllib.parse.quote(transfer_url)}"
+
+    return {
+        "status": "success",
+        "token": token,
+        "transfer_url": transfer_url,
+        "qr_url": qr_img_url,
+        "expires_in": 300
+    }
+
+
+@auth_router.get("/api/music/auth/tv/qr-status")
+async def check_tv_qr_status(token: str, request: Request):
+    """Kiểm tra trạng thái quét mã QR từ phía TV (Polling)"""
+    if not token or token not in _TV_QR_SESSIONS:
+        return {"status": "expired", "message": "Phiên QR không tồn tại hoặc đã hết hạn"}
+
+    sess = _TV_QR_SESSIONS[token]
+    if time.time() - sess.get("created_at", 0) > 300:
+        _TV_QR_SESSIONS.pop(token, None)
+        return {"status": "expired", "message": "Mã QR đã hết hạn, vui lòng tạo mã mới"}
+
+    if sess.get("status") == "confirmed":
+        user_id = sess.get("user_id")
+        username = sess.get("username")
+        user_data = sess.get("user")
+        
+        # Gán phiên đăng nhập trực tiếp cho TV
+        request.session["music_user_id"] = user_id
+        request.session["music_username"] = username
+        _TV_QR_SESSIONS.pop(token, None)
+
+        return {
+            "status": "confirmed",
+            "message": "Đăng nhập TV thành công!",
+            "user": user_data
+        }
+
+    return {"status": "pending", "message": "Đang chờ quét từ điện thoại..."}
+
+
+@auth_router.post("/api/music/auth/tv/confirm-transfer")
+async def confirm_tv_qr_transfer(payload: dict, request: Request):
+    """Xác nhận chuyển trạng thái đăng nhập từ điện thoại sang TV"""
+    token = payload.get("token")
+    if not token or token not in _TV_QR_SESSIONS:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Mã phiên TV không hợp lệ hoặc đã hết hạn."})
+
+    user_id = request.session.get("music_user_id")
+    if not user_id:
+        return JSONResponse(status_code=401, content={"status": "unauthorized", "message": "Bạn chưa đăng nhập trên điện thoại."})
+
+    try:
+        coll = db.dbs["tracking"]["music_users"]
+        user = await coll.find_one({"_id": user_id})
+        if not user or user.get("is_active") is False:
+            return JSONResponse(status_code=403, content={"status": "error", "message": "Tài khoản không hợp lệ hoặc đã bị khóa."})
+
+        user_info = {
+            "id": user["_id"],
+            "username": user["username"],
+            "display_name": user.get("display_name", user["username"]),
+            "avatar_url": user.get("avatar_url", ""),
+            "is_active": user.get("is_active", True)
+        }
+
+        _TV_QR_SESSIONS[token]["status"] = "confirmed"
+        _TV_QR_SESSIONS[token]["user_id"] = user["_id"]
+        _TV_QR_SESSIONS[token]["username"] = user["username"]
+        _TV_QR_SESSIONS[token]["user"] = user_info
+
+        return {
+            "status": "success",
+            "message": "Đã cho phép TV đăng nhập thành công!",
+            "user": user_info
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@auth_router.get("/music/transfer", response_class=HTMLResponse)
+@auth_router.get("/music/auth/transfer", response_class=HTMLResponse)
+async def tv_transfer_page(token: str = "", request: Request = None):
+    """Trang giao diện xác nhận chuyển đăng nhập sang TV khi quét QR trên điện thoại"""
+    from fastapi.responses import HTMLResponse
+    user_id = request.session.get("music_user_id")
+    username = request.session.get("music_username") or "Người dùng"
+    display_name = username
+    avatar_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
+
+    if user_id:
+        try:
+            coll = db.dbs["tracking"]["music_users"]
+            u = await coll.find_one({"_id": user_id})
+            if u:
+                display_name = u.get("display_name") or u.get("username")
+                if u.get("avatar_url"):
+                    avatar_url = u.get("avatar_url")
+        except Exception:
+            pass
+
+    is_logged_in = bool(user_id)
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Xác Nhận Đăng Nhập TV - XTAPO MUSIC</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            background: #0b0e14;
+            color: #f1f5f9;
+            font-family: system-ui, -apple-system, Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .card {{
+            background: #141923;
+            border: 2px solid #232a38;
+            border-radius: 20px;
+            padding: 32px 24px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+        }}
+        .logo-icon {{
+            width: 64px;
+            height: 64px;
+            background: rgba(245, 158, 11, 0.15);
+            border: 2px solid #f59e0b;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #f59e0b;
+            font-size: 28px;
+            margin-bottom: 16px;
+        }}
+        h2 {{ font-size: 22px; font-weight: 800; color: #f8fafc; margin-bottom: 8px; }}
+        p {{ font-size: 15px; color: #94a3b8; line-height: 1.5; margin-bottom: 24px; }}
+        .user-box {{
+            background: #1a2230;
+            border: 1px solid #334155;
+            border-radius: 14px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 24px;
+            text-align: left;
+        }}
+        .avatar {{
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #f59e0b;
+        }}
+        .user-name {{ font-size: 16px; font-weight: 700; color: #f8fafc; }}
+        .user-sub {{ font-size: 13px; color: #38bdf8; }}
+        .btn {{
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 800;
+            cursor: pointer;
+            border: none;
+            outline: none;
+            transition: all 0.2s;
+        }}
+        .btn-confirm {{
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #0b0e14;
+            box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
+            margin-bottom: 12px;
+        }}
+        .btn-confirm:active {{ transform: scale(0.98); }}
+        .btn-cancel {{
+            background: #1e2532;
+            color: #94a3b8;
+            border: 1px solid #334155;
+        }}
+        .status-box {{
+            display: none;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            margin-top: 16px;
+        }}
+        .status-success {{ background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }}
+        .status-error {{ background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }}
+        .login-form {{ text-align: left; margin-bottom: 20px; }}
+        .input-group {{ margin-bottom: 14px; }}
+        .input-label {{ font-size: 13px; font-weight: 700; color: #94a3b8; margin-bottom: 6px; display: block; }}
+        .input-field {{
+            width: 100%;
+            padding: 12px 14px;
+            background: #1a2230;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 15px;
+            outline: none;
+        }}
+        .input-field:focus {{ border-color: #f59e0b; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo-icon">📺</div>
+        <h2>Đăng Nhập Android TV</h2>
+        <p>Cho phép thiết bị Android TV / Smart TV kết nối và phát nhạc từ tài khoản của bạn.</p>
+
+        {"<!-- User Box If Logged In -->" if is_logged_in else ""}
+        {f'''
+        <div class="user-box" id="userBox">
+            <img src="{avatar_url}" class="avatar" alt="">
+            <div>
+                <div class="user-name">{display_name}</div>
+                <div class="user-sub">@{username} (Đã đăng nhập)</div>
+            </div>
+        </div>
+        <button class="btn btn-confirm" id="btnConfirm">✅ Xác Nhận Đăng Nhập Trên TV</button>
+        <button class="btn btn-cancel" onclick="window.close()">Hủy Bỏ</button>
+        ''' if is_logged_in else f'''
+        <div class="login-form">
+            <div class="input-group">
+                <label class="input-label">Tài khoản</label>
+                <input type="text" class="input-field" id="txtUsername" placeholder="Nhập username...">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Mật khẩu</label>
+                <input type="password" class="input-field" id="txtPassword" placeholder="Nhập mật khẩu...">
+            </div>
+            <button class="btn btn-confirm" id="btnLoginAndConfirm">🔐 Đăng Nhập & Chuyển Sang TV</button>
+        </div>
+        '''}
+
+        <div class="status-box" id="statusBox"></div>
+    </div>
+
+    <script>
+        const token = "{token}";
+        const statusBox = document.getElementById('statusBox');
+
+        function showStatus(msg, isSuccess) {{
+            statusBox.style.display = 'block';
+            statusBox.className = 'status-box ' + (isSuccess ? 'status-success' : 'status-error');
+            statusBox.textContent = msg;
+        }}
+
+        const btnConfirm = document.getElementById('btnConfirm');
+        if (btnConfirm) {{
+            btnConfirm.addEventListener('click', async () => {{
+                btnConfirm.disabled = true;
+                btnConfirm.textContent = 'Đang xử lý...';
+                try {{
+                    const res = await fetch('/api/music/auth/tv/confirm-transfer', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ token: token }})
+                    }});
+                    const data = await res.json();
+                    if (res.ok && data.status === 'success') {{
+                        showStatus('🎉 ' + data.message, true);
+                        btnConfirm.style.display = 'none';
+                        setTimeout(() => {{
+                            window.location.href = '/music';
+                        }}, 2000);
+                    }} else {{
+                        showStatus(data.message || 'Xác nhận thất bại', false);
+                        btnConfirm.disabled = false;
+                        btnConfirm.textContent = 'Thử lại';
+                    }}
+                }} catch (e) {{
+                    showStatus('Lỗi kết nối máy chủ: ' + e.message, false);
+                    btnConfirm.disabled = false;
+                }}
+            }});
+        }}
+
+        const btnLogin = document.getElementById('btnLoginAndConfirm');
+        if (btnLogin) {{
+            btnLogin.addEventListener('click', async () => {{
+                const u = document.getElementById('txtUsername').value.trim();
+                const p = document.getElementById('txtPassword').value;
+                if (!u || !p) {{
+                    showStatus('Vui lòng nhập đầy đủ tài khoản và mật khẩu', false);
+                    return;
+                }}
+                btnLogin.disabled = true;
+                btnLogin.textContent = 'Đang đăng nhập...';
+                try {{
+                    const resLogin = await fetch('/api/music/auth/login', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ username: u, password: p }})
+                    }});
+                    const loginData = await resLogin.json();
+                    if (!resLogin.ok || loginData.status !== 'success') {{
+                        showStatus(loginData.message || 'Đăng nhập thất bại', false);
+                        btnLogin.disabled = false;
+                        btnLogin.textContent = '🔐 Đăng Nhập & Chuyển Sang TV';
+                        return;
+                    }}
+
+                    // Chuyển luôn sang TV
+                    const resConfirm = await fetch('/api/music/auth/tv/confirm-transfer', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ token: token }})
+                    }});
+                    const confirmData = await resConfirm.json();
+                    if (resConfirm.ok && confirmData.status === 'success') {{
+                        showStatus('🎉 Đăng nhập & chuyển sang TV thành công!', true);
+                        setTimeout(() => {{ window.location.href = '/music'; }}, 2000);
+                    }} else {{
+                        showStatus(confirmData.message || 'Không thể chuyển sang TV', false);
+                    }}
+                }} catch (e) {{
+                    showStatus('Lỗi kết nối: ' + e.message, false);
+                    btnLogin.disabled = false;
+                }}
+            }});
+        }}
+    </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)

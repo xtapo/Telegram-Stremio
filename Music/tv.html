@@ -35,7 +35,7 @@
 
         /* Top Bar */
         .tv-topbar {
-            height: 60px;
+            height: 64px;
             background: #131722;
             border-bottom: 2px solid #232936;
             display: flex;
@@ -68,14 +68,35 @@
         .tv-top-actions {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 14px;
+        }
+
+        .tv-user-info {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            background: #1a2230;
+            border: 1px solid #334155;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .tv-user-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid #f59e0b;
         }
 
         /* Main Workspace (Left Albums / Right Tracklist + Player) */
         .tv-main {
             display: flex;
             flex: 1;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 64px);
             overflow: hidden;
         }
 
@@ -281,6 +302,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            transition: all 0.1s ease;
         }
 
         .tv-btn-play {
@@ -289,6 +311,13 @@
             border-color: #d97706;
             font-size: 17px;
             padding: 12px 24px;
+        }
+
+        .tv-btn-login {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #0f131c;
+            border-color: #f59e0b;
+            font-weight: 800;
         }
 
         .tv-progress-wrap {
@@ -332,15 +361,94 @@
             z-index: 100 !important;
         }
 
-        /* Remote Helper Bar at bottom */
-        .tv-remote-hint {
-            font-size: 13px;
-            color: #64748b;
-            padding: 4px 8px;
-            background: #0f131c;
-            border-radius: 6px;
+        /* ─── QR LOGIN MODAL FOR TV ─── */
+        .tv-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .tv-modal-overlay.open {
             display: flex;
-            gap: 12px;
+        }
+
+        .tv-modal-card {
+            background: #131722;
+            border: 2px solid #f59e0b;
+            border-radius: 20px;
+            padding: 36px 40px;
+            max-width: 520px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 16px 50px rgba(0,0,0,0.8), 0 0 30px rgba(245, 158, 11, 0.3);
+        }
+
+        .tv-modal-title {
+            font-size: 24px;
+            font-weight: 800;
+            color: #f8fafc;
+            margin-bottom: 8px;
+        }
+
+        .tv-modal-sub {
+            font-size: 15px;
+            color: #94a3b8;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        .tv-qr-box {
+            background: #fff;
+            padding: 14px;
+            border-radius: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            min-width: 250px;
+            min-height: 250px;
+        }
+
+        .tv-qr-img {
+            width: 240px;
+            height: 240px;
+            display: block;
+        }
+
+        .tv-qr-status {
+            font-size: 15px;
+            font-weight: 700;
+            color: #38bdf8;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .tv-toast {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e2433;
+            border: 2px solid #f59e0b;
+            border-radius: 30px;
+            padding: 10px 24px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #f8fafc;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.8);
+            z-index: 10000;
+            display: none;
         }
     </style>
 </head>
@@ -353,11 +461,12 @@
                 <span class="tv-badge">TV LITE • 0% LAG</span>
             </div>
             <div class="tv-top-actions">
-                <div class="tv-remote-hint">
-                    <span>🎮 <b>Remote:</b> ▲▼◀▶ Di chuyển</span>
-                    <span><b>OK:</b> Chọn / Phát</span>
-                    <span><b>Back:</b> Thoát</span>
+                <div class="tv-user-info" id="tvUserInfo">
+                    <img src="" id="tvUserAvatar" class="tv-user-avatar" alt="">
+                    <span id="tvUserName">User</span>
+                    <button class="tv-btn focusable" id="btnTvLogout" tabindex="0" style="padding: 4px 10px; font-size: 12px; margin-left: 6px;">Đăng Xuất</button>
                 </div>
+                <button class="tv-btn tv-btn-login focusable" id="btnOpenQrLogin" tabindex="0">📲 Đăng Nhập QR</button>
                 <button class="tv-btn focusable" id="btnReloadLibrary" tabindex="0">🔄 Tải Lại</button>
             </div>
         </header>
@@ -409,6 +518,30 @@
         </main>
     </div>
 
+    <!-- QR Login Modal for TV -->
+    <div class="tv-modal-overlay" id="qrModal">
+        <div class="tv-modal-card">
+            <div class="tv-modal-title">📲 Quét Mã QR Để Đăng Nhập TV</div>
+            <div class="tv-modal-sub">Mở ứng dụng hoặc camera trên điện thoại (đã đăng nhập tài khoản) và quét mã QR này:</div>
+
+            <div class="tv-qr-box">
+                <img id="qrCodeImg" class="tv-qr-img" src="" alt="QR Code">
+            </div>
+
+            <div class="tv-qr-status" id="qrStatusText">
+                <span>⏳ Đang chờ xác nhận từ điện thoại...</span>
+            </div>
+
+            <div style="display: flex; gap: 14px; justify-content: center;">
+                <button class="tv-btn focusable" id="btnRefreshQr" tabindex="0">🔄 Đổi Mã Khác</button>
+                <button class="tv-btn focusable" id="btnCloseQrModal" tabindex="0">Đóng (Back)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="tv-toast" id="tvToast"></div>
+
     <!-- Native Standard HTML5 Audio (Zero AudioContext overhead) -->
     <audio id="audioPlayer" preload="auto"></audio>
 
@@ -449,6 +582,9 @@
         let currentAlbumIdx = 0;
         let currentTrackIdx = 0;
         let isPlaying = false;
+        let currentUser = null;
+        let qrPollInterval = null;
+        let currentQrToken = null;
 
         // Elements
         const audio = document.getElementById('audioPlayer');
@@ -466,6 +602,25 @@
         const progressFill = document.getElementById('progressFill');
         const timeCur = document.getElementById('timeCur');
         const timeDur = document.getElementById('timeDur');
+
+        // Auth Elements
+        const tvUserInfo = document.getElementById('tvUserInfo');
+        const tvUserAvatar = document.getElementById('tvUserAvatar');
+        const tvUserName = document.getElementById('tvUserName');
+        const btnOpenQrLogin = document.getElementById('btnOpenQrLogin');
+        const btnTvLogout = document.getElementById('btnTvLogout');
+        const qrModal = document.getElementById('qrModal');
+        const qrCodeImg = document.getElementById('qrCodeImg');
+        const qrStatusText = document.getElementById('qrStatusText');
+        const btnCloseQrModal = document.getElementById('btnCloseQrModal');
+        const btnRefreshQr = document.getElementById('btnRefreshQr');
+        const tvToast = document.getElementById('tvToast');
+
+        function showToast(msg) {
+            tvToast.textContent = msg;
+            tvToast.style.display = 'block';
+            setTimeout(() => { tvToast.style.display = 'none'; }, 3500);
+        }
 
         // Format Seconds to MM:SS
         function formatTime(sec) {
@@ -642,6 +797,98 @@
             nextTrack();
         });
 
+        // ─── AUTH & QR CODE TRANSFER LOGIC ───
+        async function checkUserProfile() {
+            try {
+                const res = await fetch('/api/music/auth/profile');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.user) {
+                        currentUser = data.user;
+                        tvUserInfo.style.display = 'flex';
+                        tvUserName.textContent = currentUser.display_name || currentUser.username;
+                        tvUserAvatar.src = currentUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
+                        btnOpenQrLogin.style.display = 'none';
+                    } else {
+                        currentUser = null;
+                        tvUserInfo.style.display = 'none';
+                        btnOpenQrLogin.style.display = 'inline-flex';
+                    }
+                }
+            } catch (e) {
+                console.log('Profile check static mode');
+            }
+        }
+
+        async function openQrLogin() {
+            qrModal.classList.add('open');
+            qrStatusText.textContent = '⏳ Đang tạo mã QR kết nối...';
+            qrCodeImg.src = '';
+
+            try {
+                const res = await fetch('/api/music/auth/tv/qr-init', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    currentQrToken = data.token;
+                    qrCodeImg.src = data.qr_url;
+                    qrStatusText.innerHTML = '<span>⏳ Đang chờ xác nhận từ điện thoại...</span>';
+                    startQrPolling();
+                } else {
+                    qrStatusText.textContent = 'Lỗi tạo mã QR. Vui lòng thử lại.';
+                }
+            } catch (e) {
+                qrStatusText.textContent = 'Lỗi kết nối máy chủ: ' + e.message;
+            }
+
+            setTimeout(() => {
+                const btn = document.getElementById('btnCloseQrModal');
+                if (btn) btn.focus();
+            }, 100);
+        }
+
+        function closeQrLogin() {
+            qrModal.classList.remove('open');
+            if (qrPollInterval) {
+                clearInterval(qrPollInterval);
+                qrPollInterval = null;
+            }
+        }
+
+        function startQrPolling() {
+            if (qrPollInterval) clearInterval(qrPollInterval);
+            qrPollInterval = setInterval(async () => {
+                if (!currentQrToken || !qrModal.classList.contains('open')) {
+                    clearInterval(qrPollInterval);
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/music/auth/tv/qr-status?token=${encodeURIComponent(currentQrToken)}`);
+                    const data = await res.json();
+                    if (res.ok && data.status === 'confirmed') {
+                        clearInterval(qrPollInterval);
+                        qrPollInterval = null;
+                        closeQrLogin();
+                        showToast(`🎉 Đăng nhập thành công: ${data.user?.display_name || data.user?.username}!`);
+                        await checkUserProfile();
+                        await fetchLibrary();
+                    } else if (data.status === 'expired') {
+                        clearInterval(qrPollInterval);
+                        qrStatusText.textContent = '⚠️ Mã QR đã hết hạn. Bấm "Đổi Mã Khác" để tạo lại.';
+                    }
+                } catch (e) {}
+            }, 1500);
+        }
+
+        async function logoutUser() {
+            try {
+                await fetch('/api/music/auth/logout', { method: 'POST' });
+                currentUser = null;
+                showToast('👋 Đã đăng xuất khỏi TV');
+                await checkUserProfile();
+                await fetchLibrary();
+            } catch (e) {}
+        }
+
         // Fetch Live Telegram Library
         async function fetchLibrary() {
             try {
@@ -671,10 +918,15 @@
         btnNext.addEventListener('click', nextTrack);
         btnPrev.addEventListener('click', prevTrack);
         btnReload.addEventListener('click', fetchLibrary);
+        btnOpenQrLogin.addEventListener('click', openQrLogin);
+        btnCloseQrModal.addEventListener('click', closeQrLogin);
+        btnRefreshQr.addEventListener('click', openQrLogin);
+        btnTvLogout.addEventListener('click', logoutUser);
 
         // ─── PURE REMOTE D-PAD SPATIAL NAVIGATION (0ms LATENCY) ───
         function getFocusableElements() {
-            return Array.from(document.querySelectorAll('.focusable:not([disabled])')).filter(el => {
+            const root = qrModal.classList.contains('open') ? qrModal : document.body;
+            return Array.from(root.querySelectorAll('.focusable:not([disabled]):not([style*="display: none"])')).filter(el => {
                 const rect = el.getBoundingClientRect();
                 return rect.width > 0 && rect.height > 0;
             });
@@ -752,6 +1004,15 @@
                 return;
             }
 
+            // Back key closes modal if open
+            if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27 || e.keyCode === 4) {
+                if (qrModal.classList.contains('open')) {
+                    e.preventDefault();
+                    closeQrLogin();
+                    return;
+                }
+            }
+
             // D-Pad Navigation
             if (e.key === 'ArrowUp') { e.preventDefault(); navigate('up'); }
             else if (e.key === 'ArrowDown') { e.preventDefault(); navigate('down'); }
@@ -766,6 +1027,7 @@
         });
 
         // Initialize
+        checkUserProfile();
         fetchLibrary();
     })();
     </script>
