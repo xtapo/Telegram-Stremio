@@ -7197,6 +7197,34 @@ class XTAPOMusicApp {
         this.updateSleepTimerModalView();
     }
 
+    updateSleepTimerModalView() {
+        const isActive = this.sleepTimerMode !== null;
+
+        if (this.sleepTimerRunningBox && this.sleepTimerConfigBox) {
+            if (isActive) {
+                this.sleepTimerRunningBox.style.display = 'flex';
+                this.sleepTimerConfigBox.style.display = 'none';
+
+                if (this.sleepTimerCountdownDisplay && this.sleepTimerCountdownSub) {
+                    if (this.sleepTimerMode === 'end_of_track') {
+                        this.sleepTimerCountdownDisplay.textContent = 'HẾT BÀI';
+                        this.sleepTimerCountdownDisplay.style.fontSize = '1.6rem';
+                        this.sleepTimerCountdownSub.textContent = 'Dừng phát khi kết thúc bài hiện tại';
+                    } else {
+                        const mins = Math.floor(this.sleepTimerSeconds / 60);
+                        const secs = this.sleepTimerSeconds % 60;
+                        this.sleepTimerCountdownDisplay.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                        this.sleepTimerCountdownDisplay.style.fontSize = '2.2rem';
+                        this.sleepTimerCountdownSub.textContent = 'Thời gian còn lại';
+                    }
+                }
+            } else {
+                this.sleepTimerRunningBox.style.display = 'none';
+                this.sleepTimerConfigBox.style.display = 'block';
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // EQUALIZER 10-BAND & BASS BOOST AUDIO ENGINE & CONTROLLER
     // ─────────────────────────────────────────────────────────────
@@ -7464,7 +7492,7 @@ class XTAPOMusicApp {
             col.innerHTML = `
                 <span class="eq-band-val ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}" id="eqBandVal_${i}">${prefix}${gain.toFixed(1)}</span>
                 <div class="eq-slider-vertical-wrap">
-                    <input type="range" class="eq-vertical-slider" id="eqSlider_${i}" min="-12" max="12" step="0.5" value="${gain}" orient="vertical" aria-label="${label}">
+                    <input type="range" class="eq-vertical-slider" id="eqSlider_${i}" min="-12" max="12" step="0.5" value="${gain}" style="writing-mode: vertical-lr; direction: rtl;" aria-label="${label}">
                 </div>
                 <span class="eq-band-label">${label}</span>
             `;

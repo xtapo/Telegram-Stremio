@@ -5849,9 +5849,10 @@ html, body {
     z-index: 1;
 }
 
-/* Vertical Slider Input */
+/* Vertical Slider Input (Standard W3C writing-mode) */
 .eq-vertical-slider {
-    -webkit-appearance: slider-vertical;
+    appearance: none;
+    -webkit-appearance: none;
     writing-mode: vertical-lr;
     direction: rtl;
     width: 24px;
