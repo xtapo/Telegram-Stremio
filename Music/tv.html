@@ -913,17 +913,21 @@
 
             try {
                 const res = await fetch('/api/music/auth/tv/qr-init', { method: 'POST' });
+                if (!res.ok) {
+                    qrStatusText.innerHTML = '<span style="color: #f87171;">⚠️ Máy chủ backend chưa được cập nhật bản mới.<br><span style="font-size: 13px; color: #94a3b8;">Vui lòng chạy git pull & khởi động lại server.</span></span>';
+                    return;
+                }
                 const data = await res.json();
-                if (res.ok && data.status === 'success') {
+                if (data && data.status === 'success') {
                     currentQrToken = data.token;
                     qrCodeImg.src = data.qr_url;
                     qrStatusText.innerHTML = '<span>⏳ Đang chờ xác nhận từ điện thoại...</span>';
                     startQrPolling();
                 } else {
-                    qrStatusText.textContent = 'Lỗi tạo mã QR. Vui lòng thử lại.';
+                    qrStatusText.textContent = data.message || 'Lỗi tạo mã QR. Vui lòng thử lại.';
                 }
             } catch (e) {
-                qrStatusText.textContent = 'Lỗi kết nối máy chủ: ' + e.message;
+                qrStatusText.innerHTML = '<span style="color: #f87171;">Lỗi kết nối máy chủ: ' + e.message + '</span>';
             }
 
             setTimeout(() => {
