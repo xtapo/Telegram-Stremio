@@ -3070,15 +3070,37 @@
             if (Array.isArray(payload.tracks) && payload.tracks.length > 0) {
                 currentTracklist = payload.tracks;
                 currentPlayingTrackIdx = (trackIdx >= 0 && trackIdx < currentTracklist.length) ? trackIdx : 0;
+                currentTrackPage = Math.floor(currentPlayingTrackIdx / TRACKS_PAGE_SIZE) + 1;
                 
+                const plTitle = payload.album_title || payload.album_name || payload.track?.album || 'Danh Sách Phát';
+                const plArtist = payload.album_artist || payload.track?.artist || 'XTAPO TV';
+                const plCover = payload.album_cover || payload.track?.coverUrl || '';
+
                 currentActiveGroup = {
                     id: albumId || 'remote_playlist',
-                    title: payload.album_title || payload.album_name || payload.track?.album || 'Danh sách phát',
-                    artist: payload.album_artist || payload.track?.artist || 'XTAPO TV',
-                    coverUrl: payload.album_cover || payload.track?.coverUrl || ''
+                    title: plTitle,
+                    artist: plArtist,
+                    coverUrl: plCover
                 };
                 
+                // Cập nhật Cột 2 trên TV hiển thị group danh sách phát đồng bộ
+                if (groupContainer) {
+                    groupContainer.innerHTML = `
+                        <div class="tv-group-card focusable selected" tabindex="0" style="background: rgba(2, 132, 199, 0.25); border: 1.5px solid var(--accent);">
+                            <img src="${plCover || '/music/icon-192.png'}" onerror="this.src='/music/icon-192.png'">
+                            <div class="tv-group-card-title">${escapeHtml(plTitle)}</div>
+                            <div class="tv-group-card-sub">📡 Đồng bộ từ Điện thoại • ${currentTracklist.length} bài</div>
+                        </div>
+                    `;
+                }
+
+                // Cập nhật Cột 3 Header
+                if (currentTracklistHeader) {
+                    currentTracklistHeader.textContent = `${plTitle.toUpperCase()} (${currentTracklist.length} BÀI)`;
+                }
+
                 playTrack(currentPlayingTrackIdx);
+                renderTracklist();
                 if (seekTime > 0) {
                     setTimeout(() => { try { audio.currentTime = seekTime; } catch(e) {} }, 300);
                 }
@@ -3092,7 +3114,9 @@
                     currentTracklist = foundAlb.tracks;
                     currentPlayingTrackIdx = trackIdx;
                     currentActiveGroup = foundAlb;
+                    currentTrackPage = Math.floor(currentPlayingTrackIdx / TRACKS_PAGE_SIZE) + 1;
                     playTrack(trackIdx);
+                    renderTracklist();
                     if (seekTime > 0) {
                         setTimeout(() => { try { audio.currentTime = seekTime; } catch(e) {} }, 300);
                     }
@@ -3105,7 +3129,9 @@
                 const tr = payload.track;
                 currentTracklist = [tr];
                 currentPlayingTrackIdx = 0;
+                currentTrackPage = 1;
                 playTrack(0);
+                renderTracklist();
                 if (seekTime > 0) {
                     setTimeout(() => { try { audio.currentTime = seekTime; } catch(e) {} }, 300);
                 }

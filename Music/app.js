@@ -2614,12 +2614,9 @@ class XTAPOMusicApp {
     }
 
     nextTrack() {
-        if (this.remoteTargetDeviceId) {
-            this.sendSyncCommand('NEXT', {});
-            return;
-        }
-
         const album = this.currentAlbum;
+        if (!album || !album.tracks || album.tracks.length === 0) return;
+
         if (this.isShuffle) {
             let nextIdx;
             do {
@@ -2641,12 +2638,10 @@ class XTAPOMusicApp {
     }
 
     prevTrack() {
-        if (this.remoteTargetDeviceId) {
-            this.sendSyncCommand('PREV', {});
-            return;
-        }
+        const album = this.currentAlbum;
+        if (!album || !album.tracks || album.tracks.length === 0) return;
 
-        if (this.audio.currentTime > 3) {
+        if (!this.remoteTargetDeviceId && this.audio && this.audio.currentTime > 3) {
             this.audio.currentTime = 0;
             this.synthTime = 0;
             this.updateProgress(0);
@@ -2656,7 +2651,7 @@ class XTAPOMusicApp {
         if (this.currentTrackIndex > 0) {
             this.loadTrack(this.currentTrackIndex - 1, true);
         } else {
-            this.loadTrack(this.currentAlbum.tracks.length - 1, true);
+            this.loadTrack(album.tracks.length - 1, true);
         }
     }
 
