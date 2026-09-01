@@ -220,6 +220,10 @@ class XTAPOMusicApp {
         this.closeSearchModal = document.getElementById('closeSearchModal');
         this.searchInput = document.getElementById('searchInput');
         this.searchResults = document.getElementById('searchResults');
+        this.voiceSearchBtn = document.getElementById('voiceSearchBtn');
+        this.topNavVoiceBtn = document.getElementById('topNavVoiceBtn');
+        this.speechRecognition = null;
+        this.isVoiceListening = false;
 
         this.metaInfoBtn = document.getElementById('metaInfoBtn');
         this.openDrawerBtn = document.getElementById('openDrawerBtn');
@@ -3078,8 +3082,14 @@ class XTAPOMusicApp {
         if (this.searchBtn) {
             this.searchBtn.addEventListener('click', () => {
                 this.openModal(this.searchModal);
-                setTimeout(() => this.searchInput.focus(), 100);
+                setTimeout(() => this.searchInput && this.searchInput.focus(), 100);
             });
+        }
+        if (this.topNavVoiceBtn) {
+            this.topNavVoiceBtn.addEventListener('click', () => this.startVoiceSearch());
+        }
+        if (this.voiceSearchBtn) {
+            this.voiceSearchBtn.addEventListener('click', () => this.startVoiceSearch());
         }
         if (this.closeSearchModal) this.closeSearchModal.addEventListener('click', () => this.closeModal(this.searchModal));
         if (this.searchInput) {
@@ -4158,6 +4168,107 @@ class XTAPOMusicApp {
         this._drawerRenderedCount = end;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // VOICE SEARCH (SPEECH RECOGNITION - TIẾNG VIỆT vi-VN)
+    // ─────────────────────────────────────────────────────────────
+    initSpeechRecognition() {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) return null;
+        try {
+            const rec = new SpeechRec();
+            rec.lang = 'vi-VN';
+            rec.continuous = false;
+            rec.interimResults = true;
+            rec.maxAlternatives = 1;
+
+            rec.onstart = () => {
+                this.isVoiceListening = true;
+                if (this.voiceSearchBtn) this.voiceSearchBtn.classList.add('listening');
+                if (this.topNavVoiceBtn) this.topNavVoiceBtn.classList.add('listening');
+                this.showToast("🎙️ Đang lắng nghe giọng nói tiếng Việt... (Hãy nói)");
+            };
+
+            rec.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    transcript += event.results[i][0].transcript;
+                }
+                if (this.searchInput) {
+                    this.searchInput.value = transcript;
+                    this.handleSearch(transcript);
+                }
+
+                if (event.results[0].isFinal) {
+                    const finalQuery = transcript.trim();
+                    if (finalQuery) {
+                        this.showToast(`🔍 Đã nhận diện: "${finalQuery}"`);
+                    }
+                }
+            };
+
+            rec.onerror = (e) => {
+                console.warn('Web Speech Error:', e);
+                this.isVoiceListening = false;
+                if (this.voiceSearchBtn) this.voiceSearchBtn.classList.remove('listening');
+                if (this.topNavVoiceBtn) this.topNavVoiceBtn.classList.remove('listening');
+                if (e.error === 'not-allowed') {
+                    this.showToast("⚠️ Chưa cấp quyền Microphone để tìm giọng nói.");
+                }
+            };
+
+            rec.onend = () => {
+                this.isVoiceListening = false;
+                if (this.voiceSearchBtn) this.voiceSearchBtn.classList.remove('listening');
+                if (this.topNavVoiceBtn) this.topNavVoiceBtn.classList.remove('listening');
+            };
+
+            return rec;
+        } catch(e) {
+            console.warn('SpeechRec failed to init:', e);
+            return null;
+        }
+    }
+
+    startVoiceSearch() {
+        // Android Native Bridge check (Nếu chạy trong APK Android)
+        if (window.AndroidBridge && typeof window.AndroidBridge.startVoiceSearch === 'function') {
+            try {
+                this.openModal(this.searchModal);
+                window.AndroidBridge.startVoiceSearch();
+                return;
+            } catch(e) {}
+        }
+
+        if (!this.speechRecognition) {
+            this.speechRecognition = this.initSpeechRecognition();
+        }
+
+        if (!this.speechRecognition) {
+            this.showToast("⚠️ Trình duyệt chưa hỗ trợ Web Speech API. Hãy gõ chữ để tìm.");
+            this.openModal(this.searchModal);
+            setTimeout(() => this.searchInput && this.searchInput.focus(), 100);
+            return;
+        }
+
+        this.openModal(this.searchModal);
+
+        if (this.isVoiceListening) {
+            try { this.speechRecognition.stop(); } catch(e) {}
+            this.isVoiceListening = false;
+            return;
+        }
+
+        try {
+            this.speechRecognition.abort();
+        } catch(e) {}
+
+        try {
+            this.speechRecognition.start();
+        } catch(e) {
+            console.warn(e);
+        }
+    }
+
     handleSearch(query) {
         if (!query.trim()) {
             this.searchResults.innerHTML = '<div class="search-empty">Nhập từ khoá để tìm bài hát nhanh...</div>';
@@ -4429,7 +4540,10 @@ class XTAPOMusicApp {
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
                 this.openModal(this.searchModal);
-                setTimeout(() => this.searchInput.focus(), 100);
+                setTimeout(() => this.searchInput && this.searchInput.focus(), 100);
+            } else if (e.key === 'v' || e.key === 'V') {
+                e.preventDefault();
+                this.startVoiceSearch();
             } else if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27 || e.keyCode === 4 || e.keyCode === 111) {
                 // Đóng các modal đang mở
                 const openModals = [
@@ -8085,6 +8199,18 @@ document.addEventListener('DOMContentLoaded', () => {
     window.xtapoApp = new XTAPOMusicApp();
     window._musicApp = window.xtapoApp;
     window.player = window.xtapoApp;
+
+    // Callback cho Android Bridge Native Voice Search
+    window.onVoiceSearchResult = (spokenText) => {
+        if (window.xtapoApp && spokenText) {
+            window.xtapoApp.openModal(window.xtapoApp.searchModal);
+            if (window.xtapoApp.searchInput) {
+                window.xtapoApp.searchInput.value = spokenText;
+                window.xtapoApp.handleSearch(spokenText);
+            }
+            window.xtapoApp.showToast(`🔍 Tìm kiếm: "${spokenText}"`);
+        }
+    };
 });
 
 

@@ -880,6 +880,105 @@
             gap: 12px;
             margin-top: 8px;
         }
+
+        /* ─── VOICE SEARCH TV STYLES ─── */
+        .tv-btn-voice {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25));
+            border-color: rgba(245, 158, 11, 0.5);
+            color: #fbbf24;
+            font-weight: 800;
+        }
+
+        .tv-btn-voice:focus, .tv-btn-voice.active {
+            background: linear-gradient(135deg, #f59e0b, #ef4444) !important;
+            color: #0f172a !important;
+            border-color: #fbbf24 !important;
+            box-shadow: 0 0 24px rgba(245, 158, 11, 0.8) !important;
+        }
+
+        .tv-voice-card {
+            width: 560px;
+            max-width: 92vw;
+            padding: 36px 32px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tv-voice-icon-wrap {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .tv-voice-mic {
+            width: 76px;
+            height: 76px;
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            box-shadow: 0 0 32px rgba(245, 158, 11, 0.65);
+            z-index: 2;
+        }
+
+        .tv-voice-pulse {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: rgba(245, 158, 11, 0.45);
+            animation: tvVoicePulseAnim 1.8s infinite ease-out;
+            z-index: 1;
+        }
+
+        .tv-voice-pulse.tv-pulse-delay {
+            animation-delay: 0.9s;
+        }
+
+        @keyframes tvVoicePulseAnim {
+            0% { transform: scale(0.8); opacity: 0.95; }
+            100% { transform: scale(2.3); opacity: 0; }
+        }
+
+        .tv-voice-status {
+            font-size: 22px;
+            font-weight: 800;
+            color: #f8fafc;
+            margin-bottom: 6px;
+            letter-spacing: 0.3px;
+        }
+
+        .tv-voice-sub {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 18px;
+        }
+
+        .tv-voice-transcript {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 14px 22px;
+            font-size: 17px;
+            font-weight: 700;
+            color: #fbbf24;
+            min-height: 52px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -897,6 +996,8 @@
                     <span id="tvUserName">User</span>
                     <button class="tv-btn focusable" id="btnTvLogout" tabindex="0" style="padding: 3px 8px; font-size: 11px; margin-left: 4px;">Đăng Xuất</button>
                 </div>
+                <button class="tv-btn tv-btn-voice focusable" id="btnTvVoiceSearch" tabindex="0" title="Tìm kiếm giọng nói (Phím Mic Remote / Phím 8)">🎙️ Giọng Nói</button>
+                <button class="tv-btn focusable" id="btnTvSearch" tabindex="0" title="Tìm kiếm bài hát (Phím F2 / Search)">🔍 Tìm Kiếm</button>
                 <button class="tv-btn focusable" id="btnTvHelp" tabindex="0" title="Hướng dẫn sử dụng & Phím tắt Remote">❓ Hướng Dẫn</button>
                 <button class="tv-btn focusable" id="btnReloadLibrary" tabindex="0">🔄 Tải Lại</button>
                 <button class="tv-btn focusable" id="btnSwitchDesktop" tabindex="0" title="Chuyển về giao diện máy tính">🖥️ Bản Desktop</button>
@@ -961,6 +1062,10 @@
                 <div class="tv-nav-item focusable" data-tab="playlists" tabindex="0">
                     <span class="nav-icon">📑</span>
                     <span>PLAYLISTS</span>
+                </div>
+                <div class="tv-nav-item focusable" data-tab="search" tabindex="0">
+                    <span class="nav-icon">🔍</span>
+                    <span>TÌM KIẾM</span>
                 </div>
                 <div class="tv-nav-item focusable" data-tab="all-musics" tabindex="0">
                     <span class="nav-icon">🎵</span>
@@ -1097,6 +1202,8 @@
                 <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
                     <div style="font-weight: 800; color: #f59e0b; margin-bottom: 8px; font-size: 15px;">🎮 Phím Tắt Remote Nhanh (Không cần rê chuột):</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; color: #cbd5e1;">
+                        <div>• <b>🎙️ Giọng nói:</b> Phím <code>Mic</code> / Số <code>8</code> / <code>V</code> / <code>F2</code></div>
+                        <div>• <b>🔍 Tìm kiếm:</b> Phím <code>S</code> / <code>Search</code> / Phím <code>/</code></div>
                         <div>• <b>Chuyển bài tiếp:</b> Phím <code>⏭</code> / <code>CH+</code> / Số <code>6</code>, <code>9</code></div>
                         <div>• <b>Lùi bài trước:</b> Phím <code>⏮</code> / <code>CH-</code> / Số <code>4</code>, <code>7</code></div>
                         <div>• <b>Phát / Tạm dừng:</b> Phím <code>⏯</code> / Phím số <code>0</code>, <code>5</code></div>
@@ -1118,6 +1225,42 @@
             </div>
             <div class="tv-modal-actions">
                 <button class="tv-btn tv-btn-play focusable" id="btnUnderstandTvHelp" tabindex="0">✓ Đã Hiểu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: Tìm Kiếm Bằng Giọng Nói (Voice Search Overlay) -->
+    <div class="tv-modal-overlay" id="modalVoiceSearch">
+        <div class="tv-modal-card tv-voice-card">
+            <div class="tv-voice-icon-wrap">
+                <div class="tv-voice-pulse"></div>
+                <div class="tv-voice-pulse tv-pulse-delay"></div>
+                <div class="tv-voice-mic" id="tvVoiceMicIcon">🎙️</div>
+            </div>
+            <div class="tv-voice-status" id="tvVoiceStatus">Đang lắng nghe giọng nói...</div>
+            <div class="tv-voice-sub">Hãy nói tên bài hát, ca sĩ, thể loại (VD: "Sơn Tùng M-TP", "Bolero", "Remix"...)</div>
+            <div class="tv-voice-transcript" id="tvVoiceTranscript">"Đang nhận diện giọng nói tiếng Việt..."</div>
+            <div class="tv-modal-actions" style="justify-content: center; margin-top: 24px; gap: 16px;">
+                <button class="tv-btn focusable" id="btnStopVoiceSearch" tabindex="0">✕ Dừng / Hủy</button>
+                <button class="tv-btn tv-btn-play focusable" id="btnSwitchToTextSearch" tabindex="0">⌨️ Nhập Chữ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 5: Tìm Kiếm Bằng Bàn Phím (Text Search Modal) -->
+    <div class="tv-modal-overlay" id="modalTvSearchInput">
+        <div class="tv-modal-card" style="width: 580px; max-width: 95vw;">
+            <div class="tv-modal-header">
+                <div class="tv-modal-title">🔍 TÌM KIẾM BÀI HÁT / NGHỆ SĨ</div>
+                <button class="tv-btn focusable" id="btnCloseTvSearch" tabindex="0" style="padding: 4px 10px;">✕ Đóng</button>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 12px;">
+                <input type="text" class="tv-modal-input focusable" id="inputTvSearchText" placeholder="Nhập từ khóa tìm kiếm (VD: Sơn Tùng, Nhạc trẻ, Lossless...)" tabindex="0" style="flex: 1;">
+                <button class="tv-btn tv-btn-voice focusable" id="btnSearchModalVoice" tabindex="0" title="Nói để tìm kiếm">🎙️</button>
+            </div>
+            <div class="tv-modal-actions" style="margin-top: 18px;">
+                <button class="tv-btn focusable" id="btnCancelTvSearch" tabindex="0">Hủy</button>
+                <button class="tv-btn tv-btn-play focusable" id="btnSubmitTvSearch" tabindex="0">🔍 Tìm Ngay</button>
             </div>
         </div>
     </div>
@@ -1208,6 +1351,26 @@
         const btnTvHelp = document.getElementById('btnTvHelp');
         const btnCloseTvHelp = document.getElementById('btnCloseTvHelp');
         const btnUnderstandTvHelp = document.getElementById('btnUnderstandTvHelp');
+
+        // Voice Search & Search Elements
+        const modalVoiceSearch = document.getElementById('modalVoiceSearch');
+        const tvVoiceStatus = document.getElementById('tvVoiceStatus');
+        const tvVoiceTranscript = document.getElementById('tvVoiceTranscript');
+        const btnTvVoiceSearch = document.getElementById('btnTvVoiceSearch');
+        const btnStopVoiceSearch = document.getElementById('btnStopVoiceSearch');
+        const btnSwitchToTextSearch = document.getElementById('btnSwitchToTextSearch');
+
+        const modalTvSearchInput = document.getElementById('modalTvSearchInput');
+        const inputTvSearchText = document.getElementById('inputTvSearchText');
+        const btnTvSearch = document.getElementById('btnTvSearch');
+        const btnCloseTvSearch = document.getElementById('btnCloseTvSearch');
+        const btnCancelTvSearch = document.getElementById('btnCancelTvSearch');
+        const btnSubmitTvSearch = document.getElementById('btnSubmitTvSearch');
+        const btnSearchModalVoice = document.getElementById('btnSearchModalVoice');
+
+        let speechRecognition = null;
+        let isVoiceListening = false;
+        let searchQuery = '';
 
         const tvUserInfo = document.getElementById('tvUserInfo');
         const tvUserAvatar = document.getElementById('tvUserAvatar');
@@ -1476,12 +1639,19 @@
         }
 
         function closeAllModals() {
+            if (speechRecognition && isVoiceListening) {
+                try { speechRecognition.stop(); } catch(e) {}
+                isVoiceListening = false;
+            }
             if (modalAddToPlaylist) modalAddToPlaylist.style.display = 'none';
             if (modalCreatePlaylist) modalCreatePlaylist.style.display = 'none';
             if (modalTvHelp) modalTvHelp.style.display = 'none';
+            if (modalVoiceSearch) modalVoiceSearch.style.display = 'none';
+            if (modalTvSearchInput) modalTvSearchInput.style.display = 'none';
         }
 
         function openTvHelpModal() {
+            closeAllModals();
             if (modalTvHelp) {
                 modalTvHelp.style.display = 'flex';
                 setTimeout(() => {
@@ -1489,6 +1659,167 @@
                 }, 50);
             }
         }
+
+        // ─── TÌM KIẾM GIỌNG NÓI & BÀN PHÍM (VOICE & TEXT SEARCH ENGINE) ───
+        function initSpeechRecognition() {
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRec) return null;
+            try {
+                const rec = new SpeechRec();
+                rec.lang = 'vi-VN';
+                rec.continuous = false;
+                rec.interimResults = true;
+                rec.maxAlternatives = 1;
+
+                rec.onstart = () => {
+                    isVoiceListening = true;
+                    if (tvVoiceStatus) tvVoiceStatus.textContent = "🎙️ Đang lắng nghe... (Hãy nói)";
+                    if (tvVoiceTranscript) tvVoiceTranscript.textContent = '...';
+                };
+
+                rec.onresult = (event) => {
+                    let transcript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        transcript += event.results[i][0].transcript;
+                    }
+                    if (tvVoiceTranscript) tvVoiceTranscript.textContent = `"${transcript}"`;
+
+                    if (event.results[0].isFinal) {
+                        const finalQuery = transcript.trim();
+                        if (finalQuery) {
+                            setTimeout(() => {
+                                executeTvSearch(finalQuery);
+                            }, 400);
+                        }
+                    }
+                };
+
+                rec.onerror = (e) => {
+                    console.log('Voice rec error:', e);
+                    if (e.error === 'not-allowed') {
+                        if (tvVoiceStatus) tvVoiceStatus.textContent = "⚠️ Chưa cấp quyền Microphone";
+                    } else if (e.error === 'no-speech') {
+                        if (tvVoiceStatus) tvVoiceStatus.textContent = "Không nhận diện được giọng nói";
+                    } else {
+                        if (tvVoiceStatus) tvVoiceStatus.textContent = `Lỗi: ${e.error || 'Vui lòng thử lại'}`;
+                    }
+                };
+
+                rec.onend = () => {
+                    isVoiceListening = false;
+                };
+
+                return rec;
+            } catch(e) {
+                console.warn('SpeechRec init failed:', e);
+                return null;
+            }
+        }
+
+        function startTvVoiceSearch() {
+            closeAllModals();
+
+            // Nếu chạy trong Android Native App (Android TV / Leanback)
+            if (window.AndroidBridge && typeof window.AndroidBridge.startVoiceSearch === 'function') {
+                showToast("🎙️ Đang khởi động Google Voice Search...");
+                try {
+                    window.AndroidBridge.startVoiceSearch();
+                    return;
+                } catch(e) {
+                    console.warn(e);
+                }
+            }
+
+            if (!speechRecognition) {
+                speechRecognition = initSpeechRecognition();
+            }
+
+            if (!speechRecognition) {
+                showToast("⚠️ Trình duyệt TV chưa hỗ trợ Web Speech. Mở bàn phím gõ chữ...");
+                openTvTextSearchModal();
+                return;
+            }
+
+            if (modalVoiceSearch) modalVoiceSearch.style.display = 'flex';
+            if (tvVoiceStatus) tvVoiceStatus.textContent = "Đang lắng nghe giọng nói...";
+            if (tvVoiceTranscript) tvVoiceTranscript.textContent = '"Hãy nói tên bài hát, ca sĩ..."';
+
+            try {
+                speechRecognition.abort();
+            } catch(e) {}
+
+            try {
+                speechRecognition.start();
+            } catch(e) {
+                console.warn('Start voice search error:', e);
+            }
+
+            setTimeout(() => {
+                if (btnStopVoiceSearch) btnStopVoiceSearch.focus();
+            }, 100);
+        }
+
+        function stopTvVoiceSearch() {
+            if (speechRecognition) {
+                try { speechRecognition.stop(); } catch(e) {}
+            }
+            isVoiceListening = false;
+            closeAllModals();
+        }
+
+        function openTvTextSearchModal(defaultText = '') {
+            closeAllModals();
+            if (inputTvSearchText) {
+                inputTvSearchText.value = defaultText || searchQuery || '';
+            }
+            if (modalTvSearchInput) modalTvSearchInput.style.display = 'flex';
+            setTimeout(() => {
+                if (inputTvSearchText) {
+                    inputTvSearchText.focus();
+                    inputTvSearchText.select();
+                }
+            }, 100);
+        }
+
+        function executeTvSearch(query) {
+            stopTvVoiceSearch();
+            closeAllModals();
+            searchQuery = (query || '').trim();
+            if (!searchQuery) {
+                showToast("⚠️ Từ khóa tìm kiếm trống");
+                return;
+            }
+
+            showToast(`🔍 Tìm kiếm: "${searchQuery}"`);
+
+            // Chuyển sang Tab Search
+            currentTab = 'search';
+            currentPage = 1;
+            selectedItemIdx = 0;
+
+            document.querySelectorAll('.tv-nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.tab === 'search');
+            });
+
+            buildCategoryData();
+            renderItems();
+
+            if (currentItems.length > 0) {
+                selectItem(0);
+                setTimeout(() => {
+                    const firstCard = document.querySelector('.tv-card-item') || document.getElementById('btnPlayAll');
+                    if (firstCard) firstCard.focus();
+                }, 150);
+            }
+        }
+
+        // Global callback cho Android Bridge (Native Google Voice Search Intent)
+        window.onVoiceSearchResult = function(spokenText) {
+            console.log('[Android Voice Search] Spoken:', spokenText);
+            if (spokenText) {
+                executeTvSearch(spokenText);
+            }
+        };
 
         // ─── PHÂN LOẠI DỮ LIỆU TỪ RAW ALBUMS ───
         function buildCategoryData() {
@@ -1630,6 +1961,67 @@
                     badge: 'FAVORITES',
                     tracks: favList
                 }];
+            } else if (currentTab === 'search') {
+                const q = (searchQuery || '').trim().toLowerCase();
+                const matchedTracks = [];
+                const matchedAlbums = [];
+
+                rawAlbums.forEach(alb => {
+                    const albTitleMatch = (alb.title || '').toLowerCase().includes(q);
+                    const albArtistMatch = (alb.artist || '').toLowerCase().includes(q);
+                    if (q && (albTitleMatch || albArtistMatch)) {
+                        matchedAlbums.push(alb);
+                    }
+                    if (alb.tracks) {
+                        alb.tracks.forEach(tr => {
+                            const nameMatch = (tr.name || tr.title || '').toLowerCase().includes(q);
+                            const artMatch = (tr.artist || alb.artist || '').toLowerCase().includes(q);
+                            if (!q || nameMatch || artMatch) {
+                                matchedTracks.push({
+                                    ...tr,
+                                    artist: tr.artist || alb.artist,
+                                    cover: tr.cover || tr.cover_url || alb.coverUrl || alb.cover
+                                });
+                            }
+                        });
+                    }
+                });
+
+                if (matchedTracks.length === 0 && matchedAlbums.length === 0) {
+                    currentItems = [{
+                        type: 'search_empty',
+                        id: 'search_empty',
+                        title: q ? `Không tìm thấy: "${searchQuery}"` : 'Chưa có từ khóa tìm kiếm',
+                        sub: 'Bấm nút "🎙️ Giọng Nói" hoặc "🔍 Tìm Kiếm" để tìm bài hát',
+                        cover: '/music/icon-192.png',
+                        year: 'Tìm Kiếm',
+                        badge: 'SEARCH',
+                        tracks: []
+                    }];
+                } else {
+                    currentItems = [
+                        {
+                            type: 'search_results',
+                            id: 'search_tracks',
+                            title: q ? `Kết Quả: "${searchQuery}"` : 'Tất Cả Kết Quả',
+                            sub: `${matchedTracks.length} bài hát phù hợp`,
+                            cover: matchedTracks[0]?.cover || '/music/icon-192.png',
+                            year: 'Tìm Kiếm',
+                            badge: 'KẾT QUẢ',
+                            tracks: matchedTracks
+                        },
+                        ...matchedAlbums.map(alb => ({
+                            type: 'album',
+                            id: alb.id,
+                            title: `Album: ${alb.title}`,
+                            sub: `${alb.artist} • ${alb.tracks ? alb.tracks.length : 0} bài`,
+                            cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
+                            year: alb.year || '2026',
+                            badge: 'ALBUM',
+                            tracks: alb.tracks || []
+                        }))
+                    ];
+                }
             } else if (currentTab === 'all-musics') {
                 const allT = rawAlbums.flatMap(a => a.tracks || []);
                 currentItems = [{
@@ -1661,6 +2053,7 @@
                 'genres': 'THỂ LOẠI',
                 'countries': 'QUỐC GIA',
                 'playlists': 'PLAYLISTS',
+                'search': 'TÌM KIẾM',
                 'all-musics': 'TẤT CẢ BÀI'
             };
             const currentTabName = tabNames[currentTab] || 'YÊU THÍCH';
@@ -2292,6 +2685,41 @@
             });
         }
 
+        // Voice & Search Button Listeners
+        if (btnTvVoiceSearch) btnTvVoiceSearch.addEventListener('click', startTvVoiceSearch);
+        if (btnStopVoiceSearch) btnStopVoiceSearch.addEventListener('click', stopTvVoiceSearch);
+        if (btnSwitchToTextSearch) btnSwitchToTextSearch.addEventListener('click', () => openTvTextSearchModal());
+
+        if (btnTvSearch) btnTvSearch.addEventListener('click', () => openTvTextSearchModal());
+        if (btnCloseTvSearch) btnCloseTvSearch.addEventListener('click', closeAllModals);
+        if (btnCancelTvSearch) btnCancelTvSearch.addEventListener('click', closeAllModals);
+        if (btnSearchModalVoice) btnSearchModalVoice.addEventListener('click', startTvVoiceSearch);
+        if (btnSubmitTvSearch) {
+            btnSubmitTvSearch.addEventListener('click', () => {
+                const val = inputTvSearchText?.value.trim();
+                executeTvSearch(val);
+            });
+        }
+        if (inputTvSearchText) {
+            inputTvSearchText.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    executeTvSearch(inputTvSearchText.value.trim());
+                }
+            });
+        }
+
+        if (modalVoiceSearch) {
+            modalVoiceSearch.addEventListener('click', (e) => {
+                if (e.target === modalVoiceSearch) closeAllModals();
+            });
+        }
+        if (modalTvSearchInput) {
+            modalTvSearchInput.addEventListener('click', (e) => {
+                if (e.target === modalTvSearchInput) closeAllModals();
+            });
+        }
+
         if (tvProgressBar) {
             tvProgressBar.addEventListener('click', (e) => {
                 const rect = tvProgressBar.getBoundingClientRect();
@@ -2531,7 +2959,26 @@
                 return;
             }
 
-            // 5. Phím Bật/Đóng Hướng Dẫn Nhanh (Help Toggle): Phím H hoặc ?
+            // 5. Phím Tìm Kiếm Giọng Nói (Voice Search Remote): Nút Mic Remote (84, 170, 196, 225), F2 (113), Số 8, hoặc phím V
+            const isVoiceKey = (
+                ['BrowserSearch', 'Search', 'VoiceSearch'].includes(e.code) ||
+                [84, 170, 196, 225, 113].includes(e.keyCode) ||
+                (!isTyping && (e.key === 'v' || e.key === 'V' || e.key === '8'))
+            );
+            if (isVoiceKey) {
+                e.preventDefault();
+                startTvVoiceSearch();
+                return;
+            }
+
+            // Phím Tìm Kiếm Chữ (Text Search): Phím S hoặc /
+            if (!isTyping && (e.key === 's' || e.key === 'S' || e.key === '/')) {
+                e.preventDefault();
+                openTvTextSearchModal();
+                return;
+            }
+
+            // 6. Phím Bật/Đóng Hướng Dẫn Nhanh (Help Toggle): Phím H hoặc ?
             if (!isTyping && (e.key === 'h' || e.key === 'H' || e.key === '?')) {
                 e.preventDefault();
                 if (modalTvHelp && modalTvHelp.style.display === 'flex') closeAllModals();
@@ -2539,7 +2986,7 @@
                 return;
             }
 
-            // 5. Phím Tua nhanh / Tua lùi (Fast-Forward / Rewind)
+            // 7. Phím Tua nhanh / Tua lùi (Fast-Forward / Rewind)
             if (['MediaFastForward', 'FastForward'].includes(e.code) || e.keyCode === 228 || (!isTyping && (e.key === 'l' || e.key === 'L'))) {
                 e.preventDefault();
                 seek(10);

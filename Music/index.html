@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="dns-prefetch" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/music/style.css?v=3.3">
+    <link rel="stylesheet" href="/music/style.css?v=3.4">
     <style>
         @media (max-width: 1024px) {
             .tv-toggle-btn, #topNavTvBtn {
@@ -98,6 +98,14 @@
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </button>
+                <button class="nav-btn icon-btn" id="topNavVoiceBtn" title="Tìm kiếm giọng nói (Phím V hoặc Mic)">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
                     </svg>
                 </button>
                 <button class="nav-btn icon-btn tv-toggle-btn" id="topNavTvBtn" onclick="window.location.href='/music/tv.html';" title="Chế độ Android TV / Lite (D-Pad Remote)">
@@ -432,6 +440,14 @@
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
                 <input type="text" id="searchInput" placeholder="Tìm kiếm bài hát, nghệ sĩ, album..." autocomplete="off">
+                <button class="voice-search-btn" id="voiceSearchBtn" title="Tìm kiếm bằng giọng nói tiếng Việt">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                </button>
                 <button class="search-esc" id="closeSearchModal">ESC</button>
             </div>
             <div class="search-results" id="searchResults">
@@ -1617,6 +1633,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="/music/app.js?v=3.3"></script>
+    <script src="/music/app.js?v=3.4"></script>
 </body>
 </html>

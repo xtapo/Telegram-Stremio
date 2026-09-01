@@ -6358,9 +6358,40 @@ body.tv-lite .tv-focused {
     border: 1px solid #475569;
 }
 
+/* ─── VOICE SEARCH BUTTON STYLES ─── */
+.voice-search-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f59e0b;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-right: 6px;
+}
 
+.voice-search-btn:hover {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: #f59e0b;
+    transform: scale(1.08);
+}
 
+.voice-search-btn.listening,
+#topNavVoiceBtn.listening {
+    background: linear-gradient(135deg, #ef4444, #f59e0b) !important;
+    color: #ffffff !important;
+    border-color: #f59e0b !important;
+    animation: voiceMicPulse 1.2s infinite alternate ease-in-out !important;
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.7) !important;
+}
 
-
-
+@keyframes voiceMicPulse {
+    0% { transform: scale(1); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+    100% { transform: scale(1.15); box-shadow: 0 0 24px rgba(245, 158, 11, 0.9); }
+}
 
