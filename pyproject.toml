@@ -26,6 +26,8 @@ dependencies = [
     "uvloop>=0.22.1",
     "zstandard>=0.25.0",
     "shazamio>=0.6.0",
+    "rarfile>=4.2",
+    "py7zr>=0.22.0",
 ]
 
 [dependency-groups]

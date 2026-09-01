@@ -71,11 +71,17 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         shutil.which("7z"),
         shutil.which("7za"),
         r"C:\Windows\system32\7z.EXE",
+        "/usr/bin/7z",
+        "/usr/bin/7za",
+        "/usr/local/bin/7z",
+        shutil.which("unrar"),
+        shutil.which("unrar-free"),
+        "/usr/bin/unrar",
+        "/usr/bin/unrar-free",
         r"C:\Program Files\WinRAR\WinRAR.exe",
         r"C:\Program Files\WinRAR\UnRAR.exe",
         r"C:\Program Files (x86)\WinRAR\UnRAR.exe",
         shutil.which("rar"),
-        shutil.which("unrar"),
     ]:
         if p and os.path.exists(p) and p not in archiver_candidates:
             archiver_candidates.append(p)
@@ -112,8 +118,23 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
             last_error = f"{os.path.basename(archiver)}: {e}"
             LOGGER.warning(f"[EXTRACT CLI ERROR] {e}")
 
-    # 2. Python zipfile
-    if ext == ".zip" or not archiver_candidates:
+    # 2. Thử thư viện Python rarfile cho file .rar
+    if ext == ".rar":
+        try:
+            import rarfile
+            for archiver in archiver_candidates:
+                rarfile.UNRAR_TOOL = archiver
+                try:
+                    with rarfile.RarFile(archive_path) as rf:
+                        rf.extractall(path=extract_dir)
+                    return True, f"Đã giải nén thành công bằng rarfile ({os.path.basename(archiver)})"
+                except Exception as ex_rf:
+                    LOGGER.debug(f"rarfile with {archiver} note: {ex_rf}")
+        except Exception as e:
+            if not last_error: last_error = f"rarfile: {e}"
+
+    # 3. Python zipfile (.zip)
+    if ext == ".zip":
         try:
             with zipfile.ZipFile(archive_path, 'r') as zf:
                 zf.extractall(extract_dir)
@@ -121,7 +142,7 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         except Exception as e:
             if not last_error: last_error = f"ZipFile: {e}"
 
-    # 3. Python py7zr
+    # 4. Python py7zr (.7z)
     if ext == ".7z":
         try:
             import py7zr
@@ -131,7 +152,7 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         except Exception as e:
             if not last_error: last_error = f"py7zr: {e}"
 
-    # 4. Python tarfile
+    # 5. Python tarfile (.tar, .tar.gz, .tgz, .bz2, .xz)
     if ext in (".tar", ".tar.gz", ".tgz", ".bz2", ".xz"):
         try:
             with tarfile.open(archive_path, 'r:*') as tf:
@@ -140,7 +161,7 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         except Exception as e:
             if not last_error: last_error = f"TarFile: {e}"
 
-    return False, last_error or "Không có công cụ nào giải nén được file này hoặc file bị hỏng / có mật khẩu."
+    return False, last_error or f"Không có công cụ nào giải nén được file {ext} này hoặc file bị hỏng / có mật khẩu."
 
 
 async def _extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:

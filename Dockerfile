@@ -13,6 +13,8 @@ RUN apt-get update && \
         git \
         curl \
         ffmpeg \
+        p7zip-full \
+        unrar-free \
         pkg-config \
         libasound2-dev \
         ca-certificates \
