@@ -1729,6 +1729,10 @@ html, body {
     .hamburger-btn {
         display: flex;
     }
+
+    .tv-toggle-btn {
+        display: none !important;
+    }
     
     .kmusic-hero {
         padding: 24px 20px 20px;
@@ -2113,11 +2117,24 @@ html, body {
     }
 
     .top-nav {
-        padding: 0 14px;
+        padding: 0 12px;
         height: 60px;
         width: 100%;
         max-width: 100vw;
         box-sizing: border-box;
+    }
+
+    .nav-right {
+        gap: 8px;
+    }
+
+    .tv-toggle-btn {
+        display: none !important;
+    }
+
+    .hamburger-btn {
+        display: flex;
+        flex-shrink: 0;
     }
     
     .nav-btn.action-badge-btn {
@@ -2415,6 +2432,36 @@ html, body {
 }
 
 @media (max-width: 480px) {
+    .top-nav {
+        padding: 0 10px;
+    }
+
+    .nav-right {
+        gap: 6px;
+    }
+
+    .brand-text {
+        font-size: 1.1rem;
+        letter-spacing: 0.8px;
+    }
+
+    .user-profile-btn {
+        padding: 5px 8px;
+        font-size: 0.8rem;
+    }
+
+    .user-profile-btn span#userDisplayName {
+        max-width: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: inline-block;
+    }
+
+    .tv-toggle-btn {
+        display: none !important;
+    }
+
     .kmusic-hero {
         padding: 10px 8px 10px;
         width: 100%;
