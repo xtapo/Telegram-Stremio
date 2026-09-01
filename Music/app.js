@@ -8183,6 +8183,11 @@ class XTAPOMusicApp {
     }
 
     initMusicSync() {
+        if ((this._syncRetryCount || 0) > 2) {
+            // Không hỗ trợ WebSocket qua Proxy -> Chuyển sang REST Heartbeat mượt mà
+            return;
+        }
+
         try {
             if (this.syncWs) {
                 try { this.syncWs.close(); } catch(e) {}
@@ -8190,7 +8195,6 @@ class XTAPOMusicApp {
             }
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // Dùng /api/music/sync/ws (reverse proxy luôn hỗ trợ chuyển tiếp websocket tại /api/)
             let wsUrl = `${protocol}//${window.location.host}/api/music/sync/ws?device_id=${encodeURIComponent(this.syncDeviceId)}`;
             if (this.currentUser && this.currentUser._id) {
                 wsUrl += `&user_id=${encodeURIComponent(this.currentUser._id)}`;
@@ -8216,29 +8220,23 @@ class XTAPOMusicApp {
                 try {
                     const msg = JSON.parse(event.data);
                     this.handleSyncMessage(msg);
-                } catch (err) {
-                    console.warn('[Spotify Connect] Lỗi parse message:', err);
-                }
+                } catch (err) {}
             };
 
-            this.syncWs.onerror = (err) => {
-                // Chỉ log khi cần để tránh spam console
-                if ((this._syncRetryCount || 0) <= 2) {
-                    console.warn('[Spotify Connect] WebSocket đang thiết lập kết nối...', err);
-                }
+            this.syncWs.onerror = () => {
+                // Im lặng xử lý, đã có kênh REST Heartbeat dự phòng
             };
 
             this.syncWs.onclose = () => {
                 clearInterval(this.syncPingInterval);
                 clearTimeout(this.syncWsReconnectTimer);
-                const delay = Math.min(30000, 3000 * Math.pow(1.5, Math.min(6, this._syncRetryCount || 0)));
-                this.syncWsReconnectTimer = setTimeout(() => {
-                    this.initMusicSync();
-                }, delay);
+                if (this._syncRetryCount <= 2) {
+                    this.syncWsReconnectTimer = setTimeout(() => {
+                        this.initMusicSync();
+                    }, 5000);
+                }
             };
-        } catch (e) {
-            console.warn('[Spotify Connect] Không thể khởi tạo sync WebSocket:', e);
-        }
+        } catch (e) {}
     }
 
     async sendSyncHeartbeat() {

@@ -2860,8 +2860,14 @@
         let tvSyncReconnectTimer = null;
         let tvSyncPingInterval = null;
         let lastTvSyncSentAt = 0;
+        let tvSyncWsRetryCount = 0;
 
         function initTvMusicSync() {
+            if (tvSyncWsRetryCount > 2) {
+                // Proxy không hỗ trợ WebSocket -> chuyển sang REST Heartbeat mượt mà
+                return;
+            }
+
             try {
                 if (tvSyncWs) {
                     try { tvSyncWs.close(); } catch(e) {}
@@ -2874,10 +2880,11 @@
                     wsUrl += `&user_id=${encodeURIComponent(currentUser._id)}`;
                 }
 
+                tvSyncWsRetryCount++;
                 tvSyncWs = new WebSocket(wsUrl);
 
                 tvSyncWs.onopen = () => {
-                    console.log('[TV Spotify Connect] Kết nối WebSocket Hub thành công!');
+                    tvSyncWsRetryCount = 0;
                     sendTvSyncRegister();
 
                     clearInterval(tvSyncPingInterval);
@@ -2892,25 +2899,23 @@
                     try {
                         const msg = JSON.parse(event.data);
                         handleTvSyncMessage(msg);
-                    } catch (err) {
-                        console.warn('[TV Spotify Connect] Lỗi parse:', err);
-                    }
+                    } catch (err) {}
                 };
 
-                tvSyncWs.onerror = (err) => {
-                    console.warn('[TV Spotify Connect] WebSocket error:', err);
+                tvSyncWs.onerror = () => {
+                    // Im lặng xử lý để không spam console
                 };
 
                 tvSyncWs.onclose = () => {
                     clearInterval(tvSyncPingInterval);
                     clearTimeout(tvSyncReconnectTimer);
-                    tvSyncReconnectTimer = setTimeout(() => {
-                        initTvMusicSync();
-                    }, 3500);
+                    if (tvSyncWsRetryCount <= 2) {
+                        tvSyncReconnectTimer = setTimeout(() => {
+                            initTvMusicSync();
+                        }, 5000);
+                    }
                 };
-            } catch (e) {
-                console.warn('[TV Spotify Connect] Init error:', e);
-            }
+            } catch (e) {}
         }
 
         async function sendTvHeartbeat() {
