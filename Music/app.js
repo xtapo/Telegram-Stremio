@@ -6809,9 +6809,11 @@ class XTAPOMusicApp {
             const durationSec = this.getDurationSeconds(track.duration);
             const params = new URLSearchParams({
                 track_name: cleanTitle,
-                artist_name: cleanArtist,
-                duration: durationSec > 0 ? durationSec.toString() : ''
+                artist_name: cleanArtist
             });
+            if (durationSec && durationSec > 0) {
+                params.append('duration', Math.round(durationSec).toString());
+            }
             if (album && album.title) params.append('album_name', album.title);
 
             const res = await fetch(`/api/music/lyrics?${params.toString()}`);
@@ -8186,15 +8188,18 @@ class XTAPOMusicApp {
             }
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            let wsUrl = `${protocol}//${window.location.host}/ws/music-sync?device_id=${encodeURIComponent(this.syncDeviceId)}`;
+            // Dùng /api/music/sync/ws (reverse proxy luôn hỗ trợ chuyển tiếp websocket tại /api/)
+            let wsUrl = `${protocol}//${window.location.host}/api/music/sync/ws?device_id=${encodeURIComponent(this.syncDeviceId)}`;
             if (this.currentUser && this.currentUser._id) {
                 wsUrl += `&user_id=${encodeURIComponent(this.currentUser._id)}`;
             }
 
+            this._syncRetryCount = (this._syncRetryCount || 0) + 1;
             this.syncWs = new WebSocket(wsUrl);
 
             this.syncWs.onopen = () => {
                 console.log('[Spotify Connect] Đã kết nối WebSocket Hub thành công!');
+                this._syncRetryCount = 0;
                 this.sendSyncRegister();
                 
                 clearInterval(this.syncPingInterval);
@@ -8215,15 +8220,19 @@ class XTAPOMusicApp {
             };
 
             this.syncWs.onerror = (err) => {
-                console.warn('[Spotify Connect] WebSocket gặp lỗi kết nối:', err);
+                // Chỉ log khi cần để tránh spam console
+                if ((this._syncRetryCount || 0) <= 2) {
+                    console.warn('[Spotify Connect] WebSocket đang thiết lập kết nối...', err);
+                }
             };
 
             this.syncWs.onclose = () => {
                 clearInterval(this.syncPingInterval);
                 clearTimeout(this.syncWsReconnectTimer);
+                const delay = Math.min(30000, 3000 * Math.pow(1.5, Math.min(6, this._syncRetryCount || 0)));
                 this.syncWsReconnectTimer = setTimeout(() => {
                     this.initMusicSync();
-                }, 3500);
+                }, delay);
             };
         } catch (e) {
             console.warn('[Spotify Connect] Không thể khởi tạo sync WebSocket:', e);

@@ -143,6 +143,8 @@ hub = MusicSyncHub()
 
 
 @sync_router.websocket("/ws/music-sync")
+@sync_router.websocket("/api/music/sync/ws")
+@sync_router.websocket("/api/music/ws")
 async def music_sync_websocket_endpoint(
     websocket: WebSocket,
     device_id: Optional[str] = None,
@@ -155,10 +157,11 @@ async def music_sync_websocket_endpoint(
     # Lấy session user nếu có
     if not user_id:
         try:
-            session_uid = websocket.session.get("music_user_id")
-            if session_uid:
-                user_id = session_uid
-        except Exception:
+            if hasattr(websocket, "session") and websocket.session is not None:
+                session_uid = websocket.session.get("music_user_id")
+                if session_uid:
+                    user_id = str(session_uid)
+        except BaseException:
             pass
 
     actual_device_id = device_id or f"dev_{int(time.time()*1000)}"

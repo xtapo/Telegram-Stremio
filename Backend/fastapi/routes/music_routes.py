@@ -3279,13 +3279,22 @@ async def get_realtime_lyrics(
     track_name: str = Query(..., description="Tên bài hát"),
     artist_name: Optional[str] = Query(None, description="Tên ca sĩ / nghệ sĩ"),
     album_name: Optional[str] = Query(None, description="Tên album"),
-    duration: Optional[float] = Query(None, description="Thời lượng tính bằng giây"),
+    duration: Optional[str] = Query(None, description="Thời lượng tính bằng giây"),
     force_refresh: Optional[bool] = Query(False, description="Bỏ qua cache")
 ):
     """
     Lấy lời bài hát đồng bộ từng giây (Synced Lyrics .LRC) từ LRCLIB.
     Tự động thử nhiều chiến lược: Exact Match -> Search Cleaned Title -> Fuzzy Search.
     """
+    parsed_duration: Optional[float] = None
+    if duration:
+        try:
+            val = float(str(duration).strip())
+            if val > 0:
+                parsed_duration = val
+        except (ValueError, TypeError):
+            parsed_duration = None
+    duration = parsed_duration
     cleaned_track = _clean_track_title_for_lyrics(track_name)
     cleaned_artist = _clean_artist_name_for_lyrics(artist_name or "", track_name)
     

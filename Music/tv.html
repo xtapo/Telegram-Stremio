@@ -2869,7 +2869,7 @@
                 }
 
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                let wsUrl = `${protocol}//${window.location.host}/ws/music-sync?device_id=${encodeURIComponent(tvDeviceId)}`;
+                let wsUrl = `${protocol}//${window.location.host}/api/music/sync/ws?device_id=${encodeURIComponent(tvDeviceId)}`;
                 if (currentUser && currentUser._id) {
                     wsUrl += `&user_id=${encodeURIComponent(currentUser._id)}`;
                 }
