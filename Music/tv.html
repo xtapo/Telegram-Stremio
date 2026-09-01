@@ -1073,21 +1073,22 @@
                 <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
                     <div style="font-weight: 800; color: #f59e0b; margin-bottom: 8px; font-size: 15px;">🎮 Phím Tắt Remote Nhanh (Không cần rê chuột):</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; color: #cbd5e1;">
+                        <div>• <b>Xuống thanh Phát (Player):</b> Phím <code>P</code> / <code>D</code> / Số <code>8</code></div>
+                        <div>• <b>Phát / Tạm dừng:</b> Phím <code>⏯</code> / Phím số <code>0</code>, <code>5</code></div>
                         <div>• <b>Chuyển bài tiếp:</b> Phím <code>⏭</code> / <code>CH+</code> / Số <code>6</code>, <code>9</code></div>
                         <div>• <b>Lùi bài trước:</b> Phím <code>⏮</code> / <code>CH-</code> / Số <code>4</code>, <code>7</code></div>
-                        <div>• <b>Phát / Tạm dừng:</b> Phím <code>⏯</code> / Phím số <code>0</code>, <code>5</code></div>
                         <div>• <b>Yêu thích bài:</b> Phím <code>F</code></div>
                         <div>• <b>Tua 10s:</b> Phím <code>⏩</code> / <code>⏪</code> (hoặc <code>L</code> / <code>J</code>)</div>
-                        <div>• <b>Lật trang:</b> Phím <code>PageUp</code> / <code>PageDn</code></div>
                     </div>
                 </div>
 
                 <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
-                    <div style="font-weight: 800; color: #38bdf8; margin-bottom: 8px; font-size: 15px;">🧭 Điều Hướng D-Pad 4 Chiều Thông Minh:</div>
+                    <div style="font-weight: 800; color: #38bdf8; margin-bottom: 8px; font-size: 15px;">🧭 Điều Hướng D-Pad 4 Chiều (Xuống Thanh Phát Dưới Cùng):</div>
                     <div style="color: #cbd5e1; line-height: 1.6;">
-                        • <b>Trái / Phải (👈 👉):</b> Nhảy qua lại nhanh giữa 3 cột (Menu ➔ Albums ➔ Danh sách bài hát).<br>
-                        • <b>Lên / Xuống (👆 👇):</b> Cuộn danh sách bài hát hoặc nhảy xuống thanh Player dưới cùng. Khi ở Player bấm <b>Lên</b> sẽ quay về đúng vị trí cũ.<br>
-                        • <b>OK / Enter:</b> Bấm vào bài hát để phát. Bấm OK lần nữa trên bài đang phát để <b>Tạm dừng / Tiếp tục</b>.
+                        • <b>Cách 1 (Nhanh nhất):</b> Ở Menu Trái (Cột 1) bấm <b>Xuống (Down)</b> qua mục Playlists ➔ <b>Lập tức nhảy xuống nút ▶ Phát dưới cùng</b>.<br>
+                        • <b>Cách 2:</b> Bấm phím <b>P</b> hoặc phím số <b>8</b> trên Remote để xuống thẳng Player Bar.<br>
+                        • <b>Cách 3:</b> Ở danh sách bài hát (Cột 3), cuộn đến bài cuối cùng và bấm <b>Xuống (Down)</b> ➔ Xuống nút Phát.<br>
+                        • <b>Quay lại:</b> Khi đang ở Player Bar, chỉ cần bấm phím <b>Lên (Up)</b> ➔ Con trỏ sẽ tự động nhảy ngược về đúng vị trí bài hát cũ!
                     </div>
                 </div>
 
@@ -2351,7 +2352,13 @@
                 const navItems = Array.from(document.querySelectorAll('.tv-col-nav .tv-nav-item'));
                 const curIdx = navItems.indexOf(cur);
                 if (dir === 'down') {
-                    if (curIdx < navItems.length - 1) setFocus(navItems[curIdx + 1]);
+                    if (curIdx < navItems.length - 1) {
+                        setFocus(navItems[curIdx + 1]);
+                    } else {
+                        // Từ mục cuối menu trái bấm Xuống -> Nhảy thẳng xuống nút Phát ở Player Bar
+                        const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
+                        if (playerPlayBtn) setFocus(playerPlayBtn);
+                    }
                     return;
                 }
                 if (dir === 'up') {
@@ -2386,6 +2393,10 @@
                 if (cur === btnPrevPage || cur === btnNextPage) {
                     if (dir === 'down') {
                         if (cards.length > 0) setFocus(cards[0]);
+                        else {
+                            const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
+                            if (playerPlayBtn) setFocus(playerPlayBtn);
+                        }
                         return;
                     }
                     if (dir === 'left') {
@@ -2416,6 +2427,10 @@
                             setFocus(cards[curCardIdx + 1]);
                         } else if (!btnNextPage.disabled) {
                             btnNextPage.click();
+                        } else {
+                            // Hết trang cuối cột items bấm Xuống -> Nhảy thẳng xuống nút Phát ở Player Bar
+                            const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
+                            if (playerPlayBtn) setFocus(playerPlayBtn);
                         }
                         return;
                     }
@@ -2602,7 +2617,18 @@
                 return;
             }
 
-            // 5. Phím Tua nhanh / Tua lùi (Fast-Forward / Rewind)
+            // 6. Phím Nhảy Nhanh Xuống Thanh Phát Nhạc Dưới Cùng (Jump to Player): Phím P, Phím D, hoặc Phím Số 8
+            if (!isTyping && (e.key === 'p' || e.key === 'P' || e.key === '8' || e.key === 'd' || e.key === 'D')) {
+                const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
+                if (playerPlayBtn) {
+                    e.preventDefault();
+                    setFocus(playerPlayBtn);
+                    showToast('🎯 Đã chuyển con trỏ xuống Thanh Phát Nhạc (Bấm Lên để quay lại)');
+                    return;
+                }
+            }
+
+            // 7. Phím Tua nhanh / Tua lùi (Fast-Forward / Rewind)
             if (['MediaFastForward', 'FastForward'].includes(e.code) || e.keyCode === 228 || (!isTyping && (e.key === 'l' || e.key === 'L'))) {
                 e.preventDefault();
                 seek(10);
