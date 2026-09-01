@@ -543,6 +543,17 @@
             justify-content: center;
         }
 
+        .tv-track-thumb {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #1e293b;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+
         .tv-track-title {
             font-size: 16px;
             font-weight: 700;
@@ -1657,6 +1668,66 @@
             }
         }
 
+        // ─── STATE PERSISTENCE (LƯU & KHÔI PHỤC VỊ TRÍ KHI TẢI LẠI TRANG) ───
+        function saveTvState() {
+            try {
+                const state = {
+                    tab: currentTab,
+                    page: currentPage,
+                    selectedIdx: selectedItemIdx,
+                    activeItemId: currentActiveGroup?.id,
+                    activeItemTitle: currentActiveGroup?.title
+                };
+                localStorage.setItem('xtapo_tv_state', JSON.stringify(state));
+            } catch(e) {}
+        }
+
+        function getSavedTvState() {
+            try {
+                const s = localStorage.getItem('xtapo_tv_state');
+                return s ? JSON.parse(s) : null;
+            } catch(e) {
+                return null;
+            }
+        }
+
+        // ─── COVER ART LOOKUP (HIỂN THỊ CHÍNH XÁC ẢNH BÌA BÀI HÁT / ALBUM) ───
+        function getTrackCover(track) {
+            if (!track) return currentActiveGroup?.cover || '/music/icon-192.png';
+            if (track.cover_url && track.cover_url !== '/music/icon-192.png') return track.cover_url;
+            if (track.coverUrl && track.coverUrl !== '/music/icon-192.png') return track.coverUrl;
+            if (track.cover && track.cover !== '/music/icon-192.png') return track.cover;
+            if (track.album_cover) return track.album_cover;
+            if (track.avatar) return track.avatar;
+            if (track.image) return track.image;
+            
+            // Tìm theo chat_id & msg_id trong rawAlbums
+            const cid = String(track.chat_id || '');
+            const mid = String(track.msg_id || track.id || '');
+            if (rawAlbums && rawAlbums.length > 0 && cid && mid) {
+                for (const alb of rawAlbums) {
+                    if (alb.tracks && alb.tracks.some(t => String(t.chat_id) === cid && String(t.msg_id || t.id) === mid)) {
+                        if (alb.coverUrl || alb.cover) return alb.coverUrl || alb.cover;
+                    }
+                }
+            }
+            // Tìm theo tên bài hát trong rawAlbums
+            if (rawAlbums && rawAlbums.length > 0 && (track.name || track.title)) {
+                const trackName = (track.name || track.title || '').trim().toLowerCase();
+                for (const alb of rawAlbums) {
+                    if (alb.tracks && alb.tracks.some(t => (t.name || t.title || '').trim().toLowerCase() === trackName)) {
+                        if (alb.coverUrl || alb.cover) return alb.coverUrl || alb.cover;
+                    }
+                }
+            }
+            // Tìm theo album name trong rawAlbums
+            if (track.album && rawAlbums && rawAlbums.length > 0) {
+                const alb = rawAlbums.find(a => (a.title || a.name || '').toLowerCase() === track.album.toLowerCase());
+                if (alb && (alb.coverUrl || alb.cover)) return alb.coverUrl || alb.cover;
+            }
+            return currentActiveGroup?.cover || '/music/icon-192.png';
+        }
+
         // ─── CHỌN ITEM VÀ HIỂN THỊ DANH SÁCH BÀI HÁT (PANEL 3) ───
         function selectItem(idx) {
             const item = currentItems[idx];
@@ -1671,6 +1742,7 @@
             });
 
             showcaseCover.src = item.cover || '/music/icon-192.png';
+            showcaseCover.onerror = function() { this.src = '/music/icon-192.png'; };
             showcaseTitle.textContent = item.title;
             showcaseArtist.textContent = item.sub;
             showcaseYear.textContent = item.year || '2026';
@@ -1683,6 +1755,7 @@
                 btnShowcaseCreatePl.style.display = (currentTab === 'playlists') ? 'inline-flex' : 'inline-flex';
             }
 
+            saveTvState();
             updatePlayerFavButton();
             renderTracklist();
         }
@@ -1712,11 +1785,13 @@
                 const numOrEq = isCur 
                     ? '<div class="tv-eq-anim"><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span></div>' 
                     : (idx + 1);
+                const trCover = getTrackCover(tr);
 
                 item.innerHTML = `
                     <div class="tv-track-left">
                         <span class="tv-track-num">${numOrEq}</span>
-                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: 500; margin-left: 4px;">${art}</span>${favIcon}</span>
+                        <img src="${trCover}" class="tv-track-thumb" alt="" onerror="this.src='/music/icon-192.png'">
+                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: 500; margin-left: 6px;">${art}</span>${favIcon}</span>
                     </div>
                     <span class="tv-track-dur">${dur}</span>
                 `;
@@ -1806,7 +1881,9 @@
             if (track) {
                 playerTrackTitle.textContent = track.name || track.title || 'Đang phát';
                 playerArtistName.textContent = track.artist || currentActiveGroup?.title || 'XTAPO MUSIC';
-                playerCoverImg.src = currentActiveGroup?.cover || '/music/icon-192.png';
+                const correctCover = getTrackCover(track);
+                playerCoverImg.src = correctCover;
+                playerCoverImg.onerror = function() { this.src = '/music/icon-192.png'; };
             }
             btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
             updatePlayerFavButton();
@@ -1871,10 +1948,12 @@
             nextTrack();
         });
 
-        async function switchTab(tabKey) {
+        async function switchTab(tabKey, preservePage = false, targetIdx = 0) {
             currentTab = tabKey;
-            currentPage = 1;
-            selectedItemIdx = 0;
+            if (!preservePage) {
+                currentPage = 1;
+                selectedItemIdx = targetIdx || 0;
+            }
 
             document.querySelectorAll('.tv-nav-item').forEach(nav => {
                 nav.classList.toggle('active', nav.dataset.tab === tabKey);
@@ -1888,6 +1967,7 @@
 
             buildCategoryData();
             renderItems();
+            saveTvState();
         }
 
         // ─── AUTH & QR CODE LOCK SCREEN LOGIC ───
@@ -1937,10 +2017,10 @@
                 qrPollInterval = null;
             }
 
-            // Tải yêu thích và playlists trước, sau đó nạp thư viện và mở tab Yêu Thích mặc định
+            // Tải yêu thích và playlists trước, sau đó nạp thư viện và khôi phục đúng vị trí cũ
             await loadUserFavorites();
             await loadUserPlaylists();
-            await fetchLibrary('favorites');
+            await fetchLibrary();
         }
 
         async function initQrLogin() {
@@ -2025,8 +2105,8 @@
             } catch (e) {}
         }
 
-        // Tải thư viện nhạc khi đã đăng nhập (mặc định tab Yêu Thích)
-        async function fetchLibrary(initialTab = 'favorites') {
+        // Tải thư viện nhạc khi đã đăng nhập (khôi phục vị trí và tab đã lưu)
+        async function fetchLibrary() {
             try {
                 const res = await fetch('/api/music/albums');
                 if (res.ok) {
@@ -2039,11 +2119,41 @@
                 console.log('Lỗi fetch library');
             }
 
-            switchTab(initialTab || 'favorites');
+            const saved = getSavedTvState();
+            const initTab = saved?.tab || 'favorites';
+            currentTab = initTab;
+            if (saved?.page) currentPage = saved.page;
+
+            document.querySelectorAll('.tv-nav-item').forEach(nav => {
+                nav.classList.toggle('active', nav.dataset.tab === initTab);
+            });
+
+            if (initTab === 'playlists') {
+                await loadUserPlaylists();
+            } else if (initTab === 'favorites') {
+                await loadUserFavorites();
+            }
+
+            buildCategoryData();
+
+            if (saved?.activeItemId) {
+                const foundIdx = currentItems.findIndex(it => String(it.id) === String(saved.activeItemId));
+                if (foundIdx !== -1) {
+                    selectedItemIdx = foundIdx;
+                    currentPage = Math.floor(foundIdx / PAGE_SIZE) + 1;
+                }
+            } else if (saved?.selectedIdx !== undefined && saved.selectedIdx < currentItems.length) {
+                selectedItemIdx = saved.selectedIdx;
+            }
+
+            renderItems();
+            if (currentItems.length > 0) {
+                selectItem(selectedItemIdx);
+            }
 
             setTimeout(() => {
-                const first = document.querySelector('.tv-card-item') || document.querySelector('.tv-nav-item');
-                if (first) first.focus();
+                const activeCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || document.querySelector('.tv-nav-item.active');
+                if (activeCard) activeCard.focus();
             }, 100);
         }
 
@@ -2058,6 +2168,7 @@
             if (currentPage > 1) {
                 currentPage--;
                 renderItems();
+                saveTvState();
                 const first = document.querySelector('.tv-card-item');
                 if (first) first.focus();
             }
@@ -2068,6 +2179,7 @@
             if (currentPage < totalPages) {
                 currentPage++;
                 renderItems();
+                saveTvState();
                 const first = document.querySelector('.tv-card-item');
                 if (first) first.focus();
             }
