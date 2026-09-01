@@ -43,9 +43,7 @@
         /* ─── 1. TOP BAR ─── */
         .tv-topbar {
             height: 64px;
-            background: rgba(10, 14, 22, 0.85);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            background: #0d131f;
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             align-items: center;
@@ -68,7 +66,6 @@
             background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 24px rgba(245, 158, 11, 0.35);
         }
 
         .tv-badge {
@@ -92,14 +89,13 @@
             display: none;
             align-items: center;
             gap: 10px;
-            background: rgba(26, 34, 51, 0.8);
+            background: #182234;
             border: 1px solid rgba(255, 255, 255, 0.1);
             padding: 4px 12px;
             border-radius: 20px;
             font-size: 14px;
             font-weight: 700;
             color: #f8fafc;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         }
 
         .tv-user-avatar {
@@ -117,21 +113,20 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: radial-gradient(circle at center, #111728 0%, #06090e 85%);
+            background: #06090e;
             padding: 24px;
             text-align: center;
             z-index: 20;
         }
 
         .tv-login-card {
-            background: rgba(14, 20, 32, 0.9);
+            background: #0e1420;
             border: 2px solid rgba(245, 158, 11, 0.6);
-            backdrop-filter: blur(20px);
             border-radius: 24px;
             padding: 40px 52px;
             max-width: 600px;
             width: 90%;
-            box-shadow: 0 24px 70px rgba(0,0,0,0.85), 0 0 40px rgba(245, 158, 11, 0.2);
+            box-shadow: 0 16px 40px rgba(0,0,0,0.8);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -206,8 +201,7 @@
         .tv-col-nav {
             width: 200px;
             min-width: 200px;
-            background: rgba(9, 13, 20, 0.75);
-            backdrop-filter: blur(12px);
+            background: #090d14;
             border-right: 1px solid rgba(255, 255, 255, 0.07);
             display: flex;
             flex-direction: column;
@@ -239,14 +233,13 @@
             cursor: pointer;
             border: 2px solid transparent;
             position: relative;
-            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
+            transition: border-color 0.06s ease, background 0.06s ease;
         }
 
         .tv-nav-item .nav-icon {
             font-size: 18px;
             width: 24px;
             text-align: center;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
         }
 
         .tv-nav-item:hover,
@@ -259,7 +252,7 @@
         .tv-nav-item.active {
             border-color: #f59e0b;
             color: #ffffff;
-            background: linear-gradient(90deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.08) 100%);
+            background: #191c24;
             box-shadow: inset 3px 0 0 #f59e0b;
         }
 
@@ -267,8 +260,7 @@
         .tv-col-items {
             width: 290px;
             min-width: 270px;
-            background: rgba(12, 17, 26, 0.7);
-            backdrop-filter: blur(10px);
+            background: #0c111a;
             border-right: 1px solid rgba(255, 255, 255, 0.07);
             display: flex;
             flex-direction: column;
@@ -343,17 +335,17 @@
             align-items: center;
             gap: 12px;
             padding: 10px 12px;
-            background: rgba(18, 25, 38, 0.6);
+            background: #141c2b;
             border: 1.5px solid rgba(255, 255, 255, 0.06);
             border-radius: 12px;
             cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
+            transition: border-color 0.06s ease, background 0.06s ease;
         }
 
         .tv-card-item:hover,
         .tv-card-item.active {
             border-color: #f59e0b;
-            background: linear-gradient(90deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%);
+            background: #1e293b;
         }
 
         .tv-card-cover {
@@ -364,7 +356,6 @@
             background: #1e293b;
             flex-shrink: 0;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         }
 
         .tv-card-avatar {
@@ -375,7 +366,6 @@
             background: #1e293b;
             flex-shrink: 0;
             border: 2px solid #f59e0b;
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -412,7 +402,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: rgba(6, 9, 14, 0.5);
+            background: #06090e;
             overflow: hidden;
             min-width: 0;
         }
@@ -427,13 +417,11 @@
             display: flex;
             align-items: center;
             gap: 24px;
-            background: linear-gradient(135deg, rgba(28, 38, 56, 0.7) 0%, rgba(14, 20, 31, 0.85) 100%);
+            background: #121a28;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(16px);
             border-radius: 18px;
             padding: 18px 24px;
             margin-bottom: 16px;
-            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
             min-width: 0;
         }
 
@@ -445,7 +433,6 @@
             border: 2px solid #f59e0b;
             background: #1e293b;
             flex-shrink: 0;
-            box-shadow: 0 8px 28px rgba(0,0,0,0.6), 0 0 20px rgba(245, 158, 11, 0.25);
         }
 
         .tv-showcase-info {
@@ -512,18 +499,17 @@
             align-items: center;
             justify-content: space-between;
             padding: 12px 18px;
-            background: rgba(14, 20, 31, 0.65);
+            background: #0f1522;
             border: 1.5px solid rgba(255, 255, 255, 0.05);
             border-radius: 12px;
             margin-bottom: 8px;
             cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
+            transition: border-color 0.06s ease, background 0.06s ease;
         }
 
         .tv-track-item.playing {
             border-color: #f59e0b;
-            background: linear-gradient(90deg, rgba(245, 158, 11, 0.22) 0%, rgba(245, 158, 11, 0.06) 100%);
-            box-shadow: 0 4px 18px rgba(245, 158, 11, 0.2);
+            background: #1e293b;
         }
 
         .tv-track-left {
@@ -577,7 +563,6 @@
             width: 3.5px;
             background: #f59e0b;
             border-radius: 2px;
-            box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
         }
 
         .tv-eq-bar:nth-child(1) { height: 6px; animation: eqBounce1 0.8s ease-in-out infinite; }
@@ -588,9 +573,7 @@
         .tv-player-bar {
             display: none;
             height: 110px;
-            background: rgba(10, 14, 22, 0.95);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: #0b0f17;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             align-items: center;
             justify-content: space-between;
@@ -598,7 +581,6 @@
             gap: 24px;
             flex-shrink: 0;
             z-index: 10;
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
         }
 
         .tv-player-left {
@@ -618,7 +600,6 @@
             background: #1e293b;
             flex-shrink: 0;
             border: 1.5px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
         }
 
         .tv-player-meta {
@@ -681,13 +662,13 @@
         .tv-progress-bar {
             flex: 1;
             height: 10px;
-            background: rgba(30, 41, 59, 0.7);
+            background: #1e283b;
             border-radius: 6px;
             overflow: hidden;
             position: relative;
             cursor: pointer;
             border: 1.5px solid rgba(255, 255, 255, 0.06);
-            transition: all 0.15s ease;
+            transition: height 0.1s ease;
         }
 
         .tv-progress-bar:hover,
@@ -696,20 +677,18 @@
             height: 14px;
             border-color: #f59e0b;
             background: #242f42;
-            box-shadow: 0 0 16px rgba(245, 158, 11, 0.5) !important;
         }
 
         .tv-progress-fill {
             height: 100%;
             width: 0%;
-            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+            background: #f59e0b;
             border-radius: 5px;
-            box-shadow: 0 0 12px rgba(245, 158, 11, 0.7);
             transition: width 0.1s linear;
         }
 
         .tv-btn {
-            background: rgba(26, 36, 54, 0.8);
+            background: #182233;
             color: #f8fafc;
             border: 1.5px solid rgba(255, 255, 255, 0.1);
             border-radius: 10px;
@@ -721,7 +700,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
+            transition: border-color 0.06s ease, background 0.06s ease;
             font-family: inherit;
             white-space: nowrap;
             flex-shrink: 0;
@@ -734,7 +713,6 @@
             font-size: 15px;
             padding: 10px 22px;
             font-weight: 900;
-            box-shadow: 0 4px 18px rgba(245, 158, 11, 0.4);
         }
 
         .tv-btn-login {
@@ -750,14 +728,14 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 4px; }
 
-        /* ─── D-PAD REMOTE FOCUS INDICATOR (SIÊU ĐẸP & MƯỢT) ─── */
+        /* ─── D-PAD REMOTE FOCUS INDICATOR (SIÊU ĐẸP, SẮC NÉT & CỰC NHẸ) ─── */
         .focusable:focus,
         .focusable.focused {
-            outline: none !important;
+            outline: 3px solid #f59e0b !important;
+            outline-offset: 1px !important;
             border-color: #f59e0b !important;
-            box-shadow: 0 0 0 3px #f59e0b, 0 8px 30px rgba(245, 158, 11, 0.45) !important;
-            background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(245, 158, 11, 0.08) 100%) !important;
-            transform: scale(1.025) translateZ(0) !important;
+            background: #1f293d !important;
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.4) !important;
             z-index: 50 !important;
         }
 
@@ -766,15 +744,14 @@
             top: 24px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(15, 21, 33, 0.95);
+            background: #131b2a;
             border: 2px solid #f59e0b;
-            backdrop-filter: blur(16px);
             border-radius: 30px;
             padding: 10px 24px;
             font-size: 15px;
             font-weight: 800;
             color: #f8fafc;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.85), 0 0 25px rgba(245, 158, 11, 0.3);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8);
             z-index: 10000;
             display: none;
         }
@@ -783,9 +760,7 @@
         .tv-modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: rgba(0, 0, 0, 0.88);
             z-index: 9999;
             display: none;
             align-items: center;
@@ -793,13 +768,13 @@
         }
 
         .tv-modal-card {
-            background: rgba(17, 24, 38, 0.95);
+            background: #111826;
             border: 2px solid rgba(245, 158, 11, 0.4);
             border-radius: 20px;
             width: 540px;
             max-width: 90vw;
             padding: 28px 32px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.9), 0 0 40px rgba(245, 158, 11, 0.15);
+            box-shadow: 0 16px 40px rgba(0,0,0,0.9);
             display: flex;
             flex-direction: column;
             gap: 18px;
@@ -1812,6 +1787,7 @@
                 return;
             }
 
+            const frag = document.createDocumentFragment();
             currentTracklist.forEach((tr, idx) => {
                 const isCur = (isPlaying && idx === currentPlayingTrackIdx);
                 const isFav = isTrackInFavorites(tr);
@@ -1827,7 +1803,6 @@
                 const numOrEq = isCur 
                     ? '<div class="tv-eq-anim"><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span></div>' 
                     : (idx + 1);
-                const trCover = getTrackCover(tr);
 
                 item.innerHTML = `
                     <div class="tv-track-left">
@@ -1845,8 +1820,9 @@
                     }
                 });
 
-                trackContainer.appendChild(item);
+                frag.appendChild(item);
             });
+            trackContainer.appendChild(frag);
         }
 
         // ─── AUDIO PLAYBACK LOGIC ───
@@ -2321,152 +2297,238 @@
             });
         }
 
-        // ─── D-PAD REMOTE SMART SPATIAL NAVIGATION ENGINE ───
+        // ─── D-PAD REMOTE SMART SPATIAL NAVIGATION ENGINE (ZERO JANK / ZERO LATENCY) ───
         let lastMainFocusElement = null; // Ghi nhớ phần tử nội dung gần nhất trước khi xuống player bar
 
-        function getFocusableElements() {
-            const root = document.body;
-            // Nếu có modal đang mở, chỉ focus vào các nút trong modal
-            const openModal = document.querySelector('.tv-modal-overlay[style*="display: flex"]');
-            const searchRoot = openModal || root;
-
-            return Array.from(searchRoot.querySelectorAll('.focusable:not([disabled]):not([style*="display: none"])')).filter(el => {
-                const rect = el.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-            });
-        }
-
-        function getCenter(el) {
-            const r = el.getBoundingClientRect();
-            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        function setFocus(el) {
+            if (!el) return false;
+            el.focus();
+            el.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
+            return true;
         }
 
         function navigate(dir) {
-            const elements = getFocusableElements();
-            if (elements.length === 0) return;
-
             let cur = document.activeElement;
-            if (!cur || !elements.includes(cur)) {
-                const def = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || elements[0];
-                if (def) def.focus();
+
+            // 0. Nếu có Modal đang mở, điều hướng riêng trong Modal
+            const openModal = document.querySelector('.tv-modal-overlay[style*="display: flex"]');
+            if (openModal) {
+                const modalFocusables = Array.from(openModal.querySelectorAll('.focusable:not([disabled]):not([style*="display: none"])'));
+                if (modalFocusables.length === 0) return;
+                let curIdx = modalFocusables.indexOf(cur);
+                if (curIdx === -1) {
+                    setFocus(modalFocusables[0]);
+                    return;
+                }
+                if (dir === 'down' || dir === 'right') {
+                    setFocus(modalFocusables[(curIdx + 1) % modalFocusables.length]);
+                } else if (dir === 'up' || dir === 'left') {
+                    setFocus(modalFocusables[(curIdx - 1 + modalFocusables.length) % modalFocusables.length]);
+                }
+                return;
+            }
+
+            if (!cur || cur === document.body || !cur.classList.contains('focusable')) {
+                const def = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || document.querySelector('.tv-nav-item.active');
+                if (def) setFocus(def);
                 return;
             }
 
             // Ghi nhớ vị trí đang đứng ở nội dung chính trước khi xuống player bar
-            if (!cur.closest('.tv-player-bar') && !cur.closest('.tv-topbar') && !document.querySelector('.tv-modal-overlay[style*="display: flex"]')) {
+            if (!cur.closest('.tv-player-bar') && !cur.closest('.tv-topbar')) {
                 lastMainFocusElement = cur;
             }
 
-            // 1. SMART COLUMN NAVIGATION (CHUYỂN CỘT THÔNG MINH BẰNG PHÍM TRÁI / PHẢI)
             const isNavCol = cur.closest('.tv-col-nav');
             const isItemsCol = cur.closest('.tv-col-items');
             const isRightCol = cur.closest('.tv-col-right');
             const isPlayerBar = cur.closest('.tv-player-bar');
+            const isTopBar = cur.closest('.tv-topbar');
 
-            // Từ Menu Trái bấm Phải -> Nhảy sang Card đang chọn hoặc card đầu tiên trong Cột Items
-            if (isNavCol && dir === 'right') {
-                const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || document.getElementById('btnPrevPage');
-                if (targetCard) {
-                    targetCard.focus();
-                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // --- 1. ĐIỀU HƯỚNG TRONG CỘT TRÁI (NAV) ---
+            if (isNavCol) {
+                const navItems = Array.from(document.querySelectorAll('.tv-col-nav .tv-nav-item'));
+                const curIdx = navItems.indexOf(cur);
+                if (dir === 'down') {
+                    if (curIdx < navItems.length - 1) setFocus(navItems[curIdx + 1]);
                     return;
                 }
-            }
-
-            // Từ Cột Items bấm Trái -> Nhảy về Tab menu đang active ở Cột Trái
-            if (isItemsCol && dir === 'left') {
-                const activeNav = document.querySelector('.tv-nav-item.active') || document.querySelector('.tv-nav-item');
-                if (activeNav) {
-                    activeNav.focus();
+                if (dir === 'up') {
+                    if (curIdx > 0) setFocus(navItems[curIdx - 1]);
+                    else setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
                     return;
                 }
-            }
-
-            // Từ Cột Items bấm Phải -> Nhảy sang nút Phát Tất Cả hoặc Track đầu tiên ở Cột Phải
-            if (isItemsCol && dir === 'right') {
-                const targetRight = document.getElementById('btnPlayAll') || document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item');
-                if (targetRight) {
-                    targetRight.focus();
-                    targetRight.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (dir === 'right') {
+                    const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || document.getElementById('btnPrevPage');
+                    if (targetCard) setFocus(targetCard);
                     return;
                 }
+                return;
             }
 
-            // Từ Cột Phải (Tracklist/Showcase) bấm Trái -> Nhảy về Card đang chọn ở Cột Items
-            if (isRightCol && dir === 'left') {
-                const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
-                if (targetCard) {
-                    targetCard.focus();
-                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // --- 2. ĐIỀU HƯỚNG TRONG CỘT GIỮA (ITEMS & PHÂN TRANG) ---
+            if (isItemsCol) {
+                if (dir === 'left') {
+                    const activeNav = document.querySelector('.tv-nav-item.active') || document.querySelector('.tv-nav-item');
+                    if (activeNav) setFocus(activeNav);
                     return;
                 }
-            }
-
-            // Từ Bottom Player Bar bấm Lên -> Nhảy ngược lại vị trí vừa rời đi trong nội dung chính
-            if (isPlayerBar && dir === 'up') {
-                if (lastMainFocusElement && document.body.contains(lastMainFocusElement) && lastMainFocusElement.offsetParent !== null) {
-                    lastMainFocusElement.focus();
-                    lastMainFocusElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (dir === 'right') {
+                    const targetRight = document.getElementById('btnPlayAll') || document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item');
+                    if (targetRight) setFocus(targetRight);
                     return;
-                } else {
-                    const fallback = document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item') || document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
-                    if (fallback) {
-                        fallback.focus();
-                        fallback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+
+                const cards = Array.from(document.querySelectorAll('.tv-col-items .tv-card-item'));
+                const curCardIdx = cards.indexOf(cur);
+
+                if (cur === btnPrevPage || cur === btnNextPage) {
+                    if (dir === 'down') {
+                        if (cards.length > 0) setFocus(cards[0]);
+                        return;
+                    }
+                    if (dir === 'left') {
+                        if (cur === btnNextPage && !btnPrevPage.disabled) setFocus(btnPrevPage);
+                        else {
+                            const activeNav = document.querySelector('.tv-nav-item.active') || document.querySelector('.tv-nav-item');
+                            if (activeNav) setFocus(activeNav);
+                        }
+                        return;
+                    }
+                    if (dir === 'right') {
+                        if (cur === btnPrevPage && !btnNextPage.disabled) setFocus(btnNextPage);
+                        else {
+                            const targetRight = document.getElementById('btnPlayAll') || document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item');
+                            if (targetRight) setFocus(targetRight);
+                        }
+                        return;
+                    }
+                    if (dir === 'up') {
+                        setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
                         return;
                     }
                 }
-            }
 
-            // 2. SPATIAL PROXIMITY SEARCH (TÌM PHẦN TỬ GẦN NHẤT THEO HƯỚNG BẤM)
-            const curC = getCenter(cur);
-            let best = null;
-            let minScore = Infinity;
-
-            for (const cand of elements) {
-                if (cand === cur) continue;
-                const candC = getCenter(cand);
-                const dx = candC.x - curC.x;
-                const dy = candC.y - curC.y;
-
-                let valid = false;
-                let prim = 0;
-                let orth = 0;
-
-                if (dir === 'up' && dy < -4) {
-                    valid = true; prim = -dy; orth = Math.abs(dx);
-                } else if (dir === 'down' && dy > 4) {
-                    valid = true; prim = dy; orth = Math.abs(dx);
-                } else if (dir === 'left' && dx < -4) {
-                    valid = true; prim = -dx; orth = Math.abs(dy);
-                } else if (dir === 'right' && dx > 4) {
-                    valid = true; prim = dx; orth = Math.abs(dy);
-                }
-
-                if (valid) {
-                    const score = prim + orth * 1.6;
-                    if (score < minScore) {
-                        minScore = score;
-                        best = cand;
+                if (curCardIdx !== -1) {
+                    if (dir === 'down') {
+                        if (curCardIdx < cards.length - 1) {
+                            setFocus(cards[curCardIdx + 1]);
+                        } else if (!btnNextPage.disabled) {
+                            btnNextPage.click();
+                        }
+                        return;
+                    }
+                    if (dir === 'up') {
+                        if (curCardIdx > 0) {
+                            setFocus(cards[curCardIdx - 1]);
+                        } else if (!btnPrevPage.disabled) {
+                            btnPrevPage.click();
+                        } else {
+                            setFocus(btnPrevPage.disabled ? btnNextPage : btnPrevPage);
+                        }
+                        return;
                     }
                 }
+                return;
             }
 
-            // 3. TỰ ĐỘNG LẬT TRANG KHI ĐI HẾT DANH SÁCH (PAGINATION SMART WRAP)
-            if (!best && isItemsCol) {
-                if (dir === 'down' && !btnNextPage.disabled) {
-                    btnNextPage.click();
+            // --- 3. ĐIỀU HƯỚNG TRONG CỘT PHẢI (SHOWCASE BANNER & TRACKLIST) ---
+            if (isRightCol) {
+                if (dir === 'left') {
+                    const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
+                    if (targetCard) setFocus(targetCard);
                     return;
                 }
-                if (dir === 'up' && !btnPrevPage.disabled) {
-                    btnPrevPage.click();
-                    return;
+
+                const showcaseBtns = Array.from(document.querySelectorAll('.tv-showcase-actions .tv-btn:not([style*="display: none"])'));
+                const tracks = Array.from(document.querySelectorAll('.tv-col-right .tv-track-item'));
+                const curBtnIdx = showcaseBtns.indexOf(cur);
+                const curTrackIdx = tracks.indexOf(cur);
+
+                if (curBtnIdx !== -1) {
+                    if (dir === 'right' && curBtnIdx < showcaseBtns.length - 1) {
+                        setFocus(showcaseBtns[curBtnIdx + 1]);
+                        return;
+                    }
+                    if (dir === 'left' && curBtnIdx > 0) {
+                        setFocus(showcaseBtns[curBtnIdx - 1]);
+                        return;
+                    }
+                    if (dir === 'up') {
+                        setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
+                        return;
+                    }
+                    if (dir === 'down') {
+                        if (tracks.length > 0) setFocus(tracks[0]);
+                        else setFocus(document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable'));
+                        return;
+                    }
                 }
+
+                if (curTrackIdx !== -1) {
+                    if (dir === 'down') {
+                        if (curTrackIdx < tracks.length - 1) {
+                            setFocus(tracks[curTrackIdx + 1]);
+                        } else {
+                            const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
+                            if (playerPlayBtn) setFocus(playerPlayBtn);
+                        }
+                        return;
+                    }
+                    if (dir === 'up') {
+                        if (curTrackIdx > 0) {
+                            setFocus(tracks[curTrackIdx - 1]);
+                        } else if (showcaseBtns.length > 0) {
+                            setFocus(showcaseBtns[0]);
+                        }
+                        return;
+                    }
+                }
+                return;
             }
 
-            if (best) {
-                best.focus();
-                best.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // --- 4. ĐIỀU HƯỚNG TRONG BOTTOM PLAYER BAR ---
+            if (isPlayerBar) {
+                const playerBtns = Array.from(document.querySelectorAll('.tv-player-bar .focusable:not([disabled])'));
+                const curIdx = playerBtns.indexOf(cur);
+
+                if (dir === 'up') {
+                    if (lastMainFocusElement && document.body.contains(lastMainFocusElement) && lastMainFocusElement.offsetParent !== null) {
+                        setFocus(lastMainFocusElement);
+                    } else {
+                        const fallback = document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item') || document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
+                        if (fallback) setFocus(fallback);
+                    }
+                    return;
+                }
+                if (dir === 'right') {
+                    if (curIdx < playerBtns.length - 1) setFocus(playerBtns[curIdx + 1]);
+                    return;
+                }
+                if (dir === 'left') {
+                    if (curIdx > 0) setFocus(playerBtns[curIdx - 1]);
+                    return;
+                }
+                return;
+            }
+
+            // --- 5. ĐIỀU HƯỚNG TRONG TOPBAR ---
+            if (isTopBar) {
+                const topBtns = Array.from(document.querySelectorAll('.tv-topbar .focusable'));
+                const curIdx = topBtns.indexOf(cur);
+                if (dir === 'right' && curIdx < topBtns.length - 1) {
+                    setFocus(topBtns[curIdx + 1]);
+                    return;
+                }
+                if (dir === 'left' && curIdx > 0) {
+                    setFocus(topBtns[curIdx - 1]);
+                    return;
+                }
+                if (dir === 'down') {
+                    const fallback = lastMainFocusElement || document.querySelector('.tv-card-item.active') || document.querySelector('.tv-nav-item.active');
+                    if (fallback) setFocus(fallback);
+                    return;
+                }
             }
         }
 
