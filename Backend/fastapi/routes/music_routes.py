@@ -3728,7 +3728,13 @@ async def start_gdrive_upload(payload: dict, _: bool = Depends(require_auth)):
     if not channel_id:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Vui lòng chọn Kênh Telegram đích."})
 
-    from Backend.helper.gdrive_uploader import gdrive_upload_manager
+    import importlib
+    import Backend.helper.gdrive_uploader as gdu
+    try:
+        importlib.reload(gdu)
+    except Exception:
+        pass
+    gdrive_upload_manager = gdu.gdrive_upload_manager
     res = await gdrive_upload_manager.start(
         url=url,
         target_channel_id=channel_id,

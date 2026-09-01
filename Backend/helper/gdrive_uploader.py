@@ -29,7 +29,9 @@ ARCHIVE_EXTENSIONS = (".zip", ".rar", ".7z", ".tar", ".tar.gz", ".tgz", ".bz2", 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 TEMP_UPLOAD_DIR = os.path.abspath(os.path.join("Music", "temp_uploads"))
+CACHE_DOWNLOAD_DIR = os.path.abspath(os.path.join("Music", "temp_uploads", "cached_downloads"))
 os.makedirs(TEMP_UPLOAD_DIR, exist_ok=True)
+os.makedirs(CACHE_DOWNLOAD_DIR, exist_ok=True)
 
 
 def _find_7z_binary() -> Optional[str]:
@@ -52,10 +54,11 @@ def _find_7z_binary() -> Optional[str]:
     return None
 
 
-def _sync_extract_archive(archive_path: str, extract_dir: str) -> bool:
+def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:
     """
     Hàm giải nén đồng bộ (chạy trong worker thread):
     Hỗ trợ .rar, .7z, .zip, .tar, .tar.gz, .bz2, .xz, .iso.
+    Trả về (success, error_or_success_message).
     """
     import subprocess
     os.makedirs(extract_dir, exist_ok=True)
@@ -73,9 +76,13 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> bool:
 
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             if res.returncode == 0:
-                LOGGER.info(f"[EXTRACT SUCCESS] Extracted with {archiver}: {archive_path}")
-                return True
-            LOGGER.warning(f"[EXTRACT WARN] Return code {res.returncode}: {res.stderr or res.stdout}")
+                LOGGER.info(f"[EXTRACT SUCCESS] Extracted with {os.path.basename(archiver)}: {archive_path}")
+                return True, f"Đã giải nén thành công bằng {os.path.basename(archiver)}"
+            else:
+                err_text = (res.stderr or res.stdout or "").strip()
+                err_lines = [l for l in err_text.splitlines() if l.strip() and not l.startswith("7-Zip")][:2]
+                err_detail = " - ".join(err_lines) if err_lines else f"Exit code {res.returncode}"
+                LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_detail}")
         except Exception as e:
             LOGGER.warning(f"[EXTRACT CLI ERROR] {e}")
 
@@ -84,7 +91,7 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> bool:
         try:
             with zipfile.ZipFile(archive_path, 'r') as zf:
                 zf.extractall(extract_dir)
-            return True
+            return True, "Đã giải nén thành công bằng Python ZipFile"
         except Exception as e:
             LOGGER.warning(f"[ZIPFILE EXTRACT ERROR] {e}")
 
@@ -94,7 +101,7 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> bool:
             import py7zr
             with py7zr.SevenZipFile(archive_path, mode='r') as z:
                 z.extractall(path=extract_dir)
-            return True
+            return True, "Đã giải nén thành công bằng py7zr"
         except Exception as e:
             LOGGER.warning(f"[PY7ZR EXTRACT ERROR] {e}")
 
@@ -103,7 +110,7 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> bool:
         try:
             with tarfile.open(archive_path, 'r:*') as tf:
                 tf.extractall(extract_dir)
-            return True
+            return True, "Đã giải nén thành công bằng Python TarFile"
         except Exception as e:
             LOGGER.warning(f"[TARFILE EXTRACT ERROR] {e}")
 
@@ -114,14 +121,14 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> bool:
             cmd = [tar_cli, "-xf", archive_path, "-C", extract_dir]
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             if res.returncode == 0:
-                return True
+                return True, "Đã giải nén thành công bằng tar CLI"
         except Exception:
             pass
 
-    return False
+    return False, "Không có công cụ nào giải nén được file này hoặc file bị hỏng / có mật khẩu."
 
 
-async def _extract_archive(archive_path: str, extract_dir: str) -> bool:
+async def _extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:
     """Chạy giải nén trong threadpool tránh block event loop và tránh lỗi event loop trên Windows"""
     return await asyncio.to_thread(_sync_extract_archive, archive_path, extract_dir)
 
@@ -362,7 +369,7 @@ class GoogleDriveUploadManager:
         return f"gdrive_{file_id}", ""
 
     async def _download_gdrive_file(self, file_id: str, work_dir: str, known_filename: str = "") -> Optional[str]:
-        """Tải một file Google Drive đơn lẻ với cơ chế nhận diện tên file gốc và phát hiện Quota Exceeded"""
+        """Tải một file Google Drive đơn lẻ với bộ nhớ đệm (Download Cache) và nhận diện lỗi Quota Exceeded"""
         
         # 1. Lấy thông tin & tên file gốc từ Google Drive Preview
         real_title, page_html = await self._get_gdrive_file_info(file_id)
@@ -372,6 +379,25 @@ class GoogleDriveUploadManager:
             target_filename = real_title
         else:
             target_filename = f"gdrive_{file_id}"
+
+        # 2. Kiểm tra trong Bộ nhớ đệm (Download Cache)
+        try:
+            for fname in os.listdir(CACHE_DOWNLOAD_DIR):
+                if fname.startswith(f"{file_id}_") or (target_filename and fname.endswith(target_filename)):
+                    c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                    if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
+                        cached_sz = os.path.getsize(c_path)
+                        cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
+                        self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua bước tải Google Drive!", "success")
+                        self._download_percent = 100
+                        out_path = os.path.join(work_dir, cached_fn)
+                        try:
+                            shutil.copy2(c_path, out_path)
+                            return out_path
+                        except Exception:
+                            return c_path
+        except Exception as ex:
+            LOGGER.debug(f"Cache check error: {ex}")
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -404,7 +430,7 @@ class GoogleDriveUploadManager:
 
             content_type = (resp.headers.get("content-type") or "").lower()
 
-            # 2. Kiểm tra nếu Google Drive trả về trang HTML (Lỗi Quota Exceeded, Cảnh báo Virus, hoặc Cần xác thực)
+            # Kiểm tra nếu Google Drive trả về trang HTML (Lỗi Quota Exceeded, Cảnh báo Virus, hoặc Cần xác thực)
             if "text/html" in content_type or resp.text.startswith("<!DOCTYPE") or resp.text.startswith("<html"):
                 html_body = resp.text
                 
@@ -446,7 +472,7 @@ class GoogleDriveUploadManager:
                         self._log(err_msg, "error")
                         return None
 
-            # 3. Stream tải file nhị phân
+            # 3. Stream tải file nhị phân trực tiếp vào Cache Folder
             final_dl_url = download_url or f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
             
             async with client.stream("GET", final_dl_url, headers=headers) as stream_resp:
@@ -471,11 +497,12 @@ class GoogleDriveUploadManager:
                 self._stage = f"Đang tải về từ Google Drive: {final_filename}"
                 self._log(f"Bắt đầu tải: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
 
+                cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{file_id}_{final_filename}")
                 out_path = os.path.join(work_dir, final_filename)
                 start_dl = time.time()
                 last_update = 0
 
-                with open(out_path, "wb") as f_out:
+                with open(cache_path, "wb") as f_out:
                     async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
                         if self._cancel_requested:
                             return None
@@ -492,11 +519,11 @@ class GoogleDriveUploadManager:
                                 mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
                                 self._speed_str = f"{mbps:.2f} MB/s"
 
-                # 4. Kiểm tra file sau khi tải về (Đảm bảo không phải file HTML lỗi 2KB)
-                downloaded_fsize = os.path.getsize(out_path) if os.path.exists(out_path) else 0
+                # 4. Kiểm tra file sau khi tải về
+                downloaded_fsize = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
                 if downloaded_fsize < 4096:
                     try:
-                        with open(out_path, "r", encoding="utf-8", errors="ignore") as f_chk:
+                        with open(cache_path, "r", encoding="utf-8", errors="ignore") as f_chk:
                             chk_head = f_chk.read(500)
                             if "<!DOCTYPE" in chk_head or "<html" in chk_head:
                                 if "Quota exceeded" in chk_head or "vượt quá giới hạn" in chk_head:
@@ -505,20 +532,43 @@ class GoogleDriveUploadManager:
                                     err_msg = f"⚠️ File tải về '{final_filename}' không hợp lệ (Google Drive trả về trang HTML thông báo)."
                                 self._error_message = err_msg
                                 self._log(err_msg, "error")
-                                if os.path.exists(out_path):
-                                    os.remove(out_path)
+                                if os.path.exists(cache_path):
+                                    os.remove(cache_path)
                                 return None
                     except Exception:
                         pass
 
                 self._download_percent = 100
                 self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize/(1024*1024), 2)} MB)", "success")
-                return out_path
+                
+                # Sao chép vào work_dir
+                try:
+                    shutil.copy2(cache_path, out_path)
+                    return out_path
+                except Exception:
+                    return cache_path
 
     async def _download_direct_url(self, url: str, work_dir: str) -> Optional[str]:
-        """Tải file từ link trực tiếp (HTTP / HTTPS)"""
+        """Tải file từ link trực tiếp (HTTP / HTTPS) có lưu Cache"""
         headers = {"User-Agent": "Mozilla/5.0"}
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        
+        # Check cache
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+        for fname in os.listdir(CACHE_DOWNLOAD_DIR):
+            if fname.startswith(f"direct_{url_hash}_"):
+                c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
+                    cached_fn = fname.split("_", 2)[-1]
+                    self._log(f"⚡ Phát hiện file trong cache: '{cached_fn}'. Bỏ qua bước tải lại!", "success")
+                    self._download_percent = 100
+                    out_path = os.path.join(work_dir, cached_fn)
+                    try:
+                        shutil.copy2(c_path, out_path)
+                        return out_path
+                    except Exception:
+                        return c_path
+
+        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
             async with client.stream("GET", url, headers=headers) as resp:
                 if resp.status_code != 200:
                     self._log(f"Không thể tải từ URL (HTTP {resp.status_code})", "error")
@@ -534,11 +584,12 @@ class GoogleDriveUploadManager:
                 self._stage = f"Đang tải file: {file_name}"
                 self._log(f"Bắt đầu tải file: {file_name}", "info")
 
+                cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"direct_{url_hash}_{file_name}")
                 out_path = os.path.join(work_dir, file_name)
                 start_dl = time.time()
                 last_update = 0
 
-                with open(out_path, "wb") as f_out:
+                with open(cache_path, "wb") as f_out:
                     async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
                         if self._cancel_requested:
                             return None
@@ -556,8 +607,12 @@ class GoogleDriveUploadManager:
                                 self._speed_str = f"{mbps:.2f} MB/s"
 
                 self._download_percent = 100
-                self._log(f"✅ Tải thành công: {file_name}", "success")
-                return out_path
+                self._log(f"✅ Tải thành công file: {file_name}", "success")
+                try:
+                    shutil.copy2(cache_path, out_path)
+                    return out_path
+                except Exception:
+                    return cache_path
 
     async def _fetch_folder_file_ids(self, folder_id: str) -> List[Tuple[str, str]]:
         """Lấy danh sách các file trong Folder Google Drive công khai"""
@@ -648,11 +703,12 @@ class GoogleDriveUploadManager:
                         elif ext in ARCHIVE_EXTENSIONS:
                             # Giải nén đa định dạng (.rar, .7z, .zip, .tar)
                             sub_extract = os.path.join(work_dir, f"ext_{idx}")
-                            success = await _extract_archive(dl_path, sub_extract)
+                            success, extract_msg = await _extract_archive(dl_path, sub_extract)
                             if success:
+                                self._log(f"✅ {extract_msg} ({fname})", "success")
                                 files_to_upload.extend(self._collect_audio_files(sub_extract))
                             else:
-                                self._log(f"Lỗi giải nén file {fname}", "warn")
+                                self._log(f"Lỗi giải nén {fname}: {extract_msg}", "warn")
 
             elif link_type == "file":
                 self._stage = "Đang tải file từ Google Drive..."
@@ -668,12 +724,13 @@ class GoogleDriveUploadManager:
                     self._stage = "Đang giải nén tập tin album..."
                     self._log(f"Phát hiện file nén ({ext}), đang tự động giải nén trích xuất danh sách bài hát...", "info")
                     extract_dir = os.path.join(work_dir, "extracted")
-                    success = await _extract_archive(dl_path, extract_dir)
+                    success, extract_msg = await _extract_archive(dl_path, extract_dir)
                     if success:
+                        self._log(f"✅ {extract_msg}", "success")
                         files_to_upload = self._collect_audio_files(extract_dir)
                     else:
                         self._status = "error"
-                        self._error_message = f"Không thể giải nén file ({ext}). Vui lòng kiểm tra định dạng tập tin."
+                        self._error_message = f"Không thể giải nén file ({ext}): {extract_msg}"
                         self._log(self._error_message, "error")
                         return
                 elif ext in AUDIO_EXTENSIONS:
@@ -696,8 +753,9 @@ class GoogleDriveUploadManager:
                 ext = os.path.splitext(dl_path)[1].lower()
                 if ext in ARCHIVE_EXTENSIONS:
                     extract_dir = os.path.join(work_dir, "extracted")
-                    success = await _extract_archive(dl_path, extract_dir)
+                    success, extract_msg = await _extract_archive(dl_path, extract_dir)
                     if success:
+                        self._log(f"✅ {extract_msg}", "success")
                         files_to_upload = self._collect_audio_files(extract_dir)
                 elif ext in AUDIO_EXTENSIONS:
                     files_to_upload = [dl_path]
