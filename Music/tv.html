@@ -897,6 +897,7 @@
                     <span id="tvUserName">User</span>
                     <button class="tv-btn focusable" id="btnTvLogout" tabindex="0" style="padding: 3px 8px; font-size: 11px; margin-left: 4px;">Đăng Xuất</button>
                 </div>
+                <button class="tv-btn focusable" id="btnTvHelp" tabindex="0" title="Hướng dẫn sử dụng & Phím tắt Remote">❓ Hướng Dẫn</button>
                 <button class="tv-btn focusable" id="btnReloadLibrary" tabindex="0">🔄 Tải Lại</button>
                 <button class="tv-btn focusable" id="btnSwitchDesktop" tabindex="0" title="Chuyển về giao diện máy tính">🖥️ Bản Desktop</button>
             </div>
@@ -1084,6 +1085,43 @@
         </div>
     </div>
 
+    <!-- MODAL 3: Hướng Dẫn Sử Dụng & Phím Tắt Remote TV -->
+    <div class="tv-modal-overlay" id="modalTvHelp">
+        <div class="tv-modal-card" style="width: 640px; max-width: 95vw;">
+            <div class="tv-modal-header">
+                <div class="tv-modal-title">📖 HƯỚNG DẪN ĐIỀU KHIỂN TV REMOTE</div>
+                <button class="tv-btn focusable" id="btnCloseTvHelp" tabindex="0" style="padding: 4px 10px;">✕ Đóng</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
+                
+                <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
+                    <div style="font-weight: 800; color: #f59e0b; margin-bottom: 8px; font-size: 15px;">🎮 Phím Tắt Remote Nhanh (Không cần rê chuột):</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; color: #cbd5e1;">
+                        <div>• <b>Chuyển bài tiếp:</b> Phím <code>⏭</code> / <code>CH+</code> / Số <code>6</code>, <code>9</code></div>
+                        <div>• <b>Lùi bài trước:</b> Phím <code>⏮</code> / <code>CH-</code> / Số <code>4</code>, <code>7</code></div>
+                        <div>• <b>Phát / Tạm dừng:</b> Phím <code>⏯</code> / Phím số <code>0</code>, <code>5</code></div>
+                        <div>• <b>Yêu thích bài:</b> Phím <code>F</code></div>
+                        <div>• <b>Tua 10s:</b> Phím <code>⏩</code> / <code>⏪</code> (hoặc <code>L</code> / <code>J</code>)</div>
+                        <div>• <b>Lật trang:</b> Phím <code>PageUp</code> / <code>PageDn</code></div>
+                    </div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
+                    <div style="font-weight: 800; color: #38bdf8; margin-bottom: 8px; font-size: 15px;">🧭 Điều Hướng D-Pad 4 Chiều Thông Minh:</div>
+                    <div style="color: #cbd5e1; line-height: 1.6;">
+                        • <b>Trái / Phải (👈 👉):</b> Nhảy qua lại nhanh giữa 3 cột (Menu ➔ Albums ➔ Danh sách bài hát).<br>
+                        • <b>Lên / Xuống (👆 👇):</b> Cuộn danh sách bài hát hoặc nhảy xuống thanh Player dưới cùng. Khi ở Player bấm <b>Lên</b> sẽ quay về đúng vị trí cũ.<br>
+                        • <b>OK / Enter:</b> Bấm vào bài hát để phát. Bấm OK lần nữa trên bài đang phát để <b>Tạm dừng / Tiếp tục</b>.
+                    </div>
+                </div>
+
+            </div>
+            <div class="tv-modal-actions">
+                <button class="tv-btn tv-btn-play focusable" id="btnUnderstandTvHelp" tabindex="0">✓ Đã Hiểu</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div class="tv-toast" id="tvToast"></div>
 
@@ -1165,6 +1203,11 @@
         const inputNewPlName = document.getElementById('inputNewPlName');
         const btnCancelCreatePl = document.getElementById('btnCancelCreatePl');
         const btnSubmitCreatePl = document.getElementById('btnSubmitCreatePl');
+
+        const modalTvHelp = document.getElementById('modalTvHelp');
+        const btnTvHelp = document.getElementById('btnTvHelp');
+        const btnCloseTvHelp = document.getElementById('btnCloseTvHelp');
+        const btnUnderstandTvHelp = document.getElementById('btnUnderstandTvHelp');
 
         const tvUserInfo = document.getElementById('tvUserInfo');
         const tvUserAvatar = document.getElementById('tvUserAvatar');
@@ -1435,6 +1478,16 @@
         function closeAllModals() {
             if (modalAddToPlaylist) modalAddToPlaylist.style.display = 'none';
             if (modalCreatePlaylist) modalCreatePlaylist.style.display = 'none';
+            if (modalTvHelp) modalTvHelp.style.display = 'none';
+        }
+
+        function openTvHelpModal() {
+            if (modalTvHelp) {
+                modalTvHelp.style.display = 'flex';
+                setTimeout(() => {
+                    if (btnUnderstandTvHelp) btnUnderstandTvHelp.focus();
+                }, 50);
+            }
         }
 
         // ─── PHÂN LOẠI DỮ LIỆU TỪ RAW ALBUMS ───
@@ -2219,6 +2272,15 @@
             });
         }
 
+        if (btnTvHelp) btnTvHelp.addEventListener('click', openTvHelpModal);
+        if (btnCloseTvHelp) btnCloseTvHelp.addEventListener('click', closeAllModals);
+        if (btnUnderstandTvHelp) btnUnderstandTvHelp.addEventListener('click', closeAllModals);
+        if (modalTvHelp) {
+            modalTvHelp.addEventListener('click', (e) => {
+                if (e.target === modalTvHelp) closeAllModals();
+            });
+        }
+
         if (modalAddToPlaylist) {
             modalAddToPlaylist.addEventListener('click', (e) => {
                 if (e.target === modalAddToPlaylist) closeAllModals();
@@ -2466,6 +2528,14 @@
             if (!isTyping && (e.key === 'f' || e.key === 'F')) {
                 e.preventDefault();
                 toggleFavorite();
+                return;
+            }
+
+            // 5. Phím Bật/Đóng Hướng Dẫn Nhanh (Help Toggle): Phím H hoặc ?
+            if (!isTyping && (e.key === 'h' || e.key === 'H' || e.key === '?')) {
+                e.preventDefault();
+                if (modalTvHelp && modalTvHelp.style.display === 'flex') closeAllModals();
+                else openTvHelpModal();
                 return;
             }
 
