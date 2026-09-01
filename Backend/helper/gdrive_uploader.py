@@ -315,10 +315,17 @@ class GoogleDriveUploadManager:
                 html_body = resp.text
                 
                 # A. Phát hiện Quota Exceeded (Hết băng thông tải trong ngày của Google)
-                if "Quota exceeded" in html_body or "vượt quá giới hạn" in html_body or "Too many users" in html_body:
+                if (
+                    "Quota exceeded" in html_body or 
+                    "vượt quá giới hạn" in html_body or 
+                    "Too many users" in html_body or
+                    "can't view or download" in html_body or
+                    "can&#39;t view or download" in html_body or
+                    "Sorry, you can" in html_body
+                ):
                     err_msg = (
-                        f"⚠️ Google Drive đã khóa tải file '{target_filename}' do vượt quá giới hạn lượt tải trong ngày (Quota Exceeded). "
-                        f"Giải pháp: Hãy đăng nhập Google Drive cá nhân, chọn 'Tạo bản sao' (Make a copy) file này vào Drive của bạn rồi lấy link mới để tải ngay!"
+                        f"⚠️ Google Drive đã khóa tải file '{target_filename}' do vượt quá giới hạn lượt tải trong ngày (Google Quota Exceeded). "
+                        f"Cách khắc phục ngay: Hãy mở link trên trình duyệt, chọn 'Tạo bản sao' (Make a copy) file này vào Google Drive của bạn rồi lấy link chia sẻ của bản sao đó để upload!"
                     )
                     self._error_message = err_msg
                     self._log(err_msg, "error")
@@ -564,8 +571,8 @@ class GoogleDriveUploadManager:
                 dl_path = await self._download_gdrive_file(resource_id, work_dir)
                 if not dl_path or not os.path.exists(dl_path):
                     self._status = "error"
-                    self._error_message = "Tải file từ Google Drive thất bại. Vui lòng kiểm tra quyền chia sẻ công khai của file."
-                    self._log(self._error_message, "error")
+                    if not self._error_message:
+                        self._error_message = "Tải file từ Google Drive thất bại. Vui lòng kiểm tra quyền chia sẻ công khai của file."
                     return
 
                 ext = os.path.splitext(dl_path)[1].lower()
