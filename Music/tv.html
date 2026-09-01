@@ -1040,7 +1040,15 @@
                         </div>
                     </div>
 
-                    <div class="tv-section-title" id="currentTracklistHeader">DANH SÁCH BÀI HÁT</div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                        <div class="tv-section-title" id="currentTracklistHeader" style="margin-bottom: 0;">DANH SÁCH BÀI HÁT</div>
+                        <!-- Phân trang bài hát (Hiện khi > 50 bài) -->
+                        <div class="tv-pagination" id="trackPaginationBar" style="display: none; margin-bottom: 0; padding: 2px 8px;">
+                            <button class="tv-page-btn focusable" id="btnPrevTrackPage" tabindex="0">❮ Trước</button>
+                            <span class="tv-page-info" id="trackPageInfoText" style="font-size: 11px;">Trang 1 / 1</span>
+                            <button class="tv-page-btn focusable" id="btnNextTrackPage" tabindex="0">Sau ❯</button>
+                        </div>
+                    </div>
                     <div id="trackContainer">
                         <!-- Tracks -->
                     </div>
@@ -1163,6 +1171,7 @@
         'use strict';
 
         const PAGE_SIZE = 25; // Số lượng album/ca sĩ mỗi trang để bảo đảm 0% lag
+        const TRACKS_PAGE_SIZE = 50; // Giới hạn tối đa 50 bài/trang để TV chạy siêu mượt 60 FPS, không bao giờ bị đơ
 
         // Global State
         let rawAlbums = [];
@@ -1172,6 +1181,7 @@
         let selectedItemIdx = 0;
         let currentActiveGroup = null;
         let currentTracklist = [];
+        let currentTrackPage = 1;
         let currentPlayingTrackIdx = 0;
         let isPlaying = false;
         let currentUser = null;
@@ -1205,6 +1215,10 @@
         const btnShowcasePlaylist = document.getElementById('btnShowcasePlaylist');
         const btnShowcaseDeletePl = document.getElementById('btnShowcaseDeletePl');
         const currentTracklistHeader = document.getElementById('currentTracklistHeader');
+        const trackPaginationBar = document.getElementById('trackPaginationBar');
+        const trackPageInfoText = document.getElementById('trackPageInfoText');
+        const btnPrevTrackPage = document.getElementById('btnPrevTrackPage');
+        const btnNextTrackPage = document.getElementById('btnNextTrackPage');
         const trackContainer = document.getElementById('trackContainer');
 
         const playerCoverImg = document.getElementById('playerCoverImg');
@@ -1808,6 +1822,7 @@
             selectedItemIdx = idx;
             currentActiveGroup = item;
             currentTracklist = item.tracks || [];
+            currentTrackPage = 1;
 
             document.querySelectorAll('.tv-card-item').forEach(c => {
                 c.classList.toggle('active', parseInt(c.dataset.idx) === idx);
@@ -1832,18 +1847,38 @@
             renderTracklist();
         }
 
-        // ─── RENDER PANEL 3: DANH SÁCH BÀI HÁT ───
+        // ─── RENDER PANEL 3: DANH SÁCH BÀI HÁT (PHÂN TRANG 50 BÀI/TRANG - 0% LAG) ───
         function renderTracklist() {
             trackContainer.innerHTML = '';
             currentTracklistHeader.textContent = `DANH SÁCH BÀI HÁT (${currentTracklist.length} BÀI)`;
 
             if (currentTracklist.length === 0) {
+                if (trackPaginationBar) trackPaginationBar.style.display = 'none';
                 trackContainer.innerHTML = '<div style="padding: 20px; color: #64748b; font-size: 15px;">Chưa có bài hát nào trong mục này. Bấm "➕ Playlist" để thêm bài hát vào đây.</div>';
                 return;
             }
 
+            const totalTrackPages = Math.ceil(currentTracklist.length / TRACKS_PAGE_SIZE) || 1;
+            currentTrackPage = Math.max(1, Math.min(totalTrackPages, currentTrackPage));
+
+            if (trackPaginationBar && trackPageInfoText && btnPrevTrackPage && btnNextTrackPage) {
+                if (totalTrackPages > 1) {
+                    trackPaginationBar.style.display = 'flex';
+                    trackPageInfoText.textContent = `Trang ${currentTrackPage} / ${totalTrackPages}`;
+                    btnPrevTrackPage.disabled = (currentTrackPage <= 1);
+                    btnNextTrackPage.disabled = (currentTrackPage >= totalTrackPages);
+                } else {
+                    trackPaginationBar.style.display = 'none';
+                }
+            }
+
+            const startIdx = (currentTrackPage - 1) * TRACKS_PAGE_SIZE;
+            const endIdx = Math.min(currentTracklist.length, startIdx + TRACKS_PAGE_SIZE);
+            const pageTracks = currentTracklist.slice(startIdx, endIdx);
+
             const frag = document.createDocumentFragment();
-            currentTracklist.forEach((tr, idx) => {
+            pageTracks.forEach((tr, pageOffset) => {
+                const idx = startIdx + pageOffset;
                 const isCur = (isPlaying && idx === currentPlayingTrackIdx);
                 const isFav = isTrackInFavorites(tr);
                 const item = document.createElement('div');
@@ -2257,6 +2292,29 @@
             }
         });
 
+        if (btnPrevTrackPage) {
+            btnPrevTrackPage.addEventListener('click', () => {
+                if (currentTrackPage > 1) {
+                    currentTrackPage--;
+                    renderTracklist();
+                    const first = document.querySelector('.tv-col-right .tv-track-item');
+                    if (first) setFocus(first);
+                }
+            });
+        }
+
+        if (btnNextTrackPage) {
+            btnNextTrackPage.addEventListener('click', () => {
+                const totalTrackPages = Math.ceil(currentTracklist.length / TRACKS_PAGE_SIZE) || 1;
+                if (currentTrackPage < totalTrackPages) {
+                    currentTrackPage++;
+                    renderTracklist();
+                    const first = document.querySelector('.tv-col-right .tv-track-item');
+                    if (first) setFocus(first);
+                }
+            });
+        }
+
         btnPlayAll.addEventListener('click', () => {
             if (currentTracklist.length > 0) playTrack(0);
         });
@@ -2514,6 +2572,34 @@
                 const curBtnIdx = showcaseBtns.indexOf(cur);
                 const curTrackIdx = tracks.indexOf(cur);
 
+                if (cur === btnPrevTrackPage || cur === btnNextTrackPage) {
+                    if (dir === 'down') {
+                        if (tracks.length > 0) setFocus(tracks[0]);
+                        else {
+                            const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
+                            if (playerPlayBtn) setFocus(playerPlayBtn);
+                        }
+                        return;
+                    }
+                    if (dir === 'up') {
+                        if (showcaseBtns.length > 0) setFocus(showcaseBtns[0]);
+                        else setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
+                        return;
+                    }
+                    if (dir === 'left') {
+                        if (cur === btnNextTrackPage && !btnPrevTrackPage.disabled) setFocus(btnPrevTrackPage);
+                        else {
+                            const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
+                            if (targetCard) setFocus(targetCard);
+                        }
+                        return;
+                    }
+                    if (dir === 'right') {
+                        if (cur === btnPrevTrackPage && !btnNextTrackPage.disabled) setFocus(btnNextTrackPage);
+                        return;
+                    }
+                }
+
                 if (curBtnIdx !== -1) {
                     if (dir === 'right' && curBtnIdx < showcaseBtns.length - 1) {
                         setFocus(showcaseBtns[curBtnIdx + 1]);
@@ -2528,8 +2614,13 @@
                         return;
                     }
                     if (dir === 'down') {
-                        if (tracks.length > 0) setFocus(tracks[0]);
-                        else setFocus(document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable'));
+                        if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
+                            setFocus(btnPrevTrackPage.disabled ? btnNextTrackPage : btnPrevTrackPage);
+                        } else if (tracks.length > 0) {
+                            setFocus(tracks[0]);
+                        } else {
+                            setFocus(document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable'));
+                        }
                         return;
                     }
                 }
@@ -2538,6 +2629,8 @@
                     if (dir === 'down') {
                         if (curTrackIdx < tracks.length - 1) {
                             setFocus(tracks[curTrackIdx + 1]);
+                        } else if (btnNextTrackPage && !btnNextTrackPage.disabled) {
+                            btnNextTrackPage.click();
                         } else {
                             const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
                             if (playerPlayBtn) setFocus(playerPlayBtn);
@@ -2547,6 +2640,8 @@
                     if (dir === 'up') {
                         if (curTrackIdx > 0) {
                             setFocus(tracks[curTrackIdx - 1]);
+                        } else if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
+                            setFocus(btnPrevTrackPage.disabled ? btnNextTrackPage : btnPrevTrackPage);
                         } else if (showcaseBtns.length > 0) {
                             setFocus(showcaseBtns[0]);
                         }
@@ -2726,12 +2821,20 @@
 
             if (e.key === 'PageUp' || e.keyCode === 33) {
                 e.preventDefault();
-                btnPrevPage.click();
+                if (document.activeElement && document.activeElement.closest('.tv-col-right') && btnPrevTrackPage && !btnPrevTrackPage.disabled) {
+                    btnPrevTrackPage.click();
+                } else {
+                    btnPrevPage.click();
+                }
                 return;
             }
             if (e.key === 'PageDown' || e.keyCode === 34) {
                 e.preventDefault();
-                btnNextPage.click();
+                if (document.activeElement && document.activeElement.closest('.tv-col-right') && btnNextTrackPage && !btnNextTrackPage.disabled) {
+                    btnNextTrackPage.click();
+                } else {
+                    btnNextPage.click();
+                }
                 return;
             }
 
