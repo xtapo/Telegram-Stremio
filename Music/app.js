@@ -2271,8 +2271,12 @@ class XTAPOMusicApp {
         if (this.remoteTargetDeviceId) {
             this.sendSyncCommand('PLAY_TRACK', {
                 album_id: album ? album.id : null,
+                album_title: album ? album.title : (track.album || 'Danh sách phát'),
+                album_artist: album ? album.artist : (track.artist || 'XTAPO Music'),
+                album_cover: album ? album.coverUrl : (track.coverUrl || ''),
                 track_index: trackIndex,
                 track: track,
+                tracks: album && album.tracks && album.tracks.length > 0 ? album.tracks : [track],
                 seek_time: 0
             });
             this.isPlaying = true;
@@ -8468,10 +8472,19 @@ class XTAPOMusicApp {
             targetAlbumIdx = this.albums.findIndex(a => String(a.id) === String(albumId));
         }
 
-        if (targetAlbumIdx !== -1) {
+        // 1. Nếu có toàn bộ danh sách bài hát trong Playlist được gửi sang
+        if (Array.isArray(payload.tracks) && payload.tracks.length > 0) {
+            const virtualAlbum = {
+                id: payload.album_id || 'remote-sync-playlist',
+                title: payload.album_title || payload.track?.album || 'Danh sách phát',
+                artist: payload.album_artist || payload.track?.artist || 'XTAPO Music',
+                coverUrl: payload.album_cover || payload.track?.coverUrl || '',
+                tracks: payload.tracks
+            };
+            this.setVirtualAlbum(virtualAlbum, trackIdx, true);
+        } else if (targetAlbumIdx !== -1) {
             this.loadAlbum(targetAlbumIdx, trackIdx, true);
         } else if (payload.track) {
-            // Nếu album không có sẵn trong list, tạo album ảo tạm thời
             const dummyAlbum = {
                 id: 'remote-stream',
                 title: payload.track.album || 'Remote Stream',
@@ -8479,14 +8492,13 @@ class XTAPOMusicApp {
                 coverUrl: payload.track.coverUrl || '',
                 tracks: [payload.track]
             };
-            this.albums.unshift(dummyAlbum);
-            this.loadAlbum(0, 0, true);
+            this.setVirtualAlbum(dummyAlbum, 0, true);
         }
 
         if (seekTime > 0) {
             setTimeout(() => {
                 if (this.audio) {
-                    this.audio.currentTime = seekTime;
+                    try { this.audio.currentTime = seekTime; } catch(e) {}
                 }
             }, 300);
         }
@@ -8741,8 +8753,12 @@ class XTAPOMusicApp {
         if (prevTrack) {
             this.sendSyncCommand('TRANSFER', {
                 album_id: prevAlbum ? prevAlbum.id : null,
+                album_title: prevAlbum ? prevAlbum.title : (prevTrack.album || 'Danh sách phát'),
+                album_artist: prevAlbum ? prevAlbum.artist : (prevTrack.artist || 'XTAPO Music'),
+                album_cover: prevAlbum ? prevAlbum.coverUrl : (prevTrack.coverUrl || ''),
                 track_index: this.currentTrackIndex,
                 track: prevTrack,
+                tracks: prevAlbum && prevAlbum.tracks && prevAlbum.tracks.length > 0 ? prevAlbum.tracks : [prevTrack],
                 seek_time: prevTime,
                 is_playing: prevPlaying
             }, targetDeviceId);

@@ -3066,38 +3066,48 @@
             const trackIdx = payload.track_index !== undefined ? payload.track_index : 0;
             const seekTime = payload.seek_time || 0;
 
-            if (payload.track) {
-                const tr = payload.track;
-                const streamUrl = tr.url || tr.stream_url || tr.previewUrl || (tr.chat_id && tr.msg_id ? `/api/music/stream/${tr.chat_id}/${tr.msg_id}` : null);
-                if (streamUrl) {
-                    currentTracklist = [tr];
-                    currentPlayingTrackIdx = 0;
-                    try { audio.pause(); audio.currentTime = 0; } catch(e) {}
-                    audio.src = streamUrl;
-                    audio.load();
-                    audio.play().then(() => {
-                        isPlaying = true;
-                        if (seekTime > 0) audio.currentTime = seekTime;
-                        updatePlayerUI();
-                        renderTracklist();
-                    }).catch(console.error);
-                    isPlaying = true;
-                    updatePlayerUI();
-                    renderTracklist();
-                    return;
+            // 1. Đồng bộ nguyên danh sách Playlist / Album sang TV
+            if (Array.isArray(payload.tracks) && payload.tracks.length > 0) {
+                currentTracklist = payload.tracks;
+                currentPlayingTrackIdx = (trackIdx >= 0 && trackIdx < currentTracklist.length) ? trackIdx : 0;
+                
+                currentActiveGroup = {
+                    id: albumId || 'remote_playlist',
+                    title: payload.album_title || payload.album_name || payload.track?.album || 'Danh sách phát',
+                    artist: payload.album_artist || payload.track?.artist || 'XTAPO TV',
+                    coverUrl: payload.album_cover || payload.track?.coverUrl || ''
+                };
+                
+                playTrack(currentPlayingTrackIdx);
+                if (seekTime > 0) {
+                    setTimeout(() => { try { audio.currentTime = seekTime; } catch(e) {} }, 300);
                 }
+                return;
             }
 
-            // Fallback: tìm trong thư viện TV
+            // 2. Fallback: tìm trong thư viện TV
             if (albumId && rawAlbums) {
                 const foundAlb = rawAlbums.find(a => String(a.id) === String(albumId));
                 if (foundAlb && foundAlb.tracks) {
                     currentTracklist = foundAlb.tracks;
                     currentPlayingTrackIdx = trackIdx;
+                    currentActiveGroup = foundAlb;
                     playTrack(trackIdx);
                     if (seekTime > 0) {
-                        setTimeout(() => { audio.currentTime = seekTime; }, 300);
+                        setTimeout(() => { try { audio.currentTime = seekTime; } catch(e) {} }, 300);
                     }
+                    return;
+                }
+            }
+
+            // 3. Fallback chỉ có 1 track đơn lẻ
+            if (payload.track) {
+                const tr = payload.track;
+                currentTracklist = [tr];
+                currentPlayingTrackIdx = 0;
+                playTrack(0);
+                if (seekTime > 0) {
+                    setTimeout(() => { try { audio.currentTime = seekTime; } catch(e) {} }, 300);
                 }
             }
         }
