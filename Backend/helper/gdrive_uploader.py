@@ -264,18 +264,32 @@ def parse_gdrive_url(url: str) -> Tuple[str, str]:
 
 def parse_gdrive_urls(raw_text: str) -> List[Tuple[str, str, str]]:
     """
-    Phân tích danh sách nhiều liên kết (nhập cách nhau bằng dòng mới, dấu phẩy, chấm phẩy hoặc khoảng trắng).
+    Phân tích danh sách nhiều liên kết (nhập cách nhau bằng dấu phẩy ',', dòng mới, chấm phẩy ';', gạch đứng '|' hoặc khoảng trắng).
     Trả về danh sách các tuple: (link_type, resource_id, original_url)
     """
     if not raw_text:
         return []
 
-    tokens = re.split(r'[\r\n,;]+', raw_text.strip())
+    # 1. Thử tách trước theo các dấu phân cách thông dụng (dấu phẩy, chấm phẩy, dòng mới, gạch đứng)
+    tokens = re.split(r'[\r\n,;|]+', raw_text.strip())
+    
+    # 2. Nếu sau khi tách mà vẫn có token chứa nhiều link dính liền cách nhau bằng khoảng trắng
+    expanded_tokens = []
+    for tok in tokens:
+        tok_clean = tok.strip().strip("'\"`")
+        if not tok_clean:
+            continue
+        if "http" in tok_clean and tok_clean.count("http") > 1:
+            sub_toks = re.findall(r'https?://[^\s,;|\'\"`<>]+', tok_clean)
+            expanded_tokens.extend(sub_toks)
+        else:
+            expanded_tokens.append(tok_clean)
+
     results = []
     seen = set()
 
-    for token in tokens:
-        t = token.strip()
+    for t in expanded_tokens:
+        t = t.strip().rstrip(',;.:)\'\"]')
         if not t or t in seen:
             continue
         l_type, r_id = parse_gdrive_url(t)
