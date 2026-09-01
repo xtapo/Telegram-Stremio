@@ -25,11 +25,84 @@ AUDIO_EXTENSIONS = (
     ".mp3", ".flac", ".m4a", ".wav", ".aac", 
     ".alac", ".ogg", ".opus", ".dsf", ".dff", ".ape", ".aiff"
 )
-ARCHIVE_EXTENSIONS = (".zip", ".tar", ".tar.gz", ".tgz")
+ARCHIVE_EXTENSIONS = (".zip", ".rar", ".7z", ".tar", ".tar.gz", ".tgz", ".bz2", ".xz", ".iso")
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 TEMP_UPLOAD_DIR = os.path.abspath(os.path.join("Music", "temp_uploads"))
 os.makedirs(TEMP_UPLOAD_DIR, exist_ok=True)
+
+
+async def _extract_archive(archive_path: str, extract_dir: str) -> bool:
+    """
+    Giải nén đa định dạng (.rar, .7z, .zip, .tar, .tar.gz, .bz2, .xz)
+    Sử dụng 7-Zip CLI (nếu có sẵn trên Windows/Linux) và các thư viện Python dự phòng.
+    """
+    os.makedirs(extract_dir, exist_ok=True)
+    ext = os.path.splitext(archive_path)[1].lower()
+
+    # 1. Thử 7-Zip CLI trước tiên (Tốc độ cao nhất, hỗ trợ hoàn hảo .rar, .7z, .zip)
+    seven_zip = shutil.which("7z") or shutil.which("7za")
+    if seven_zip:
+        try:
+            cmd = [seven_zip, "x", archive_path, f"-o{extract_dir}", "-y"]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                LOGGER.info(f"[7Z EXTRACT] Successfully extracted {archive_path}")
+                return True
+            LOGGER.warning(f"[7Z EXTRACT] Return code {proc.returncode}: {stderr.decode('utf-8', errors='ignore')}")
+        except Exception as e:
+            LOGGER.warning(f"[7Z EXTRACT ERROR] {e}")
+
+    # 2. Python zipfile (.zip)
+    if ext == ".zip":
+        try:
+            with zipfile.ZipFile(archive_path, 'r') as zf:
+                zf.extractall(extract_dir)
+            return True
+        except Exception as e:
+            LOGGER.warning(f"[ZIPFILE EXTRACT ERROR] {e}")
+
+    # 3. Python py7zr (.7z)
+    if ext == ".7z":
+        try:
+            import py7zr
+            with py7zr.SevenZipFile(archive_path, mode='r') as z:
+                z.extractall(path=extract_dir)
+            return True
+        except Exception as e:
+            LOGGER.warning(f"[PY7ZR EXTRACT ERROR] {e}")
+
+    # 4. Python tarfile (.tar, .tar.gz, .tgz, .bz2, .xz)
+    if ext in (".tar", ".tar.gz", ".tgz", ".bz2", ".xz"):
+        try:
+            with tarfile.open(archive_path, 'r:*') as tf:
+                tf.extractall(extract_dir)
+            return True
+        except Exception as e:
+            LOGGER.warning(f"[TARFILE EXTRACT ERROR] {e}")
+
+    # 5. Tar CLI fallback
+    tar_cli = shutil.which("tar")
+    if tar_cli:
+        try:
+            cmd = [tar_cli, "-xf", archive_path, "-C", extract_dir]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await proc.communicate()
+            if proc.returncode == 0:
+                return True
+        except Exception:
+            pass
+
+    return False
 
 
 def parse_gdrive_url(url: str) -> Tuple[str, str]:
@@ -552,19 +625,13 @@ class GoogleDriveUploadManager:
                         if ext in AUDIO_EXTENSIONS:
                             files_to_upload.append(dl_path)
                         elif ext in ARCHIVE_EXTENSIONS:
-                            # Giải nén
+                            # Giải nén đa định dạng (.rar, .7z, .zip, .tar)
                             sub_extract = os.path.join(work_dir, f"ext_{idx}")
-                            os.makedirs(sub_extract, exist_ok=True)
-                            try:
-                                if ext == ".zip":
-                                    with zipfile.ZipFile(dl_path, 'r') as zf:
-                                        zf.extractall(sub_extract)
-                                elif ext in (".tar", ".tar.gz", ".tgz"):
-                                    with tarfile.open(dl_path, 'r:*') as tf:
-                                        tf.extractall(sub_extract)
+                            success = await _extract_archive(dl_path, sub_extract)
+                            if success:
                                 files_to_upload.extend(self._collect_audio_files(sub_extract))
-                            except Exception as ex:
-                                self._log(f"Lỗi giải nén {fname}: {ex}", "warn")
+                            else:
+                                self._log(f"Lỗi giải nén file {fname}", "warn")
 
             elif link_type == "file":
                 self._stage = "Đang tải file từ Google Drive..."
@@ -578,20 +645,14 @@ class GoogleDriveUploadManager:
                 ext = os.path.splitext(dl_path)[1].lower()
                 if ext in ARCHIVE_EXTENSIONS:
                     self._stage = "Đang giải nén tập tin album..."
-                    self._log(f"Phát hiện file nén ({ext}), đang giải nén để trích xuất danh sách bài hát...", "info")
+                    self._log(f"Phát hiện file nén ({ext}), đang tự động giải nén trích xuất danh sách bài hát...", "info")
                     extract_dir = os.path.join(work_dir, "extracted")
-                    os.makedirs(extract_dir, exist_ok=True)
-                    try:
-                        if ext == ".zip":
-                            with zipfile.ZipFile(dl_path, 'r') as zf:
-                                zf.extractall(extract_dir)
-                        elif ext in (".tar", ".tar.gz", ".tgz"):
-                            with tarfile.open(dl_path, 'r:*') as tf:
-                                tf.extractall(extract_dir)
+                    success = await _extract_archive(dl_path, extract_dir)
+                    if success:
                         files_to_upload = self._collect_audio_files(extract_dir)
-                    except Exception as e:
+                    else:
                         self._status = "error"
-                        self._error_message = f"Lỗi khi giải nén file: {e}"
+                        self._error_message = f"Không thể giải nén file ({ext}). Vui lòng kiểm tra định dạng tập tin."
                         self._log(self._error_message, "error")
                         return
                 elif ext in AUDIO_EXTENSIONS:
@@ -614,11 +675,9 @@ class GoogleDriveUploadManager:
                 ext = os.path.splitext(dl_path)[1].lower()
                 if ext in ARCHIVE_EXTENSIONS:
                     extract_dir = os.path.join(work_dir, "extracted")
-                    os.makedirs(extract_dir, exist_ok=True)
-                    if ext == ".zip":
-                        with zipfile.ZipFile(dl_path, 'r') as zf:
-                            zf.extractall(extract_dir)
-                    files_to_upload = self._collect_audio_files(extract_dir)
+                    success = await _extract_archive(dl_path, extract_dir)
+                    if success:
+                        files_to_upload = self._collect_audio_files(extract_dir)
                 elif ext in AUDIO_EXTENSIONS:
                     files_to_upload = [dl_path]
 
