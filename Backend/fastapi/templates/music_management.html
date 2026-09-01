@@ -4942,9 +4942,13 @@ function startPollingGDriveUpload() {
 async function pollGDriveUploadStatus() {
     try {
         const res = await fetch('/api/music/gdrive-upload/status');
-        const result = await res.json();
+        if (!res.ok) return; // Bỏ qua nếu server đang restart / 502 tạm thời
 
-        if (!res.ok || result.status !== 'success' || !result.data) return;
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) return;
+
+        const result = await res.json();
+        if (!result || result.status !== 'success' || !result.data) return;
 
         const data = result.data;
         const status = data.status;
