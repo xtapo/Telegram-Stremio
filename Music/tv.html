@@ -543,17 +543,6 @@
             justify-content: center;
         }
 
-        .tv-track-thumb {
-            width: 38px;
-            height: 38px;
-            border-radius: 8px;
-            object-fit: cover;
-            flex-shrink: 0;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: #1e293b;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-        }
-
         .tv-track-title {
             font-size: 16px;
             font-weight: 700;
@@ -1790,7 +1779,6 @@
                 item.innerHTML = `
                     <div class="tv-track-left">
                         <span class="tv-track-num">${numOrEq}</span>
-                        <img src="${trCover}" class="tv-track-thumb" alt="" onerror="this.src='/music/icon-192.png'">
                         <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: 500; margin-left: 6px;">${art}</span>${favIcon}</span>
                     </div>
                     <span class="tv-track-dur">${dur}</span>
