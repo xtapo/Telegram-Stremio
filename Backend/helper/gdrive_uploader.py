@@ -247,62 +247,130 @@ class GoogleDriveUploadManager:
             self._task.cancel()
         return {"ok": True, "message": "Đã hủy tiến trình tải lên."}
 
-    async def _download_gdrive_file(self, file_id: str, work_dir: str) -> Optional[str]:
-        """Tải một file Google Drive đơn lẻ với cơ chế xác thực vượt cảnh báo virus"""
+    async def _get_gdrive_file_info(self, file_id: str) -> Tuple[str, str]:
+        """Trích xuất tiêu đề gốc và định dạng file từ trang xem trước Google Drive"""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                r = await client.get(f"https://drive.google.com/file/d/{file_id}/view", headers=headers)
+                if r.status_code == 200:
+                    m = re.search(r'<title>(.*?)</title>', r.text)
+                    if m:
+                        raw_title = m.group(1).replace(" - Google Drive", "").replace(" - Google Trang tính", "").strip()
+                        raw_title = raw_title.replace("&quot;", '"').replace("&amp;", '&').replace("&lt;", '<').replace("&gt;", '>')
+                        if raw_title and raw_title != "Google Drive":
+                            return raw_title, r.text
+        except Exception as e:
+            LOGGER.debug(f"[GDRIVE VIEW FETCH] {e}")
+        return f"gdrive_{file_id}", ""
+
+    async def _download_gdrive_file(self, file_id: str, work_dir: str, known_filename: str = "") -> Optional[str]:
+        """Tải một file Google Drive đơn lẻ với cơ chế nhận diện tên file gốc và phát hiện Quota Exceeded"""
+        
+        # 1. Lấy thông tin & tên file gốc từ Google Drive Preview
+        real_title, page_html = await self._get_gdrive_file_info(file_id)
+        if known_filename:
+            target_filename = known_filename
+        elif real_title and "." in real_title:
+            target_filename = real_title
+        else:
+            target_filename = f"gdrive_{file_id}"
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+        }
+
         url_candidates = [
             f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t",
             f"https://docs.google.com/uc?export=download&id={file_id}&confirm=t",
             f"https://drive.google.com/uc?export=download&id={file_id}",
         ]
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "*/*",
-        }
-
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
             resp = None
+            download_url = None
+
             for u in url_candidates:
                 try:
                     resp = await client.get(u, headers=headers)
                     if resp.status_code == 200:
+                        download_url = u
                         break
                 except Exception as e:
                     LOGGER.debug(f"Candidate {u} failed: {e}")
 
             if not resp or resp.status_code != 200:
-                self._log(f"Không thể truy cập file Google Drive ID: {file_id}", "error")
+                self._log(f"Không thể kết nối đến máy chủ Google Drive cho file '{target_filename}' (ID: {file_id})", "error")
                 return None
 
-            # Kiểm tra nếu Google Drive trả về trang xác nhận virus (Confirmation form)
-            content_type = resp.headers.get("content-type", "")
-            download_url = str(resp.url)
+            content_type = (resp.headers.get("content-type") or "").lower()
 
-            if "text/html" in content_type:
+            # 2. Kiểm tra nếu Google Drive trả về trang HTML (Lỗi Quota Exceeded, Cảnh báo Virus, hoặc Cần xác thực)
+            if "text/html" in content_type or resp.text.startswith("<!DOCTYPE") or resp.text.startswith("<html"):
                 html_body = resp.text
-                confirm_match = re.search(r'confirm=([0-9A-Za-z_-]+)', html_body) or re.search(r'name="confirm"\s+value="([^"]+)"', html_body)
-                if confirm_match:
-                    confirm_code = confirm_match.group(1)
-                    download_url = f"https://docs.google.com/uc?export=download&confirm={confirm_code}&id={file_id}"
-                    self._log("Đã phát hiện token xác thực tải file lớn từ Google Drive...", "info")
-
-            # Bắt đầu stream tải file
-            async with client.stream("GET", download_url, headers=headers) as stream_resp:
-                if stream_resp.status_code != 200:
-                    self._log(f"Lỗi phản hồi HTTP {stream_resp.status_code} khi tải dữ liệu", "error")
+                
+                # A. Phát hiện Quota Exceeded (Hết băng thông tải trong ngày của Google)
+                if "Quota exceeded" in html_body or "vượt quá giới hạn" in html_body or "Too many users" in html_body:
+                    err_msg = (
+                        f"⚠️ Google Drive đã khóa tải file '{target_filename}' do vượt quá giới hạn lượt tải trong ngày (Quota Exceeded). "
+                        f"Giải pháp: Hãy đăng nhập Google Drive cá nhân, chọn 'Tạo bản sao' (Make a copy) file này vào Drive của bạn rồi lấy link mới để tải ngay!"
+                    )
+                    self._error_message = err_msg
+                    self._log(err_msg, "error")
                     return None
 
-                file_name = _extract_filename_from_headers(stream_resp.headers, f"gdrive_{file_id}")
+                # B. Phát hiện Token xác nhận tải file lớn (>100MB)
+                confirm_match = (
+                    re.search(r'confirm=([0-9A-Za-z_-]+)', html_body) or 
+                    re.search(r'name="confirm"\s+value="([^"]+)"', html_body) or
+                    re.search(r'id="uc-download-link"\s+href="([^"]+)"', html_body)
+                )
+                if confirm_match:
+                    match_val = confirm_match.group(1)
+                    if match_val.startswith("http"):
+                        download_url = match_val
+                    else:
+                        download_url = f"https://docs.google.com/uc?export=download&confirm={match_val}&id={file_id}"
+                    self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
+                else:
+                    # Kiểm tra xem có phải trang yêu cầu đăng nhập / quyền truy cập không
+                    if "accounts.google.com" in str(resp.url) or "ServiceLogin" in html_body or "Access denied" in html_body:
+                        err_msg = f"⚠️ File '{target_filename}' chưa được chia sẻ công khai. Vui lòng đặt quyền chia sẻ Google Drive là 'Bất kỳ ai có liên kết (Anyone with the link)'."
+                        self._error_message = err_msg
+                        self._log(err_msg, "error")
+                        return None
+
+            # 3. Stream tải file nhị phân
+            final_dl_url = download_url or f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+            
+            async with client.stream("GET", final_dl_url, headers=headers) as stream_resp:
+                if stream_resp.status_code != 200:
+                    self._log(f"Lỗi HTTP {stream_resp.status_code} khi tải nội dung file '{target_filename}'", "error")
+                    return None
+
+                header_fn = _extract_filename_from_headers(stream_resp.headers, "")
+                if header_fn and header_fn != f"gdrive_{file_id}" and "." in header_fn:
+                    final_filename = header_fn
+                elif target_filename and "." in target_filename:
+                    final_filename = target_filename
+                else:
+                    final_filename = header_fn or target_filename or f"gdrive_{file_id}.flac"
+
                 content_len = stream_resp.headers.get("content-length")
                 total_bytes = int(content_len) if content_len and content_len.isdigit() else 0
 
                 self._download_total = total_bytes
                 self._download_bytes = 0
-                self._current_file = file_name
-                self._stage = f"Đang tải về từ Google Drive: {file_name}"
-                self._log(f"Bắt đầu tải: {file_name} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
+                self._current_file = final_filename
+                self._stage = f"Đang tải về từ Google Drive: {final_filename}"
+                self._log(f"Bắt đầu tải: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
 
-                out_path = os.path.join(work_dir, file_name)
+                out_path = os.path.join(work_dir, final_filename)
                 start_dl = time.time()
                 last_update = 0
 
@@ -323,8 +391,27 @@ class GoogleDriveUploadManager:
                                 mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
                                 self._speed_str = f"{mbps:.2f} MB/s"
 
+                # 4. Kiểm tra file sau khi tải về (Đảm bảo không phải file HTML lỗi 2KB)
+                downloaded_fsize = os.path.getsize(out_path) if os.path.exists(out_path) else 0
+                if downloaded_fsize < 4096:
+                    try:
+                        with open(out_path, "r", encoding="utf-8", errors="ignore") as f_chk:
+                            chk_head = f_chk.read(500)
+                            if "<!DOCTYPE" in chk_head or "<html" in chk_head:
+                                if "Quota exceeded" in chk_head or "vượt quá giới hạn" in chk_head:
+                                    err_msg = f"⚠️ File '{final_filename}' bị giới hạn lượt tải trong ngày (Google Drive Quota Exceeded). Hãy 'Tạo bản sao' trên Drive để tải."
+                                else:
+                                    err_msg = f"⚠️ File tải về '{final_filename}' không hợp lệ (Google Drive trả về trang HTML thông báo)."
+                                self._error_message = err_msg
+                                self._log(err_msg, "error")
+                                if os.path.exists(out_path):
+                                    os.remove(out_path)
+                                return None
+                    except Exception:
+                        pass
+
                 self._download_percent = 100
-                self._log(f"✅ Tải thành công từ Google Drive: {file_name}", "success")
+                self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize/(1024*1024), 2)} MB)", "success")
                 return out_path
 
     async def _download_direct_url(self, url: str, work_dir: str) -> Optional[str]:
