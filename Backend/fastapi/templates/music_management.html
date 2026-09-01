@@ -4718,6 +4718,8 @@ async function deleteMusicUser(userId, username = '') {
     } catch (e) {
         alertToast('Lỗi mạng: ' + e.message);
     }
+}
+
 // --- Google Drive Upload Logic (User Session / Userbot) ---
 let gdriveUploadPollInterval = null;
 let gdriveStartTime = 0;
