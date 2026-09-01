@@ -19,6 +19,7 @@ from Backend.helper.metadata.music_scraper import (
     clean_audio_filename,
     extract_context_from_text,
     fetch_music_metadata,
+    parse_artist_and_title,
 )
 
 AUDIO_EXTENSIONS = (
@@ -837,17 +838,16 @@ class GoogleDriveUploadManager:
                 self._upload_bytes = 0
                 self._upload_total = fsize
 
-                # Phân tích ca sĩ & album
-                artist_candidate = default_artist
-                album_candidate = default_album
-                title_candidate = clean_title
-
-                # Thử tách Artist - Title từ tên file
-                if " - " in clean_title:
-                    parts = clean_title.split(" - ", 1)
-                    if not artist_candidate:
-                        artist_candidate = parts[0].strip()
-                    title_candidate = parts[1].strip()
+                # Phân tích ca sĩ, tên bài hát & album ban đầu
+                parsed_artist, parsed_title, parsed_album = parse_artist_and_title(
+                    raw_title="",
+                    raw_artist=default_artist,
+                    raw_album=default_album,
+                    file_name=raw_filename
+                )
+                artist_candidate = parsed_artist or default_artist
+                title_candidate = parsed_title or clean_title
+                album_candidate = parsed_album or default_album
 
                 cover_url = ""
                 # Tìm metadata & ảnh bìa online nếu bật auto_scrape
@@ -856,11 +856,14 @@ class GoogleDriveUploadManager:
                         scraped = await fetch_music_metadata(
                             raw_title=title_candidate,
                             raw_artist=artist_candidate,
-                            file_name=raw_filename
+                            raw_album=album_candidate,
+                            file_name=raw_filename,
+                            default_artist=default_artist,
+                            default_album=default_album,
                         )
                         if scraped:
                             if scraped.get("title"): title_candidate = scraped["title"]
-                            if scraped.get("artist") and not default_artist: artist_candidate = scraped["artist"]
+                            if scraped.get("artist"): artist_candidate = scraped["artist"]
                             if scraped.get("album") and not default_album: album_candidate = scraped["album"]
                             if scraped.get("cover_url"): cover_url = scraped["cover_url"]
                     except Exception as e:

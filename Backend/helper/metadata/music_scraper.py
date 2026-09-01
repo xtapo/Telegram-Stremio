@@ -221,22 +221,32 @@ async def fetch_music_metadata(raw_title: str = "", raw_artist: str = "", raw_al
                         cand_artist = item.get("artistName", "")
                         cand_album = item.get("collectionName", "")
                         
+                        # Tính độ khớp tìm kiếm tổng thể
                         score_full = token_similarity(search_query, f"{cand_artist} {cand_title}")
                         score_title = token_similarity(title, cand_title)
                         
-                        final_score = max(score_full, score_title * 0.8)
+                        # Kiểm tra cả 2 chiều: (Ca sĩ - Bài hát) hoặc (Bài hát - Ca sĩ)
+                        match_fwd = (token_similarity(artist, cand_artist) * 0.5 + token_similarity(title, cand_title) * 0.5) if (artist and title) else 0.0
+                        match_rev = (token_similarity(artist, cand_title) * 0.5 + token_similarity(title, cand_artist) * 0.5) if (artist and title) else 0.0
+                        
+                        final_score = max(score_full, score_title * 0.8, match_fwd, match_rev)
 
-                        # KIỂM TRA NGHIÊM NGẶT:
-                        # Nếu file gốc KHÔNG có ca sĩ (chỉ có tên bài hát như "Chiếc lá cuối cùng"),
-                        # thì KHÔNG được tự tiện gán một ca sĩ ngẫu nhiên từ mạng (như Khánh Phương thay vì Lệ Quyên)!
-                        if not artist:
+                        full_raw_text = (file_name + ' ' + caption + ' ' + raw_title + ' ' + raw_artist).lower()
+                        
+                        # Nếu cả tên bài hát và tên ca sĩ từ Apple Music đều xuất hiện trong tên file
+                        if cand_title.lower() in full_raw_text and cand_artist.lower() in full_raw_text:
+                            final_score = max(final_score, 0.95)
+                        elif cand_artist.lower() in full_raw_text:
+                            final_score = max(final_score, 0.85)
+                        elif not artist:
                             # Không có ca sĩ trong file gốc -> Chỉ chấp nhận nếu cand_artist xuất hiện trong filename/caption
-                            if cand_artist.lower() not in (file_name + ' ' + caption + ' ' + raw_title).lower():
+                            if cand_artist.lower() not in full_raw_text:
                                 continue  # Bỏ qua ứng viên này vì khác ca sĩ
                         else:
-                            # Nếu có ca sĩ -> Kiểm tra ca sĩ có khớp không
-                            artist_score = token_similarity(artist, cand_artist)
-                            if artist_score < 0.4 and artist.lower() not in cand_artist.lower() and cand_artist.lower() not in artist.lower():
+                            # Nếu có ca sĩ -> Kiểm tra ca sĩ có khớp không (theo chiều thuận hoặc chiều đảo)
+                            artist_score_fwd = token_similarity(artist, cand_artist)
+                            artist_score_rev = token_similarity(title, cand_artist)
+                            if max(artist_score_fwd, artist_score_rev) < 0.35 and cand_artist.lower() not in full_raw_text:
                                 continue  # Ca sĩ không khớp -> Bỏ qua
 
                             final_score = min(1.0, final_score + 0.25)
