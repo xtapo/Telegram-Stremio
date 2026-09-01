@@ -626,23 +626,28 @@ async def get_music_static_file(filename: str):
     Bảo đảm 100% không bị lỗi 404 trên Linux / Hugging Face.
     """
     if not filename or filename.strip("/") in ["", "index.html"]:
-        return FileResponse(os.path.join(MUSIC_DIR, "index.html"))
+        return FileResponse(os.path.join(MUSIC_DIR, "index.html"), headers={"Cache-Control": "no-cache, must-revalidate"})
 
     if filename.strip("/") in ["tv", "tv.html", "lite"]:
         tv_path = os.path.join(MUSIC_DIR, "tv.html")
         if os.path.exists(tv_path):
-            return FileResponse(tv_path)
+            return FileResponse(tv_path, headers={"Cache-Control": "no-cache, must-revalidate"})
 
     clean_name = filename.lstrip("/")
     file_path = os.path.join(MUSIC_DIR, clean_name)
     if os.path.exists(file_path) and os.path.isfile(file_path):
         mime_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
-        return FileResponse(file_path, media_type=mime_type)
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in [".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot"]:
+            headers = {"Cache-Control": "public, max-age=604800, stale-while-revalidate=86400"}
+        else:
+            headers = {"Cache-Control": "public, max-age=3600"}
+        return FileResponse(file_path, media_type=mime_type, headers=headers)
 
     # Fallback to index.html if not a static file
     index_path = os.path.join(MUSIC_DIR, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers={"Cache-Control": "no-cache, must-revalidate"})
     return HTMLResponse("File not found", status_code=404)
 
 

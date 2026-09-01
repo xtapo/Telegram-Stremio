@@ -12,9 +12,9 @@
     <link rel="apple-touch-icon" sizes="512x512" href="/music/icon-512.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/music/style.css?v=3.3">
-    <link rel="stylesheet" href="/Music/style.css?v=3.3">
     <style>
         @media (max-width: 1024px) {
             .tv-toggle-btn, #topNavTvBtn {
@@ -26,11 +26,9 @@
             }
         }
     </style>
-    <!-- JSZip for Client-side Zip Packaging & High-Speed Batch Downloads -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- Standalone Offline QRCode.js for Instant Telegram QR Render -->
-    <script src="/music/qrcode.min.js?v=1.0"></script>
-    <script src="/Music/qrcode.min.js?v=1.0"></script>
+    <!-- Non-blocking scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+    <script src="/music/qrcode.min.js?v=1.0" defer></script>
 </head>
 <body class="kmusic-body">
     <!-- Ambient Dynamic Background Blur (Apple Music Style) -->
