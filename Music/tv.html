@@ -204,14 +204,14 @@
 
         /* PANEL 1: LEFT NAVIGATION MENU */
         .tv-col-nav {
-            width: 230px;
-            min-width: 230px;
+            width: 200px;
+            min-width: 200px;
             background: rgba(9, 13, 20, 0.75);
             backdrop-filter: blur(12px);
             border-right: 1px solid rgba(255, 255, 255, 0.07);
             display: flex;
             flex-direction: column;
-            padding: 18px 12px;
+            padding: 16px 10px;
             gap: 6px;
             overflow-y: auto;
             flex-shrink: 0;
@@ -222,19 +222,19 @@
             font-weight: 900;
             color: #64748b;
             letter-spacing: 1.5px;
-            padding: 4px 12px 6px 12px;
+            padding: 4px 10px 6px 10px;
             text-transform: uppercase;
         }
 
         .tv-nav-item {
             display: flex;
             align-items: center;
-            gap: 14px;
-            padding: 12px 16px;
+            gap: 12px;
+            padding: 11px 14px;
             border-radius: 12px;
             background: transparent;
             color: #94a3b8;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             cursor: pointer;
             border: 2px solid transparent;
@@ -243,8 +243,8 @@
         }
 
         .tv-nav-item .nav-icon {
-            font-size: 20px;
-            width: 26px;
+            font-size: 18px;
+            width: 24px;
             text-align: center;
             filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
         }
@@ -265,14 +265,14 @@
 
         /* PANEL 2: CATEGORY ITEMS LIST */
         .tv-col-items {
-            width: 380px;
-            min-width: 350px;
+            width: 290px;
+            min-width: 270px;
             background: rgba(12, 17, 26, 0.7);
             backdrop-filter: blur(10px);
             border-right: 1px solid rgba(255, 255, 255, 0.07);
             display: flex;
             flex-direction: column;
-            padding: 16px;
+            padding: 16px 12px;
             overflow: hidden;
             flex-shrink: 0;
         }
@@ -341,8 +341,8 @@
         .tv-card-item {
             display: flex;
             align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
+            gap: 12px;
+            padding: 10px 12px;
             background: rgba(18, 25, 38, 0.6);
             border: 1.5px solid rgba(255, 255, 255, 0.06);
             border-radius: 12px;
@@ -357,8 +357,8 @@
         }
 
         .tv-card-cover {
-            width: 52px;
-            height: 52px;
+            width: 48px;
+            height: 48px;
             border-radius: 10px;
             object-fit: cover;
             background: #1e293b;
@@ -368,8 +368,8 @@
         }
 
         .tv-card-avatar {
-            width: 52px;
-            height: 52px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             object-fit: cover;
             background: #1e293b;
@@ -379,7 +379,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
+            font-size: 20px;
         }
 
         .tv-card-info {
@@ -388,7 +388,7 @@
         }
 
         .tv-card-title {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 800;
             color: #f8fafc;
             white-space: nowrap;
@@ -398,9 +398,9 @@
         }
 
         .tv-card-sub {
-            font-size: 13px;
+            font-size: 12px;
             color: #94a3b8;
-            margin-top: 3px;
+            margin-top: 2px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -414,6 +414,7 @@
             flex-direction: column;
             background: rgba(6, 9, 14, 0.5);
             overflow: hidden;
+            min-width: 0;
         }
 
         .tv-tracklist-wrap {
@@ -425,7 +426,7 @@
         .tv-showcase-banner {
             display: flex;
             align-items: center;
-            gap: 22px;
+            gap: 24px;
             background: linear-gradient(135deg, rgba(28, 38, 56, 0.7) 0%, rgba(14, 20, 31, 0.85) 100%);
             border: 1px solid rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(16px);
@@ -433,11 +434,12 @@
             padding: 18px 24px;
             margin-bottom: 16px;
             box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
+            min-width: 0;
         }
 
         .tv-showcase-cover {
-            width: 96px;
-            height: 96px;
+            width: 100px;
+            height: 100px;
             border-radius: 14px;
             object-fit: cover;
             border: 2px solid #f59e0b;
@@ -449,12 +451,13 @@
         .tv-showcase-info {
             flex: 1;
             overflow: hidden;
+            min-width: 0;
         }
 
         .tv-showcase-tags {
             display: flex;
             gap: 8px;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
 
         .tv-showcase-tag {
@@ -469,7 +472,7 @@
         }
 
         .tv-showcase-title {
-            font-size: 24px;
+            font-size: 26px;
             font-weight: 900;
             color: #f8fafc;
             line-height: 1.25;
@@ -477,19 +480,22 @@
             overflow: hidden;
             text-overflow: ellipsis;
             letter-spacing: -0.4px;
+            margin: 4px 0;
         }
 
         .tv-showcase-artist {
             font-size: 15px;
             color: #94a3b8;
-            margin-top: 4px;
+            margin-top: 2px;
             font-weight: 600;
         }
 
         .tv-showcase-actions {
             display: flex;
+            align-items: center;
             gap: 10px;
-            margin-top: 12px;
+            margin-top: 10px;
+            flex-wrap: wrap;
         }
 
         .tv-section-title {
@@ -581,22 +587,32 @@
         /* ─── 3. BOTTOM PLAYER BAR ─── */
         .tv-player-bar {
             display: none;
-            height: 104px;
-            background: rgba(10, 14, 22, 0.92);
+            height: 110px;
+            background: rgba(10, 14, 22, 0.95);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255, 255, 255, 0.09);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
             align-items: center;
-            padding: 0 28px;
-            gap: 22px;
+            justify-content: space-between;
+            padding: 0 32px;
+            gap: 24px;
             flex-shrink: 0;
             z-index: 10;
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
+        }
+
+        .tv-player-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 280px;
+            min-width: 240px;
+            flex-shrink: 0;
         }
 
         .tv-player-cover {
-            width: 66px;
-            height: 66px;
+            width: 64px;
+            height: 64px;
             border-radius: 12px;
             object-fit: cover;
             background: #1e293b;
@@ -606,7 +622,7 @@
         }
 
         .tv-player-meta {
-            width: 240px;
+            flex: 1;
             overflow: hidden;
         }
 
@@ -630,10 +646,66 @@
             font-weight: 700;
         }
 
+        .tv-player-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            max-width: 850px;
+        }
+
         .tv-player-controls {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
+        }
+
+        .tv-progress-row {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .tv-time-label {
+            font-size: 13px;
+            color: #94a3b8;
+            font-weight: 700;
+            min-width: 38px;
+            text-align: center;
+        }
+
+        .tv-progress-bar {
+            flex: 1;
+            height: 10px;
+            background: rgba(30, 41, 59, 0.7);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+            border: 1.5px solid rgba(255, 255, 255, 0.06);
+            transition: all 0.15s ease;
+        }
+
+        .tv-progress-bar:hover,
+        .tv-progress-bar:focus,
+        .tv-progress-bar.focused {
+            height: 14px;
+            border-color: #f59e0b;
+            background: #242f42;
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.5) !important;
+        }
+
+        .tv-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+            border-radius: 5px;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.7);
+            transition: width 0.1s linear;
         }
 
         .tv-btn {
@@ -651,6 +723,8 @@
             justify-content: center;
             transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
             font-family: inherit;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .tv-btn-play {
@@ -658,7 +732,7 @@
             color: #0b0e14;
             border-color: #f59e0b;
             font-size: 15px;
-            padding: 10px 20px;
+            padding: 10px 22px;
             font-weight: 900;
             box-shadow: 0 4px 18px rgba(245, 158, 11, 0.4);
         }
@@ -671,50 +745,10 @@
             padding: 10px 22px;
         }
 
-        .tv-progress-wrap {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .tv-progress-bar {
-            width: 100%;
-            height: 10px;
-            background: rgba(30, 41, 59, 0.7);
-            border-radius: 6px;
-            overflow: hidden;
-            position: relative;
-            cursor: pointer;
-            border: 1.5px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.15s ease;
-        }
-
-        .tv-progress-bar:hover,
-        .tv-progress-bar:focus,
-        .tv-progress-bar.focused {
-            height: 14px;
-            border-color: #f59e0b;
-            background: #242f42;
-            box-shadow: 0 0 16px rgba(245, 158, 11, 0.4) !important;
-        }
-
-        .tv-progress-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #f59e0b, #fbbf24);
-            border-radius: 5px;
-            box-shadow: 0 0 12px rgba(245, 158, 11, 0.7);
-            transition: width 0.1s linear;
-        }
-
-        .tv-time-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-            color: #94a3b8;
-            font-weight: 700;
-        }
+        /* ─── SCROLLBAR TỐI GIẢN SIÊU MƯỢT ─── */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 4px; }
 
         /* ─── D-PAD REMOTE FOCUS INDICATOR (SIÊU ĐẸP & MƯỢT) ─── */
         .focusable:focus,
@@ -986,29 +1020,30 @@
 
         <!-- 3. BOTTOM PLAYER BAR (CHỈ HIỂN THỊ KHI ĐÃ ĐĂNG NHẬP) -->
         <footer class="tv-player-bar" id="tvPlayerBar">
-            <img src="/music/icon-192.png" id="playerCoverImg" class="tv-player-cover" alt="Cover">
-            <div class="tv-player-meta">
-                <div class="tv-player-title" id="playerTrackTitle">Chưa phát bài hát nào</div>
-                <div class="tv-player-artist" id="playerArtistName">XTAPO MUSIC TV</div>
-            </div>
-
-            <div class="tv-player-controls">
-                <button class="tv-btn focusable" id="btnPrev" tabindex="0" title="Bài trước">⏮</button>
-                <button class="tv-btn focusable" id="btnSeekBack" tabindex="0" title="Tua lùi 10 giây">⏪ 10s</button>
-                <button class="tv-btn tv-btn-play focusable" id="btnPlay" tabindex="0" title="Phát / Dừng">▶ Phát</button>
-                <button class="tv-btn focusable" id="btnSeekFwd" tabindex="0" title="Tua nhanh 10 giây">10s ⏩</button>
-                <button class="tv-btn focusable" id="btnNext" tabindex="0" title="Bài tiếp">⏭</button>
-                <button class="tv-btn focusable" id="btnPlayerFav" tabindex="0" title="Yêu thích bài đang phát" style="font-size: 16px;">🤍</button>
-                <button class="tv-btn focusable" id="btnPlayerAddToPlaylist" tabindex="0" title="Thêm bài đang phát vào Playlist">➕ Playlist</button>
-            </div>
-
-            <div class="tv-progress-wrap">
-                <div class="tv-progress-bar focusable" id="tvProgressBar" tabindex="0" role="slider" aria-label="Thanh tua bài hát" title="Dùng phím Trái / Phải để tua bài">
-                    <div class="tv-progress-fill" id="progressFill"></div>
+            <div class="tv-player-left">
+                <img src="/music/icon-192.png" id="playerCoverImg" class="tv-player-cover" alt="Cover">
+                <div class="tv-player-meta">
+                    <div class="tv-player-title" id="playerTrackTitle">Chưa phát bài hát nào</div>
+                    <div class="tv-player-artist" id="playerArtistName">XTAPO MUSIC TV</div>
                 </div>
-                <div class="tv-time-row">
-                    <span id="timeCur">0:00</span>
-                    <span id="timeDur">0:00</span>
+            </div>
+
+            <div class="tv-player-center">
+                <div class="tv-player-controls">
+                    <button class="tv-btn focusable" id="btnPrev" tabindex="0" title="Bài trước">⏮</button>
+                    <button class="tv-btn focusable" id="btnSeekBack" tabindex="0" title="Tua lùi 10 giây">⏪ 10s</button>
+                    <button class="tv-btn tv-btn-play focusable" id="btnPlay" tabindex="0" title="Phát / Dừng">▶ Phát</button>
+                    <button class="tv-btn focusable" id="btnSeekFwd" tabindex="0" title="Tua nhanh 10 giây">10s ⏩</button>
+                    <button class="tv-btn focusable" id="btnNext" tabindex="0" title="Bài tiếp">⏭</button>
+                    <button class="tv-btn focusable" id="btnPlayerFav" tabindex="0" title="Yêu thích bài đang phát" style="font-size: 16px;">🤍</button>
+                    <button class="tv-btn focusable" id="btnPlayerAddToPlaylist" tabindex="0" title="Thêm bài đang phát vào Playlist">➕ Playlist</button>
+                </div>
+                <div class="tv-progress-row">
+                    <span id="timeCur" class="tv-time-label">0:00</span>
+                    <div class="tv-progress-bar focusable" id="tvProgressBar" tabindex="0" role="slider" aria-label="Thanh tua bài hát" title="Dùng phím Trái / Phải để tua bài">
+                        <div class="tv-progress-fill" id="progressFill"></div>
+                    </div>
+                    <span id="timeDur" class="tv-time-label">0:00</span>
                 </div>
             </div>
         </footer>
