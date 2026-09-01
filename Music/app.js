@@ -4315,9 +4315,43 @@ class XTAPOMusicApp {
             `;
 
             el.addEventListener('click', () => {
-                this.loadAlbum(item.albumIdx, item.trackIdx, true);
+                const targetTrack = item.track;
+                const targetAlbum = item.album;
+
+                // 1. Reset virtual queues để quay về danh sách albums gốc
+                this.albums = this.getBaseAlbums();
+
+                // 2. Tìm chính xác album trong this.albums
+                let actualAlbumIdx = this.albums.findIndex(a => 
+                    (a.id && targetAlbum.id && String(a.id) === String(targetAlbum.id)) ||
+                    (a.title === targetAlbum.title && a.artist === targetAlbum.artist)
+                );
+
+                if (actualAlbumIdx === -1) {
+                    this.albums.unshift(targetAlbum);
+                    actualAlbumIdx = 0;
+                }
+
+                const actualAlbum = this.albums[actualAlbumIdx];
+                const albumTracks = actualAlbum.tracks || [];
+
+                // 3. Tìm chính xác index của bài hát trong albumTracks
+                let actualTrackIdx = albumTracks.findIndex(t => 
+                    (t.msgId && targetTrack.msgId && String(t.msgId) === String(targetTrack.msgId)) ||
+                    (t.id && targetTrack.id && String(t.id) === String(targetTrack.id)) ||
+                    (t.previewUrl && targetTrack.previewUrl && t.previewUrl === targetTrack.previewUrl) ||
+                    (t.url && targetTrack.url && t.url === targetTrack.url) ||
+                    (t.name && targetTrack.name && t.name.trim().toLowerCase() === targetTrack.name.trim().toLowerCase())
+                );
+
+                if (actualTrackIdx === -1) {
+                    actualTrackIdx = (item.trackIdx >= 0 && item.trackIdx < albumTracks.length) ? item.trackIdx : 0;
+                }
+
+                this.currentAlbumIndex = actualAlbumIdx;
+                this.loadAlbum(actualAlbumIdx, actualTrackIdx, true);
                 this.closeModal(this.searchModal);
-                this.showToast(`Đang phát: ${item.track.name}`);
+                this.showToast(`▶ Đang phát: ${targetTrack.name || 'Bài hát'}`);
             });
 
             frag.appendChild(el);

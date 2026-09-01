@@ -1977,10 +1977,19 @@
                             const nameMatch = (tr.name || tr.title || '').toLowerCase().includes(q);
                             const artMatch = (tr.artist || alb.artist || '').toLowerCase().includes(q);
                             if (!q || nameMatch || artMatch) {
+                                const cid = tr.chat_id || alb.chat_id || 0;
+                                const mid = tr.msg_id || tr.id || 0;
                                 matchedTracks.push({
                                     ...tr,
-                                    artist: tr.artist || alb.artist,
-                                    cover: tr.cover || tr.cover_url || alb.coverUrl || alb.cover
+                                    id: mid,
+                                    chat_id: cid,
+                                    msg_id: mid,
+                                    name: tr.name || tr.title || 'Bài hát',
+                                    artist: tr.artist || alb.artist || 'XTAPO Music',
+                                    album: alb.title || alb.name || '',
+                                    duration: tr.duration || '0:00',
+                                    url: tr.url || tr.stream_url || tr.previewUrl || (cid && mid ? `/api/music/stream/${cid}/${mid}` : null),
+                                    cover: tr.cover || tr.cover_url || alb.coverUrl || alb.cover || '/music/icon-192.png'
                                 });
                             }
                         });
