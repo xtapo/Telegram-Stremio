@@ -57,16 +57,32 @@ def _find_7z_binary() -> Optional[str]:
 def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:
     """
     Hàm giải nén đồng bộ (chạy trong worker thread):
-    Hỗ trợ .rar, .7z, .zip, .tar, .tar.gz, .bz2, .xz, .iso.
+    Thử lần lượt tất cả các công cụ 7-Zip, WinRAR, UnRAR, Python zip/7z/tar.
     Trả về (success, error_or_success_message).
     """
     import subprocess
     os.makedirs(extract_dir, exist_ok=True)
     ext = os.path.splitext(archive_path)[1].lower()
 
-    # 1. Thử 7-Zip / WinRAR CLI (Tương thích tốt nhất với .rar và .7z)
-    archiver = _find_7z_binary()
-    if archiver:
+    archiver_candidates = []
+    for p in [
+        r"C:\Program Files\7-Zip\7z.exe",
+        r"C:\Program Files (x86)\7-Zip\7z.exe",
+        shutil.which("7z"),
+        shutil.which("7za"),
+        r"C:\Windows\system32\7z.EXE",
+        r"C:\Program Files\WinRAR\WinRAR.exe",
+        r"C:\Program Files\WinRAR\UnRAR.exe",
+        r"C:\Program Files (x86)\WinRAR\UnRAR.exe",
+        shutil.which("rar"),
+        shutil.which("unrar"),
+    ]:
+        if p and os.path.exists(p) and p not in archiver_candidates:
+            archiver_candidates.append(p)
+
+    last_error = ""
+    # 1. Thử tất cả các công cụ CLI đã tìm thấy
+    for archiver in archiver_candidates:
         try:
             is_winrar = "winrar" in archiver.lower() or "unrar" in archiver.lower()
             if is_winrar:
@@ -80,22 +96,32 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 return True, f"Đã giải nén thành công bằng {os.path.basename(archiver)}"
             else:
                 err_text = (res.stderr or res.stdout or "").strip()
-                err_lines = [l for l in err_text.splitlines() if l.strip() and not l.startswith("7-Zip")][:2]
-                err_detail = " - ".join(err_lines) if err_lines else f"Exit code {res.returncode}"
-                LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_detail}")
+                err_lines = [
+                    l.strip() for l in err_text.splitlines() 
+                    if l.strip() and not l.startswith("7-Zip") 
+                    and not l.startswith("Scanning") 
+                    and not l.startswith("Path =") 
+                    and not l.startswith("Type =") 
+                    and not l.startswith("Physical Size")
+                    and not l.startswith("Everything is Ok")
+                ]
+                err_detail = " | ".join(err_lines[:2]) if err_lines else f"Exit code {res.returncode}"
+                last_error = f"{os.path.basename(archiver)}: {err_detail}"
+                LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_text}")
         except Exception as e:
+            last_error = f"{os.path.basename(archiver)}: {e}"
             LOGGER.warning(f"[EXTRACT CLI ERROR] {e}")
 
-    # 2. Python zipfile (.zip)
-    if ext == ".zip":
+    # 2. Python zipfile
+    if ext == ".zip" or not archiver_candidates:
         try:
             with zipfile.ZipFile(archive_path, 'r') as zf:
                 zf.extractall(extract_dir)
             return True, "Đã giải nén thành công bằng Python ZipFile"
         except Exception as e:
-            LOGGER.warning(f"[ZIPFILE EXTRACT ERROR] {e}")
+            if not last_error: last_error = f"ZipFile: {e}"
 
-    # 3. Python py7zr (.7z)
+    # 3. Python py7zr
     if ext == ".7z":
         try:
             import py7zr
@@ -103,29 +129,18 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 z.extractall(path=extract_dir)
             return True, "Đã giải nén thành công bằng py7zr"
         except Exception as e:
-            LOGGER.warning(f"[PY7ZR EXTRACT ERROR] {e}")
+            if not last_error: last_error = f"py7zr: {e}"
 
-    # 4. Python tarfile (.tar, .tar.gz, .tgz, .bz2, .xz)
+    # 4. Python tarfile
     if ext in (".tar", ".tar.gz", ".tgz", ".bz2", ".xz"):
         try:
             with tarfile.open(archive_path, 'r:*') as tf:
                 tf.extractall(extract_dir)
             return True, "Đã giải nén thành công bằng Python TarFile"
         except Exception as e:
-            LOGGER.warning(f"[TARFILE EXTRACT ERROR] {e}")
+            if not last_error: last_error = f"TarFile: {e}"
 
-    # 5. Tar CLI fallback
-    tar_cli = shutil.which("tar")
-    if tar_cli:
-        try:
-            cmd = [tar_cli, "-xf", archive_path, "-C", extract_dir]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            if res.returncode == 0:
-                return True, "Đã giải nén thành công bằng tar CLI"
-        except Exception:
-            pass
-
-    return False, "Không có công cụ nào giải nén được file này hoặc file bị hỏng / có mật khẩu."
+    return False, last_error or "Không có công cụ nào giải nén được file này hoặc file bị hỏng / có mật khẩu."
 
 
 async def _extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:
