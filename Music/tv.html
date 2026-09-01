@@ -729,15 +729,68 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 4px; }
 
-        /* ─── D-PAD REMOTE FOCUS INDICATOR (SIÊU ĐẸP, SẮC NÉT & CỰC NHẸ) ─── */
+        /* ─── D-PAD REMOTE FOCUS INDICATOR (NEON CYAN SIÊU NỔI BẬT DỄ NHẬN BIẾT) ─── */
         .focusable:focus,
         .focusable.focused {
-            outline: 2.5px solid #f59e0b !important;
+            outline: 3px solid #00e5ff !important;
             outline-offset: 1px !important;
-            border-color: #f59e0b !important;
-            background: #1f293d !important;
-            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4) !important;
+            border-color: #00e5ff !important;
+            background: #102a45 !important;
+            box-shadow: 0 0 16px rgba(0, 229, 255, 0.65), 0 0 4px #00e5ff !important;
+            color: #ffffff !important;
             z-index: 50 !important;
+        }
+
+        .tv-nav-item.focusable:focus,
+        .tv-nav-item.focusable.focused {
+            border-color: #00e5ff !important;
+            background: linear-gradient(90deg, rgba(0, 229, 255, 0.28) 0%, rgba(14, 165, 233, 0.12) 100%) !important;
+            color: #ffffff !important;
+        }
+
+        .tv-nav-item.focusable:focus .nav-icon {
+            filter: drop-shadow(0 0 8px #00e5ff);
+        }
+
+        .tv-card-item.focusable:focus,
+        .tv-card-item.focusable.focused {
+            border-color: #00e5ff !important;
+            background: linear-gradient(90deg, #163654 0%, #0f2438 100%) !important;
+        }
+
+        .tv-card-item.focusable:focus .tv-card-title {
+            color: #00e5ff !important;
+        }
+
+        .tv-track-item.focusable:focus,
+        .tv-track-item.focusable.focused {
+            border-color: #00e5ff !important;
+            background: linear-gradient(90deg, #183a5c 0%, #0f2336 100%) !important;
+        }
+
+        .tv-track-item.focusable:focus .tv-track-title {
+            color: #00e5ff !important;
+        }
+
+        .tv-btn.focusable:focus,
+        .tv-btn.focusable.focused {
+            border-color: #00e5ff !important;
+            outline: 3px solid #00e5ff !important;
+            box-shadow: 0 0 16px rgba(0, 229, 255, 0.7) !important;
+        }
+
+        .tv-btn-play.focusable:focus,
+        .tv-btn-play.focusable.focused {
+            outline: 3px solid #00e5ff !important;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.85) !important;
+        }
+
+        .tv-progress-bar:focus,
+        .tv-progress-bar.focused {
+            height: 8px;
+            border-color: #00e5ff !important;
+            background: #242f42;
+            box-shadow: 0 0 14px rgba(0, 229, 255, 0.6) !important;
         }
 
         .tv-toast {

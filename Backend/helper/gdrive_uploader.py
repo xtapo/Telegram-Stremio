@@ -655,6 +655,7 @@ class GoogleDriveUploadManager:
                 out_path = os.path.join(work_dir, final_filename)
                 start_dl = time.time()
                 last_update = 0
+                last_dl_bytes = 0
 
                 with open(cache_path, "wb") as f_out:
                     async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
@@ -664,13 +665,15 @@ class GoogleDriveUploadManager:
                         self._download_bytes += len(chunk)
 
                         now = time.time()
-                        if now - last_update > 0.5:
+                        if now - last_update >= 0.5:
+                            delta_t = now - last_update if last_update > 0 else (now - start_dl)
+                            delta_b = self._download_bytes - last_dl_bytes if last_update > 0 else self._download_bytes
                             last_update = now
+                            last_dl_bytes = self._download_bytes
                             if total_bytes > 0:
                                 self._download_percent = min(100, int((self._download_bytes / total_bytes) * 100))
-                            elapsed_dl = now - start_dl
-                            if elapsed_dl > 0:
-                                mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
+                            if delta_t > 0 and delta_b >= 0:
+                                mbps = (delta_b / (1024 * 1024)) / delta_t
                                 self._speed_str = f"{mbps:.2f} MB/s"
 
                 downloaded_fsize = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
@@ -964,19 +967,22 @@ class GoogleDriveUploadManager:
 
                     start_up = time.time()
                     last_up_time = 0
+                    last_bytes = 0
 
                     def _progress_cb(current, total):
-                        nonlocal last_up_time
+                        nonlocal last_up_time, last_bytes
                         self._upload_bytes = current
                         self._upload_total = total
                         if total > 0:
                             self._upload_percent = min(100, int((current / total) * 100))
                         now = time.time()
-                        if now - last_up_time > 0.5:
+                        if now - last_up_time >= 0.5:
+                            delta_time = now - last_up_time if last_up_time > 0 else (now - start_up)
+                            delta_bytes = current - last_bytes if last_up_time > 0 else current
                             last_up_time = now
-                            elapsed = now - start_up
-                            if elapsed > 0:
-                                mbps = (current / (1024 * 1024)) / elapsed
+                            last_bytes = current
+                            if delta_time > 0 and delta_bytes >= 0:
+                                mbps = (delta_bytes / (1024 * 1024)) / delta_time
                                 self._speed_str = f"{mbps:.2f} MB/s"
 
                     caption = f"🎵 {title_candidate}\n👤 {artist_candidate or 'Unknown Artist'}\n💿 {album_candidate or 'Single'}"
@@ -1040,7 +1046,8 @@ class GoogleDriveUploadManager:
                             "size": f"{fsize_mb} MB"
                         })
 
-                    await asyncio.sleep(0.3)
+                    # Nghỉ nhẹ an toàn giữa các bài để giữ tốc độ và tránh bị Telegram bóp băng thông
+                    await asyncio.sleep(0.8)
 
                 # 5. Đồng bộ các bài hát vừa upload vào Database MongoDB
                 if uploaded_messages_item:
