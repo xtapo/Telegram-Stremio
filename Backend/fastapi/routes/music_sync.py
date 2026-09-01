@@ -67,6 +67,10 @@ class MusicSyncHub:
     def __init__(self):
         # rooms: { room_id: { device_id: ConnectedDevice } }
         self.rooms: Dict[str, Dict[str, ConnectedDevice]] = {}
+        # rest_devices: { room_id: { device_id: dict } }
+        self.rest_devices: Dict[str, Dict[str, dict]] = {}
+        # pending_commands: { target_device_id: [ command_dict ] }
+        self.pending_commands: Dict[str, List[dict]] = {}
         # pair_codes: { pair_code: { room_id, created_at } }
         self.pair_codes: Dict[str, dict] = {}
         self._lock = asyncio.Lock()
@@ -96,10 +100,64 @@ class MusicSyncHub:
         LOGGER.info(f"[MUSIC SYNC] Unregistered device ({device_id}) from room '{room_id}'")
         await self.broadcast_devices(room_id)
 
+    def update_rest_device(self, room_id: str, device_info: dict):
+        dev_id = device_info.get("device_id")
+        if not dev_id:
+            return
+        if room_id not in self.rest_devices:
+            self.rest_devices[room_id] = {}
+        
+        now = time.time()
+        device_info["last_seen"] = now
+        self.rest_devices[room_id][dev_id] = device_info
+
+        # Clean expired rest devices (> 20s)
+        expired = [d_id for d_id, d in self.rest_devices[room_id].items() if now - d.get("last_seen", 0) > 20]
+        for d_id in expired:
+            del self.rest_devices[room_id][d_id]
+
     def get_devices_list(self, room_id: str) -> List[dict]:
-        if room_id not in self.rooms:
-            return []
-        return [dev.to_dict() for dev in self.rooms[room_id].values()]
+        combined = {}
+        # 1. From active WebSockets
+        if room_id in self.rooms:
+            for d_id, dev in self.rooms[room_id].items():
+                combined[d_id] = dev.to_dict()
+        
+        # 2. From REST heartbeat devices
+        now = time.time()
+        if room_id in self.rest_devices:
+            for d_id, d in list(self.rest_devices[room_id].items()):
+                if now - d.get("last_seen", 0) <= 20:
+                    if d_id not in combined:
+                        combined[d_id] = d
+
+        return list(combined.values())
+
+    async def queue_command(self, room_id: str, target_device_id: Optional[str], command_data: dict):
+        if target_device_id:
+            if target_device_id not in self.pending_commands:
+                self.pending_commands[target_device_id] = []
+            self.pending_commands[target_device_id].append(command_data)
+            # Try sending over WS immediately
+            await self.send_to_device(room_id, target_device_id, command_data)
+        else:
+            # Broadcast to all other devices
+            devices = self.get_devices_list(room_id)
+            from_dev = command_data.get("from_device_id")
+            for d in devices:
+                d_id = d.get("device_id")
+                if d_id and d_id != from_dev:
+                    if d_id not in self.pending_commands:
+                        self.pending_commands[d_id] = []
+                    self.pending_commands[d_id].append(command_data)
+            await self.broadcast(room_id, command_data, exclude_device_id=from_dev)
+
+    def pop_pending_commands(self, device_id: str) -> List[dict]:
+        if device_id in self.pending_commands:
+            cmds = self.pending_commands[device_id]
+            del self.pending_commands[device_id]
+            return cmds
+        return []
 
     async def broadcast(self, room_id: str, message: dict, exclude_device_id: Optional[str] = None):
         if room_id not in self.rooms:
@@ -238,12 +296,7 @@ async def music_sync_websocket_endpoint(
                     "payload": payload,
                     "timestamp": time.time()
                 }
-
-                if target_device_id:
-                    await hub.send_to_device(room_id, target_device_id, cmd_msg)
-                else:
-                    # Broadcast cho tất cả thiết bị khác
-                    await hub.broadcast(room_id, cmd_msg, exclude_device_id=device.device_id)
+                await hub.queue_command(room_id, target_device_id, cmd_msg)
 
             elif msg_type == "PING":
                 await websocket.send_text(json.dumps({"type": "PONG", "timestamp": time.time()}))
@@ -254,6 +307,100 @@ async def music_sync_websocket_endpoint(
         LOGGER.warning(f"[MUSIC SYNC WS] Error for device {actual_device_id}: {e}")
     finally:
         await hub.unregister_device(room_id, actual_device_id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REST API HYBRID SYNC ENDPOINTS (POLLING FALLBACK FOR REVERSE PROXIES & MOBILE)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@sync_router.post("/api/music/sync/heartbeat")
+async def sync_heartbeat(payload: dict, request: Request):
+    """
+    Heartbeat đồng bộ định kỳ (dành cho cả WebSocket & REST Polling Fallback).
+    Nhận state hiện tại, trả về danh sách thiết bị và các lệnh điều khiển pending.
+    """
+    device_id = payload.get("device_id")
+    if not device_id:
+        return {"status": "error", "message": "Missing device_id"}
+
+    user_id = payload.get("user_id")
+    if not user_id:
+        try:
+            user_id = request.session.get("music_user_id")
+        except Exception:
+            pass
+
+    pair_code = payload.get("pair_code")
+    cf_ip = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For")
+    client_ip = cf_ip.split(",")[0].strip() if cf_ip else (request.client.host if request.client else "127.0.0.1")
+
+    room_id = hub.get_room_id(user_id, pair_code, client_ip)
+
+    # Cập nhật thông tin rest device
+    device_info = {
+        "device_id": device_id,
+        "device_name": payload.get("device_name", "Thiết bị"),
+        "device_type": payload.get("device_type", "desktop"),
+        "user_id": user_id,
+        "username": payload.get("username"),
+        "is_active_player": payload.get("is_active_player", False),
+        "current_state": payload.get("current_state", {})
+    }
+    hub.update_rest_device(room_id, device_info)
+
+    # Lấy các lệnh điều khiển gửi tới thiết bị này
+    pending_cmds = hub.pop_pending_commands(device_id)
+    devices = hub.get_devices_list(room_id)
+
+    return {
+        "status": "success",
+        "room_id": room_id,
+        "devices": devices,
+        "commands": pending_cmds,
+        "server_time": time.time()
+    }
+
+
+@sync_router.post("/api/music/sync/command")
+async def send_sync_command(payload: dict, request: Request):
+    """
+    Gửi lệnh điều khiển từ xa qua REST API (Play/Pause/Seek/Transfer/Volume).
+    Hoạt động độc lập ngay cả khi WebSocket không khả dụng!
+    """
+    from_dev_id = payload.get("from_device_id")
+    target_dev_id = payload.get("target_device_id")
+    command_name = payload.get("command")
+    cmd_payload = payload.get("payload", {})
+
+    user_id = payload.get("user_id")
+    if not user_id:
+        try:
+            user_id = request.session.get("music_user_id")
+        except Exception:
+            pass
+
+    pair_code = payload.get("pair_code")
+    cf_ip = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For")
+    client_ip = cf_ip.split(",")[0].strip() if cf_ip else (request.client.host if request.client else "127.0.0.1")
+    room_id = hub.get_room_id(user_id, pair_code, client_ip)
+
+    cmd_msg = {
+        "type": "EXEC_COMMAND",
+        "command": command_name,
+        "from_device_id": from_dev_id,
+        "from_device_name": payload.get("from_device_name", "Điện thoại"),
+        "payload": cmd_payload,
+        "timestamp": time.time()
+    }
+
+    await hub.queue_command(room_id, target_dev_id, cmd_msg)
+    LOGGER.info(f"[MUSIC SYNC REST] Dispatched command '{command_name}' from {from_dev_id} to {target_dev_id} in room {room_id}")
+
+    return {
+        "status": "success",
+        "message": f"Command {command_name} dispatched",
+        "room_id": room_id
+    }
 
 
 @sync_router.get("/api/music/sync/devices")

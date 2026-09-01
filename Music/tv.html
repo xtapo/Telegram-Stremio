@@ -2913,7 +2913,52 @@
             }
         }
 
+        async function sendTvHeartbeat() {
+            try {
+                const curTr = currentTracklist?.[currentPlayingTrackIdx];
+                const payload = {
+                    device_id: tvDeviceId,
+                    device_name: 'XTAPO Android TV',
+                    device_type: 'tv',
+                    user_id: currentUser ? currentUser._id : null,
+                    username: currentUser ? (currentUser.display_name || currentUser.username) : null,
+                    is_active_player: isPlaying,
+                    current_state: {
+                        is_playing: isPlaying,
+                        current_time: audio ? audio.currentTime : 0,
+                        duration: audio ? audio.duration : 0,
+                        volume: audio ? audio.volume : 1.0,
+                        album_id: currentActiveGroup ? currentActiveGroup.id : null,
+                        track_index: currentPlayingTrackIdx,
+                        track: curTr ? {
+                            id: curTr.id,
+                            name: curTr.name || curTr.title,
+                            artist: curTr.artist || 'XTAPO TV',
+                            coverUrl: getTrackCover(curTr),
+                            duration: curTr.duration
+                        } : null
+                    }
+                };
+
+                const res = await fetch('/api/music/sync/heartbeat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'success' && Array.isArray(data.commands) && data.commands.length > 0) {
+                        for (const cmd of data.commands) {
+                            handleTvSyncMessage(cmd);
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
         function sendTvSyncRegister() {
+            sendTvHeartbeat();
             if (!tvSyncWs || tvSyncWs.readyState !== WebSocket.OPEN) return;
             const curTr = currentTracklist?.[currentPlayingTrackIdx];
             const payload = {
@@ -3071,9 +3116,11 @@
             get audio() { return audio; }
         };
 
-        // Initialize: Kiểm tra trạng thái đăng nhập & Khởi tạo WebSocket Sync
+        // Initialize: Kiểm tra trạng thái đăng nhập & Khởi tạo WebSocket Sync & REST Heartbeat
         checkUserProfile();
         initTvMusicSync();
+        sendTvHeartbeat();
+        setInterval(sendTvHeartbeat, 2200);
     })();
     </script>
 </body>

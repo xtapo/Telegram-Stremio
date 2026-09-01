@@ -639,6 +639,8 @@ class XTAPOMusicApp {
         this.updateEqualizerUI();
         this.setupDeviceSyncEvents();
         this.initMusicSync();
+        this.sendSyncHeartbeat();
+        setInterval(() => this.sendSyncHeartbeat(), 2200);
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
@@ -8239,7 +8241,63 @@ class XTAPOMusicApp {
         }
     }
 
+    async sendSyncHeartbeat() {
+        try {
+            const track = this.currentTrack;
+            const album = this.currentAlbum;
+            const payload = {
+                device_id: this.syncDeviceId,
+                device_name: this.syncDeviceName,
+                device_type: this.syncDeviceType,
+                user_id: this.currentUser ? this.currentUser._id : null,
+                username: this.currentUser ? (this.currentUser.display_name || this.currentUser.username) : null,
+                is_active_player: !this.remoteTargetDeviceId && this.isPlaying,
+                current_state: {
+                    is_playing: this.isPlaying,
+                    current_time: this.audio ? (this.audio.currentTime || 0) : 0,
+                    duration: this.audio ? (this.audio.duration || 0) : 0,
+                    volume: this.volume || 0.85,
+                    album_id: album ? album.id : null,
+                    track_index: this.currentTrackIndex,
+                    track: track ? {
+                        id: track.id,
+                        name: track.name,
+                        artist: track.artist || (album ? album.artist : ''),
+                        album: album ? album.title : '',
+                        coverUrl: this.getTrackCover(track, album),
+                        duration: track.duration,
+                        previewUrl: track.previewUrl
+                    } : null
+                }
+            };
+
+            const res = await fetch('/api/music/sync/heartbeat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'success') {
+                    if (data.devices) {
+                        this.availableDevices = data.devices;
+                        this.renderDevicesList();
+                    }
+                    if (Array.isArray(data.commands) && data.commands.length > 0) {
+                        for (const cmd of data.commands) {
+                            this.handleSyncMessage(cmd);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            // Im lặng bỏ qua khi mất mạng tạm thời
+        }
+    }
+
     sendSyncRegister() {
+        this.sendSyncHeartbeat();
         if (!this.syncWs || this.syncWs.readyState !== WebSocket.OPEN) return;
         const payload = {
             device_name: this.syncDeviceName,
@@ -8264,7 +8322,6 @@ class XTAPOMusicApp {
     }
 
     sendSyncState() {
-        if (!this.syncWs || this.syncWs.readyState !== WebSocket.OPEN) return;
         if (this.remoteTargetDeviceId) return; // Không gửi state nếu máy này chỉ là Remote Controller
 
         const track = this.currentTrack;
@@ -8288,10 +8345,12 @@ class XTAPOMusicApp {
             } : null
         };
 
-        this.syncWs.send(JSON.stringify({
-            type: 'STATE_UPDATE',
-            payload: payload
-        }));
+        if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
+            this.syncWs.send(JSON.stringify({
+                type: 'STATE_UPDATE',
+                payload: payload
+            }));
+        }
     }
 
     throttledSendSyncState() {
@@ -8302,20 +8361,38 @@ class XTAPOMusicApp {
         }
     }
 
-    sendSyncCommand(command, payload = {}, targetDeviceId = null) {
-        if (!this.syncWs || this.syncWs.readyState !== WebSocket.OPEN) {
-            this.showToast('⚠️ Mất kết nối tới Hub điều khiển. Đang thử kết nối lại...');
-            this.initMusicSync();
-            return;
-        }
-
+    async sendSyncCommand(command, payload = {}, targetDeviceId = null) {
+        const targetId = targetDeviceId || this.remoteTargetDeviceId;
         const msg = {
             type: 'COMMAND',
             command: command,
-            target_device_id: targetDeviceId || this.remoteTargetDeviceId,
+            target_device_id: targetId,
             payload: payload
         };
-        this.syncWs.send(JSON.stringify(msg));
+
+        // 1. Thử gửi qua WebSocket nếu đang kết nối
+        if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
+            try {
+                this.syncWs.send(JSON.stringify(msg));
+            } catch(e) {}
+        }
+
+        // 2. Đồng thời gửi qua REST API Command Hub (Đảm bảo 100% lệnh được chuyển đi kể cả khi WS fail)
+        try {
+            await fetch('/api/music/sync/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    from_device_id: this.syncDeviceId,
+                    from_device_name: this.syncDeviceName,
+                    target_device_id: targetId,
+                    command: command,
+                    payload: payload
+                })
+            });
+        } catch (e) {
+            console.warn('[Spotify Connect] Lỗi gửi REST command:', e);
+        }
     }
 
     handleSyncMessage(msg) {
