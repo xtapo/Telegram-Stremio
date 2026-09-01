@@ -88,5 +88,14 @@ if UPSTREAM_REPO:
         commit_check = srun(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
         if commit_check.returncode == 0:
             log_info(f"Latest commit ID: {commit_check.stdout.strip()}")
+
+        # Tự động cài đặt p7zip-full và unrar-free nếu đang chạy trên Linux/Docker
+        try:
+            if shutil.which("apt-get") and not (shutil.which("7z") or shutil.which("unrar")):
+                log_info("Installing p7zip-full and unrar-free for audio archive extraction...")
+                srun(["apt-get", "update", "-qq"])
+                srun(["apt-get", "install", "-y", "-qq", "--no-install-recommends", "p7zip-full", "unrar-free"])
+        except Exception as e:
+            log_error(f"Archiver installation note: {e}")
     else:
         log_error("❌ Update failed! Retry or ask for support.")

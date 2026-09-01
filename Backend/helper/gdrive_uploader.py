@@ -86,6 +86,18 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         if p and os.path.exists(p) and p not in archiver_candidates:
             archiver_candidates.append(p)
 
+    # Nếu đang chạy trong Linux/Docker mà chưa cài 7z, tự động cài đặt ngầm p7zip-full
+    if os.name != "nt" and not archiver_candidates and shutil.which("apt-get"):
+        try:
+            LOGGER.info("[AUTO INSTALL] Linux archiver not found in Docker. Installing p7zip-full...")
+            subprocess.run(["apt-get", "update", "-qq"], timeout=60)
+            subprocess.run(["apt-get", "install", "-y", "-qq", "--no-install-recommends", "p7zip-full", "unrar-free"], timeout=120)
+            for p in ["/usr/bin/7z", "/usr/bin/7za", "/usr/bin/unrar", "/usr/bin/unrar-free"]:
+                if os.path.exists(p) and p not in archiver_candidates:
+                    archiver_candidates.append(p)
+        except Exception as e:
+            LOGGER.warning(f"[AUTO INSTALL ERROR] {e}")
+
     last_error = ""
     # 1. Thử tất cả các công cụ CLI đã tìm thấy
     for archiver in archiver_candidates:
