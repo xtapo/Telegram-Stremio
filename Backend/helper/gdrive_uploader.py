@@ -182,6 +182,42 @@ async def _extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, s
     return await asyncio.to_thread(_sync_extract_archive, archive_path, extract_dir)
 
 
+def _cleanup_old_temp_files(max_age_seconds: int = 3600):
+    """
+    Tự động dọn dẹp các thư mục tạm và file cache rác cũ hơn max_age_seconds (mặc định 1 tiếng).
+    """
+    now = time.time()
+    try:
+        if os.path.exists(TEMP_UPLOAD_DIR):
+            for item in os.listdir(TEMP_UPLOAD_DIR):
+                if item == "cached_downloads":
+                    continue
+                item_path = os.path.join(TEMP_UPLOAD_DIR, item)
+                try:
+                    if os.path.isdir(item_path):
+                        mtime = os.path.getmtime(item_path)
+                        if now - mtime > max_age_seconds:
+                            shutil.rmtree(item_path, ignore_errors=True)
+                            LOGGER.debug(f"[CLEANUP] Đã xóa thư mục tạm cũ: {item}")
+                except Exception:
+                    pass
+
+        if os.path.exists(CACHE_DOWNLOAD_DIR):
+            for item in os.listdir(CACHE_DOWNLOAD_DIR):
+                item_path = os.path.join(CACHE_DOWNLOAD_DIR, item)
+                try:
+                    if os.path.isfile(item_path):
+                        mtime = os.path.getmtime(item_path)
+                        # Dọn các file cache rác tồn đọng quá 2 tiếng
+                        if now - mtime > 7200:
+                            os.remove(item_path)
+                            LOGGER.debug(f"[CLEANUP] Đã dọn file cache cũ: {item}")
+                except Exception:
+                    pass
+    except Exception as e:
+        LOGGER.debug(f"[CLEANUP ERROR] {e}")
+
+
 def parse_gdrive_url(url: str) -> Tuple[str, str]:
     """
     Phân tích URL Google Drive và trả về:
@@ -978,10 +1014,29 @@ class GoogleDriveUploadManager:
             self._log(f"Lỗi: {exc}", "error")
             LOGGER.error(f"[GDRIVE UPLOAD PIPELINE ERROR] {exc}", exc_info=True)
         finally:
-            # Dọn dẹp thư mục tạm
+            # 1. Dọn dẹp thư mục làm việc tạm của phiên upload này (các file WAV/FLAC giải nén)
             try:
                 if os.path.exists(work_dir):
                     shutil.rmtree(work_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+            # 2. Nếu đã hoàn tất upload thành công 100%, xóa file nén gốc trong Cache để giải phóng dung lượng
+            if self._status == "completed":
+                try:
+                    if os.path.exists(CACHE_DOWNLOAD_DIR):
+                        for fname in os.listdir(CACHE_DOWNLOAD_DIR):
+                            if fname.startswith(f"{resource_id}_"):
+                                c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                                if os.path.isfile(c_file):
+                                    os.remove(c_file)
+                                    LOGGER.info(f"[CLEANUP] Đã giải phóng file nén trong bộ nhớ đệm: {fname}")
+                except Exception:
+                    pass
+
+            # 3. Quét dọn rác tự động các thư mục tạm cũ
+            try:
+                _cleanup_old_temp_files()
             except Exception:
                 pass
 
