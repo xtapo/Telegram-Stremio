@@ -35,6 +35,10 @@
 
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center gap-2">
+                <button type="button" onclick="openGDriveUploadModal()"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-500 shadow-lg shadow-blue-500/25 hover:brightness-110">
+                    <i class="fa-brands fa-google-drive text-amber-300"></i> Upload Google Drive
+                </button>
                 <button type="button" onclick="openScanModal()"
                         class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-primary text-white border-primary shadow-lg shadow-primary/25 hover:brightness-110">
                     <i class="fa-solid fa-satellite-dish"></i> Quét Kênh Telegram
@@ -590,6 +594,217 @@
             <button onclick="closeScanModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Đóng</button>
             <button id="start-scan-btn" onclick="startMusicScan()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 flex items-center gap-2">
                 <i class="fa-solid fa-play"></i> Bắt Đầu Quét
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 1.5: Upload Nhạc từ Google Drive (Google Drive Uploader) -->
+<div id="gdrive-upload-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 sm:p-7 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[92vh] flex flex-col">
+        
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-xl border border-blue-500/30">
+                    <i class="fa-brands fa-google-drive"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Upload Nhạc từ Google Drive</h3>
+                    <p class="text-xs text-text-secondary">Tải file/thư mục Google Drive và upload lên kênh Telegram bằng User Session</p>
+                </div>
+            </div>
+            <button onclick="closeGDriveUploadModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Client Speed & Session Mode Status Banner -->
+        <div id="gdrive-client-badge-container" class="mb-4 p-3 rounded-2xl bg-surface border border-hairline flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div id="gdrive-session-icon" class="w-7 h-7 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <div>
+                    <span class="text-[10px] uppercase font-bold text-text-secondary tracking-wider block">Chế Độ Truyền Tải</span>
+                    <span id="gdrive-session-mode-label" class="text-xs font-black text-amber-300">Đang kiểm tra kết nối...</span>
+                </div>
+            </div>
+            <span id="gdrive-session-badge" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                ⚡ Tốc độ tối đa
+            </span>
+        </div>
+
+        <!-- VIEW 1: Upload Setup Form -->
+        <div id="gdrive-view-setup" class="flex-1 overflow-y-auto pr-1 space-y-4">
+            <!-- URL Input -->
+            <div>
+                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">
+                    <i class="fa-solid fa-link text-primary mr-1"></i> Link Google Drive hoặc Link Tải Trực Tiếp:
+                </label>
+                <div class="relative">
+                    <input type="text" id="gdrive-url-input"
+                           placeholder="https://drive.google.com/file/d/... hoặc /folders/... hoặc link file .zip / audio"
+                           class="w-full pl-3 pr-10 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary focus:border-primary font-mono">
+                    <button type="button" onclick="pasteClipboardToGDriveUrl()" title="Dán từ Clipboard"
+                            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary text-xs p-1">
+                        <i class="fa-solid fa-paste"></i>
+                    </button>
+                </div>
+                <p class="text-[11px] text-text-secondary mt-1">
+                    💡 Hỗ trợ link File đơn, Thư mục Folder, File nén <code>.zip</code> chứa album, và các file <code>.flac, .mp3, .wav, .dsf, .m4a</code>.
+                </p>
+            </div>
+
+            <!-- Target Telegram Channel Selector -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">
+                        <i class="fa-brands fa-telegram text-sky-400 mr-1"></i> Kênh Telegram Đích:
+                    </label>
+                    <button type="button" onclick="openScanModal()" class="text-[11px] font-bold text-primary hover:underline">
+                        <i class="fa-solid fa-plus text-[10px]"></i> Thêm Kênh Mới
+                    </button>
+                </div>
+                <select id="gdrive-channel-select" class="w-full px-3 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary cursor-pointer">
+                    <option value="">-- Đang tải danh sách kênh --</option>
+                </select>
+            </div>
+
+            <!-- Fallback Metadata Inputs -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-hairline">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Ca Sĩ Mặc Định (Tuỳ chọn):</label>
+                    <input type="text" id="gdrive-default-artist" placeholder="Ví dụ: Taylor Swift, Lệ Quyên..."
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs" title="Áp dụng nếu file không ghi tên ca sĩ">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Tên Album (Tuỳ chọn):</label>
+                    <input type="text" id="gdrive-default-album" placeholder="Ví dụ: 1989, Khúc Tình Xưa..."
+                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs">
+                </div>
+            </div>
+
+            <!-- Options Checkboxes -->
+            <div class="space-y-2.5 pt-1">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="gdrive-auto-scrape" checked class="w-4 h-4 rounded accent-primary cursor-pointer">
+                    <label for="gdrive-auto-scrape" class="text-xs text-text cursor-pointer select-none">
+                        Tự động tìm kiếm ảnh bìa HD Thumbnail & siêu dữ liệu từ <strong>Apple Music & Deezer</strong>
+                    </label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="gdrive-as-document" class="w-4 h-4 rounded accent-primary cursor-pointer">
+                    <label for="gdrive-as-document" class="text-xs text-text cursor-pointer select-none">
+                        Gửi dưới dạng File Document (Khuyên dùng cho file Hi-Res <strong>FLAC 24-bit / DSD DSF/DFF</strong> nguyên bản)
+                    </label>
+                </div>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center gap-2">
+                <i class="fa-solid fa-circle-check text-emerald-400 shrink-0"></i>
+                <span>Tự động lập chỉ mục: Sau khi upload hoàn tất, các bài hát sẽ được thêm ngay vào Thư viện Nhạc mà không cần quét lại.</span>
+            </div>
+        </div>
+
+        <!-- VIEW 2: Live Progress & Logs -->
+        <div id="gdrive-view-progress" class="hidden flex-1 flex flex-col justify-between space-y-4 py-2">
+            <div class="space-y-4">
+                <!-- Status Banner -->
+                <div class="flex items-center justify-between p-3 rounded-2xl bg-surface border border-hairline">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div id="gdrive-spinner-icon" class="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-cloud-arrow-down animate-bounce"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <span class="text-[10px] uppercase font-bold text-text-secondary tracking-wider block">Tiến Trình</span>
+                            <span id="gdrive-live-stage-badge" class="text-xs font-black text-primary truncate block">Đang khởi động...</span>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="text-[10px] uppercase font-bold text-text-secondary tracking-wider block">Thời Gian</span>
+                        <span id="gdrive-live-elapsed" class="text-xs font-bold text-text">0s</span>
+                    </div>
+                </div>
+
+                <!-- Dual Progress Bars: Download & Upload -->
+                <div class="space-y-2.5">
+                    <!-- 1. Download from Google Drive -->
+                    <div>
+                        <div class="flex items-center justify-between text-xs font-bold mb-1">
+                            <span class="text-text-secondary flex items-center gap-1.5">
+                                <i class="fa-brands fa-google-drive text-amber-300"></i> Tải từ Google Drive:
+                            </span>
+                            <span id="gdrive-dl-percent" class="text-blue-400 font-mono font-black">0%</span>
+                        </div>
+                        <div class="w-full h-2.5 rounded-full bg-surface border border-hairline overflow-hidden p-0.5">
+                            <div id="gdrive-dl-fill" class="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-300" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Upload to Telegram -->
+                    <div>
+                        <div class="flex items-center justify-between text-xs font-bold mb-1">
+                            <span class="text-text-secondary flex items-center gap-1.5">
+                                <i class="fa-brands fa-telegram text-sky-400"></i> Đẩy lên Telegram (User Session):
+                            </span>
+                            <span id="gdrive-up-percent" class="text-emerald-400 font-mono font-black">0%</span>
+                        </div>
+                        <div class="w-full h-2.5 rounded-full bg-surface border border-hairline overflow-hidden p-0.5">
+                            <div id="gdrive-up-fill" class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Metrics Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Bài Hát</span>
+                        <span id="gdrive-stat-file-idx" class="text-sm font-black text-text">0 / 0</span>
+                    </div>
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Tốc Độ</span>
+                        <span id="gdrive-stat-speed" class="text-sm font-black text-amber-300 font-mono">-- MB/s</span>
+                    </div>
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Đã Upload</span>
+                        <span id="gdrive-stat-uploaded-count" class="text-sm font-black text-emerald-400">0 bài</span>
+                    </div>
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[10px] font-bold text-text-secondary uppercase block">Chế Độ</span>
+                        <span id="gdrive-stat-client" class="text-xs font-black text-sky-300 block truncate">User Session</span>
+                    </div>
+                </div>
+
+                <!-- Current Track & Activity Log Box -->
+                <div class="space-y-1.5">
+                    <div class="text-[11px] text-text-secondary truncate">
+                        <span class="font-bold text-text">Tập tin hiện tại:</span> <span id="gdrive-current-filename" class="text-primary italic">Chưa có...</span>
+                    </div>
+                    <div id="gdrive-live-logs" class="p-2.5 bg-black/40 rounded-xl font-mono text-[10px] text-text-secondary space-y-1 max-h-28 overflow-y-auto border border-hairline">
+                        <div>[Bắt đầu] Đang khởi động tiến trình...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Action Buttons -->
+            <div class="flex items-center justify-between pt-3 border-t border-hairline">
+                <button type="button" onclick="cancelGDriveUpload()" id="btn-cancel-gdrive"
+                        class="px-4 py-2 rounded-xl bg-red-500/15 hover:bg-red-500 text-red-400 hover:text-white text-xs font-bold transition flex items-center gap-1.5 border border-red-500/30">
+                    <i class="fa-solid fa-stop"></i> Hủy Upload
+                </button>
+                <button type="button" onclick="finishAndCloseGDriveModal()" id="btn-finish-gdrive" disabled
+                        class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/25 hover:brightness-110 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> Hoàn Tất & Xem Thư Viện
+                </button>
+            </div>
+        </div>
+
+        <!-- Setup Footer Action Buttons -->
+        <div id="gdrive-setup-footer" class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-hairline shrink-0">
+            <button onclick="closeGDriveUploadModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-text-secondary hover:bg-surface transition">Đóng</button>
+            <button id="btn-start-gdrive-upload" onclick="startGDriveUpload()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-blue-500/25 hover:brightness-110 flex items-center gap-2">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Bắt Đầu Tải & Upload
             </button>
         </div>
     </div>
@@ -4503,6 +4718,329 @@ async function deleteMusicUser(userId, username = '') {
     } catch (e) {
         alertToast('Lỗi mạng: ' + e.message);
     }
+// --- Google Drive Upload Logic (User Session / Userbot) ---
+let gdriveUploadPollInterval = null;
+let gdriveStartTime = 0;
+
+async function openGDriveUploadModal() {
+    const modal = document.getElementById('gdrive-upload-modal');
+    if (!modal) return;
+
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+
+    // Load kênh và kiểm tra trạng thái User Session
+    await Promise.all([
+        loadGDriveChannelsList(),
+        checkGDriveClientStatus()
+    ]);
+
+    // Kiểm tra nếu đang có tiến trình chạy ngầm
+    try {
+        const res = await fetch('/api/music/gdrive-upload/status');
+        const data = await res.json();
+        if (res.ok && data.status === 'success' && data.data) {
+            const st = data.data.status;
+            if (st === 'downloading' || st === 'uploading' || st === 'indexing') {
+                switchToGDriveProgressView();
+                startPollingGDriveUpload();
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('Lỗi kiểm tra tiến trình gdrive:', e);
+    }
+
+    // Mặc định về view setup
+    switchToGDriveSetupView();
+}
+
+function closeGDriveUploadModal() {
+    const modal = document.getElementById('gdrive-upload-modal');
+    if (!modal) return;
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+    if (gdriveUploadPollInterval) {
+        clearInterval(gdriveUploadPollInterval);
+        gdriveUploadPollInterval = null;
+    }
+}
+
+async function checkGDriveClientStatus() {
+    try {
+        const res = await fetch('/api/music/uploader/client-status');
+        const data = await res.json();
+        const labelEl = document.getElementById('gdrive-session-mode-label');
+        const badgeEl = document.getElementById('gdrive-session-badge');
+        const iconEl = document.getElementById('gdrive-session-icon');
+        const statClientEl = document.getElementById('gdrive-stat-client');
+
+        if (res.ok && data.status === 'success') {
+            const isUserSession = data.active_mode === 'user_session';
+            if (isUserSession) {
+                if (labelEl) labelEl.textContent = '⚡ User Session (Tốc độ tối đa • Không giới hạn 2GB/4GB)';
+                if (labelEl) labelEl.className = 'text-xs font-black text-emerald-400';
+                if (badgeEl) {
+                    badgeEl.textContent = '⚡ User Session';
+                    badgeEl.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+                }
+                if (iconEl) {
+                    iconEl.className = 'w-7 h-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs';
+                    iconEl.innerHTML = '<i class="fa-solid fa-bolt"></i>';
+                }
+                if (statClientEl) statClientEl.textContent = '⚡ User Session';
+            } else {
+                if (labelEl) labelEl.textContent = '🤖 Telegram Bot Client (Chưa kích hoạt User Session)';
+                if (labelEl) labelEl.className = 'text-xs font-bold text-sky-400';
+                if (badgeEl) {
+                    badgeEl.textContent = '🤖 Bot Mode';
+                    badgeEl.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30';
+                }
+                if (iconEl) {
+                    iconEl.className = 'w-7 h-7 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center text-xs';
+                    iconEl.innerHTML = '<i class="fa-solid fa-robot"></i>';
+                }
+                if (statClientEl) statClientEl.textContent = '🤖 Bot Mode';
+            }
+        }
+    } catch (e) {
+        console.warn('Lỗi lấy trạng thái client:', e);
+    }
+}
+
+async function loadGDriveChannelsList() {
+    const selectEl = document.getElementById('gdrive-channel-select');
+    if (!selectEl) return;
+
+    try {
+        const res = await fetch('/api/music/channels');
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success' && data.channels && data.channels.length > 0) {
+            selectEl.innerHTML = data.channels.map(ch => {
+                const displayName = ch.name ? `${ch.name} (${ch.id})` : `Kênh ID: ${ch.id}`;
+                return `<option value="${ch.id}">${displayName}</option>`;
+            }).join('');
+        } else {
+            selectEl.innerHTML = '<option value="">⚠️ Chưa có kênh Telegram nào! Vui lòng bấm "Thêm Kênh Mới"</option>';
+        }
+    } catch (e) {
+        selectEl.innerHTML = '<option value="">Lỗi tải danh sách kênh</option>';
+    }
+}
+
+async function pasteClipboardToGDriveUrl() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+            const input = document.getElementById('gdrive-url-input');
+            if (input) {
+                input.value = text.trim();
+                alertToast('Đã dán link từ bộ nhớ tạm!');
+            }
+        }
+    } catch (e) {
+        alertToast('Vui lòng cấp quyền đọc Clipboard trên trình duyệt');
+    }
+}
+
+function switchToGDriveSetupView() {
+    const vSetup = document.getElementById('gdrive-view-setup');
+    const vProg = document.getElementById('gdrive-view-progress');
+    const footerSetup = document.getElementById('gdrive-setup-footer');
+    if (vSetup) vSetup.classList.remove('hidden');
+    if (vProg) vProg.classList.add('hidden');
+    if (footerSetup) footerSetup.classList.remove('hidden');
+}
+
+function switchToGDriveProgressView() {
+    const vSetup = document.getElementById('gdrive-view-setup');
+    const vProg = document.getElementById('gdrive-view-progress');
+    const footerSetup = document.getElementById('gdrive-setup-footer');
+    if (vSetup) vSetup.classList.add('hidden');
+    if (vProg) vProg.classList.remove('hidden');
+    if (footerSetup) footerSetup.classList.add('hidden');
+}
+
+async function startGDriveUpload() {
+    const url = (document.getElementById('gdrive-url-input')?.value || '').trim();
+    const channelId = (document.getElementById('gdrive-channel-select')?.value || '').trim();
+    const defaultArtist = (document.getElementById('gdrive-default-artist')?.value || '').trim();
+    const defaultAlbum = (document.getElementById('gdrive-default-album')?.value || '').trim();
+    const autoScrape = document.getElementById('gdrive-auto-scrape')?.checked ?? true;
+    const sendAsDocument = document.getElementById('gdrive-as-document')?.checked ?? false;
+
+    if (!url) {
+        alertToast('Vui lòng nhập Link Google Drive hoặc link tải âm thanh.');
+        document.getElementById('gdrive-url-input')?.focus();
+        return;
+    }
+    if (!channelId) {
+        alertToast('Vui lòng chọn Kênh Telegram đích để upload.');
+        return;
+    }
+
+    const btnStart = document.getElementById('btn-start-gdrive-upload');
+    if (btnStart) {
+        btnStart.disabled = true;
+        btnStart.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Đang kết nối...';
+    }
+
+    try {
+        const res = await fetch('/api/music/gdrive-upload/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: url,
+                channel_id: channelId,
+                default_artist: defaultArtist,
+                default_album: defaultAlbum,
+                auto_scrape: autoScrape,
+                send_as_document: sendAsDocument
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+            gdriveStartTime = Date.now();
+            switchToGDriveProgressView();
+            startPollingGDriveUpload();
+            alertToast('Đã bắt đầu tải từ Google Drive & upload lên Telegram!');
+        } else {
+            alertToast(data.message || 'Lỗi khởi chạy upload');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
+    } finally {
+        if (btnStart) {
+            btnStart.disabled = false;
+            btnStart.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Bắt Đầu Tải & Upload';
+        }
+    }
+}
+
+function startPollingGDriveUpload() {
+    if (gdriveUploadPollInterval) clearInterval(gdriveUploadPollInterval);
+
+    // Initial poll
+    pollGDriveUploadStatus();
+    gdriveUploadPollInterval = setInterval(pollGDriveUploadStatus, 800);
+}
+
+async function pollGDriveUploadStatus() {
+    try {
+        const res = await fetch('/api/music/gdrive-upload/status');
+        const result = await res.json();
+
+        if (!res.ok || result.status !== 'success' || !result.data) return;
+
+        const data = result.data;
+        const status = data.status;
+
+        // 1. Cập nhật Stage & Thời gian
+        const stageEl = document.getElementById('gdrive-live-stage-badge');
+        if (stageEl) stageEl.textContent = data.stage || 'Đang xử lý...';
+
+        const elapsedEl = document.getElementById('gdrive-live-elapsed');
+        if (elapsedEl) {
+            const sec = data.elapsed_seconds || 0;
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            elapsedEl.textContent = m > 0 ? `${m}m ${s}s` : `${s}s`;
+        }
+
+        // 2. Download Progress
+        const dlPercentEl = document.getElementById('gdrive-dl-percent');
+        const dlFillEl = document.getElementById('gdrive-dl-fill');
+        if (dlPercentEl) dlPercentEl.textContent = `${data.download_percent || 0}%`;
+        if (dlFillEl) dlFillEl.style.width = `${data.download_percent || 0}%`;
+
+        // 3. Upload Progress
+        const upPercentEl = document.getElementById('gdrive-up-percent');
+        const upFillEl = document.getElementById('gdrive-up-fill');
+        if (upPercentEl) upPercentEl.textContent = `${data.upload_percent || 0}%`;
+        if (upFillEl) upFillEl.style.width = `${data.upload_percent || 0}%`;
+
+        // 4. Metrics
+        const fileIdxEl = document.getElementById('gdrive-stat-file-idx');
+        if (fileIdxEl) fileIdxEl.textContent = `${data.file_index || 0} / ${data.total_files || 1}`;
+
+        const speedEl = document.getElementById('gdrive-stat-speed');
+        if (speedEl) speedEl.textContent = data.speed || '-- MB/s';
+
+        const uploadedCountEl = document.getElementById('gdrive-stat-uploaded-count');
+        if (uploadedCountEl) uploadedCountEl.textContent = `${data.uploaded_count || 0} bài`;
+
+        const curFileEl = document.getElementById('gdrive-current-filename');
+        if (curFileEl) curFileEl.textContent = data.current_file || 'Đang chuẩn bị...';
+
+        // 5. Activity Logs
+        const logsContainer = document.getElementById('gdrive-live-logs');
+        if (logsContainer && data.logs && data.logs.length > 0) {
+            logsContainer.innerHTML = data.logs.map(lg => {
+                let colorClass = 'text-text-secondary';
+                if (lg.type === 'success') colorClass = 'text-emerald-400 font-bold';
+                else if (lg.type === 'warn') colorClass = 'text-amber-400';
+                else if (lg.type === 'error') colorClass = 'text-red-400 font-bold';
+                return `<div class="${colorClass}">[${lg.time}] ${escapeHtml(lg.msg)}</div>`;
+            }).join('');
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        // 6. Trạng thái kết thúc (completed / error / cancelled)
+        const btnCancel = document.getElementById('btn-cancel-gdrive');
+        const btnFinish = document.getElementById('btn-finish-gdrive');
+
+        if (status === 'completed') {
+            if (gdriveUploadPollInterval) clearInterval(gdriveUploadPollInterval);
+            if (btnCancel) btnCancel.classList.add('hidden');
+            if (btnFinish) {
+                btnFinish.disabled = false;
+                btnFinish.classList.remove('opacity-40', 'cursor-not-allowed');
+                btnFinish.innerHTML = '<i class="fa-solid fa-circle-check"></i> Hoàn Tất & Xem Thư Viện';
+            }
+            if (stageEl) {
+                stageEl.textContent = '🎉 Hoàn tất upload toàn bộ bài hát!';
+                stageEl.className = 'text-xs font-black text-emerald-400';
+            }
+            alertToast('🎉 Đã tải và upload toàn bộ bài hát lên Telegram thành công!');
+        } else if (status === 'error') {
+            if (gdriveUploadPollInterval) clearInterval(gdriveUploadPollInterval);
+            if (stageEl) {
+                stageEl.textContent = '❌ Lỗi: ' + (data.error_message || 'Không xác định');
+                stageEl.className = 'text-xs font-black text-red-400';
+            }
+            if (btnCancel) btnCancel.textContent = 'Đóng';
+        } else if (status === 'cancelled') {
+            if (gdriveUploadPollInterval) clearInterval(gdriveUploadPollInterval);
+            if (stageEl) {
+                stageEl.textContent = '⚠️ Tiến trình đã bị hủy.';
+                stageEl.className = 'text-xs font-black text-amber-400';
+            }
+            if (btnCancel) btnCancel.textContent = 'Đóng';
+        }
+    } catch (e) {
+        console.warn('Lỗi poll trạng thái upload:', e);
+    }
+}
+
+async function cancelGDriveUpload() {
+    if (!confirm('Bạn có chắc chắn muốn hủy tiến trình tải & upload này không?')) return;
+    try {
+        const res = await fetch('/api/music/gdrive-upload/cancel', { method: 'POST' });
+        const data = await res.json();
+        alertToast(data.message || 'Đã gửi yêu cầu hủy.');
+    } catch (e) {
+        alertToast('Lỗi: ' + e.message);
+    }
+}
+
+function finishAndCloseGDriveModal() {
+    closeGDriveUploadModal();
+    loadMusicData(true);
+    alertToast('Đã cập nhật lại danh sách Thư viện Nhạc!');
 }
 </script>
 {% endblock %}
+
