@@ -1985,9 +1985,8 @@ class XTAPOMusicApp {
         }
 
         // Update Covers
-        const initialCover = (album.tracks && album.tracks[trackIndex] && album.tracks[trackIndex].coverUrl) || album.coverUrl;
-        this.albumCoverImg.src = initialCover;
-        this.vinylCenterImg.src = initialCover;
+        const initialCover = this.getTrackCover(album.tracks && album.tracks[trackIndex], album);
+        this.updateCovers(initialCover);
 
         // Update Background Glows
         const glow1 = document.querySelector('.glow-1');
@@ -2161,17 +2160,9 @@ class XTAPOMusicApp {
         const track = this.currentTrack;
         const album = this.currentAlbum;
 
-        // Cập nhật ảnh đĩa than & Album Sleeve theo từng bài hát ngay lập tức
-        const trackCover = (track && track.coverUrl) || (album && album.coverUrl) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
-        if (this.albumCoverImg) {
-            this.albumCoverImg.src = trackCover;
-        }
-        if (this.vinylCenterImg) {
-            this.vinylCenterImg.src = trackCover;
-        }
-
-        // Cập nhật Dynamic Album Art Backdrop phong cách Apple Music
-        this.updateDynamicBackdrop(trackCover);
+        // Cập nhật ảnh đĩa than & Album Sleeve theo từng bài hát ngay lập tức với cơ chế fallback tự động
+        const trackCover = this.getTrackCover(track, album);
+        this.updateCovers(trackCover);
 
         // Preload trước ảnh cover của các bài hát xung quanh để chuyển bài hiện ngay
         this.preloadCoversForCurrentAlbum();
@@ -2312,6 +2303,51 @@ class XTAPOMusicApp {
         }
     }
 
+    getTrackCover(track, album) {
+        track = track || this.currentTrack;
+        album = album || this.currentAlbum;
+
+        const fallback = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
+        let cover = (track && (track.coverUrl || track.cover_url || track.cover || track.albumCover || track.thumb)) ||
+                    (album && (album.coverUrl || album.cover_url || album.cover || album.thumb || (album.tracks && album.tracks[0] && (album.tracks[0].coverUrl || album.tracks[0].cover_url || album.tracks[0].cover)))) ||
+                    (this.currentUser && this.currentUser.avatar_url) ||
+                    fallback;
+
+        if (!cover || typeof cover !== 'string' || cover.trim() === '') {
+            cover = fallback;
+        }
+        return cover;
+    }
+
+    updateCovers(coverUrl) {
+        const resolvedCover = coverUrl || this.getTrackCover();
+        const fallbackCover = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
+
+        if (this.albumCoverImg) {
+            this.albumCoverImg.onerror = () => {
+                if (this.albumCoverImg.src !== fallbackCover) {
+                    this.albumCoverImg.src = fallbackCover;
+                }
+            };
+            if (this.albumCoverImg.src !== resolvedCover) {
+                this.albumCoverImg.src = resolvedCover;
+            }
+        }
+
+        if (this.vinylCenterImg) {
+            this.vinylCenterImg.onerror = () => {
+                if (this.vinylCenterImg.src !== fallbackCover) {
+                    this.vinylCenterImg.src = fallbackCover;
+                }
+            };
+            if (this.vinylCenterImg.src !== resolvedCover) {
+                this.vinylCenterImg.src = resolvedCover;
+            }
+        }
+
+        this.updateDynamicBackdrop(resolvedCover);
+    }
+
     // --- Dynamic Album Art Backdrop (Apple Music Style Cross-fade) ---
     updateDynamicBackdrop(coverUrl) {
         if (!coverUrl) return;
@@ -2379,8 +2415,7 @@ class XTAPOMusicApp {
 
         const trackName = track.name || 'Unknown Track';
         const artistName = track.artist || album.artist || 'XTAPO Music';
-        const albumTitle = album.title || 'XTAPO Music';
-        const rawCover = track.coverUrl || album.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop';
+        const rawCover = this.getTrackCover(track, album);
         const fullCoverUrl = new URL(rawCover, window.location.href).href;
 
         const sizes = [96, 128, 192, 256, 384, 512];

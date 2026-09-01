@@ -2318,7 +2318,11 @@ async def get_music_cover(chat_id: int, msg_id: int):
             clients_to_try = []
             if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
                 clients_to_try.append(botmod.Userbot)
-            if StreamBot and StreamBot not in clients_to_try:
+            if multi_clients:
+                for c in multi_clients.values():
+                    if c and getattr(c, "is_connected", False) and c not in clients_to_try:
+                        clients_to_try.append(c)
+            if StreamBot and getattr(StreamBot, "is_connected", False) and StreamBot not in clients_to_try:
                 clients_to_try.append(StreamBot)
 
             for cl in clients_to_try:
