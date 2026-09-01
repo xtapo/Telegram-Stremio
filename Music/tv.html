@@ -3,9 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XTAPO MUSIC - Android TV Lite</title>
+    <title>XTAPO MUSIC - Android TV Edition</title>
+    <!-- Google Fonts: Outfit (Hiện đại, siêu nét, tối ưu cho màn hình TV 4K/1080p) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        /* ─── RESET & TV ULTRA-FAST FONTS ─── */
+        /* ─── RESET & ULTRA LIGHTWEIGHT HARDWARE ACCELERATION ─── */
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -14,9 +18,13 @@
         }
 
         body {
-            background-color: #080b11;
+            background-color: #06090e;
+            background-image: 
+                radial-gradient(circle at 10% 10%, rgba(30, 41, 59, 0.45) 0%, transparent 45%),
+                radial-gradient(circle at 90% 90%, rgba(245, 158, 11, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, #06090e 0%, #030508 100%);
             color: #f1f5f9;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             font-size: 16px;
             overflow: hidden;
             width: 100vw;
@@ -32,15 +40,17 @@
             height: 100vh;
         }
 
-        /* Top Bar */
+        /* ─── 1. TOP BAR ─── */
         .tv-topbar {
-            height: 60px;
-            background: #0f141f;
-            border-bottom: 2px solid #1f2736;
+            height: 64px;
+            background: rgba(10, 14, 22, 0.85);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 24px;
+            padding: 0 28px;
             flex-shrink: 0;
             z-index: 10;
         }
@@ -49,20 +59,27 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 19px;
-            font-weight: 800;
-            color: #f59e0b;
-            letter-spacing: 0.5px;
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: 0.8px;
+        }
+
+        .tv-brand-text {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 24px rgba(245, 158, 11, 0.35);
         }
 
         .tv-badge {
-            background: #1e2638;
+            background: rgba(56, 189, 248, 0.15);
             color: #38bdf8;
             font-size: 12px;
-            font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
-            border: 1px solid #334155;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            letter-spacing: 0.5px;
         }
 
         .tv-top-actions {
@@ -74,22 +91,23 @@
         .tv-user-info {
             display: none;
             align-items: center;
-            gap: 8px;
-            background: #1a2233;
-            border: 1px solid #334155;
-            padding: 3px 10px;
-            border-radius: 16px;
-            font-size: 13px;
+            gap: 10px;
+            background: rgba(26, 34, 51, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
             font-weight: 700;
             color: #f8fafc;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         }
 
         .tv-user-avatar {
-            width: 24px;
-            height: 24px;
+            width: 26px;
+            height: 26px;
             border-radius: 50%;
             object-fit: cover;
-            border: 1px solid #f59e0b;
+            border: 1.5px solid #f59e0b;
         }
 
         /* ─── FULLSCREEN TV LOGIN LOCK SCREEN (KHI CHƯA ĐĂNG NHẬP) ─── */
@@ -99,20 +117,21 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: radial-gradient(circle at center, #131b2b 0%, #080b11 80%);
+            background: radial-gradient(circle at center, #111728 0%, #06090e 85%);
             padding: 24px;
             text-align: center;
             z-index: 20;
         }
 
         .tv-login-card {
-            background: #101622;
-            border: 2px solid #f59e0b;
-            border-radius: 20px;
-            padding: 36px 48px;
-            max-width: 580px;
+            background: rgba(14, 20, 32, 0.9);
+            border: 2px solid rgba(245, 158, 11, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 40px 52px;
+            max-width: 600px;
             width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(245, 158, 11, 0.2);
+            box-shadow: 0 24px 70px rgba(0,0,0,0.85), 0 0 40px rgba(245, 158, 11, 0.2);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -121,35 +140,36 @@
         .tv-login-header {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
             margin-bottom: 12px;
         }
 
         .tv-login-title {
-            font-size: 24px;
-            font-weight: 800;
+            font-size: 26px;
+            font-weight: 900;
             color: #f8fafc;
+            letter-spacing: -0.3px;
         }
 
         .tv-login-sub {
             font-size: 15px;
             color: #94a3b8;
-            line-height: 1.5;
-            margin-bottom: 20px;
-            max-width: 440px;
+            line-height: 1.6;
+            margin-bottom: 22px;
+            max-width: 460px;
         }
 
         .tv-qr-box {
             background: #fff;
             padding: 14px;
-            border-radius: 16px;
+            border-radius: 20px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 18px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.5);
-            min-width: 230px;
-            min-height: 230px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.6);
+            min-width: 240px;
+            min-height: 240px;
         }
 
         .tv-qr-img {
@@ -162,7 +182,7 @@
             font-size: 15px;
             font-weight: 700;
             color: #38bdf8;
-            margin-bottom: 20px;
+            margin-bottom: 22px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -176,78 +196,83 @@
 
         /* ─── MAIN 3-PANEL WORKSPACE (HIỆN KHI ĐÃ ĐĂNG NHẬP) ─── */
         .tv-main {
-            display: none; /* Mặc định ẩn, chỉ hiện khi đã đăng nhập */
+            display: none;
             flex: 1;
-            height: calc(100vh - 60px - 100px);
+            height: calc(100vh - 64px - 104px);
             overflow: hidden;
         }
 
-        /* PANEL 1: LEFT NAVIGATION MENU (DẠNG MENU NHƯ DESKTOP) */
+        /* PANEL 1: LEFT NAVIGATION MENU */
         .tv-col-nav {
-            width: 220px;
-            min-width: 220px;
-            background: #0b0f17;
-            border-right: 2px solid #1c2433;
+            width: 230px;
+            min-width: 230px;
+            background: rgba(9, 13, 20, 0.75);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid rgba(255, 255, 255, 0.07);
             display: flex;
             flex-direction: column;
-            padding: 16px 10px;
-            gap: 8px;
+            padding: 18px 12px;
+            gap: 6px;
             overflow-y: auto;
             flex-shrink: 0;
         }
 
         .tv-nav-title {
-            font-size: 12px;
-            font-weight: 800;
+            font-size: 11px;
+            font-weight: 900;
             color: #64748b;
-            letter-spacing: 1px;
-            padding: 0 10px 4px 10px;
+            letter-spacing: 1.5px;
+            padding: 4px 12px 6px 12px;
             text-transform: uppercase;
         }
 
         .tv-nav-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px 14px;
-            border-radius: 10px;
+            gap: 14px;
+            padding: 12px 16px;
+            border-radius: 12px;
             background: transparent;
-            color: #cbd5e1;
+            color: #94a3b8;
             font-size: 15px;
             font-weight: 700;
             cursor: pointer;
             border: 2px solid transparent;
-            transition: background 0.15s ease, border-color 0.15s ease;
+            position: relative;
+            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
         }
 
         .tv-nav-item .nav-icon {
-            font-size: 18px;
-            width: 24px;
+            font-size: 20px;
+            width: 26px;
             text-align: center;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
         }
 
         .tv-nav-item:hover,
         .tv-nav-item.active {
-            background: #1a2233;
+            background: rgba(245, 158, 11, 0.12);
             color: #f59e0b;
-            border-color: #334155;
+            border-color: rgba(245, 158, 11, 0.3);
         }
 
         .tv-nav-item.active {
             border-color: #f59e0b;
-            color: #f8fafc;
-            background: rgba(245, 158, 11, 0.15);
+            color: #ffffff;
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.08) 100%);
+            box-shadow: inset 3px 0 0 #f59e0b;
         }
 
-        /* PANEL 2: CATEGORY ITEMS LIST (PHÂN TRANG 25 ITEMS) */
+        /* PANEL 2: CATEGORY ITEMS LIST */
         .tv-col-items {
-            width: 360px;
-            min-width: 340px;
-            background: #0e131d;
-            border-right: 2px solid #1c2433;
+            width: 380px;
+            min-width: 350px;
+            background: rgba(12, 17, 26, 0.7);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.07);
             display: flex;
             flex-direction: column;
-            padding: 14px;
+            padding: 16px;
             overflow: hidden;
             flex-shrink: 0;
         }
@@ -256,15 +281,15 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             padding: 0 4px;
         }
 
         .tv-items-title {
-            font-size: 14px;
-            font-weight: 800;
+            font-size: 13px;
+            font-weight: 900;
             color: #94a3b8;
-            letter-spacing: 0.8px;
+            letter-spacing: 1px;
             text-transform: uppercase;
         }
 
@@ -273,33 +298,34 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: #141b27;
-            border: 1px solid #232d40;
-            border-radius: 8px;
-            padding: 4px 8px;
-            margin-bottom: 10px;
-            gap: 6px;
+            background: rgba(18, 25, 38, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 6px 12px;
+            margin-bottom: 12px;
+            gap: 8px;
         }
 
         .tv-page-btn {
-            background: #1c2433;
+            background: #1e283b;
             color: #f8fafc;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            padding: 4px 10px;
-            font-size: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 5px 12px;
+            font-size: 13px;
             font-weight: 700;
             cursor: pointer;
+            transition: all 0.15s ease;
         }
 
         .tv-page-btn:disabled {
-            opacity: 0.35;
+            opacity: 0.3;
             cursor: not-allowed;
         }
 
         .tv-page-info {
-            font-size: 12px;
-            font-weight: 700;
+            font-size: 13px;
+            font-weight: 800;
             color: #f59e0b;
         }
 
@@ -309,48 +335,51 @@
             flex-direction: column;
             gap: 8px;
             overflow-y: auto;
-            padding-right: 2px;
+            padding-right: 4px;
         }
 
         .tv-card-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 10px 12px;
-            background: #141a26;
-            border: 2px solid #20293a;
-            border-radius: 10px;
+            gap: 14px;
+            padding: 10px 14px;
+            background: rgba(18, 25, 38, 0.6);
+            border: 1.5px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
             cursor: pointer;
-            transition: all 0.1s ease;
+            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
         }
 
+        .tv-card-item:hover,
         .tv-card-item.active {
             border-color: #f59e0b;
-            background: #1e2638;
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%);
         }
 
         .tv-card-cover {
-            width: 48px;
-            height: 48px;
-            border-radius: 6px;
+            width: 52px;
+            height: 52px;
+            border-radius: 10px;
             object-fit: cover;
-            background: #232d40;
+            background: #1e293b;
             flex-shrink: 0;
-            border: 1px solid #334155;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         }
 
         .tv-card-avatar {
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
             object-fit: cover;
             background: #1e293b;
             flex-shrink: 0;
-            border: 1px solid #f59e0b;
+            border: 2px solid #f59e0b;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
+            font-size: 22px;
         }
 
         .tv-card-info {
@@ -359,21 +388,23 @@
         }
 
         .tv-card-title {
-            font-size: 15px;
-            font-weight: 700;
+            font-size: 16px;
+            font-weight: 800;
             color: #f8fafc;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            letter-spacing: -0.2px;
         }
 
         .tv-card-sub {
-            font-size: 12px;
+            font-size: 13px;
             color: #94a3b8;
-            margin-top: 2px;
+            margin-top: 3px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-weight: 500;
         }
 
         /* PANEL 3: RIGHT TRACKLIST & SHOWCASE */
@@ -381,36 +412,38 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: #080b11;
+            background: rgba(6, 9, 14, 0.5);
             overflow: hidden;
         }
 
         .tv-tracklist-wrap {
             flex: 1;
-            padding: 16px 24px;
+            padding: 18px 28px;
             overflow-y: auto;
         }
 
         .tv-showcase-banner {
             display: flex;
             align-items: center;
-            gap: 20px;
-            background: linear-gradient(135deg, #131926, #0d121c);
-            border: 2px solid #1e2738;
-            border-radius: 14px;
-            padding: 16px 20px;
-            margin-bottom: 14px;
+            gap: 22px;
+            background: linear-gradient(135deg, rgba(28, 38, 56, 0.7) 0%, rgba(14, 20, 31, 0.85) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(16px);
+            border-radius: 18px;
+            padding: 18px 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
         }
 
         .tv-showcase-cover {
-            width: 84px;
-            height: 84px;
-            border-radius: 10px;
+            width: 96px;
+            height: 96px;
+            border-radius: 14px;
             object-fit: cover;
             border: 2px solid #f59e0b;
-            background: #1e2638;
+            background: #1e293b;
             flex-shrink: 0;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.6), 0 0 20px rgba(245, 158, 11, 0.25);
         }
 
         .tv-showcase-info {
@@ -420,48 +453,51 @@
 
         .tv-showcase-tags {
             display: flex;
-            gap: 6px;
-            margin-bottom: 4px;
+            gap: 8px;
+            margin-bottom: 6px;
         }
 
         .tv-showcase-tag {
             background: rgba(245, 158, 11, 0.2);
             color: #f59e0b;
             font-size: 11px;
-            font-weight: 800;
-            padding: 2px 6px;
-            border-radius: 4px;
+            font-weight: 900;
+            padding: 3px 8px;
+            border-radius: 6px;
             border: 1px solid rgba(245, 158, 11, 0.4);
+            letter-spacing: 0.5px;
         }
 
         .tv-showcase-title {
-            font-size: 22px;
-            font-weight: 800;
+            font-size: 24px;
+            font-weight: 900;
             color: #f8fafc;
-            line-height: 1.2;
+            line-height: 1.25;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            letter-spacing: -0.4px;
         }
 
         .tv-showcase-artist {
-            font-size: 14px;
+            font-size: 15px;
             color: #94a3b8;
-            margin-top: 3px;
+            margin-top: 4px;
+            font-weight: 600;
         }
 
         .tv-showcase-actions {
             display: flex;
-            gap: 8px;
-            margin-top: 8px;
+            gap: 10px;
+            margin-top: 12px;
         }
 
         .tv-section-title {
-            font-size: 14px;
-            font-weight: 800;
+            font-size: 13px;
+            font-weight: 900;
             color: #94a3b8;
-            letter-spacing: 0.8px;
-            margin-bottom: 10px;
+            letter-spacing: 1.2px;
+            margin-bottom: 12px;
             text-transform: uppercase;
         }
 
@@ -469,36 +505,41 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 11px 16px;
-            background: #111723;
-            border: 2px solid #1a2333;
-            border-radius: 8px;
-            margin-bottom: 6px;
+            padding: 12px 18px;
+            background: rgba(14, 20, 31, 0.65);
+            border: 1.5px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            margin-bottom: 8px;
             cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
         }
 
         .tv-track-item.playing {
             border-color: #f59e0b;
-            background: rgba(245, 158, 11, 0.15);
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.22) 0%, rgba(245, 158, 11, 0.06) 100%);
+            box-shadow: 0 4px 18px rgba(245, 158, 11, 0.2);
         }
 
         .tv-track-left {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
             overflow: hidden;
         }
 
         .tv-track-num {
             font-size: 14px;
-            font-weight: 700;
+            font-weight: 800;
             color: #64748b;
-            width: 24px;
+            width: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .tv-track-title {
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             color: #f1f5f9;
             white-space: nowrap;
             overflow: hidden;
@@ -507,56 +548,86 @@
 
         .tv-track-dur {
             font-size: 13px;
-            font-weight: 600;
+            font-weight: 700;
             color: #94a3b8;
             flex-shrink: 0;
-            margin-left: 12px;
+            margin-left: 14px;
         }
 
-        /* BOTTOM PLAYER BAR (HIỆN KHI ĐÃ ĐĂNG NHẬP) */
+        /* ─── EQUALIZER WAVE ANIMATION ─── */
+        @keyframes eqBounce1 { 0%, 100% { height: 4px; } 50% { height: 16px; } }
+        @keyframes eqBounce2 { 0%, 100% { height: 16px; } 50% { height: 6px; } }
+        @keyframes eqBounce3 { 0%, 100% { height: 8px; } 50% { height: 18px; } }
+
+        .tv-eq-anim {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2.5px;
+            height: 18px;
+            width: 18px;
+        }
+
+        .tv-eq-bar {
+            width: 3.5px;
+            background: #f59e0b;
+            border-radius: 2px;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+        }
+
+        .tv-eq-bar:nth-child(1) { height: 6px; animation: eqBounce1 0.8s ease-in-out infinite; }
+        .tv-eq-bar:nth-child(2) { height: 16px; animation: eqBounce2 0.65s ease-in-out infinite; }
+        .tv-eq-bar:nth-child(3) { height: 10px; animation: eqBounce3 0.85s ease-in-out infinite; }
+
+        /* ─── 3. BOTTOM PLAYER BAR ─── */
         .tv-player-bar {
-            display: none; /* Mặc định ẩn, chỉ hiện khi đã đăng nhập */
-            height: 100px;
-            background: #0f1420;
-            border-top: 2px solid #1f2736;
+            display: none;
+            height: 104px;
+            background: rgba(10, 14, 22, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.09);
             align-items: center;
-            padding: 0 24px;
-            gap: 20px;
+            padding: 0 28px;
+            gap: 22px;
             flex-shrink: 0;
             z-index: 10;
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
         }
 
         .tv-player-cover {
-            width: 60px;
-            height: 60px;
-            border-radius: 8px;
+            width: 66px;
+            height: 66px;
+            border-radius: 12px;
             object-fit: cover;
-            background: #1e2638;
+            background: #1e293b;
             flex-shrink: 0;
-            border: 1px solid #334155;
+            border: 1.5px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
         }
 
         .tv-player-meta {
-            width: 220px;
+            width: 240px;
             overflow: hidden;
         }
 
         .tv-player-title {
             font-size: 16px;
-            font-weight: 700;
+            font-weight: 800;
             color: #f8fafc;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            letter-spacing: -0.2px;
         }
 
         .tv-player-artist {
-            font-size: 13px;
+            font-size: 14px;
             color: #f59e0b;
-            margin-top: 2px;
+            margin-top: 3px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-weight: 700;
         }
 
         .tv-player-controls {
@@ -566,53 +637,56 @@
         }
 
         .tv-btn {
-            background: #192130;
+            background: rgba(26, 36, 54, 0.8);
             color: #f8fafc;
-            border: 2px solid #2d3748;
-            border-radius: 8px;
-            padding: 8px 14px;
+            border: 1.5px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 9px 16px;
             font-size: 14px;
-            font-weight: 700;
+            font-weight: 800;
             cursor: pointer;
             outline: none;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.1s ease;
+            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
+            font-family: inherit;
         }
 
         .tv-btn-play {
-            background: #f59e0b;
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
             color: #0b0e14;
-            border-color: #d97706;
+            border-color: #f59e0b;
             font-size: 15px;
-            padding: 10px 18px;
-            font-weight: 800;
+            padding: 10px 20px;
+            font-weight: 900;
+            box-shadow: 0 4px 18px rgba(245, 158, 11, 0.4);
         }
 
         .tv-btn-login {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
+            background: linear-gradient(135deg, #fbbf24, #d97706);
             color: #0b0e14;
             border-color: #f59e0b;
-            font-weight: 800;
+            font-weight: 900;
+            padding: 10px 22px;
         }
 
         .tv-progress-wrap {
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
 
         .tv-progress-bar {
             width: 100%;
             height: 10px;
-            background: #1c2433;
-            border-radius: 5px;
+            background: rgba(30, 41, 59, 0.7);
+            border-radius: 6px;
             overflow: hidden;
             position: relative;
             cursor: pointer;
-            border: 2px solid transparent;
+            border: 1.5px solid rgba(255, 255, 255, 0.05);
             transition: all 0.15s ease;
         }
 
@@ -622,50 +696,51 @@
             height: 14px;
             border-color: #f59e0b;
             background: #242f42;
-            outline: 3px solid #f59e0b !important;
-            outline-offset: 2px !important;
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.4) !important;
         }
 
         .tv-progress-fill {
             height: 100%;
             width: 0%;
             background: linear-gradient(90deg, #f59e0b, #fbbf24);
-            border-radius: 4px;
+            border-radius: 5px;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.7);
             transition: width 0.1s linear;
         }
 
         .tv-time-row {
             display: flex;
             justify-content: space-between;
-            font-size: 12px;
+            font-size: 13px;
             color: #94a3b8;
-            font-weight: 600;
+            font-weight: 700;
         }
 
-        /* ─── D-PAD REMOTE FOCUS INDICATOR ─── */
+        /* ─── D-PAD REMOTE FOCUS INDICATOR (SIÊU ĐẸP & MƯỢT) ─── */
         .focusable:focus,
         .focusable.focused {
-            outline: 3px solid #f59e0b !important;
-            outline-offset: 2px !important;
-            background-color: rgba(245, 158, 11, 0.25) !important;
+            outline: none !important;
             border-color: #f59e0b !important;
-            transform: scale(1.02) !important;
-            z-index: 100 !important;
+            box-shadow: 0 0 0 3px #f59e0b, 0 8px 30px rgba(245, 158, 11, 0.45) !important;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(245, 158, 11, 0.08) 100%) !important;
+            transform: scale(1.025) translateZ(0) !important;
+            z-index: 50 !important;
         }
 
         .tv-toast {
             position: fixed;
-            top: 20px;
+            top: 24px;
             left: 50%;
             transform: translateX(-50%);
-            background: #1a2233;
+            background: rgba(15, 21, 33, 0.95);
             border: 2px solid #f59e0b;
-            border-radius: 24px;
-            padding: 8px 20px;
-            font-size: 14px;
-            font-weight: 700;
+            backdrop-filter: blur(16px);
+            border-radius: 30px;
+            padding: 10px 24px;
+            font-size: 15px;
+            font-weight: 800;
             color: #f8fafc;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.8);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.85), 0 0 25px rgba(245, 158, 11, 0.3);
             z-index: 10000;
             display: none;
         }
@@ -674,8 +749,9 @@
         .tv-modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.82);
-            backdrop-filter: blur(8px);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             z-index: 9999;
             display: none;
             align-items: center;
@@ -683,82 +759,85 @@
         }
 
         .tv-modal-card {
-            background: #151b28;
-            border: 2px solid #2d3748;
-            border-radius: 16px;
-            width: 520px;
+            background: rgba(17, 24, 38, 0.95);
+            border: 2px solid rgba(245, 158, 11, 0.4);
+            border-radius: 20px;
+            width: 540px;
             max-width: 90vw;
-            padding: 24px 28px;
-            box-shadow: 0 16px 40px rgba(0,0,0,0.9);
+            padding: 28px 32px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.9), 0 0 40px rgba(245, 158, 11, 0.15);
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 18px;
         }
 
         .tv-modal-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-bottom: 1px solid #242f42;
-            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 14px;
         }
 
         .tv-modal-title {
-            font-size: 20px;
-            font-weight: 800;
+            font-size: 22px;
+            font-weight: 900;
             color: #f59e0b;
+            letter-spacing: -0.3px;
         }
 
         .tv-modal-sub {
-            font-size: 13px;
+            font-size: 14px;
             color: #94a3b8;
             margin-top: -8px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-weight: 600;
         }
 
         .tv-modal-list {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            max-height: 280px;
+            gap: 10px;
+            max-height: 300px;
             overflow-y: auto;
             padding-right: 4px;
         }
 
         .tv-modal-item {
-            background: #1e2638;
-            border: 2px solid #334155;
-            border-radius: 10px;
-            padding: 12px 16px;
+            background: rgba(26, 36, 56, 0.7);
+            border: 1.5px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 14px 18px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             cursor: pointer;
             outline: none;
             color: #f8fafc;
-            font-weight: 600;
+            font-weight: 700;
             font-size: 15px;
-            transition: all 0.15s ease;
+            transition: all 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
         }
 
         .tv-modal-input {
             width: 100%;
-            background: #0b0e14;
+            background: #090d14;
             border: 2px solid #334155;
-            border-radius: 8px;
-            padding: 12px 16px;
-            font-size: 15px;
+            border-radius: 10px;
+            padding: 14px 18px;
+            font-size: 16px;
             color: #f8fafc;
             outline: none;
-            font-weight: 600;
+            font-weight: 700;
             box-sizing: border-box;
+            font-family: inherit;
         }
 
         .tv-modal-input:focus {
             border-color: #f59e0b;
-            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.45);
         }
 
         .tv-modal-actions {
@@ -774,7 +853,8 @@
         <!-- Top Bar -->
         <header class="tv-topbar">
             <div class="tv-brand">
-                <span>🎵 XTAPO MUSIC TV</span>
+                <span>🎵</span>
+                <span class="tv-brand-text">XTAPO MUSIC TV</span>
                 <span class="tv-badge" id="activeCategoryBadge">ĐĂNG NHẬP</span>
             </div>
             <div class="tv-top-actions">
@@ -1593,12 +1673,15 @@
                 const name = tr.name || tr.title || 'Bài hát';
                 const dur = tr.duration || formatTime(tr.duration_sec) || '0:00';
                 const art = tr.artist ? ` • ${tr.artist}` : '';
-                const favIcon = isFav ? '<span style="color: #ef4444; margin-left: 6px; font-size: 13px;">❤️</span>' : '';
+                const favIcon = isFav ? '<span style="color: #ef4444; margin-left: 8px; font-size: 13px;">❤️</span>' : '';
+                const numOrEq = isCur 
+                    ? '<div class="tv-eq-anim"><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span></div>' 
+                    : (idx + 1);
 
                 item.innerHTML = `
                     <div class="tv-track-left">
-                        <span class="tv-track-num">${idx + 1}</span>
-                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: normal;">${art}</span>${favIcon}</span>
+                        <span class="tv-track-num">${numOrEq}</span>
+                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: 500; margin-left: 4px;">${art}</span>${favIcon}</span>
                     </div>
                     <span class="tv-track-dur">${dur}</span>
                 `;
