@@ -34,10 +34,6 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import android.speech.RecognizerIntent;
-import org.json.JSONObject;
-import java.util.ArrayList;
-
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -54,7 +50,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_SERVER_URL = "server_url";
     private static final String DEFAULT_SERVER_URL = "https://tg.xtapo.org";
     private static final int REQUEST_NOTIFICATION_PERMISSION = 1001;
-    private static final int VOICE_SEARCH_REQ_CODE = 9988;
 
     private WebView webView;
     private SwipeRefreshLayout swipeRefresh;
@@ -151,11 +146,6 @@ public class MainActivity extends AppCompatActivity {
             if (XTMediaBrowserService.instance != null) {
                 XTMediaBrowserService.instance.updateTrack(title, artist, album, coverUrl, isPlaying == 1);
             }
-        }
-
-        @android.webkit.JavascriptInterface
-        public void startVoiceSearch() {
-            runOnUiThread(() -> triggerNativeVoiceSearch());
         }
     }
 
@@ -502,33 +492,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return super.dispatchKeyEvent(event);
-    }
-
-    private void triggerNativeVoiceSearch() {
-        try {
-            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "vi-VN");
-            intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Nói tên bài hát hoặc ca sĩ...");
-            startActivityForResult(intent, VOICE_SEARCH_REQ_CODE);
-        } catch (Exception e) {
-            Toast.makeText(this, "Thiết bị không hỗ trợ Google Voice Search", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == VOICE_SEARCH_REQ_CODE && resultCode == RESULT_OK && data != null) {
-            ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-            if (results != null && !results.isEmpty()) {
-                String spokenText = results.get(0);
-                if (webView != null && !TextUtils.isEmpty(spokenText)) {
-                    String escaped = JSONObject.quote(spokenText);
-                    webView.evaluateJavascript("window.onVoiceSearchResult && window.onVoiceSearchResult(" + escaped + ");", null);
-                }
-            }
-        }
     }
 
     @Override
