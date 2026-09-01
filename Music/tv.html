@@ -1076,6 +1076,30 @@
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
+        // ─── TUA NHANH / TUA LÙI (SEEKING LOGIC) ───
+        function seek(deltaSec) {
+            if (!audio.duration || isNaN(audio.duration)) return;
+            let target = audio.currentTime + deltaSec;
+            if (target < 0) target = 0;
+            if (target > audio.duration) target = audio.duration - 1;
+            audio.currentTime = target;
+
+            const pct = (target / audio.duration) * 100;
+            if (progressFill) progressFill.style.width = `${pct}%`;
+            if (timeCur) timeCur.textContent = formatTime(target);
+            showToast(`${deltaSec > 0 ? '⏩ Tua tới +' : '⏪ Tua lùi '}${Math.abs(deltaSec)}s (${formatTime(target)})`);
+        }
+
+        function seekToPercent(pct) {
+            if (!audio.duration || isNaN(audio.duration)) return;
+            pct = Math.max(0, Math.min(1, pct));
+            const target = pct * audio.duration;
+            audio.currentTime = target;
+            if (progressFill) progressFill.style.width = `${pct * 100}%`;
+            if (timeCur) timeCur.textContent = formatTime(target);
+            showToast(`⏩ Nhảy tới ${formatTime(target)}`);
+        }
+
         // ─── FAVORITES & PLAYLISTS HELPERS ───
         function isTrackInFavorites(track) {
             if (!track || !userFavorites) return false;
