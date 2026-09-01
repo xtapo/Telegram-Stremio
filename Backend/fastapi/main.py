@@ -180,9 +180,11 @@ try:
         app.mount("/Music", StaticFiles(directory="Music"), name="music_static")
     from Backend.fastapi.routes.music_routes import router as music_router
     from Backend.fastapi.routes.music_auth import auth_router as music_auth_router
+    from Backend.fastapi.routes.music_sync import sync_router as music_sync_router
     from Backend.fastapi.routes.telegram_qr_auth import qr_auth_router
     app.include_router(qr_auth_router)
     app.include_router(music_auth_router)
+    app.include_router(music_sync_router)
     app.include_router(music_router)
 except Exception as e:
     LOGGER.error(f"[Music] Lỗi nạp router nhạc: {e}", exc_info=True)

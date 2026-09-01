@@ -2851,6 +2851,213 @@
             }
         });
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SPOTIFY CONNECT / ANDROID TV REMOTE SYNC RECEIVER ENGINE
+        // ═══════════════════════════════════════════════════════════════════════════
+        const tvDeviceId = localStorage.getItem('xtapo_tv_device_id') || ('tv_' + Math.random().toString(36).substring(2, 9));
+        try { localStorage.setItem('xtapo_tv_device_id', tvDeviceId); } catch(e) {}
+        let tvSyncWs = null;
+        let tvSyncReconnectTimer = null;
+        let tvSyncPingInterval = null;
+        let lastTvSyncSentAt = 0;
+
+        function initTvMusicSync() {
+            try {
+                if (tvSyncWs) {
+                    try { tvSyncWs.close(); } catch(e) {}
+                    tvSyncWs = null;
+                }
+
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                let wsUrl = `${protocol}//${window.location.host}/ws/music-sync?device_id=${encodeURIComponent(tvDeviceId)}`;
+                if (currentUser && currentUser._id) {
+                    wsUrl += `&user_id=${encodeURIComponent(currentUser._id)}`;
+                }
+
+                tvSyncWs = new WebSocket(wsUrl);
+
+                tvSyncWs.onopen = () => {
+                    console.log('[TV Spotify Connect] Kết nối WebSocket Hub thành công!');
+                    sendTvSyncRegister();
+
+                    clearInterval(tvSyncPingInterval);
+                    tvSyncPingInterval = setInterval(() => {
+                        if (tvSyncWs && tvSyncWs.readyState === WebSocket.OPEN) {
+                            tvSyncWs.send(JSON.stringify({ type: 'PING' }));
+                        }
+                    }, 25000);
+                };
+
+                tvSyncWs.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        handleTvSyncMessage(msg);
+                    } catch (err) {
+                        console.warn('[TV Spotify Connect] Lỗi parse:', err);
+                    }
+                };
+
+                tvSyncWs.onerror = (err) => {
+                    console.warn('[TV Spotify Connect] WebSocket error:', err);
+                };
+
+                tvSyncWs.onclose = () => {
+                    clearInterval(tvSyncPingInterval);
+                    clearTimeout(tvSyncReconnectTimer);
+                    tvSyncReconnectTimer = setTimeout(() => {
+                        initTvMusicSync();
+                    }, 3500);
+                };
+            } catch (e) {
+                console.warn('[TV Spotify Connect] Init error:', e);
+            }
+        }
+
+        function sendTvSyncRegister() {
+            if (!tvSyncWs || tvSyncWs.readyState !== WebSocket.OPEN) return;
+            const curTr = currentTracklist?.[currentPlayingTrackIdx];
+            const payload = {
+                device_name: 'XTAPO Android TV',
+                device_type: 'tv',
+                is_active_player: isPlaying,
+                user_id: currentUser ? currentUser._id : null,
+                username: currentUser ? (currentUser.display_name || currentUser.username) : null,
+                current_state: {
+                    is_playing: isPlaying,
+                    current_time: audio ? audio.currentTime : 0,
+                    duration: audio ? audio.duration : 0,
+                    volume: audio ? audio.volume : 1.0,
+                    album_id: currentActiveGroup ? currentActiveGroup.id : null,
+                    track_index: currentPlayingTrackIdx,
+                    track: curTr ? {
+                        id: curTr.id,
+                        name: curTr.name || curTr.title,
+                        artist: curTr.artist || 'XTAPO TV',
+                        coverUrl: getTrackCover(curTr),
+                        duration: curTr.duration
+                    } : null
+                }
+            };
+            tvSyncWs.send(JSON.stringify({
+                type: 'REGISTER',
+                payload: payload
+            }));
+        }
+
+        function sendTvSyncState() {
+            if (!tvSyncWs || tvSyncWs.readyState !== WebSocket.OPEN) return;
+            const curTr = currentTracklist?.[currentPlayingTrackIdx];
+            const payload = {
+                is_active_player: true,
+                is_playing: isPlaying,
+                current_time: audio ? audio.currentTime : 0,
+                duration: audio ? audio.duration : 0,
+                volume: audio ? audio.volume : 1.0,
+                album_id: currentActiveGroup ? currentActiveGroup.id : null,
+                track_index: currentPlayingTrackIdx,
+                track: curTr ? {
+                    id: curTr.id,
+                    name: curTr.name || curTr.title,
+                    artist: curTr.artist || 'XTAPO TV',
+                    coverUrl: getTrackCover(curTr),
+                    duration: curTr.duration
+                } : null
+            };
+            tvSyncWs.send(JSON.stringify({
+                type: 'STATE_UPDATE',
+                payload: payload
+            }));
+        }
+
+        function throttledSendTvSyncState() {
+            const now = Date.now();
+            if (now - lastTvSyncSentAt > 1000) {
+                lastTvSyncSentAt = now;
+                sendTvSyncState();
+            }
+        }
+
+        function handleTvSyncMessage(msg) {
+            if (!msg) return;
+            if (msg.type === 'EXEC_COMMAND') {
+                const cmd = msg.command;
+                const payload = msg.payload;
+                const fromName = msg.from_device_name || 'Điện thoại';
+                console.log(`[TV Spotify Connect] Nhận lệnh '${cmd}' từ ${fromName}:`, payload);
+
+                if (cmd === 'PLAY_TRACK' || cmd === 'TRANSFER') {
+                    playTrackByRemotePayload(payload);
+                    showToast(`📱 Điều khiển từ ${fromName}: ${payload?.track?.name || 'Bài hát'}`);
+                } else if (cmd === 'PAUSE') {
+                    if (isPlaying) togglePlay();
+                } else if (cmd === 'RESUME') {
+                    if (!isPlaying) togglePlay();
+                } else if (cmd === 'TOGGLE_PLAY') {
+                    togglePlay();
+                } else if (cmd === 'SEEK') {
+                    if (payload && payload.position !== undefined) {
+                        audio.currentTime = payload.position;
+                    }
+                } else if (cmd === 'SET_VOLUME') {
+                    if (payload && payload.volume !== undefined) {
+                        audio.volume = Math.max(0, Math.min(1, payload.volume));
+                    }
+                } else if (cmd === 'NEXT') {
+                    nextTrack();
+                } else if (cmd === 'PREV') {
+                    prevTrack();
+                }
+            }
+        }
+
+        function playTrackByRemotePayload(payload) {
+            if (!payload) return;
+            const albumId = payload.album_id;
+            const trackIdx = payload.track_index !== undefined ? payload.track_index : 0;
+            const seekTime = payload.seek_time || 0;
+
+            if (payload.track) {
+                const tr = payload.track;
+                const streamUrl = tr.url || tr.stream_url || tr.previewUrl || (tr.chat_id && tr.msg_id ? `/api/music/stream/${tr.chat_id}/${tr.msg_id}` : null);
+                if (streamUrl) {
+                    currentTracklist = [tr];
+                    currentPlayingTrackIdx = 0;
+                    try { audio.pause(); audio.currentTime = 0; } catch(e) {}
+                    audio.src = streamUrl;
+                    audio.load();
+                    audio.play().then(() => {
+                        isPlaying = true;
+                        if (seekTime > 0) audio.currentTime = seekTime;
+                        updatePlayerUI();
+                        renderTracklist();
+                    }).catch(console.error);
+                    isPlaying = true;
+                    updatePlayerUI();
+                    renderTracklist();
+                    return;
+                }
+            }
+
+            // Fallback: tìm trong thư viện TV
+            if (albumId && rawAlbums) {
+                const foundAlb = rawAlbums.find(a => String(a.id) === String(albumId));
+                if (foundAlb && foundAlb.tracks) {
+                    currentTracklist = foundAlb.tracks;
+                    currentPlayingTrackIdx = trackIdx;
+                    playTrack(trackIdx);
+                    if (seekTime > 0) {
+                        setTimeout(() => { audio.currentTime = seekTime; }, 300);
+                    }
+                }
+            }
+        }
+
+        // Lắng nghe audio events trên TV để bắn sync state về Phone
+        audio.addEventListener('timeupdate', throttledSendTvSyncState);
+        audio.addEventListener('play', sendTvSyncState);
+        audio.addEventListener('pause', sendTvSyncState);
+        audio.addEventListener('ended', sendTvSyncState);
+
         // Expose player controller cho Android TV WebView & Remote Dispatch
         window.player = {
             togglePlay: togglePlay,
@@ -2864,8 +3071,9 @@
             get audio() { return audio; }
         };
 
-        // Initialize: Kiểm tra trạng thái đăng nhập
+        // Initialize: Kiểm tra trạng thái đăng nhập & Khởi tạo WebSocket Sync
         checkUserProfile();
+        initTvMusicSync();
     })();
     </script>
 </body>

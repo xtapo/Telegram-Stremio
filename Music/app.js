@@ -592,6 +592,33 @@ class XTAPOMusicApp {
         // Load saved Equalizer state
         this.loadEqualizerSettings();
 
+        // Spotify Connect / Multi-Device Playback Sync Elements & State
+        this.devicePickerBtn = document.getElementById('devicePickerBtn');
+        this.devicePickerLabel = document.getElementById('devicePickerLabel');
+        this.deviceActiveDot = document.getElementById('deviceActiveDot');
+        this.devicesModal = document.getElementById('devicesModal');
+        this.closeDevicesModal = document.getElementById('closeDevicesModal');
+        this.devicesList = document.getElementById('devicesList');
+        this.btnRefreshDevices = document.getElementById('btnRefreshDevices');
+        this.currentTargetCard = document.getElementById('currentTargetCard');
+        this.currentTargetName = document.getElementById('currentTargetName');
+        this.currentTargetSub = document.getElementById('currentTargetSub');
+        this.btnDisconnectRemote = document.getElementById('btnDisconnectRemote');
+        this.pairCodeInput = document.getElementById('pairCodeInput');
+        this.btnSubmitPairCode = document.getElementById('btnSubmitPairCode');
+
+        this.syncDeviceId = localStorage.getItem('xtapo_device_id') || ('web_' + Math.random().toString(36).substring(2, 9));
+        try { localStorage.setItem('xtapo_device_id', this.syncDeviceId); } catch(e) {}
+        this.syncDeviceName = this.detectDeviceName();
+        this.syncDeviceType = this.detectDeviceType();
+        this.remoteTargetDeviceId = null;
+        this.remoteTargetName = null;
+        this.availableDevices = [];
+        this.syncWs = null;
+        this.syncWsReconnectTimer = null;
+        this.syncPingInterval = null;
+        this.lastSyncStateSentAt = 0;
+
         // Init
         this.init();
     }
@@ -605,6 +632,8 @@ class XTAPOMusicApp {
         this.setupEqualizerEvents();
         this.renderEqualizerSliders();
         this.updateEqualizerUI();
+        this.setupDeviceSyncEvents();
+        this.initMusicSync();
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupVisualizer();
@@ -2230,6 +2259,21 @@ class XTAPOMusicApp {
         }
         this.stopAudioSynth();
         this._preloadedTrackUrl = null;
+
+        // Nếu đang ở chế độ Điều Khiển Từ Xa (Remote Controller target TV / PC khác)
+        if (this.remoteTargetDeviceId) {
+            this.sendSyncCommand('PLAY_TRACK', {
+                album_id: album ? album.id : null,
+                track_index: trackIndex,
+                track: track,
+                seek_time: 0
+            });
+            this.isPlaying = true;
+            this.updatePlayStateVisuals(true);
+            this.showToast(`📡 Đang phát trên ${this.remoteTargetName || 'thiết bị đích'}: ${track.name || 'Bài hát'}`);
+            return;
+        }
+
         if (track.previewUrl) {
             this.audio.src = track.previewUrl;
             this.audio.load();
@@ -2543,6 +2587,14 @@ class XTAPOMusicApp {
     }
 
     togglePlay() {
+        if (this.remoteTargetDeviceId) {
+            const nextState = !this.isPlaying;
+            this.sendSyncCommand(nextState ? 'RESUME' : 'PAUSE', {});
+            this.isPlaying = nextState;
+            this.updatePlayStateVisuals(this.isPlaying);
+            return;
+        }
+
         if (this.isPlaying) {
             this.pause();
         } else {
@@ -2551,6 +2603,11 @@ class XTAPOMusicApp {
     }
 
     nextTrack() {
+        if (this.remoteTargetDeviceId) {
+            this.sendSyncCommand('NEXT', {});
+            return;
+        }
+
         const album = this.currentAlbum;
         if (this.isShuffle) {
             let nextIdx;
@@ -2573,6 +2630,11 @@ class XTAPOMusicApp {
     }
 
     prevTrack() {
+        if (this.remoteTargetDeviceId) {
+            this.sendSyncCommand('PREV', {});
+            return;
+        }
+
         if (this.audio.currentTime > 3) {
             this.audio.currentTime = 0;
             this.synthTime = 0;
@@ -2818,6 +2880,15 @@ class XTAPOMusicApp {
             const clickPos = (e.clientX - rect.left) / rect.width;
             const targetPercent = Math.max(0, Math.min(1, clickPos));
 
+            if (this.remoteTargetDeviceId) {
+                const totalSec = this._lastRemoteDuration || 200;
+                const seekPos = targetPercent * totalSec;
+                this.sendSyncCommand('SEEK', { position: seekPos });
+                this.updateProgress(targetPercent * 100);
+                this.timeCurrent.textContent = this.formatTime(seekPos);
+                return;
+            }
+
             if (this.synthesizerActive) {
                 this.synthTime = targetPercent * this.synthDuration;
                 this.updateProgress(targetPercent * 100);
@@ -2857,6 +2928,9 @@ class XTAPOMusicApp {
         // Volume Control
         this.volumeSlider.addEventListener('input', (e) => {
             this.volume = parseFloat(e.target.value);
+            if (this.remoteTargetDeviceId) {
+                this.sendSyncCommand('SET_VOLUME', { volume: this.volume });
+            }
             this.audio.volume = this.volume;
             this.isMuted = this.volume === 0;
             this.updateVolumeIcons();
@@ -8069,9 +8143,529 @@ class XTAPOMusicApp {
         } catch (e) {}
     }
 
-    escapeHtml(str) {
-        if (!str || typeof str !== 'string') return '';
-        return str
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SPOTIFY CONNECT / MULTI-DEVICE PLAYBACK SYNC & REMOTE CONTROLLER ENGINE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    detectDeviceName() {
+        const ua = navigator.userAgent || '';
+        let deviceName = 'Thiết bị Web';
+        if (/iPad/.test(ua)) deviceName = 'iPad';
+        else if (/iPhone/.test(ua)) deviceName = 'iPhone';
+        else if (/Android.*TV|SmartTV|GoogleTV|AFTT|AndroidTV/i.test(ua)) deviceName = 'Smart TV';
+        else if (/Android/i.test(ua)) deviceName = 'Điện thoại Android';
+        else if (/Macintosh|Mac OS X/i.test(ua)) deviceName = 'MacBook / Mac';
+        else if (/Windows NT 10.0|Windows NT 11.0|Windows/i.test(ua)) deviceName = 'Máy tính Windows';
+        else if (/Linux/i.test(ua)) deviceName = 'Máy tính Linux';
+
+        const customName = localStorage.getItem('xtapo_device_custom_name');
+        return customName || deviceName;
+    }
+
+    detectDeviceType() {
+        const ua = navigator.userAgent || '';
+        if (/Android.*TV|SmartTV|GoogleTV|AFTT|AndroidTV|tv/i.test(ua) || window.location.pathname.includes('/tv')) {
+            return 'tv';
+        }
+        if (/Mobi|Android|iPhone|iPad|iPod/i.test(ua)) {
+            return 'mobile';
+        }
+        return 'desktop';
+    }
+
+    initMusicSync() {
+        try {
+            if (this.syncWs) {
+                try { this.syncWs.close(); } catch(e) {}
+                this.syncWs = null;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            let wsUrl = `${protocol}//${window.location.host}/ws/music-sync?device_id=${encodeURIComponent(this.syncDeviceId)}`;
+            if (this.currentUser && this.currentUser._id) {
+                wsUrl += `&user_id=${encodeURIComponent(this.currentUser._id)}`;
+            }
+
+            this.syncWs = new WebSocket(wsUrl);
+
+            this.syncWs.onopen = () => {
+                console.log('[Spotify Connect] Đã kết nối WebSocket Hub thành công!');
+                this.sendSyncRegister();
+                
+                clearInterval(this.syncPingInterval);
+                this.syncPingInterval = setInterval(() => {
+                    if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
+                        this.syncWs.send(JSON.stringify({ type: 'PING' }));
+                    }
+                }, 25000);
+            };
+
+            this.syncWs.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    this.handleSyncMessage(msg);
+                } catch (err) {
+                    console.warn('[Spotify Connect] Lỗi parse message:', err);
+                }
+            };
+
+            this.syncWs.onerror = (err) => {
+                console.warn('[Spotify Connect] WebSocket gặp lỗi kết nối:', err);
+            };
+
+            this.syncWs.onclose = () => {
+                clearInterval(this.syncPingInterval);
+                clearTimeout(this.syncWsReconnectTimer);
+                this.syncWsReconnectTimer = setTimeout(() => {
+                    this.initMusicSync();
+                }, 3500);
+            };
+        } catch (e) {
+            console.warn('[Spotify Connect] Không thể khởi tạo sync WebSocket:', e);
+        }
+    }
+
+    sendSyncRegister() {
+        if (!this.syncWs || this.syncWs.readyState !== WebSocket.OPEN) return;
+        const payload = {
+            device_name: this.syncDeviceName,
+            device_type: this.syncDeviceType,
+            is_active_player: !this.remoteTargetDeviceId && this.isPlaying,
+            user_id: this.currentUser ? this.currentUser._id : null,
+            username: this.currentUser ? (this.currentUser.display_name || this.currentUser.username) : null,
+            current_state: {
+                is_playing: this.isPlaying,
+                current_time: this.audio ? this.audio.currentTime : 0,
+                duration: this.audio ? this.audio.duration : 0,
+                volume: this.volume || 0.85,
+                album_id: this.currentAlbum ? this.currentAlbum.id : null,
+                track_index: this.currentTrackIndex,
+                track: this.currentTrack
+            }
+        };
+        this.syncWs.send(JSON.stringify({
+            type: 'REGISTER',
+            payload: payload
+        }));
+    }
+
+    sendSyncState() {
+        if (!this.syncWs || this.syncWs.readyState !== WebSocket.OPEN) return;
+        if (this.remoteTargetDeviceId) return; // Không gửi state nếu máy này chỉ là Remote Controller
+
+        const track = this.currentTrack;
+        const album = this.currentAlbum;
+        const payload = {
+            is_active_player: true,
+            is_playing: this.isPlaying,
+            current_time: this.audio ? (this.audio.currentTime || 0) : 0,
+            duration: this.audio ? (this.audio.duration || 0) : 0,
+            volume: this.volume || 0.85,
+            album_id: album ? album.id : null,
+            track_index: this.currentTrackIndex,
+            track: track ? {
+                id: track.id,
+                name: track.name,
+                artist: track.artist || (album ? album.artist : ''),
+                album: album ? album.title : '',
+                coverUrl: this.getTrackCover(track, album),
+                duration: track.duration,
+                previewUrl: track.previewUrl
+            } : null
+        };
+
+        this.syncWs.send(JSON.stringify({
+            type: 'STATE_UPDATE',
+            payload: payload
+        }));
+    }
+
+    throttledSendSyncState() {
+        const now = Date.now();
+        if (now - this.lastSyncStateSentAt > 1000) {
+            this.lastSyncStateSentAt = now;
+            this.sendSyncState();
+        }
+    }
+
+    sendSyncCommand(command, payload = {}, targetDeviceId = null) {
+        if (!this.syncWs || this.syncWs.readyState !== WebSocket.OPEN) {
+            this.showToast('⚠️ Mất kết nối tới Hub điều khiển. Đang thử kết nối lại...');
+            this.initMusicSync();
+            return;
+        }
+
+        const msg = {
+            type: 'COMMAND',
+            command: command,
+            target_device_id: targetDeviceId || this.remoteTargetDeviceId,
+            payload: payload
+        };
+        this.syncWs.send(JSON.stringify(msg));
+    }
+
+    handleSyncMessage(msg) {
+        if (!msg) return;
+
+        if (msg.type === 'INIT_STATE') {
+            if (msg.device_id) this.syncDeviceId = msg.device_id;
+            this.availableDevices = msg.devices || [];
+            this.renderDevicesList();
+        } else if (msg.type === 'DEVICES_UPDATE') {
+            this.availableDevices = msg.devices || [];
+            this.renderDevicesList();
+            this.checkActiveRemoteTarget();
+        } else if (msg.type === 'EXEC_COMMAND') {
+            this.remoteExecuteCommand(msg.command, msg.payload, msg.from_device_name);
+        } else if (msg.type === 'PLAYBACK_STATE') {
+            // Nhận trạng thái phát từ thiết bị khác trong phòng
+            if (this.remoteTargetDeviceId && this.remoteTargetDeviceId === msg.from_device_id) {
+                this.applyRemotePlaybackState(msg.state);
+            }
+        }
+    }
+
+    checkActiveRemoteTarget() {
+        if (!this.remoteTargetDeviceId) return;
+        const exists = this.availableDevices.find(d => d.device_id === this.remoteTargetDeviceId);
+        if (!exists) {
+            this.showToast(`⚠️ Thiết bị ${this.remoteTargetName || ''} đã ngoại tuyến. Tự động chuyển về máy này.`);
+            this.disconnectRemoteControl(false);
+        }
+    }
+
+    remoteExecuteCommand(command, payload, fromDeviceName) {
+        console.log(`[Spotify Connect] Nhận lệnh '${command}' từ ${fromDeviceName}:`, payload);
+
+        if (command === 'PLAY_TRACK') {
+            this.remoteExecutePlay(payload);
+            this.showToast(`📱 Được điều khiển từ ${fromDeviceName || 'thiết bị khác'}`);
+        } else if (command === 'PAUSE') {
+            this.pause();
+        } else if (command === 'RESUME') {
+            this.play();
+        } else if (command === 'TOGGLE_PLAY') {
+            this.togglePlay();
+        } else if (command === 'SEEK') {
+            if (payload && payload.position !== undefined && this.audio) {
+                this.audio.currentTime = payload.position;
+                this.updateProgress((this.audio.currentTime / (this.audio.duration || 1)) * 100);
+            }
+        } else if (command === 'SET_VOLUME') {
+            if (payload && payload.volume !== undefined) {
+                this.volume = payload.volume;
+                if (this.audio) this.audio.volume = this.volume;
+                if (this.volumeSlider) this.volumeSlider.value = this.volume;
+                this.updateVolumeIcons();
+            }
+        } else if (command === 'NEXT') {
+            this.nextTrack();
+        } else if (command === 'PREV') {
+            this.prevTrack();
+        } else if (command === 'TRANSFER') {
+            this.remoteExecutePlay(payload);
+            this.showToast(`🔄 Đã chuyển phát nhạc sang máy này từ ${fromDeviceName || 'thiết bị'}`);
+        }
+    }
+
+    remoteExecutePlay(payload) {
+        if (!payload) return;
+        const albumId = payload.album_id;
+        const trackIdx = payload.track_index !== undefined ? payload.track_index : 0;
+        const seekTime = payload.seek_time || 0;
+
+        let targetAlbumIdx = -1;
+        if (albumId) {
+            targetAlbumIdx = this.albums.findIndex(a => String(a.id) === String(albumId));
+        }
+
+        if (targetAlbumIdx !== -1) {
+            this.loadAlbum(targetAlbumIdx, trackIdx, true);
+        } else if (payload.track) {
+            // Nếu album không có sẵn trong list, tạo album ảo tạm thời
+            const dummyAlbum = {
+                id: 'remote-stream',
+                title: payload.track.album || 'Remote Stream',
+                artist: payload.track.artist || 'XTAPO Music',
+                coverUrl: payload.track.coverUrl || '',
+                tracks: [payload.track]
+            };
+            this.albums.unshift(dummyAlbum);
+            this.loadAlbum(0, 0, true);
+        }
+
+        if (seekTime > 0) {
+            setTimeout(() => {
+                if (this.audio) {
+                    this.audio.currentTime = seekTime;
+                }
+            }, 300);
+        }
+    }
+
+    applyRemotePlaybackState(state) {
+        if (!state) return;
+        this.isPlaying = !!state.is_playing;
+        this.updatePlayStateVisuals(this.isPlaying);
+
+        if (state.track) {
+            if (this.nowPlayingTitle) this.nowPlayingTitle.textContent = state.track.name || 'Đang phát nhạc';
+            if (this.nowPlayingArtist) this.nowPlayingArtist.textContent = state.track.artist || 'XTAPO Music';
+            if (state.track.coverUrl) {
+                this.updateCovers(state.track.coverUrl);
+            }
+        }
+
+        if (state.duration && state.duration > 0) {
+            this._lastRemoteDuration = state.duration;
+            const curTime = state.current_time || 0;
+            const percent = (curTime / state.duration) * 100;
+            this.updateProgress(percent);
+            if (this.timeCurrent) this.timeCurrent.textContent = this.formatTime(curTime);
+            if (this.timeTotal) this.timeTotal.textContent = this.formatTime(state.duration);
+            this.syncLyricsTime(curTime);
+        }
+    }
+
+    // --- Devices Modal UI & Events ---
+    setupDeviceSyncEvents() {
+        if (this.devicePickerBtn) {
+            this.devicePickerBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.openDevicesModal();
+            });
+        }
+
+        if (this.closeDevicesModal) {
+            this.closeDevicesModal.addEventListener('click', () => {
+                this.closeDevicesModalDialog();
+            });
+        }
+
+        if (this.devicesModal) {
+            this.devicesModal.addEventListener('click', (e) => {
+                if (e.target === this.devicesModal) {
+                    this.closeDevicesModalDialog();
+                }
+            });
+        }
+
+        if (this.btnRefreshDevices) {
+            this.btnRefreshDevices.addEventListener('click', () => {
+                this.sendSyncRegister();
+                this.showToast('🔄 Đang làm mới danh sách thiết bị...');
+            });
+        }
+
+        if (this.btnDisconnectRemote) {
+            this.btnDisconnectRemote.addEventListener('click', () => {
+                this.disconnectRemoteControl(true);
+            });
+        }
+
+        if (this.btnSubmitPairCode) {
+            this.btnSubmitPairCode.addEventListener('click', () => {
+                const code = this.pairCodeInput ? this.pairCodeInput.value.trim() : '';
+                this.pairWithPinCode(code);
+            });
+        }
+
+        if (this.pairCodeInput) {
+            this.pairCodeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const code = this.pairCodeInput.value.trim();
+                    this.pairWithPinCode(code);
+                }
+            });
+        }
+    }
+
+    openDevicesModal() {
+        if (this.devicesModal) {
+            this.devicesModal.classList.add('open');
+            this.sendSyncRegister();
+            this.renderDevicesList();
+        }
+    }
+
+    closeDevicesModalDialog() {
+        if (this.devicesModal) {
+            this.devicesModal.classList.remove('open');
+        }
+    }
+
+    renderDevicesList() {
+        if (!this.devicesList) return;
+
+        // Cập nhật Banner Current Target
+        if (this.remoteTargetDeviceId) {
+            if (this.currentTargetName) this.currentTargetName.textContent = this.remoteTargetName || 'Thiết bị từ xa';
+            if (this.currentTargetSub) this.currentTargetSub.textContent = `📡 Đang điều khiển từ xa giống Spotify Connect`;
+            if (this.currentTargetCard) this.currentTargetCard.classList.add('remote-active');
+            if (this.btnDisconnectRemote) this.btnDisconnectRemote.style.display = 'block';
+            if (this.devicePickerBtn) this.devicePickerBtn.classList.add('active');
+            if (this.deviceActiveDot) this.deviceActiveDot.style.display = 'inline-block';
+            if (this.devicePickerLabel) this.devicePickerLabel.textContent = (this.remoteTargetName || 'TV').substring(0, 10);
+        } else {
+            if (this.currentTargetName) this.currentTargetName.textContent = `${this.syncDeviceName} (Thiết bị này)`;
+            if (this.currentTargetSub) this.currentTargetSub.textContent = 'Âm thanh phát trực tiếp từ trình duyệt này';
+            if (this.currentTargetCard) this.currentTargetCard.classList.remove('remote-active');
+            if (this.btnDisconnectRemote) this.btnDisconnectRemote.style.display = 'none';
+            if (this.devicePickerBtn) this.devicePickerBtn.classList.remove('active');
+            if (this.deviceActiveDot) this.deviceActiveDot.style.display = 'none';
+            if (this.devicePickerLabel) this.devicePickerLabel.textContent = 'Thiết Bị';
+        }
+
+        // Lọc các thiết bị khác thiết bị hiện tại
+        const otherDevices = (this.availableDevices || []).filter(d => d.device_id !== this.syncDeviceId);
+
+        if (otherDevices.length === 0) {
+            this.devicesList.innerHTML = `
+                <div class="devices-loading-placeholder">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.6;">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                    <span>Chưa phát hiện thiết bị khác trực tuyến trong mạng. Mở XTAPO Music trên TV, điện thoại hoặc máy tính khác để liên kết ngay!</span>
+                </div>
+            `;
+            return;
+        }
+
+        this.devicesList.innerHTML = '';
+        otherDevices.forEach(dev => {
+            const isTarget = this.remoteTargetDeviceId === dev.device_id;
+            const isTv = dev.device_type === 'tv' || dev.device_name.toLowerCase().includes('tv');
+            
+            let iconSvg = `
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                    <path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>
+                </svg>
+            `;
+            if (isTv) {
+                iconSvg = `
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                        <polyline points="17 2 12 7 7 2"></polyline>
+                    </svg>
+                `;
+            } else if (dev.device_type === 'mobile') {
+                iconSvg = `
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                        <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                    </svg>
+                `;
+            }
+
+            const itemCard = document.createElement('div');
+            itemCard.className = `device-item-card ${isTarget ? 'is-target' : ''} ${isTv ? 'is-tv' : ''}`;
+            
+            const playingState = dev.current_state && dev.current_state.is_playing;
+            const playingTrackName = dev.current_state && dev.current_state.track ? (dev.current_state.track.name || dev.current_state.track.title) : null;
+
+            itemCard.innerHTML = `
+                <div class="device-item-left">
+                    <div class="device-item-icon">
+                        ${iconSvg}
+                    </div>
+                    <div class="device-item-meta">
+                        <div class="device-item-name">${this.escapeHtml(dev.device_name)}</div>
+                        <div class="device-item-status">
+                            <span class="online-dot"></span>
+                            <span>${playingState && playingTrackName ? `Đang phát: ${this.escapeHtml(playingTrackName)}` : (isTv ? 'Android TV sẵn sàng' : 'Sẵn sàng kết nối')}</span>
+                            ${playingState ? `<div class="device-wave-bars"><span></span><span></span><span></span></div>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <button class="device-connect-btn">
+                    ${isTarget ? 'Đang chọn' : 'Phát tại đây'}
+                </button>
+            `;
+
+            itemCard.addEventListener('click', () => {
+                this.connectToTargetDevice(dev.device_id, dev.device_name, dev.device_type);
+            });
+
+            this.devicesList.appendChild(itemCard);
+        });
+    }
+
+    connectToTargetDevice(targetDeviceId, targetName, targetType) {
+        if (this.remoteTargetDeviceId === targetDeviceId) {
+            this.showToast(`Đang điều khiển ${targetName}`);
+            this.closeDevicesModalDialog();
+            return;
+        }
+
+        const prevWasLocal = !this.remoteTargetDeviceId;
+        const prevTime = this.audio ? this.audio.currentTime : 0;
+        const prevTrack = this.currentTrack;
+        const prevAlbum = this.currentAlbum;
+        const prevPlaying = this.isPlaying;
+
+        // Dừng âm thanh máy này
+        if (this.audio) {
+            try { this.audio.pause(); } catch(e) {}
+        }
+        this.stopAudioSynth();
+
+        this.remoteTargetDeviceId = targetDeviceId;
+        this.remoteTargetName = targetName;
+        this.remoteTargetType = targetType;
+
+        // Gửi lệnh chuyển phát nhạc liền mạch (Seamless Hand-off)
+        if (prevTrack) {
+            this.sendSyncCommand('TRANSFER', {
+                album_id: prevAlbum ? prevAlbum.id : null,
+                track_index: this.currentTrackIndex,
+                track: prevTrack,
+                seek_time: prevTime,
+                is_playing: prevPlaying
+            }, targetDeviceId);
+        }
+
+        this.showToast(`🎉 Đã kết nối với ${targetName}! Mọi thao tác phát nhạc sẽ chuyển tới ${targetName}.`);
+        this.renderDevicesList();
+        this.closeDevicesModalDialog();
+    }
+
+    disconnectRemoteControl(showToastMsg = true) {
+        this.remoteTargetDeviceId = null;
+        this.remoteTargetName = null;
+        this.remoteTargetType = null;
+        this.renderDevicesList();
+        if (showToastMsg) {
+            this.showToast('🎧 Đã chuyển chế độ phát âm thanh về máy này.');
+        }
+    }
+
+    async pairWithPinCode(code) {
+        if (!code || code.length < 4) {
+            this.showToast('Vui lòng nhập đủ mã PIN kết nối.');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/music/sync/pair-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'join', code: code })
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                this.showToast(`✅ Đã ghép nối mã PIN ${code} thành công! Đang đồng bộ...`);
+                if (this.pairCodeInput) this.pairCodeInput.value = '';
+                this.initMusicSync();
+            } else {
+                this.showToast(data.detail || data.message || 'Mã PIN không đúng hoặc đã hết hạn.');
+            }
+        } catch (e) {
+            this.showToast(`Lỗi kết nối: ${e.message}`);
+        }
+    }
+
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
