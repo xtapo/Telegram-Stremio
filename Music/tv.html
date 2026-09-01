@@ -2425,7 +2425,7 @@
             const isPlayPauseKey = (
                 ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'Play', 'Pause'].includes(e.code) ||
                 [179, 126, 127, 85, 19, 86, 130, 415, 10252].includes(e.keyCode) ||
-                (!isTyping && (e.code === 'Space' || e.keyCode === 32 || e.key === 'p' || e.key === 'P' || e.key === 'k' || e.key === 'K' || e.key === '0' || e.key === '5'))
+                (!isTyping && (e.code === 'Space' || e.keyCode === 32 || e.key === 'k' || e.key === 'K' || e.key === '0' || e.key === '5'))
             );
 
             if (isPlayPauseKey) {
@@ -2434,21 +2434,42 @@
                 return;
             }
 
-            // 2. Phím Chuyển Bài Tiếp (Next)
-            if (['MediaTrackNext', 'TrackNext'].includes(e.code) || e.keyCode === 87 || (!isTyping && (e.key === 'n' || e.key === 'N'))) {
+            // 2. Phím Chuyển Bài Tiếp (Next Track): Phím Next, N, >, CH+, Số 6, Số 9
+            const isNextKey = (
+                ['MediaTrackNext', 'TrackNext'].includes(e.code) ||
+                ['ChannelUp', 'ChUp'].includes(e.code) ||
+                e.keyCode === 87 || e.keyCode === 176 || e.keyCode === 427 ||
+                (!isTyping && (e.key === 'n' || e.key === 'N' || e.key === '>' || e.key === '.' || e.key === '6' || e.key === '9' || e.key === '3'))
+            );
+
+            if (isNextKey) {
                 e.preventDefault();
                 nextTrack();
                 return;
             }
 
-            // 3. Phím Quay Lại Bài Trước (Previous)
-            if (['MediaTrackPrevious', 'TrackPrevious'].includes(e.code) || e.keyCode === 88 || (!isTyping && (e.key === 'b' || e.key === 'B'))) {
+            // 3. Phím Quay Lại Bài Trước (Previous Track): Phím Prev, B, <, CH-, Số 4, Số 7
+            const isPrevKey = (
+                ['MediaTrackPrevious', 'TrackPrevious'].includes(e.code) ||
+                ['ChannelDown', 'ChDown'].includes(e.code) ||
+                e.keyCode === 88 || e.keyCode === 177 || e.keyCode === 428 ||
+                (!isTyping && (e.key === 'b' || e.key === 'B' || e.key === '<' || e.key === ',' || e.key === '4' || e.key === '7' || e.key === '1'))
+            );
+
+            if (isPrevKey) {
                 e.preventDefault();
                 prevTrack();
                 return;
             }
 
-            // 4. Phím Tua nhanh / Tua lùi (Fast-Forward / Rewind)
+            // 4. Phím Yêu Thích Nhanh (Favorite Toggle): Phím F
+            if (!isTyping && (e.key === 'f' || e.key === 'F')) {
+                e.preventDefault();
+                toggleFavorite();
+                return;
+            }
+
+            // 5. Phím Tua nhanh / Tua lùi (Fast-Forward / Rewind)
             if (['MediaFastForward', 'FastForward'].includes(e.code) || e.keyCode === 228 || (!isTyping && (e.key === 'l' || e.key === 'L'))) {
                 e.preventDefault();
                 seek(10);
