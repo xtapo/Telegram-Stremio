@@ -596,6 +596,11 @@ class XTAPOMusicApp {
         this.devicePickerBtn = document.getElementById('devicePickerBtn');
         this.devicePickerLabel = document.getElementById('devicePickerLabel');
         this.deviceActiveDot = document.getElementById('deviceActiveDot');
+        this.topNavDeviceBtn = document.getElementById('topNavDeviceBtn');
+        this.topNavDeviceDot = document.getElementById('topNavDeviceDot');
+        this.mobilePlayerDeviceBtn = document.getElementById('mobilePlayerDeviceBtn');
+        this.mobileDeviceBtnLabel = document.getElementById('mobileDeviceBtnLabel');
+        this.mobileNavDevices = document.getElementById('mobileNavDevices');
         this.devicesModal = document.getElementById('devicesModal');
         this.closeDevicesModal = document.getElementById('closeDevicesModal');
         this.devicesList = document.getElementById('devicesList');
@@ -8429,10 +8434,24 @@ class XTAPOMusicApp {
 
     // --- Devices Modal UI & Events ---
     setupDeviceSyncEvents() {
+        const handleOpen = (e) => {
+            if (e) e.preventDefault();
+            this.openDevicesModal();
+        };
+
         if (this.devicePickerBtn) {
-            this.devicePickerBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.openDevicesModal();
+            this.devicePickerBtn.addEventListener('click', handleOpen);
+        }
+        if (this.topNavDeviceBtn) {
+            this.topNavDeviceBtn.addEventListener('click', handleOpen);
+        }
+        if (this.mobilePlayerDeviceBtn) {
+            this.mobilePlayerDeviceBtn.addEventListener('click', handleOpen);
+        }
+        if (this.mobileNavDevices) {
+            this.mobileNavDevices.addEventListener('click', (e) => {
+                this.closeMobileDrawer();
+                handleOpen(e);
             });
         }
 
@@ -8482,7 +8501,7 @@ class XTAPOMusicApp {
 
     openDevicesModal() {
         if (this.devicesModal) {
-            this.devicesModal.classList.add('open');
+            this.openModal(this.devicesModal);
             this.sendSyncRegister();
             this.renderDevicesList();
         }
@@ -8490,7 +8509,7 @@ class XTAPOMusicApp {
 
     closeDevicesModalDialog() {
         if (this.devicesModal) {
-            this.devicesModal.classList.remove('open');
+            this.closeModal(this.devicesModal);
         }
     }
 
@@ -8499,13 +8518,23 @@ class XTAPOMusicApp {
 
         // Cập nhật Banner Current Target
         if (this.remoteTargetDeviceId) {
+            const labelName = (this.remoteTargetName || 'TV').substring(0, 10);
             if (this.currentTargetName) this.currentTargetName.textContent = this.remoteTargetName || 'Thiết bị từ xa';
             if (this.currentTargetSub) this.currentTargetSub.textContent = `📡 Đang điều khiển từ xa giống Spotify Connect`;
             if (this.currentTargetCard) this.currentTargetCard.classList.add('remote-active');
             if (this.btnDisconnectRemote) this.btnDisconnectRemote.style.display = 'block';
             if (this.devicePickerBtn) this.devicePickerBtn.classList.add('active');
             if (this.deviceActiveDot) this.deviceActiveDot.style.display = 'inline-block';
-            if (this.devicePickerLabel) this.devicePickerLabel.textContent = (this.remoteTargetName || 'TV').substring(0, 10);
+            if (this.devicePickerLabel) this.devicePickerLabel.textContent = labelName;
+
+            if (this.topNavDeviceBtn) this.topNavDeviceBtn.classList.add('active');
+            if (this.topNavDeviceDot) this.topNavDeviceDot.style.display = 'inline-block';
+
+            if (this.mobilePlayerDeviceBtn) {
+                this.mobilePlayerDeviceBtn.style.background = 'rgba(16, 185, 129, 0.3)';
+                this.mobilePlayerDeviceBtn.style.borderColor = '#10b981';
+            }
+            if (this.mobileDeviceBtnLabel) this.mobileDeviceBtnLabel.textContent = labelName;
         } else {
             if (this.currentTargetName) this.currentTargetName.textContent = `${this.syncDeviceName} (Thiết bị này)`;
             if (this.currentTargetSub) this.currentTargetSub.textContent = 'Âm thanh phát trực tiếp từ trình duyệt này';
@@ -8514,6 +8543,15 @@ class XTAPOMusicApp {
             if (this.devicePickerBtn) this.devicePickerBtn.classList.remove('active');
             if (this.deviceActiveDot) this.deviceActiveDot.style.display = 'none';
             if (this.devicePickerLabel) this.devicePickerLabel.textContent = 'Thiết Bị';
+
+            if (this.topNavDeviceBtn) this.topNavDeviceBtn.classList.remove('active');
+            if (this.topNavDeviceDot) this.topNavDeviceDot.style.display = 'none';
+
+            if (this.mobilePlayerDeviceBtn) {
+                this.mobilePlayerDeviceBtn.style.background = 'rgba(16, 185, 129, 0.15)';
+                this.mobilePlayerDeviceBtn.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+            }
+            if (this.mobileDeviceBtnLabel) this.mobileDeviceBtnLabel.textContent = 'Thiết Bị';
         }
 
         // Lọc các thiết bị khác thiết bị hiện tại
