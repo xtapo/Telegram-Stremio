@@ -2259,7 +2259,9 @@
             });
         }
 
-        // ─── D-PAD REMOTE SPATIAL NAVIGATION ───
+        // ─── D-PAD REMOTE SMART SPATIAL NAVIGATION ENGINE ───
+        let lastMainFocusElement = null; // Ghi nhớ phần tử nội dung gần nhất trước khi xuống player bar
+
         function getFocusableElements() {
             const root = document.body;
             // Nếu có modal đang mở, chỉ focus vào các nút trong modal
@@ -2283,10 +2285,78 @@
 
             let cur = document.activeElement;
             if (!cur || !elements.includes(cur)) {
-                elements[0].focus();
+                const def = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || elements[0];
+                if (def) def.focus();
                 return;
             }
 
+            // Ghi nhớ vị trí đang đứng ở nội dung chính trước khi xuống player bar
+            if (!cur.closest('.tv-player-bar') && !cur.closest('.tv-topbar') && !document.querySelector('.tv-modal-overlay[style*="display: flex"]')) {
+                lastMainFocusElement = cur;
+            }
+
+            // 1. SMART COLUMN NAVIGATION (CHUYỂN CỘT THÔNG MINH BẰNG PHÍM TRÁI / PHẢI)
+            const isNavCol = cur.closest('.tv-col-nav');
+            const isItemsCol = cur.closest('.tv-col-items');
+            const isRightCol = cur.closest('.tv-col-right');
+            const isPlayerBar = cur.closest('.tv-player-bar');
+
+            // Từ Menu Trái bấm Phải -> Nhảy sang Card đang chọn hoặc card đầu tiên trong Cột Items
+            if (isNavCol && dir === 'right') {
+                const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || document.getElementById('btnPrevPage');
+                if (targetCard) {
+                    targetCard.focus();
+                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    return;
+                }
+            }
+
+            // Từ Cột Items bấm Trái -> Nhảy về Tab menu đang active ở Cột Trái
+            if (isItemsCol && dir === 'left') {
+                const activeNav = document.querySelector('.tv-nav-item.active') || document.querySelector('.tv-nav-item');
+                if (activeNav) {
+                    activeNav.focus();
+                    return;
+                }
+            }
+
+            // Từ Cột Items bấm Phải -> Nhảy sang nút Phát Tất Cả hoặc Track đầu tiên ở Cột Phải
+            if (isItemsCol && dir === 'right') {
+                const targetRight = document.getElementById('btnPlayAll') || document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item');
+                if (targetRight) {
+                    targetRight.focus();
+                    targetRight.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    return;
+                }
+            }
+
+            // Từ Cột Phải (Tracklist/Showcase) bấm Trái -> Nhảy về Card đang chọn ở Cột Items
+            if (isRightCol && dir === 'left') {
+                const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
+                if (targetCard) {
+                    targetCard.focus();
+                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    return;
+                }
+            }
+
+            // Từ Bottom Player Bar bấm Lên -> Nhảy ngược lại vị trí vừa rời đi trong nội dung chính
+            if (isPlayerBar && dir === 'up') {
+                if (lastMainFocusElement && document.body.contains(lastMainFocusElement) && lastMainFocusElement.offsetParent !== null) {
+                    lastMainFocusElement.focus();
+                    lastMainFocusElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    return;
+                } else {
+                    const fallback = document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item') || document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
+                    if (fallback) {
+                        fallback.focus();
+                        fallback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        return;
+                    }
+                }
+            }
+
+            // 2. SPATIAL PROXIMITY SEARCH (TÌM PHẦN TỬ GẦN NHẤT THEO HƯỚNG BẤM)
             const curC = getCenter(cur);
             let best = null;
             let minScore = Infinity;
@@ -2301,22 +2371,34 @@
                 let prim = 0;
                 let orth = 0;
 
-                if (dir === 'up' && dy < -6) {
+                if (dir === 'up' && dy < -4) {
                     valid = true; prim = -dy; orth = Math.abs(dx);
-                } else if (dir === 'down' && dy > 6) {
+                } else if (dir === 'down' && dy > 4) {
                     valid = true; prim = dy; orth = Math.abs(dx);
-                } else if (dir === 'left' && dx < -6) {
+                } else if (dir === 'left' && dx < -4) {
                     valid = true; prim = -dx; orth = Math.abs(dy);
-                } else if (dir === 'right' && dx > 6) {
+                } else if (dir === 'right' && dx > 4) {
                     valid = true; prim = dx; orth = Math.abs(dy);
                 }
 
                 if (valid) {
-                    const score = prim + orth * 2.0;
+                    const score = prim + orth * 1.6;
                     if (score < minScore) {
                         minScore = score;
                         best = cand;
                     }
+                }
+            }
+
+            // 3. TỰ ĐỘNG LẬT TRANG KHI ĐI HẾT DANH SÁCH (PAGINATION SMART WRAP)
+            if (!best && isItemsCol) {
+                if (dir === 'down' && !btnNextPage.disabled) {
+                    btnNextPage.click();
+                    return;
+                }
+                if (dir === 'up' && !btnPrevPage.disabled) {
+                    btnPrevPage.click();
+                    return;
                 }
             }
 
