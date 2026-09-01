@@ -32,31 +32,52 @@ TEMP_UPLOAD_DIR = os.path.abspath(os.path.join("Music", "temp_uploads"))
 os.makedirs(TEMP_UPLOAD_DIR, exist_ok=True)
 
 
-async def _extract_archive(archive_path: str, extract_dir: str) -> bool:
+def _find_7z_binary() -> Optional[str]:
+    """Tìm kiếm file thực thi 7-Zip hoặc WinRAR trên hệ thống"""
+    candidates = [
+        r"C:\Program Files\7-Zip\7z.exe",
+        r"C:\Program Files (x86)\7-Zip\7z.exe",
+        shutil.which("7z"),
+        shutil.which("7za"),
+        r"C:\Windows\system32\7z.EXE",
+        r"C:\Program Files\WinRAR\WinRAR.exe",
+        r"C:\Program Files\WinRAR\UnRAR.exe",
+        r"C:\Program Files (x86)\WinRAR\UnRAR.exe",
+        shutil.which("rar"),
+        shutil.which("unrar"),
+    ]
+    for p in candidates:
+        if p and os.path.exists(p):
+            return p
+    return None
+
+
+def _sync_extract_archive(archive_path: str, extract_dir: str) -> bool:
     """
-    Giải nén đa định dạng (.rar, .7z, .zip, .tar, .tar.gz, .bz2, .xz)
-    Sử dụng 7-Zip CLI (nếu có sẵn trên Windows/Linux) và các thư viện Python dự phòng.
+    Hàm giải nén đồng bộ (chạy trong worker thread):
+    Hỗ trợ .rar, .7z, .zip, .tar, .tar.gz, .bz2, .xz, .iso.
     """
+    import subprocess
     os.makedirs(extract_dir, exist_ok=True)
     ext = os.path.splitext(archive_path)[1].lower()
 
-    # 1. Thử 7-Zip CLI trước tiên (Tốc độ cao nhất, hỗ trợ hoàn hảo .rar, .7z, .zip)
-    seven_zip = shutil.which("7z") or shutil.which("7za")
-    if seven_zip:
+    # 1. Thử 7-Zip / WinRAR CLI (Tương thích tốt nhất với .rar và .7z)
+    archiver = _find_7z_binary()
+    if archiver:
         try:
-            cmd = [seven_zip, "x", archive_path, f"-o{extract_dir}", "-y"]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode == 0:
-                LOGGER.info(f"[7Z EXTRACT] Successfully extracted {archive_path}")
+            is_winrar = "winrar" in archiver.lower() or "unrar" in archiver.lower()
+            if is_winrar:
+                cmd = [archiver, "x", "-y", archive_path, extract_dir]
+            else:
+                cmd = [archiver, "x", "-y", f"-o{extract_dir}", archive_path]
+
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if res.returncode == 0:
+                LOGGER.info(f"[EXTRACT SUCCESS] Extracted with {archiver}: {archive_path}")
                 return True
-            LOGGER.warning(f"[7Z EXTRACT] Return code {proc.returncode}: {stderr.decode('utf-8', errors='ignore')}")
+            LOGGER.warning(f"[EXTRACT WARN] Return code {res.returncode}: {res.stderr or res.stdout}")
         except Exception as e:
-            LOGGER.warning(f"[7Z EXTRACT ERROR] {e}")
+            LOGGER.warning(f"[EXTRACT CLI ERROR] {e}")
 
     # 2. Python zipfile (.zip)
     if ext == ".zip":
@@ -91,18 +112,18 @@ async def _extract_archive(archive_path: str, extract_dir: str) -> bool:
     if tar_cli:
         try:
             cmd = [tar_cli, "-xf", archive_path, "-C", extract_dir]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            await proc.communicate()
-            if proc.returncode == 0:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if res.returncode == 0:
                 return True
         except Exception:
             pass
 
     return False
+
+
+async def _extract_archive(archive_path: str, extract_dir: str) -> bool:
+    """Chạy giải nén trong threadpool tránh block event loop và tránh lỗi event loop trên Windows"""
+    return await asyncio.to_thread(_sync_extract_archive, archive_path, extract_dir)
 
 
 def parse_gdrive_url(url: str) -> Tuple[str, str]:
