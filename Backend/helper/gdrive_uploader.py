@@ -262,6 +262,76 @@ def parse_gdrive_url(url: str) -> Tuple[str, str]:
     return "invalid", ""
 
 
+def parse_gdrive_urls(raw_text: str) -> List[Tuple[str, str, str]]:
+    """
+    Phân tích danh sách nhiều liên kết (nhập cách nhau bằng dòng mới, dấu phẩy, chấm phẩy hoặc khoảng trắng).
+    Trả về danh sách các tuple: (link_type, resource_id, original_url)
+    """
+    if not raw_text:
+        return []
+
+    tokens = re.split(r'[\r\n,;]+', raw_text.strip())
+    results = []
+    seen = set()
+
+    for token in tokens:
+        t = token.strip()
+        if not t or t in seen:
+            continue
+        l_type, r_id = parse_gdrive_url(t)
+        if l_type != "invalid":
+            seen.add(t)
+            results.append((l_type, r_id, t))
+
+    return results
+
+
+def _sync_list_gdrive_folder(folder_url_or_id: str) -> List[dict]:
+    """
+    Quét danh sách tất cả các files/albums bên trong Google Drive Folder công khai.
+    Trả về danh sách dict: [{'id': ..., 'name': ..., 'url': ...}]
+    """
+    if "drive.google.com" not in folder_url_or_id:
+        folder_url = f"https://drive.google.com/drive/folders/{folder_url_or_id}"
+    else:
+        folder_url = folder_url_or_id
+
+    # 1. Dùng gdown library (chuẩn xác và tối ưu nhất cho Google Drive Folder)
+    try:
+        import gdown
+        items = gdown.download_folder(url=folder_url, skip_download=True, quiet=True)
+        if items:
+            result = []
+            for item in items:
+                fn = os.path.basename(getattr(item, "path", "")) or getattr(item, "name", "") or f"gdrive_{item.id}"
+                result.append({
+                    "id": item.id,
+                    "name": fn,
+                    "url": f"https://drive.google.com/file/d/{item.id}/view"
+                })
+            LOGGER.info(f"[GDRIVE FOLDER] gdown quét được {len(result)} files trong folder: {folder_url}")
+            return result
+    except Exception as ex:
+        LOGGER.warning(f"[GDRIVE FOLDER] gdown note: {ex}")
+
+    # 2. Fallback HTML regex scraping
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        }
+        resp = httpx.get(folder_url, headers=headers, follow_redirects=True, timeout=15.0)
+        if resp.status_code == 200:
+            found_ids = list(dict.fromkeys(re.findall(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]{25,})', resp.text)))
+            if not found_ids:
+                found_ids = list(dict.fromkeys(re.findall(r'\[\"([a-zA-Z0-9_-]{28,38})\"', resp.text)))
+            if found_ids:
+                return [{"id": fid, "name": f"gdrive_{fid}", "url": f"https://drive.google.com/file/d/{fid}/view"} for fid in found_ids]
+    except Exception as ex2:
+        LOGGER.warning(f"[GDRIVE FOLDER HTML] fallback error: {ex2}")
+
+    return []
+
+
 def _extract_filename_from_headers(headers: httpx.Headers, default_name: str = "downloaded_file") -> str:
     cd = headers.get("content-disposition", "")
     if cd:
@@ -373,9 +443,9 @@ class GoogleDriveUploadManager:
         if self._status in ("downloading", "uploading", "indexing") and self._task and not self._task.done():
             return {"ok": False, "message": "Đang có tiến trình upload khác đang chạy!"}
 
-        link_type, resource_id = parse_gdrive_url(url)
-        if link_type == "invalid":
-            return {"ok": False, "message": "URL Google Drive hoặc link tải không hợp lệ."}
+        parsed_links = parse_gdrive_urls(url)
+        if not parsed_links:
+            return {"ok": False, "message": "Không tìm thấy URL Google Drive hoặc link tải hợp lệ nào."}
 
         client, client_type = await _get_upload_client()
         self._client_type = client_type
@@ -385,7 +455,7 @@ class GoogleDriveUploadManager:
         self._stage = "Đang khởi động kết nối..."
         self._current_file = ""
         self._file_index = 0
-        self._total_files = 1
+        self._total_files = len(parsed_links)
         self._download_percent = 0
         self._download_bytes = 0
         self._download_total = 0
@@ -402,12 +472,12 @@ class GoogleDriveUploadManager:
 
         client_label = "⚡ User Session (Tốc độ tối đa)" if client_type == "user_session" else "🤖 StreamBot"
         self._log(f"Bắt đầu upload lên kênh {target_channel_id} sử dụng {client_label}", "info")
+        self._log(f"Phát hiện {len(parsed_links)} liên kết/thư mục cần xử lý.", "info")
 
         self._task = asyncio.create_task(
             self._run_upload_pipeline(
-                url=url,
-                link_type=link_type,
-                resource_id=resource_id,
+                raw_url=url,
+                parsed_links=parsed_links,
                 target_channel_id=target_channel_id,
                 default_artist=default_artist,
                 default_album=default_album,
@@ -417,7 +487,7 @@ class GoogleDriveUploadManager:
         )
         return {
             "ok": True,
-            "message": f"Đã khởi chạy tiến trình tải & upload bằng {client_label}.",
+            "message": f"Đã khởi chạy tiến trình tải & upload {len(parsed_links)} liên kết/thư mục bằng {client_label}.",
             "client_type": client_type
         }
 
@@ -449,14 +519,15 @@ class GoogleDriveUploadManager:
                         raw_title = raw_title.replace("&quot;", '"').replace("&amp;", '&').replace("&lt;", '<').replace("&gt;", '>')
                         if raw_title and raw_title != "Google Drive":
                             return raw_title, r.text
-        except Exception as e:
-            LOGGER.debug(f"[GDRIVE VIEW FETCH] {e}")
-        return f"gdrive_{file_id}", ""
+        except Exception:
+            pass
+        return "", ""
 
     async def _download_gdrive_file(self, file_id: str, work_dir: str, known_filename: str = "") -> Optional[str]:
-        """Tải một file Google Drive đơn lẻ với bộ nhớ đệm (Download Cache) và nhận diện lỗi Quota Exceeded"""
-        
-        # 1. Lấy thông tin & tên file gốc từ Google Drive Preview
+        """
+        Tải file từ Google Drive với hỗ trợ file lớn, tự động vượt trang cảnh báo virus,
+        cơ chế Quota Exceeded và Download Cache.
+        """
         real_title, page_html = await self._get_gdrive_file_info(file_id)
         if known_filename:
             target_filename = known_filename
@@ -465,7 +536,7 @@ class GoogleDriveUploadManager:
         else:
             target_filename = f"gdrive_{file_id}"
 
-        # 2. Kiểm tra trong Bộ nhớ đệm (Download Cache)
+        # Kiểm tra trong Bộ nhớ đệm (Download Cache)
         try:
             for fname in os.listdir(CACHE_DOWNLOAD_DIR):
                 if fname.startswith(f"{file_id}_") or (target_filename and fname.endswith(target_filename)):
@@ -515,28 +586,14 @@ class GoogleDriveUploadManager:
 
             content_type = (resp.headers.get("content-type") or "").lower()
 
-            # Kiểm tra nếu Google Drive trả về trang HTML (Lỗi Quota Exceeded, Cảnh báo Virus, hoặc Cần xác thực)
             if "text/html" in content_type or resp.text.startswith("<!DOCTYPE") or resp.text.startswith("<html"):
                 html_body = resp.text
-                
-                # A. Phát hiện Quota Exceeded (Hết băng thông tải trong ngày của Google)
-                if (
-                    "Quota exceeded" in html_body or 
-                    "vượt quá giới hạn" in html_body or 
-                    "Too many users" in html_body or
-                    "can't view or download" in html_body or
-                    "can&#39;t view or download" in html_body or
-                    "Sorry, you can" in html_body
-                ):
-                    err_msg = (
-                        f"⚠️ Google Drive đã khóa tải file '{target_filename}' do vượt quá giới hạn lượt tải trong ngày (Google Quota Exceeded). "
-                        f"Cách khắc phục ngay: Hãy mở link trên trình duyệt, chọn 'Tạo bản sao' (Make a copy) file này vào Google Drive của bạn rồi lấy link chia sẻ của bản sao đó để upload!"
-                    )
+                if any(q in html_body for q in ["Quota exceeded", "vượt quá giới hạn", "Too many users", "can't view or download", "Sorry, you can"]):
+                    err_msg = f"⚠️ File '{target_filename}' đã bị giới hạn tải trong ngày của Google Drive (Quota Exceeded)."
                     self._error_message = err_msg
                     self._log(err_msg, "error")
                     return None
 
-                # B. Phát hiện Token xác nhận tải file lớn (>100MB)
                 confirm_match = (
                     re.search(r'confirm=([0-9A-Za-z_-]+)', html_body) or 
                     re.search(r'name="confirm"\s+value="([^"]+)"', html_body) or
@@ -550,14 +607,12 @@ class GoogleDriveUploadManager:
                         download_url = f"https://docs.google.com/uc?export=download&confirm={match_val}&id={file_id}"
                     self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
                 else:
-                    # Kiểm tra xem có phải trang yêu cầu đăng nhập / quyền truy cập không
                     if "accounts.google.com" in str(resp.url) or "ServiceLogin" in html_body or "Access denied" in html_body:
                         err_msg = f"⚠️ File '{target_filename}' chưa được chia sẻ công khai. Vui lòng đặt quyền chia sẻ Google Drive là 'Bất kỳ ai có liên kết (Anyone with the link)'."
                         self._error_message = err_msg
                         self._log(err_msg, "error")
                         return None
 
-            # 3. Stream tải file nhị phân trực tiếp vào Cache Folder
             final_dl_url = download_url or f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
             
             async with client.stream("GET", final_dl_url, headers=headers) as stream_resp:
@@ -604,7 +659,6 @@ class GoogleDriveUploadManager:
                                 mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
                                 self._speed_str = f"{mbps:.2f} MB/s"
 
-                # 4. Kiểm tra file sau khi tải về
                 downloaded_fsize = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
                 if downloaded_fsize < 4096:
                     try:
@@ -612,7 +666,7 @@ class GoogleDriveUploadManager:
                             chk_head = f_chk.read(500)
                             if "<!DOCTYPE" in chk_head or "<html" in chk_head:
                                 if "Quota exceeded" in chk_head or "vượt quá giới hạn" in chk_head:
-                                    err_msg = f"⚠️ File '{final_filename}' bị giới hạn lượt tải trong ngày (Google Drive Quota Exceeded). Hãy 'Tạo bản sao' trên Drive để tải."
+                                    err_msg = f"⚠️ File '{final_filename}' bị giới hạn lượt tải trong ngày (Google Drive Quota Exceeded)."
                                 else:
                                     err_msg = f"⚠️ File tải về '{final_filename}' không hợp lệ (Google Drive trả về trang HTML thông báo)."
                                 self._error_message = err_msg
@@ -624,9 +678,7 @@ class GoogleDriveUploadManager:
                         pass
 
                 self._download_percent = 100
-                self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize/(1024*1024), 2)} MB)", "success")
-                
-                # Sao chép vào work_dir
+                self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize / (1024 * 1024), 2)} MB)", "success")
                 try:
                     shutil.copy2(cache_path, out_path)
                     return out_path
@@ -634,109 +686,103 @@ class GoogleDriveUploadManager:
                     return cache_path
 
     async def _download_direct_url(self, url: str, work_dir: str) -> Optional[str]:
-        """Tải file từ link trực tiếp (HTTP / HTTPS) có lưu Cache"""
-        headers = {"User-Agent": "Mozilla/5.0"}
-        
-        # Check cache
+        """Tải file từ link HTTP/HTTPS trực tiếp với bộ nhớ đệm"""
+        import hashlib
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
-        for fname in os.listdir(CACHE_DOWNLOAD_DIR):
-            if fname.startswith(f"direct_{url_hash}_"):
-                c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
-                if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
-                    cached_fn = fname.split("_", 2)[-1]
-                    self._log(f"⚡ Phát hiện file trong cache: '{cached_fn}'. Bỏ qua bước tải lại!", "success")
+        base_fn = os.path.basename(urllib.parse.urlparse(url).path) or f"download_{url_hash}"
+
+        try:
+            for fname in os.listdir(CACHE_DOWNLOAD_DIR):
+                if fname.startswith(f"{url_hash}_") or (base_fn and fname.endswith(base_fn)):
+                    c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                    if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
+                        cached_sz = os.path.getsize(c_path)
+                        cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
+                        self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua tải trực tiếp!", "success")
+                        self._download_percent = 100
+                        out_path = os.path.join(work_dir, cached_fn)
+                        try:
+                            shutil.copy2(c_path, out_path)
+                            return out_path
+                        except Exception:
+                            return c_path
+        except Exception:
+            pass
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+                async with client.stream("GET", url, headers=headers) as stream_resp:
+                    if stream_resp.status_code != 200:
+                        self._log(f"Lỗi HTTP {stream_resp.status_code} khi tải link trực tiếp", "error")
+                        return None
+
+                    header_fn = _extract_filename_from_headers(stream_resp.headers, "")
+                    final_filename = header_fn or base_fn
+
+                    content_len = stream_resp.headers.get("content-length")
+                    total_bytes = int(content_len) if content_len and content_len.isdigit() else 0
+
+                    self._download_total = total_bytes
+                    self._download_bytes = 0
+                    self._current_file = final_filename
+                    self._stage = f"Đang tải về: {final_filename}"
+                    self._log(f"Bắt đầu tải trực tiếp: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
+
+                    cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}_{final_filename}")
+                    out_path = os.path.join(work_dir, final_filename)
+                    start_dl = time.time()
+                    last_update = 0
+
+                    with open(cache_path, "wb") as f_out:
+                        async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
+                            if self._cancel_requested:
+                                return None
+                            f_out.write(chunk)
+                            self._download_bytes += len(chunk)
+
+                            now = time.time()
+                            if now - last_update > 0.5:
+                                last_update = now
+                                if total_bytes > 0:
+                                    self._download_percent = min(100, int((self._download_bytes / total_bytes) * 100))
+                                elapsed_dl = now - start_dl
+                                if elapsed_dl > 0:
+                                    mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
+                                    self._speed_str = f"{mbps:.2f} MB/s"
+
                     self._download_percent = 100
-                    out_path = os.path.join(work_dir, cached_fn)
+                    dl_sz = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
+                    self._log(f"✅ Tải thành công: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)", "success")
                     try:
-                        shutil.copy2(c_path, out_path)
+                        shutil.copy2(cache_path, out_path)
                         return out_path
                     except Exception:
-                        return c_path
-
-        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-            async with client.stream("GET", url, headers=headers) as resp:
-                if resp.status_code != 200:
-                    self._log(f"Không thể tải từ URL (HTTP {resp.status_code})", "error")
-                    return None
-
-                file_name = _extract_filename_from_headers(resp.headers, os.path.basename(urllib.parse.urlparse(url).path) or "downloaded_audio")
-                content_len = resp.headers.get("content-length")
-                total_bytes = int(content_len) if content_len and content_len.isdigit() else 0
-
-                self._download_total = total_bytes
-                self._download_bytes = 0
-                self._current_file = file_name
-                self._stage = f"Đang tải file: {file_name}"
-                self._log(f"Bắt đầu tải file: {file_name}", "info")
-
-                cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"direct_{url_hash}_{file_name}")
-                out_path = os.path.join(work_dir, file_name)
-                start_dl = time.time()
-                last_update = 0
-
-                with open(cache_path, "wb") as f_out:
-                    async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
-                        if self._cancel_requested:
-                            return None
-                        f_out.write(chunk)
-                        self._download_bytes += len(chunk)
-
-                        now = time.time()
-                        if now - last_update > 0.5:
-                            last_update = now
-                            if total_bytes > 0:
-                                self._download_percent = min(100, int((self._download_bytes / total_bytes) * 100))
-                            elapsed_dl = now - start_dl
-                            if elapsed_dl > 0:
-                                mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
-                                self._speed_str = f"{mbps:.2f} MB/s"
-
-                self._download_percent = 100
-                self._log(f"✅ Tải thành công file: {file_name}", "success")
-                try:
-                    shutil.copy2(cache_path, out_path)
-                    return out_path
-                except Exception:
-                    return cache_path
-
-    async def _fetch_folder_file_ids(self, folder_id: str) -> List[Tuple[str, str]]:
-        """Lấy danh sách các file trong Folder Google Drive công khai"""
-        files = []
-        try:
-            url = f"https://drive.google.com/embeddedfolderview?id={folder_id}#list"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-                resp = await client.get(url, headers=headers)
-                if resp.status_code == 200:
-                    html = resp.text
-                    # Trích xuất các liên kết file trong trang folder
-                    matches = re.findall(r'href="https://drive\.google\.com/file/d/([a-zA-Z0-9_-]+)/[^"]*"[^>]*aria-label="([^"]+)"', html)
-                    for fid, fname in matches:
-                        files.append((fid, fname))
+                        return cache_path
         except Exception as e:
-            LOGGER.warning(f"[GDRIVE FOLDER SCRAPE] {e}")
-        return files
+            self._log(f"Lỗi khi tải trực tiếp: {e}", "error")
+            return None
 
     def _collect_audio_files(self, extract_dir: str) -> List[str]:
-        """Duyệt đệ quy và gom tất cả file âm thanh trong thư mục"""
+        """Duyệt đệ quy và thu thập tất cả các file âm thanh trong thư mục đã giải nén"""
         audio_files = []
-        for root, _, filenames in os.walk(extract_dir):
-            for fn in filenames:
-                ext = os.path.splitext(fn)[1].lower()
+        for root, _, files in os.walk(extract_dir):
+            for file in sorted(files):
+                ext = os.path.splitext(file)[1].lower()
                 if ext in AUDIO_EXTENSIONS:
-                    audio_files.append(os.path.join(root, fn))
-        audio_files.sort()
+                    audio_files.append(os.path.join(root, file))
         return audio_files
 
-    async def _download_cover_image(self, cover_url: str, temp_dir: str) -> Optional[str]:
-        """Tải ảnh bìa về làm thumbnail cho Telegram"""
-        if not cover_url or not cover_url.startswith("http"):
+    async def _download_cover_image(self, cover_url: str, work_dir: str) -> Optional[str]:
+        if not cover_url:
             return None
         try:
+            cover_path = os.path.join(work_dir, "cover_thumb.jpg")
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 r = await client.get(cover_url)
                 if r.status_code == 200:
-                    cover_path = os.path.join(temp_dir, "thumb.jpg")
                     with open(cover_path, "wb") as f:
                         f.write(r.content)
                     return cover_path
@@ -746,9 +792,8 @@ class GoogleDriveUploadManager:
 
     async def _run_upload_pipeline(
         self,
-        url: str,
-        link_type: str,
-        resource_id: str,
+        raw_url: str,
+        parsed_links: List[Tuple[str, str, str]],
         target_channel_id: str,
         default_artist: str,
         default_album: str,
@@ -760,248 +805,257 @@ class GoogleDriveUploadManager:
             client, client_type = await _get_upload_client()
             target_chat_id = int(target_channel_id) if target_channel_id.lstrip("-").isdigit() else target_channel_id
 
-            files_to_upload: List[str] = []
+            # 1. Mở rộng tất cả các link và thư mục thành hàng đợi (Queue) các tập tin cụ thể
+            self._stage = "Đang quét và phân tích danh sách liên kết/thư mục..."
+            items_queue = []
 
-            # 1. Xử lý tải về theo loại link
-            if link_type == "folder":
-                self._stage = f"Đang quét danh sách file trong thư mục Google Drive..."
-                self._log(f"Đang duyệt Folder ID: {resource_id}...", "info")
-                folder_items = await self._fetch_folder_file_ids(resource_id)
-                if not folder_items:
-                    self._status = "error"
-                    self._error_message = "Không tìm thấy file nào trong thư mục Google Drive (Hãy đảm bảo thư mục được chia sẻ công khai 'Bất kỳ ai có liên kết')."
-                    self._log(self._error_message, "error")
-                    return
-
-                self._total_files = len(folder_items)
-                self._log(f"Tìm thấy {len(folder_items)} file trong thư mục Google Drive.", "info")
-
-                for idx, (fid, fname) in enumerate(folder_items, 1):
-                    if self._cancel_requested:
-                        break
-                    self._file_index = idx
-                    dl_path = await self._download_gdrive_file(fid, work_dir)
-                    if dl_path and os.path.exists(dl_path):
-                        ext = os.path.splitext(dl_path)[1].lower()
-                        if ext in AUDIO_EXTENSIONS:
-                            files_to_upload.append(dl_path)
-                        elif ext in ARCHIVE_EXTENSIONS:
-                            # Giải nén đa định dạng (.rar, .7z, .zip, .tar)
-                            sub_extract = os.path.join(work_dir, f"ext_{idx}")
-                            success, extract_msg = await _extract_archive(dl_path, sub_extract)
-                            if success:
-                                self._log(f"✅ {extract_msg} ({fname})", "success")
-                                files_to_upload.extend(self._collect_audio_files(sub_extract))
-                            else:
-                                self._log(f"Lỗi giải nén {fname}: {extract_msg}", "warn")
-
-            elif link_type == "file":
-                self._stage = "Đang tải file từ Google Drive..."
-                dl_path = await self._download_gdrive_file(resource_id, work_dir)
-                if not dl_path or not os.path.exists(dl_path):
-                    self._status = "error"
-                    if not self._error_message:
-                        self._error_message = "Tải file từ Google Drive thất bại. Vui lòng kiểm tra quyền chia sẻ công khai của file."
-                    return
-
-                ext = os.path.splitext(dl_path)[1].lower()
-                if ext in ARCHIVE_EXTENSIONS:
-                    self._stage = "Đang giải nén tập tin album..."
-                    self._log(f"Phát hiện file nén ({ext}), đang tự động giải nén trích xuất danh sách bài hát...", "info")
-                    extract_dir = os.path.join(work_dir, "extracted")
-                    success, extract_msg = await _extract_archive(dl_path, extract_dir)
-                    if success:
-                        self._log(f"✅ {extract_msg}", "success")
-                        files_to_upload = self._collect_audio_files(extract_dir)
-                    else:
-                        self._status = "error"
-                        self._error_message = f"Không thể giải nén file ({ext}): {extract_msg}"
-                        self._log(self._error_message, "error")
-                        return
-                elif ext in AUDIO_EXTENSIONS:
-                    files_to_upload = [dl_path]
-                else:
-                    self._status = "error"
-                    self._error_message = f"Định dạng file ({ext}) không phải là âm thanh hoặc file nén được hỗ trợ."
-                    self._log(self._error_message, "error")
-                    return
-
-            elif link_type == "direct":
-                self._stage = "Đang tải file từ đường dẫn trực tiếp..."
-                dl_path = await self._download_direct_url(resource_id, work_dir)
-                if not dl_path or not os.path.exists(dl_path):
-                    self._status = "error"
-                    self._error_message = "Tải file trực tiếp thất bại."
-                    self._log(self._error_message, "error")
-                    return
-
-                ext = os.path.splitext(dl_path)[1].lower()
-                if ext in ARCHIVE_EXTENSIONS:
-                    extract_dir = os.path.join(work_dir, "extracted")
-                    success, extract_msg = await _extract_archive(dl_path, extract_dir)
-                    if success:
-                        self._log(f"✅ {extract_msg}", "success")
-                        files_to_upload = self._collect_audio_files(extract_dir)
-                elif ext in AUDIO_EXTENSIONS:
-                    files_to_upload = [dl_path]
-
-            if not files_to_upload:
-                self._status = "error"
-                self._error_message = "Không tìm thấy bất kỳ file âm thanh nào (FLAC, MP3, WAV, DSF, M4A,...) để tải lên."
-                self._log(self._error_message, "error")
-                return
-
-            self._total_files = len(files_to_upload)
-            self._log(f"Sẵn sàng upload {len(files_to_upload)} bài hát lên kênh Telegram...", "info")
-
-            # 2. Bắt đầu Upload từng bài lên Telegram bằng Userbot / StreamBot
-            self._status = "uploading"
-            uploaded_messages = []
-
-            for idx, file_path in enumerate(files_to_upload, 1):
+            for link_type, resource_id, original_url in parsed_links:
                 if self._cancel_requested:
                     break
 
-                self._file_index = idx
-                raw_filename = os.path.basename(file_path)
-                clean_title = clean_audio_filename(raw_filename)
-                fsize = os.path.getsize(file_path)
-                fsize_mb = round(fsize / (1024 * 1024), 2)
-
-                self._current_file = raw_filename
-                self._stage = f"Đang upload [{idx}/{self._total_files}]: {raw_filename} ({fsize_mb} MB)"
-                self._upload_percent = 0
-                self._upload_bytes = 0
-                self._upload_total = fsize
-
-                # Phân tích ca sĩ, tên bài hát & album ban đầu
-                parsed_artist, parsed_title, parsed_album = parse_artist_and_title(
-                    raw_title="",
-                    raw_artist=default_artist,
-                    raw_album=default_album,
-                    file_name=raw_filename
-                )
-                artist_candidate = parsed_artist or default_artist
-                title_candidate = parsed_title or clean_title
-                album_candidate = parsed_album or default_album
-
-                cover_url = ""
-                # Tìm metadata & ảnh bìa online nếu bật auto_scrape
-                if auto_scrape:
-                    try:
-                        scraped = await fetch_music_metadata(
-                            raw_title=title_candidate,
-                            raw_artist=artist_candidate,
-                            raw_album=album_candidate,
-                            file_name=raw_filename,
-                            default_artist=default_artist,
-                            default_album=default_album,
-                        )
-                        if scraped:
-                            if scraped.get("title"): title_candidate = scraped["title"]
-                            if scraped.get("artist"): artist_candidate = scraped["artist"]
-                            if scraped.get("album") and not default_album: album_candidate = scraped["album"]
-                            if scraped.get("cover_url"): cover_url = scraped["cover_url"]
-                    except Exception as e:
-                        LOGGER.debug(f"Metadata scrape note: {e}")
-
-                # Tải ảnh thumbnail về nếu có
-                thumb_path = await self._download_cover_image(cover_url, work_dir) if cover_url else None
-
-                # Progress callback cho pyrogram
-                start_up = time.time()
-                last_up_time = 0
-
-                def _progress_cb(current, total):
-                    nonlocal last_up_time
-                    self._upload_bytes = current
-                    self._upload_total = total
-                    if total > 0:
-                        self._upload_percent = min(100, int((current / total) * 100))
-                    now = time.time()
-                    if now - last_up_time > 0.5:
-                        last_up_time = now
-                        elapsed = now - start_up
-                        if elapsed > 0:
-                            mbps = (current / (1024 * 1024)) / elapsed
-                            self._speed_str = f"{mbps:.2f} MB/s"
-
-                caption = f"🎵 {title_candidate}\n👤 {artist_candidate or 'Unknown Artist'}\n💿 {album_candidate or 'Single'}"
-
-                sent_msg = None
-                try:
-                    # Gửi file âm thanh
-                    ext = os.path.splitext(file_path)[1].lower()
-                    if send_as_document or ext in (".dsf", ".dff", ".ape"):
-                        sent_msg = await client.send_document(
-                            chat_id=target_chat_id,
-                            document=file_path,
-                            caption=caption,
-                            thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                            force_document=True,
-                            progress=_progress_cb
-                        )
+                if link_type == "folder":
+                    self._log(f"📁 Đang quét Thư mục Google Drive: {original_url}", "info")
+                    folder_files = await asyncio.to_thread(_sync_list_gdrive_folder, original_url)
+                    if folder_files:
+                        self._log(f"✅ Tìm thấy {len(folder_files)} tập tin/album trong thư mục Google Drive!", "success")
+                        for ff in folder_files:
+                            items_queue.append({
+                                "link_type": "file",
+                                "resource_id": ff["id"],
+                                "known_filename": ff["name"],
+                                "source_label": f"📁 {ff['name']}"
+                            })
                     else:
-                        sent_msg = await client.send_audio(
-                            chat_id=target_chat_id,
-                            audio=file_path,
-                            caption=caption,
-                            title=title_candidate,
-                            performer=artist_candidate or None,
-                            thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                            progress=_progress_cb
-                        )
-                except FloodWait as fw:
-                    self._log(f"Telegram yêu cầu chờ FloodWait {fw.value}s — đang tự động tạm dừng...", "warn")
-                    await asyncio.sleep(fw.value + 1)
-                    if send_as_document:
-                        sent_msg = await client.send_document(
-                            chat_id=target_chat_id,
-                            document=file_path,
-                            caption=caption,
-                            thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                            force_document=True,
-                            progress=_progress_cb
-                        )
-                    else:
-                        sent_msg = await client.send_audio(
-                            chat_id=target_chat_id,
-                            audio=file_path,
-                            caption=caption,
-                            title=title_candidate,
-                            performer=artist_candidate or None,
-                            thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                            progress=_progress_cb
-                        )
-                except Exception as upload_err:
-                    self._log(f"❌ Lỗi khi upload bài '{raw_filename}': {upload_err}", "error")
-                    continue
-
-                if sent_msg:
-                    self._log(f"✅ Đã upload thành công lên Telegram: {title_candidate} (Msg #{sent_msg.id})", "success")
-                    uploaded_messages.append((sent_msg, title_candidate, artist_candidate, album_candidate, cover_url, file_path))
-                    self._uploaded_tracks.append({
-                        "msg_id": sent_msg.id,
-                        "title": title_candidate,
-                        "artist": artist_candidate,
-                        "album": album_candidate,
-                        "size": f"{fsize_mb} MB"
+                        self._log(f"⚠️ Không tìm thấy tập tin nào trong thư mục Google Drive (ID: {resource_id})", "warn")
+                elif link_type == "file":
+                    items_queue.append({
+                        "link_type": "file",
+                        "resource_id": resource_id,
+                        "known_filename": "",
+                        "source_label": original_url
+                    })
+                elif link_type == "direct":
+                    items_queue.append({
+                        "link_type": "direct",
+                        "resource_id": resource_id,
+                        "known_filename": "",
+                        "source_label": original_url
                     })
 
-                # Nghỉ nhẹ giữa các bài
-                await asyncio.sleep(0.3)
+            if not items_queue:
+                self._status = "error"
+                self._error_message = "Không tìm thấy bất kỳ tập tin nào hợp lệ để tải về."
+                self._log(self._error_message, "error")
+                return
 
-            # 3. Lập chỉ mục vào Thư viện Nhạc
-            if uploaded_messages:
-                self._status = "indexing"
-                self._stage = "Đang lập chỉ mục các bài hát vừa upload vào Thư viện Nhạc..."
-                self._log(f"Đang đồng bộ {len(uploaded_messages)} bài hát mới vào Thư viện & MongoDB...", "info")
-                await self._index_uploaded_tracks(uploaded_messages, target_chat_id)
+            total_queue_items = len(items_queue)
+            self._log(f"🚀 Bắt đầu xử lý hàng đợi gồm {total_queue_items} mục (tập tin/album)...", "info")
+            uploaded_messages_all = []
+
+            # 2. Xử lý tuần tự từng mục trong hàng đợi
+            for q_idx, q_item in enumerate(items_queue, 1):
+                if self._cancel_requested:
+                    break
+
+                q_link_type = q_item["link_type"]
+                q_res_id = q_item["resource_id"]
+                q_known_fn = q_item["known_filename"]
+                q_label = q_item["source_label"]
+
+                self._file_index = q_idx
+                self._total_files = total_queue_items
+                self._stage = f"[{q_idx}/{total_queue_items}] Đang tải: {q_known_fn or q_label}..."
+                self._log(f"👉 [{q_idx}/{total_queue_items}] Bắt đầu xử lý: {q_known_fn or q_label}", "info")
+
+                dl_path = None
+                if q_link_type == "file":
+                    dl_path = await self._download_gdrive_file(q_res_id, work_dir, known_filename=q_known_fn)
+                elif q_link_type == "direct":
+                    dl_path = await self._download_direct_url(q_res_id, work_dir)
+
+                if not dl_path or not os.path.exists(dl_path):
+                    self._log(f"⚠️ Bỏ qua mục [{q_idx}/{total_queue_items}] do tải về thất bại: {q_label}", "warn")
+                    continue
+
+                # 3. Giải nén (nếu là file nén) hoặc lấy trực tiếp file audio
+                files_to_upload = []
+                ext = os.path.splitext(dl_path)[1].lower()
+                sub_extract_dir = os.path.join(work_dir, f"item_{q_idx}_extracted")
+
+                if ext in ARCHIVE_EXTENSIONS:
+                    self._stage = f"[{q_idx}/{total_queue_items}] Đang giải nén tập tin album: {os.path.basename(dl_path)}..."
+                    self._log(f"Phát hiện file nén ({ext}), đang giải nén trích xuất danh sách bài hát...", "info")
+                    success, extract_msg = await _extract_archive(dl_path, sub_extract_dir)
+                    if success:
+                        self._log(f"✅ {extract_msg}", "success")
+                        files_to_upload = self._collect_audio_files(sub_extract_dir)
+                    else:
+                        self._log(f"⚠️ Lỗi giải nén {os.path.basename(dl_path)}: {extract_msg}", "warn")
+                elif ext in AUDIO_EXTENSIONS:
+                    files_to_upload = [dl_path]
+
+                if not files_to_upload:
+                    self._log(f"⚠️ Không tìm thấy bài hát nào trong {os.path.basename(dl_path)}", "warn")
+                    continue
+
+                self._log(f"Tìm thấy {len(files_to_upload)} bài hát trong mục [{q_idx}/{total_queue_items}]. Đang upload lên Telegram...", "info")
+                uploaded_messages_item = []
+
+                # 4. Upload từng bài hát trong item này lên Telegram
+                for track_idx, file_path in enumerate(files_to_upload, 1):
+                    if self._cancel_requested:
+                        break
+
+                    raw_filename = os.path.basename(file_path)
+                    clean_title = clean_audio_filename(raw_filename)
+                    fsize = os.path.getsize(file_path)
+                    fsize_mb = round(fsize / (1024 * 1024), 2)
+
+                    self._current_file = raw_filename
+                    self._stage = f"[{q_idx}/{total_queue_items}] Đang upload bài [{track_idx}/{len(files_to_upload)}]: {raw_filename} ({fsize_mb} MB)"
+                    self._upload_percent = 0
+                    self._upload_bytes = 0
+                    self._upload_total = fsize
+
+                    parsed_artist, parsed_title, parsed_album = parse_artist_and_title(
+                        raw_title="",
+                        raw_artist=default_artist,
+                        raw_album=default_album,
+                        file_name=raw_filename
+                    )
+                    artist_candidate = parsed_artist or default_artist
+                    title_candidate = parsed_title or clean_title
+                    album_candidate = parsed_album or default_album
+
+                    cover_url = ""
+                    if auto_scrape:
+                        try:
+                            scraped = await fetch_music_metadata(
+                                raw_title=title_candidate,
+                                raw_artist=artist_candidate,
+                                raw_album=album_candidate,
+                                file_name=raw_filename,
+                                default_artist=default_artist,
+                                default_album=default_album,
+                            )
+                            if scraped:
+                                if scraped.get("title"): title_candidate = scraped["title"]
+                                if scraped.get("artist"): artist_candidate = scraped["artist"]
+                                if scraped.get("album") and not default_album: album_candidate = scraped["album"]
+                                if scraped.get("cover_url"): cover_url = scraped["cover_url"]
+                        except Exception as e:
+                            LOGGER.debug(f"Metadata scrape note: {e}")
+
+                    thumb_path = await self._download_cover_image(cover_url, work_dir) if cover_url else None
+
+                    start_up = time.time()
+                    last_up_time = 0
+
+                    def _progress_cb(current, total):
+                        nonlocal last_up_time
+                        self._upload_bytes = current
+                        self._upload_total = total
+                        if total > 0:
+                            self._upload_percent = min(100, int((current / total) * 100))
+                        now = time.time()
+                        if now - last_up_time > 0.5:
+                            last_up_time = now
+                            elapsed = now - start_up
+                            if elapsed > 0:
+                                mbps = (current / (1024 * 1024)) / elapsed
+                                self._speed_str = f"{mbps:.2f} MB/s"
+
+                    caption = f"🎵 {title_candidate}\n👤 {artist_candidate or 'Unknown Artist'}\n💿 {album_candidate or 'Single'}"
+
+                    sent_msg = None
+                    try:
+                        ext_f = os.path.splitext(file_path)[1].lower()
+                        if send_as_document or ext_f in (".dsf", ".dff", ".ape"):
+                            sent_msg = await client.send_document(
+                                chat_id=target_chat_id,
+                                document=file_path,
+                                caption=caption,
+                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+                                force_document=True,
+                                progress=_progress_cb
+                            )
+                        else:
+                            sent_msg = await client.send_audio(
+                                chat_id=target_chat_id,
+                                audio=file_path,
+                                caption=caption,
+                                title=title_candidate,
+                                performer=artist_candidate or None,
+                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+                                progress=_progress_cb
+                            )
+                    except FloodWait as fw:
+                        self._log(f"Telegram yêu cầu chờ FloodWait {fw.value}s — đang tự động tạm dừng...", "warn")
+                        await asyncio.sleep(fw.value + 1)
+                        if send_as_document:
+                            sent_msg = await client.send_document(
+                                chat_id=target_chat_id,
+                                document=file_path,
+                                caption=caption,
+                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+                                force_document=True,
+                                progress=_progress_cb
+                            )
+                        else:
+                            sent_msg = await client.send_audio(
+                                chat_id=target_chat_id,
+                                audio=file_path,
+                                caption=caption,
+                                title=title_candidate,
+                                performer=artist_candidate or None,
+                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+                                progress=_progress_cb
+                            )
+                    except Exception as upload_err:
+                        self._log(f"❌ Lỗi khi upload bài '{raw_filename}': {upload_err}", "error")
+                        continue
+
+                    if sent_msg:
+                        self._log(f"✅ Đã upload [{track_idx}/{len(files_to_upload)}]: {title_candidate} - {artist_candidate} (Msg #{sent_msg.id})", "success")
+                        uploaded_messages_item.append((sent_msg, title_candidate, artist_candidate, album_candidate, cover_url, file_path))
+                        self._uploaded_tracks.append({
+                            "msg_id": sent_msg.id,
+                            "title": title_candidate,
+                            "artist": artist_candidate,
+                            "album": album_candidate,
+                            "size": f"{fsize_mb} MB"
+                        })
+
+                    await asyncio.sleep(0.3)
+
+                # 5. Đồng bộ các bài hát vừa upload vào Database MongoDB
+                if uploaded_messages_item:
+                    self._stage = f"Đang đồng bộ {len(uploaded_messages_item)} bài hát của mục [{q_idx}/{total_queue_items}] vào Thư viện..."
+                    await self._index_uploaded_tracks(uploaded_messages_item, target_chat_id)
+                    uploaded_messages_all.extend(uploaded_messages_item)
+
+                # Dọn dẹp thư mục giải nén của mục này
+                if os.path.exists(sub_extract_dir):
+                    try:
+                        shutil.rmtree(sub_extract_dir, ignore_errors=True)
+                    except Exception:
+                        pass
+
+                # Xóa file cache của mục này sau khi đã hoàn thành upload
+                try:
+                    if os.path.exists(CACHE_DOWNLOAD_DIR):
+                        for fname in os.listdir(CACHE_DOWNLOAD_DIR):
+                            if fname.startswith(f"{q_res_id}_"):
+                                c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                                if os.path.isfile(c_file):
+                                    os.remove(c_file)
+                except Exception:
+                    pass
 
             self._status = "completed"
-            self._stage = "Hoàn tất upload toàn bộ bài hát!"
+            self._stage = f"Hoàn tất upload toàn bộ {len(self._uploaded_tracks)} bài hát!"
             self._end_time = time.time()
-            self._log(f"🎉 Hoàn tất quá trình! Đã tải và upload thành công {len(uploaded_messages)}/{self._total_files} bài hát.", "success")
+            self._log(f"🎉 Hoàn tất toàn bộ tiến trình! Đã tải và upload thành công {len(self._uploaded_tracks)} bài hát từ {total_queue_items} mục.", "success")
 
         except asyncio.CancelledError:
             self._status = "cancelled"
@@ -1014,7 +1068,7 @@ class GoogleDriveUploadManager:
             self._log(f"Lỗi: {exc}", "error")
             LOGGER.error(f"[GDRIVE UPLOAD PIPELINE ERROR] {exc}", exc_info=True)
         finally:
-            # 1. Dọn dẹp thư mục làm việc tạm của phiên upload này (các file WAV/FLAC giải nén)
+            # 1. Dọn dẹp thư mục làm việc tạm
             try:
                 if os.path.exists(work_dir):
                     shutil.rmtree(work_dir, ignore_errors=True)

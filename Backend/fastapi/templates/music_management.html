@@ -637,22 +637,27 @@
 
         <!-- VIEW 1: Upload Setup Form -->
         <div id="gdrive-view-setup" class="flex-1 overflow-y-auto pr-1 space-y-4">
-            <!-- URL Input -->
+            <!-- URL Input (Hỗ trợ 1 hoặc nhiều link / Folder) -->
             <div>
-                <label class="block text-xs font-bold uppercase text-text-secondary mb-1">
-                    <i class="fa-solid fa-link text-primary mr-1"></i> Link Google Drive hoặc Link Tải Trực Tiếp:
-                </label>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold uppercase text-text-secondary">
+                        <i class="fa-solid fa-link text-primary mr-1"></i> Link Google Drive hoặc Link Tải (1 hoặc nhiều link):
+                    </label>
+                    <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        <i class="fa-solid fa-folder-open mr-1"></i> Hỗ trợ Thư mục & Đa Link
+                    </span>
+                </div>
                 <div class="relative">
-                    <input type="text" id="gdrive-url-input"
-                           placeholder="https://drive.google.com/file/d/... hoặc /folders/... hoặc link file .zip / audio"
-                           class="w-full pl-3 pr-10 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary focus:border-primary font-mono">
+                    <textarea id="gdrive-url-input" rows="3"
+                              placeholder="Dán 1 hoặc nhiều link Google Drive (Mỗi link 1 dòng)...&#10;Ví dụ: https://drive.google.com/drive/folders/... hoặc https://drive.google.com/file/d/..."
+                              class="w-full pl-3 pr-10 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary focus:border-primary font-mono resize-y"></textarea>
                     <button type="button" onclick="pasteClipboardToGDriveUrl()" title="Dán từ Clipboard"
-                            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary text-xs p-1">
+                            class="absolute right-2.5 top-3 text-text-secondary hover:text-primary text-xs p-1">
                         <i class="fa-solid fa-paste"></i>
                     </button>
                 </div>
                 <p class="text-[11px] text-text-secondary mt-1">
-                    💡 Hỗ trợ link File đơn, Thư mục Folder, File nén <code>.zip</code> chứa album, và các file <code>.flac, .mp3, .wav, .dsf, .m4a</code>.
+                    💡 Hỗ trợ: <b>Thư mục Google Drive (Folder)</b>, file đơn lẻ, file nén <code>.zip/.rar/.7z</code>, và nhập <b>nhiều liên kết cùng lúc</b> (mỗi link 1 dòng).
                 </p>
             </div>
 
@@ -4837,8 +4842,12 @@ async function pasteClipboardToGDriveUrl() {
         if (text) {
             const input = document.getElementById('gdrive-url-input');
             if (input) {
-                input.value = text.trim();
-                alertToast('Đã dán link từ bộ nhớ tạm!');
+                if (input.value.trim()) {
+                    input.value = input.value.trim() + '\n' + text.trim();
+                } else {
+                    input.value = text.trim();
+                }
+                alertToast('Đã dán liên kết từ bộ nhớ tạm!');
             }
         }
     } catch (e) {
