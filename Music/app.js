@@ -2375,23 +2375,9 @@ class XTAPOMusicApp {
         this.currentTrackIndex = trackIndex;
         const track = this.currentTrack;
         const album = this.currentAlbum;
+        if (!track) return;
 
-        // Cập nhật ảnh đĩa than & Album Sleeve theo từng bài hát ngay lập tức với cơ chế fallback tự động
-        const trackCover = this.getTrackCover(track, album);
-        this.updateCovers(trackCover);
-
-        // Preload trước ảnh cover của các bài hát xung quanh để chuyển bài hiện ngay
-        this.preloadCoversForCurrentAlbum();
-
-        // Cập nhật màu nền phát sáng theo bài hát nếu có
-        if (track && track.glowColors) {
-            const glow1 = document.querySelector('.glow-1');
-            const glow2 = document.querySelector('.glow-2');
-            if (glow1 && track.glowColors.glow1) glow1.style.background = track.glowColors.glow1;
-            if (glow2 && track.glowColors.glow2) glow2.style.background = track.glowColors.glow2;
-        }
-
-        // Cập nhật thông tin bài hát đang phát
+        // 1. Cập nhật thông tin bài hát đang phát & thanh trạng thái ngay lập tức
         const artistName = (track && track.artist) || (album && album.artist) || 'XTAPO Music';
         this.nowPlayingTitle.textContent = `${this.currentTrackIndex + 1}. ${track.name || 'Unknown Track'}`;
         this.nowPlayingArtist.textContent = artistName;
@@ -2399,25 +2385,11 @@ class XTAPOMusicApp {
         this.timeCurrent.textContent = "0:00";
         this.updateProgress(0);
 
-        // Cập nhật thẻ Badge chất lượng & năm phát hành thực tế
-        this.updateAudioBadges(track, album);
+        // 2. Cập nhật ảnh đĩa than & dynamic backdrop
+        const trackCover = this.getTrackCover(track, album);
+        this.updateCovers(trackCover);
 
-        // Cập nhật MediaSession cho màn hình khóa iPhone (iOS), Android và Desktop
-        this.updateMediaSession();
-
-        // Cập nhật trạng thái nút Yêu thích
-        this.updateFavoriteBtnState();
-
-        // Cập nhật Lời bài hát thời gian thực (Real-time Synced Lyrics)
-        this.fetchTrackLyrics(track, album);
-        if (this.karaokeTrackTitle) this.karaokeTrackTitle.textContent = track.name || 'Unknown Track';
-        if (this.karaokeArtistName) this.karaokeArtistName.textContent = artistName;
-        if (this.karaokeBackdrop) this.karaokeBackdrop.style.backgroundImage = `url("${trackCover}")`;
-        if (this.karaokeTimeTotal) this.karaokeTimeTotal.textContent = track.duration || '--:--';
-        if (this.karaokeTimeCurrent) this.karaokeTimeCurrent.textContent = "0:00";
-        if (this.karaokeProgressFill) this.karaokeProgressFill.style.width = '0%';
-
-        // Update Active Tracklist Item
+        // 3. Highlight item trong danh sách phát (dùng auto scroll để không gây giật lag UI)
         if (this.tracklistEl) {
             if (this.currentTrackIndex >= (this._mainTracklistRenderedCount || 0)) {
                 this.appendMainTracklistBatch(this.currentTrackIndex - (this._mainTracklistRenderedCount || 0) + 20);
@@ -2433,11 +2405,11 @@ class XTAPOMusicApp {
                 activeItem.classList.add('active');
                 if (!this.isPlaying) activeItem.classList.add('paused');
                 else activeItem.classList.remove('paused');
-                activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                activeItem.scrollIntoView({ behavior: 'auto', block: 'nearest' });
             }
         }
 
-        // Set Audio Source - Dừng dứt điểm bài hát cũ trước khi nạp bài mới
+        // 4. Cập nhật Audio Source & phát nhạc ngay
         if (this.audio) {
             try {
                 this.audio.pause();
@@ -2480,7 +2452,6 @@ class XTAPOMusicApp {
 
         if (track.previewUrl) {
             this.audio.src = track.previewUrl;
-            this.audio.load();
         }
 
         if (autoPlay) {
@@ -2489,10 +2460,29 @@ class XTAPOMusicApp {
             this.pauseVisuals();
         }
 
-        this.savePlayerState();
+        // 5. Chạy các tác vụ cập nhật thứ cấp qua rAF để không block luồng xử lý UI
+        requestAnimationFrame(() => {
+            this.updateAudioBadges(track, album);
+            this.updateMediaSession();
+            this.updateFavoriteBtnState();
 
-        // Tự động nạp trước (preload) bài hát kế tiếp sau 1.2s
-        setTimeout(() => this.preloadNextTrack(), 1200);
+            if (this.karaokeTrackTitle) this.karaokeTrackTitle.textContent = track.name || 'Unknown Track';
+            if (this.karaokeArtistName) this.karaokeArtistName.textContent = artistName;
+            if (this.karaokeBackdrop) this.karaokeBackdrop.style.backgroundImage = `url("${trackCover}")`;
+            if (this.karaokeTimeTotal) this.karaokeTimeTotal.textContent = track.duration || '--:--';
+            if (this.karaokeTimeCurrent) this.karaokeTimeCurrent.textContent = "0:00";
+            if (this.karaokeProgressFill) this.karaokeProgressFill.style.width = '0%';
+
+            // Cập nhật Lời bài hát thời gian thực (Real-time Synced Lyrics)
+            this.fetchTrackLyrics(track, album);
+            this.savePlayerState();
+        });
+
+        // 6. Nạp trước cover và bài hát kế tiếp sau khi giao diện đã ổn định
+        setTimeout(() => {
+            this.preloadCoversForCurrentAlbum();
+            this.preloadNextTrack();
+        }, 800);
     }
 
     playTrackById(trackId) {
