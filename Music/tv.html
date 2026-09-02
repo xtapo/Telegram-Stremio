@@ -1658,6 +1658,12 @@
                                     c = 'Nhật Bản';
                                 } else if (['jay chou', 'faye wong', 'jj lin', 'c-pop', 'nhạc hoa'].some(k => full.includes(k)) || /[\u4e00-\u9fff]/.test(full)) {
                                     c = 'Hoa Ngữ';
+                                } else if (['jeff satur', 'billkin', 'pp krit', 'nanon', 'bright vachirawit', 'three man down', 'tilly birds', 't-pop', 'nhạc thái'].some(k => full.includes(k)) || /[\u0e00-\u0e7f]/.test(full)) {
+                                    c = 'Thái Lan';
+                                } else if (['latin', 'reggaeton', 'bachata', 'salsa', 'bad bunny', 'daddy yankee', 'shakira', 'despacito', 'maluma', 'enrique iglesias'].some(k => full.includes(k))) {
+                                    c = 'Latin / Tây Ban Nha';
+                                } else if (['chanson', 'french pop', 'nhạc pháp', 'lời pháp', 'indila', 'stromae', 'carla bruni', 'edith piaf'].some(k => full.includes(k))) {
+                                    c = 'Pháp / Châu Âu';
                                 } else if (/[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]/.test(full)) {
                                     c = 'Việt Nam';
                                 } else {

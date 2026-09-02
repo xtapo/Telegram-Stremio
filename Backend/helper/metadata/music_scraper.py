@@ -261,7 +261,7 @@ _JP_ARTISTS = {
     "utada hikaru", "yoasobi", "kenshi yonezu", "aimer", "radwimps", "one ok rock", 
     "official hige dandism", "x japan", "milet", "ayumi hamasaki", "namie amuro", 
     "king gnu", "ado", "eve", "vocaloid", "hatsune miku", "flow", "sawano hiroyuki", 
-    "joe hisaishi", "liSA", "yorushika", "vaundy", "fujii kaze", "mrs. green apple"
+    "joe hisaishi", "lisa", "yorushika", "vaundy", "fujii kaze", "mrs. green apple"
 }
 
 _CN_ARTISTS = {
@@ -271,6 +271,23 @@ _CN_ARTISTS = {
     "luu duc hoa", "lưu đức hoa", "quach phu thanh", "quách phú thành", "le minh", "lê minh", 
     "tran dich tan", "trần dịch tấn", "eason chan", "chau tham", "châu thâm", "zhou shen", 
     "phuong hoang truyen ky", "phượng hoàng truyền kỳ", "phoenix legend", "eric chou", "châu hưng triết"
+}
+
+_TH_ARTISTS = {
+    "jeff satur", "billkin", "pp krit", "nanon", "bright vachirawit", "three man down",
+    "tilly birds", "bowkylion", "violette wautier", "milli", "f.hero", "non kul", "the toys",
+    "ink waruntorn", "scrubb", "cocktail", "bodyslam", "getsunova", "palmy", "stamp apiwat"
+}
+
+_LATIN_ARTISTS = {
+    "bad bunny", "daddy yankee", "luis fonsi", "j balvin", "shakira", "rosalia", "rosalía",
+    "maluma", "enrique iglesias", "camila cabello", "ozuna", "rauw alejandro", "anuel aa",
+    "karol g", "becky g", "ricky martin", "jennifer lopez", "pitbull", "gipsy kings", "alvaro soler"
+}
+
+_FR_ARTISTS = {
+    "indila", "stromae", "carla bruni", "edith piaf", "alizee", "alizée", "kendji girac",
+    "angele", "angèle", "zaz", "gims", "aya nakamura", "claude francois", "charles aznavour"
 }
 
 
@@ -303,15 +320,29 @@ def classify_genre_and_country(
         detected_country = "Nhật Bản"
     elif any(a in low_art for a in _CN_ARTISTS):
         detected_country = "Hoa Ngữ"
+    elif any(a in low_art for a in _TH_ARTISTS):
+        detected_country = "Thái Lan"
+    elif any(a in low_art for a in _LATIN_ARTISTS):
+        detected_country = "Latin / Tây Ban Nha"
+    elif any(a in low_art for a in _FR_ARTISTS):
+        detected_country = "Pháp / Châu Âu"
     elif any(a in low_art for a in _VN_BOLERO_ARTISTS | _VN_RAP_ARTISTS | _VN_ACOUSTIC_CHILL_ARTISTS | _VN_POP_ARTISTS):
         detected_country = "Việt Nam"
-    # Ký tự đặc trưng từng ngôn ngữ
+    # Ký tự đặc trưng từng ngôn ngữ & chữ viết
     elif re.search(r'[\uac00-\ud7a3\u1100-\u11ff\u3130-\u318f]', full_text) or any(k in low_art or k in low_text for k in ["k-pop", "kpop", "korean", "ost hàn"]):
         detected_country = "Hàn Quốc"
     elif re.search(r'[\u3040-\u309f\u30a0-\u30ff]', full_text) or any(k in low_art or k in low_text for k in ["j-pop", "jpop", "anime", "japanese"]):
         detected_country = "Nhật Bản"
     elif re.search(r'[\u4e00-\u9fff]', full_text) or any(k in low_art or k in low_text for k in ["c-pop", "cpop", "mandopop", "cantopop", "nhạc hoa", "nhạc trung"]):
         detected_country = "Hoa Ngữ"
+    elif re.search(r'[\u0e00-\u0e7f]', full_text) or any(k in low_art or k in low_text for k in ["t-pop", "tpop", "thai pop", "nhạc thái", "ost thái"]):
+        detected_country = "Thái Lan"
+    # Latin / Tây Ban Nha
+    elif any(k in low_art or k in low_text for k in ["latin", "reggaeton", "bachata", "salsa", "despacito", "spanish pop", "musica latina"]):
+        detected_country = "Latin / Tây Ban Nha"
+    # Pháp / Châu Âu
+    elif any(k in low_art or k in low_text for k in ["chanson", "french pop", "nhạc pháp", "lời pháp", "france gall", "french chanson"]):
+        detected_country = "Pháp / Châu Âu"
     # Tiếng Việt có dấu
     elif re.search(r'[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]', full_text):
         detected_country = "Việt Nam"
