@@ -173,7 +173,11 @@
                                 <span class="tracklist-hint">Click bài hát để nghe</span>
                             </div>
                             <!-- Album Quick Actions Menu -->
-                            <div class="tracklist-actions-wrap">
+                            <div class="tracklist-actions-wrap" style="display: flex; align-items: center; gap: 8px;">
+                                <button class="album-quick-export-btn" id="btnTracklistAddAllToPlaylist" title="Lưu toàn bộ danh sách bài hát này vào Playlist của bạn" style="background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.35); color: #c7d2fe;">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                                    <span>Lưu Vào Playlist</span>
+                                </button>
                                 <div class="dropdown-wrapper" id="albumExportDropdown">
                                     <button class="album-quick-export-btn" id="albumExportBtn" title="Tải về Album hoặc Xuất Playlist M3U8/PLS">
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
@@ -181,6 +185,13 @@
                                         <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="margin-left: 2px;"><polygon points="6 9 12 15 18 9"></polygon></svg>
                                     </button>
                                     <div class="dropdown-menu" id="albumExportMenu">
+                                        <button class="dropdown-item" id="btnExportMenuAddToPlaylist">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                                            <div>
+                                                <div class="dd-title">Lưu Vào Playlist Cá Nhân</div>
+                                                <div class="dd-sub">Thêm toàn bộ bài hát đang phát vào Playlist</div>
+                                            </div>
+                                        </button>
                                         <button class="dropdown-item" id="btnDownloadAlbumZip">
                                             <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 10v-3h-4v-2h4V8l4 4-4 4z"/></svg>
                                             <div>
@@ -457,10 +468,16 @@
                 <h3 style="margin: 0; font-size: 1.2rem;">Thêm Vào Playlist</h3>
                 <button class="modal-close" id="closeAddToPlaylistModal">&times;</button>
             </div>
-            <div style="margin-bottom: 16px; padding: 10px 14px; background: rgba(255,255,255,0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">BÀI HÁT ĐƯỢC CHỌN:</div>
-                <div id="addToPlaylistTrackTitle" style="font-weight: 600; color: var(--accent-gold); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            <div style="margin-bottom: 14px; padding: 10px 14px; background: rgba(255,255,255,0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                <div id="addToPlaylistModalHeaderLabel" style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">BÀI HÁT / TUYỂN TẬP ĐƯỢC CHỌN:</div>
+                <div id="addToPlaylistTrackTitle" style="font-weight: 700; color: var(--accent-gold); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
             </div>
+            <!-- Quick New Playlist Creation Inline -->
+            <div style="margin-bottom: 14px; display: flex; gap: 8px;">
+                <input type="text" id="inputNewPlaylistInline" placeholder="Tạo playlist mới từ danh sách này..." style="flex: 1; padding: 9px 14px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+                <button id="btnCreateNewPlaylistInline" style="padding: 9px 16px; border-radius: 8px; background: var(--color-primary); color: #fff; border: none; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; transition: all 0.2s;">+ Tạo & Lưu</button>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">HOẶC CHỌN PLAYLIST CÓ SẴN:</div>
             <div id="addToPlaylistOptions" style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto;">
                 <!-- Options populated by js -->
             </div>
@@ -1786,6 +1803,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="/music/app.js?v=5.0"></script>
+    <script src="/music/app.js?v=5.1"></script>
 </body>
 </html>
