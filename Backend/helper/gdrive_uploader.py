@@ -696,11 +696,7 @@ class GoogleDriveUploadManager:
 
                 self._download_percent = 100
                 self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize / (1024 * 1024), 2)} MB)", "success")
-                try:
-                    shutil.copy2(cache_path, out_path)
-                    return out_path
-                except Exception:
-                    return cache_path
+                return cache_path
 
     async def _download_direct_url(self, url: str, work_dir: str) -> Optional[str]:
         """Tải file từ link HTTP/HTTPS trực tiếp với bộ nhớ đệm"""
@@ -717,12 +713,7 @@ class GoogleDriveUploadManager:
                         cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
                         self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua tải trực tiếp!", "success")
                         self._download_percent = 100
-                        out_path = os.path.join(work_dir, cached_fn)
-                        try:
-                            shutil.copy2(c_path, out_path)
-                            return out_path
-                        except Exception:
-                            return c_path
+                        return c_path
         except Exception:
             pass
 
@@ -749,9 +740,9 @@ class GoogleDriveUploadManager:
                     self._log(f"Bắt đầu tải trực tiếp: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
 
                     cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}_{final_filename}")
-                    out_path = os.path.join(work_dir, final_filename)
                     start_dl = time.time()
                     last_update = 0
+                    last_dl_bytes = 0
 
                     with open(cache_path, "wb") as f_out:
                         async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
@@ -761,23 +752,21 @@ class GoogleDriveUploadManager:
                             self._download_bytes += len(chunk)
 
                             now = time.time()
-                            if now - last_update > 0.5:
+                            if now - last_update >= 0.5:
+                                delta_t = now - last_update if last_update > 0 else (now - start_dl)
+                                delta_b = self._download_bytes - last_dl_bytes if last_update > 0 else self._download_bytes
                                 last_update = now
+                                last_dl_bytes = self._download_bytes
                                 if total_bytes > 0:
                                     self._download_percent = min(100, int((self._download_bytes / total_bytes) * 100))
-                                elapsed_dl = now - start_dl
-                                if elapsed_dl > 0:
-                                    mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
+                                if delta_t > 0 and delta_b >= 0:
+                                    mbps = (delta_b / (1024 * 1024)) / delta_t
                                     self._speed_str = f"{mbps:.2f} MB/s"
 
                     self._download_percent = 100
                     dl_sz = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
                     self._log(f"✅ Tải thành công: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)", "success")
-                    try:
-                        shutil.copy2(cache_path, out_path)
-                        return out_path
-                    except Exception:
-                        return cache_path
+                    return cache_path
         except Exception as e:
             self._log(f"Lỗi khi tải trực tiếp: {e}", "error")
             return None
@@ -1073,6 +1062,13 @@ class GoogleDriveUploadManager:
                 except Exception:
                     pass
 
+                # Thu hồi RAM chủ động sau mỗi album để tránh OOM Killer
+                try:
+                    import gc
+                    gc.collect()
+                except Exception:
+                    pass
+
             self._status = "completed"
             self._stage = f"Hoàn tất upload toàn bộ {len(self._uploaded_tracks)} bài hát!"
             self._end_time = time.time()
@@ -1096,18 +1092,12 @@ class GoogleDriveUploadManager:
             except Exception:
                 pass
 
-            # 2. Nếu đã hoàn tất upload thành công 100%, xóa file nén gốc trong Cache để giải phóng dung lượng
-            if self._status == "completed":
-                try:
-                    if os.path.exists(CACHE_DOWNLOAD_DIR):
-                        for fname in os.listdir(CACHE_DOWNLOAD_DIR):
-                            if fname.startswith(f"{resource_id}_"):
-                                c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
-                                if os.path.isfile(c_file):
-                                    os.remove(c_file)
-                                    LOGGER.info(f"[CLEANUP] Đã giải phóng file nén trong bộ nhớ đệm: {fname}")
-                except Exception:
-                    pass
+            # 2. Thu hồi RAM
+            try:
+                import gc
+                gc.collect()
+            except Exception:
+                pass
 
             # 3. Quét dọn rác tự động các thư mục tạm cũ
             try:
