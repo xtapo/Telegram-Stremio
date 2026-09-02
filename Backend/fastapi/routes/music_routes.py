@@ -1426,7 +1426,7 @@ class MusicScanManager:
             client = _get_active_client()
             all_scanned_tracks = []
             audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
-            from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title
+            from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title, classify_genre_and_country
             from Backend.helper.metadata.audio_fingerprint import recognize_audio_from_telegram
 
             for idx, raw_ch in enumerate(channels, 1):
@@ -1710,6 +1710,8 @@ class MusicScanManager:
                             t_year = scraped_meta.get("year", time.strftime("%Y"))
                             t_pub = scraped_meta.get("publisher", f"Telegram: {chat_title}")
                             t_genre = scraped_meta.get("genre") or fingerprint_genre or ""
+                            t_country = scraped_meta.get("country") or ""
+                            t_era = scraped_meta.get("era") or ""
                         else:
                             t_title = final_title
                             t_artist = final_artist
@@ -1718,6 +1720,22 @@ class MusicScanManager:
                             t_year = time.strftime("%Y")
                             t_pub = f"Telegram: {chat_title}"
                             t_genre = fingerprint_genre or ""
+                            t_country = ""
+                            t_era = ""
+
+                        # Chuẩn hóa phân loại đa chiều (Genre, Country, Era)
+                        cls_meta = classify_genre_and_country(
+                            title=t_title,
+                            artist=t_artist,
+                            album=t_album,
+                            raw_genre=t_genre,
+                            file_name=f_name or "",
+                            caption=caption_text or "",
+                            year=t_year
+                        )
+                        t_genre = cls_meta["genre"]
+                        t_country = t_country or cls_meta["country"]
+                        t_era = t_era or cls_meta["era"]
 
                         self._current_track = f"{t_title} - {t_artist}"
                         all_scanned_tracks.append({
@@ -1738,6 +1756,8 @@ class MusicScanManager:
                             "year": t_year,
                             "publisher": t_pub,
                             "genre": t_genre,
+                            "country": t_country,
+                            "era": t_era,
                             "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
                         })
                         self._found_tracks_count = len(all_scanned_tracks)

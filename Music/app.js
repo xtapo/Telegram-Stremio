@@ -294,6 +294,7 @@ class XTAPOMusicApp {
         this.genreModal = document.getElementById('genreModal');
         this.closeGenreModal = document.getElementById('closeGenreModal');
         this.genreGrid = document.getElementById('genreGrid');
+        this.genreSearchInput = document.getElementById('genreSearchInput');
 
         this.countryModal = document.getElementById('countryModal');
         this.closeCountryModal = document.getElementById('closeCountryModal');
@@ -3342,6 +3343,11 @@ class XTAPOMusicApp {
         if (this.closeGenreModal && this.genreModal) {
             this.closeGenreModal.addEventListener('click', () => this.closeModal(this.genreModal));
         }
+        if (this.genreSearchInput) {
+            this.genreSearchInput.addEventListener('input', (e) => {
+                this.renderGenreGrid(null, e.target.value.trim());
+            });
+        }
 
         if (this.navCountries && this.countryModal) {
             this.navCountries.addEventListener('click', (e) => {
@@ -4044,7 +4050,7 @@ class XTAPOMusicApp {
 
         this.getBaseAlbums().forEach(album => {
             (album.tracks || []).forEach(track => {
-                const g = ((track.genre || 'Khác').trim() || 'Khác').toLowerCase();
+                const g = this.normalizeGenre(track.genre, track).toLowerCase();
                 if (g === targetGenreLow) {
                     const key = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
                     if (!seenKeys.has(key)) {
@@ -5198,7 +5204,146 @@ class XTAPOMusicApp {
         this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${tracks.length} bài)`);
     }
 
-    renderGenreGrid(selectedCountry = null) {
+    normalizeGenre(rawGenre, track = null) {
+        if (!rawGenre && !track) return 'Khác';
+        const r = (rawGenre || '').trim().toLowerCase();
+        
+        const trackTitle = ((track && (track.name || track.title)) || '').toLowerCase();
+        const trackArtist = ((track && track.artist) || '').toLowerCase();
+        const trackAlbum = ((track && (track.album || track.albumName)) || '').toLowerCase();
+        const trackFn = ((track && track.file_name) || '').toLowerCase();
+        const fullText = `${trackTitle} ${trackArtist} ${trackAlbum} ${trackFn} ${r}`.toLowerCase();
+
+        // 1. Nhận diện ưu tiên từ khóa & nghệ sĩ đặc thù
+        // A. Bolero / Trữ Tình
+        const boleroArtists = ['nhu quynh', 'như quỳnh', 'che linh', 'chế linh', 'quang le', 'quang lê', 'truong vu', 'trường vũ', 'phi nhung', 'huong lan', 'hương lan', 'giao linh', 'manh quynh', 'mạnh quỳnh', 'le quyen', 'lệ quyên', 'tuan vu', 'tuấn vũ', 'dan nguyen', 'đan nguyên', 'ngoc son', 'ngọc sơn', 'duy khanh', 'duy khánh', 'thanh tuyen', 'thanh tuyền', 'hoang oanh', 'hoàng oanh', 'phuong dung', 'phương dung', 'mai thien van', 'mai thiên vân', 'quoc dai', 'quốc đại', 'to my', 'tố my', 'luu anh loan', 'lưu ánh loan'];
+        const boleroKws = ['bolero', 'trữ tình', 'nhạc vàng', 'tân cổ', 'cải lương', 'liên khúc chiều mưa', 'đò nghèo', 'áo em chưa mặc', 'con đường xưa em đi', 'sầu tím', 'chuyến tàu hoàng hôn', 'thương về miền trung', 'vọng cổ', 'dân ca'];
+        if (boleroArtists.some(a => trackArtist.includes(a)) || boleroKws.some(k => fullText.includes(k))) {
+            return 'Bolero / Trữ Tình';
+        }
+
+        // B. EDM / Remix / Vinahouse
+        const remixKws = ['remix', 'vinahouse', 'vina house', 'nonstop', 'bass boosted', 'speed up', 'nightcore', 'mashup', 'club mix', 'extended mix', 'dj ', 'dj-', 'electro remix', 'house mix', 'dance remix', 'festival edit'];
+        if (remixKws.some(k => trackTitle.includes(k) || trackFn.includes(k) || fullText.includes(k))) {
+            return 'EDM / Remix';
+        }
+
+        // C. Rap / Hip-Hop
+        const rapArtists = ['den vau', 'đen vâu', 'b ray', 'karik', 'justatee', 'binz', 'hieuthuhai', 'mck', 'wxrdie', 'rhymastic', 'tage', 'bigdaddy', 'suboi', 'andree', 'low g', '24k.right', 'icd', 'lk', 'phao', 'pháo', 'gill', 'de choat', 'dế choắt', 'double2t', 'tlinh', '16 typh', 'rap viet'];
+        const rapKws = ['rap việt', 'rap viet', 'freestyle', 'cypher', 'prod. by', 'hip-hop', 'hip hop', 'trap beat', 'boom bap'];
+        if (rapArtists.some(a => trackArtist.includes(a)) || rapKws.some(k => fullText.includes(k))) {
+            return 'Rap / Hip-Hop';
+        }
+
+        // D. Acoustic / Chill / Lofi
+        const acousticArtists = ['vu.', 'vũ.', 'chillies', 'ngot', 'ngọt', 'ca hoi hoang', 'cá hồi hoang', 'trang', 'thinh suy', 'thịnh suy', 'hoang dung', 'hoàng dũng', 'ha anh tuan', 'hà anh tuấn', 'kai dinh', 'kai đinh', 'le cat trong ly', 'lê cát trọng lý', 'phan manh quynh', 'phan mạnh quỳnh', 'nguyen ha', 'nguyên hà', 'thai dinh', 'thái đinh', 'buitruonglinh', 'lyly', 'grey d'];
+        const acousticKws = ['lofi', 'lo-fi', 'chill ver', 'chill version', 'acoustic', 'unplugged', 'coffee chill', 'guitar cover', 'piano version', 'live session'];
+        if (acousticArtists.some(a => trackArtist.includes(a)) || acousticKws.some(k => fullText.includes(k))) {
+            return 'Acoustic / Chill / Lofi';
+        }
+
+        // E. Nhạc Đỏ / Cách Mạng
+        const redKws = ['tiền chiến', 'cách mạng', 'nhạc đỏ', 'giải phóng', 'trường sơn', 'bác hồ', 'việt nam quê hương tôi', 'bài ca hy vọng', 'hành khúc', 'đoàn vệ quốc quân', 'đất nước trọn niềm vui'];
+        if (redKws.some(k => fullText.includes(k))) {
+            return 'Nhạc Đỏ / Cách Mạng';
+        }
+
+        // F. Nhạc Phim / OST
+        const ostKws = [' ost', 'ost ', '(ost)', '[ost]', 'soundtrack', 'nhạc phim', 'original soundtrack', 'theme song', 'opening theme', 'ending theme'];
+        if (ostKws.some(k => fullText.includes(k))) {
+            return 'Nhạc Phim / OST';
+        }
+
+        // G. Thiếu Nhi / Kids
+        const kidsKws = ['thiếu nhi', 'mầm non', 'búp bê', 'chú voi con', 'cá vàng bơi', 'ba ngọn nến', 'nursery rhymes'];
+        if (kidsKws.some(k => fullText.includes(k))) {
+            return 'Thiếu Nhi / Kids';
+        }
+
+        // H. Podcast / Sách Nói
+        const podKws = ['podcast', 'sách nói', 'audiobook', 'truyện đọc', 'thiền định', 'radio tâm sự'];
+        if (podKws.some(k => fullText.includes(k))) {
+            return 'Podcast / Sách Nói';
+        }
+
+        // 2. Map Taxonomy chuẩn
+        const map = {
+            'pop': 'Pop / Ballad',
+            'ballad': 'Pop / Ballad',
+            'v-pop': 'V-Pop / Nhạc Trẻ',
+            'vpop': 'V-Pop / Nhạc Trẻ',
+            'vietnamese pop': 'V-Pop / Nhạc Trẻ',
+            'vietnamese': 'V-Pop / Nhạc Trẻ',
+            'nhạc trẻ': 'V-Pop / Nhạc Trẻ',
+            'c-pop': 'Pop / Ballad',
+            'cpop': 'Pop / Ballad',
+            'k-pop': 'Pop / Ballad',
+            'kpop': 'Pop / Ballad',
+            'j-pop': 'Pop / Ballad',
+            'jpop': 'Pop / Ballad',
+            'bolero': 'Bolero / Trữ Tình',
+            'trữ tình': 'Bolero / Trữ Tình',
+            'nhạc vàng': 'Bolero / Trữ Tình',
+            'electronic': 'EDM / Remix',
+            'dance': 'EDM / Remix',
+            'edm': 'EDM / Remix',
+            'remix': 'EDM / Remix',
+            'house': 'EDM / Remix',
+            'vinahouse': 'EDM / Remix',
+            'techno': 'EDM / Remix',
+            'trance': 'EDM / Remix',
+            'hip-hop': 'Rap / Hip-Hop',
+            'hip-hop/rap': 'Rap / Hip-Hop',
+            'hip hop': 'Rap / Hip-Hop',
+            'rap': 'Rap / Hip-Hop',
+            'r&b': 'R&B / Soul',
+            'r&b/soul': 'R&B / Soul',
+            'soul': 'R&B / Soul',
+            'funk': 'R&B / Soul',
+            'rock': 'Rock / Indie',
+            'alternative': 'Rock / Indie',
+            'indie': 'Rock / Indie',
+            'metal': 'Rock / Indie',
+            'acoustic': 'Acoustic / Chill / Lofi',
+            'lofi': 'Acoustic / Chill / Lofi',
+            'chill': 'Acoustic / Chill / Lofi',
+            'chillout': 'Acoustic / Chill / Lofi',
+            'ambient': 'Acoustic / Chill / Lofi',
+            'soundtrack': 'Nhạc Phim / OST',
+            'ost': 'Nhạc Phim / OST',
+            'classical': 'Cổ Điển / Classical',
+            'cổ điển': 'Cổ Điển / Classical',
+            'instrumental': 'Cổ Điển / Classical',
+            'không lời': 'Cổ Điển / Classical',
+            'jazz': 'Jazz / Blues',
+            'blues': 'Jazz / Blues',
+            'nhạc đỏ': 'Nhạc Đỏ / Cách Mạng',
+            'cách mạng': 'Nhạc Đỏ / Cách Mạng',
+            'country': 'Country / Folk',
+            'folk': 'Country / Folk',
+            'latin': 'Latin / Reggae',
+            'reggae': 'Latin / Reggae',
+            'kids': 'Thiếu Nhi / Kids',
+            'thiếu nhi': 'Thiếu Nhi / Kids',
+            'podcast': 'Podcast / Sách Nói',
+            'sách nói': 'Podcast / Sách Nói'
+        };
+
+        if (map[r]) return map[r];
+        for (const [k, v] of Object.entries(map)) {
+            if (r.includes(k)) return v;
+        }
+
+        // 3. Fallback theo quốc gia
+        const country = (track && track.country) || (track && this.detectCountryFromTrack(track)) || '';
+        if (country === 'Việt Nam') return 'V-Pop / Nhạc Trẻ';
+        if (r && r !== 'unknown' && r !== 'khác' && r !== 'hi-res audio') {
+            return rawGenre.trim();
+        }
+        return 'Pop / Ballad';
+    }
+
+    renderGenreGrid(selectedCountry = null, searchQuery = '') {
         if (!this.genreGrid) return;
         if (selectedCountry !== null) {
             this.selectedGenreCountryFilter = selectedCountry;
@@ -5209,77 +5354,61 @@ class XTAPOMusicApp {
             'Bolero / Trữ Tình': '🎻',
             'Bolero': '🎻',
             'Trữ Tình': '🎻',
-            'Lofi / Chill': '☕',
-            'Lofi': '☕',
-            'Chill': '☕',
+            'V-Pop / Nhạc Trẻ': '✨',
+            'Nhạc Trẻ': '✨',
+            'Pop / Ballad': '💖',
+            'Pop': '💖',
+            'Ballad': '🎼',
             'EDM / Remix': '⚡',
             'EDM': '⚡',
             'Remix': '⚡',
             'Vinahouse': '⚡',
-            'Dance': '💃',
-            'Acoustic / Instrumental': '🎸',
-            'Acoustic': '🎸',
-            'Instrumental': '🎹',
             'Rap / Hip-Hop': '🎤',
             'Rap': '🎤',
             'Hip-Hop': '🎤',
-            'Trap': '🔥',
+            'Acoustic / Chill / Lofi': '☕',
+            'Acoustic': '🎸',
+            'Lofi': '☕',
+            'Chill': '☕',
             'R&B / Soul': '🎷',
             'R&B': '🎷',
             'Soul': '🎷',
             'Rock / Indie': '🤘',
             'Rock': '🤘',
             'Indie': '🎸',
-            'Metal': '⚡',
-            'Pop / Ballad': '💖',
-            'Pop': '✨',
-            'Ballad': '🎼',
-            'Nhạc Trẻ': '💖',
-            'Jazz / Blues': '🎺',
-            'Jazz': '🎺',
-            'Blues': '🎷',
             'Nhạc Phim / OST': '🎬',
             'Soundtrack': '🎬',
             'OST': '🎬',
             'Cổ Điển / Classical': '🎼',
             'Classical': '🎼',
+            'Jazz / Blues': '🎺',
+            'Jazz': '🎺',
+            'Blues': '🎷',
             'Nhạc Đỏ / Cách Mạng': '⭐',
             'Country / Folk': '🌾',
-            'Country': '🌾',
-            'Folk': '🌾',
             'Latin / Reggae': '🌴',
-            'Latin': '🌴',
-            'Reggae': '🌴',
             'Thiếu Nhi / Kids': '🎈',
-            'Kids': '🎈',
             'Podcast / Sách Nói': '🎙️',
-            'Podcast': '🎙️',
-            'Audiobook': '📚',
             'Khác': '🎵'
         };
 
         const genreColors = {
-            'Bolero / Trữ Tình': 'linear-gradient(135deg, rgba(217, 119, 6, 0.35), rgba(180, 83, 9, 0.15))',
-            'Bolero': 'linear-gradient(135deg, rgba(217, 119, 6, 0.35), rgba(180, 83, 9, 0.15))',
-            'Lofi / Chill': 'linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(67, 56, 202, 0.15))',
-            'Lofi': 'linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(67, 56, 202, 0.15))',
-            'EDM / Remix': 'linear-gradient(135deg, rgba(236, 72, 153, 0.35), rgba(190, 24, 93, 0.15))',
-            'EDM': 'linear-gradient(135deg, rgba(236, 72, 153, 0.35), rgba(190, 24, 93, 0.15))',
-            'Acoustic / Instrumental': 'linear-gradient(135deg, rgba(16, 185, 129, 0.35), rgba(4, 120, 87, 0.15))',
-            'Acoustic': 'linear-gradient(135deg, rgba(16, 185, 129, 0.35), rgba(4, 120, 87, 0.15))',
-            'Rap / Hip-Hop': 'linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(185, 28, 28, 0.15))',
-            'Rap': 'linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(185, 28, 28, 0.15))',
-            'R&B / Soul': 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(126, 34, 206, 0.15))',
-            'Rock / Indie': 'linear-gradient(135deg, rgba(139, 92, 246, 0.35), rgba(109, 40, 217, 0.15))',
-            'Pop / Ballad': 'linear-gradient(135deg, rgba(2, 132, 199, 0.35), rgba(3, 105, 161, 0.15))',
-            'Jazz / Blues': 'linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(217, 119, 6, 0.15))',
-            'Nhạc Phim / OST': 'linear-gradient(135deg, rgba(20, 184, 166, 0.35), rgba(13, 148, 136, 0.15))',
-            'Cổ Điển / Classical': 'linear-gradient(135deg, rgba(217, 70, 239, 0.35), rgba(162, 28, 175, 0.15))',
-            'Nhạc Đỏ / Cách Mạng': 'linear-gradient(135deg, rgba(220, 38, 38, 0.4), rgba(185, 28, 28, 0.15))',
-            'Country / Folk': 'linear-gradient(135deg, rgba(234, 179, 8, 0.35), rgba(161, 98, 7, 0.15))',
-            'Latin / Reggae': 'linear-gradient(135deg, rgba(249, 115, 22, 0.35), rgba(194, 65, 12, 0.15))',
-            'Thiếu Nhi / Kids': 'linear-gradient(135deg, rgba(251, 146, 60, 0.35), rgba(234, 88, 12, 0.15))',
-            'Podcast / Sách Nói': 'linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(2, 132, 199, 0.15))',
+            'Bolero / Trữ Tình': 'linear-gradient(135deg, rgba(217, 119, 6, 0.4), rgba(180, 83, 9, 0.15))',
+            'V-Pop / Nhạc Trẻ': 'linear-gradient(135deg, rgba(236, 72, 153, 0.4), rgba(190, 24, 93, 0.15))',
+            'Pop / Ballad': 'linear-gradient(135deg, rgba(2, 132, 199, 0.4), rgba(3, 105, 161, 0.15))',
+            'EDM / Remix': 'linear-gradient(135deg, rgba(168, 85, 247, 0.45), rgba(126, 34, 206, 0.2))',
+            'Rap / Hip-Hop': 'linear-gradient(135deg, rgba(239, 68, 68, 0.4), rgba(185, 28, 28, 0.15))',
+            'Acoustic / Chill / Lofi': 'linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(4, 120, 87, 0.15))',
+            'R&B / Soul': 'linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(109, 40, 217, 0.15))',
+            'Rock / Indie': 'linear-gradient(135deg, rgba(245, 158, 11, 0.4), rgba(217, 119, 6, 0.15))',
+            'Nhạc Phim / OST': 'linear-gradient(135deg, rgba(20, 184, 166, 0.4), rgba(13, 148, 136, 0.15))',
+            'Cổ Điển / Classical': 'linear-gradient(135deg, rgba(217, 70, 239, 0.4), rgba(162, 28, 175, 0.15))',
+            'Jazz / Blues': 'linear-gradient(135deg, rgba(234, 179, 8, 0.4), rgba(161, 98, 7, 0.15))',
+            'Nhạc Đỏ / Cách Mạng': 'linear-gradient(135deg, rgba(220, 38, 38, 0.45), rgba(185, 28, 28, 0.15))',
+            'Country / Folk': 'linear-gradient(135deg, rgba(249, 115, 22, 0.4), rgba(194, 65, 12, 0.15))',
+            'Latin / Reggae': 'linear-gradient(135deg, rgba(251, 146, 60, 0.4), rgba(234, 88, 12, 0.15))',
+            'Thiếu Nhi / Kids': 'linear-gradient(135deg, rgba(56, 189, 248, 0.4), rgba(2, 132, 199, 0.15))',
+            'Podcast / Sách Nói': 'linear-gradient(135deg, rgba(14, 165, 233, 0.4), rgba(3, 105, 161, 0.15))',
             'Khác': 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.1))'
         };
 
@@ -5295,11 +5424,12 @@ class XTAPOMusicApp {
         };
 
         const genreMap = new Map();
+        const searchLow = (searchQuery || '').toLowerCase().trim();
 
         this.getBaseAlbums().forEach(album => {
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
-                const g = (track.genre || 'Khác').trim() || 'Khác';
+                const g = this.normalizeGenre(track.genre, track);
                 const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
                 const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
 
@@ -5308,8 +5438,13 @@ class XTAPOMusicApp {
                     countryGenreSets[validCountry].add(g);
                 }
 
-                // Filter for current view
+                // Filter by country
                 if (this.selectedGenreCountryFilter && this.selectedGenreCountryFilter !== 'all' && validCountry !== this.selectedGenreCountryFilter) {
+                    return;
+                }
+
+                // Filter by search keyword
+                if (searchLow && !g.toLowerCase().includes(searchLow)) {
                     return;
                 }
 
@@ -5351,14 +5486,19 @@ class XTAPOMusicApp {
                 pill.innerHTML = `<span>${opt.icon}</span> <span>${opt.label}</span> <span class="pill-count">${count}</span>`;
                 pill.onclick = () => {
                     this.selectedGenreCountryFilter = opt.id;
-                    this.renderGenreGrid(opt.id);
+                    this.renderGenreGrid(opt.id, this.genreSearchInput ? this.genreSearchInput.value.trim() : '');
                 };
                 this.genreCountryFilterTabs.appendChild(pill);
             });
         }
 
         if (genreMap.size === 0) {
-            this.genreGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Chưa có thể loại âm nhạc nào trong khu vực này.</div>';
+            this.genreGrid.innerHTML = `
+                <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">
+                    <div style="font-size: 1.8rem; margin-bottom: 8px;">🔍</div>
+                    <div>Không tìm thấy thể loại nào phù hợp.</div>
+                </div>
+            `;
             return;
         }
 
@@ -5366,7 +5506,7 @@ class XTAPOMusicApp {
 
         sortedGenres.forEach(gObj => {
             const icon = genreIcons[gObj.genre] || '🎵';
-            const bg = genreColors[gObj.genre] || 'linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02))';
+            const bg = genreColors[gObj.genre] || 'linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02))';
 
             const card = document.createElement('div');
             card.className = 'genre-card-item';
