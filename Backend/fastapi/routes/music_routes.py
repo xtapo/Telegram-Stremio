@@ -2144,6 +2144,18 @@ async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mi
 @router.get("/api/music/stream/{chat_id}/{msg_id}")
 @router.head("/api/music/stream/{chat_id}/{msg_id}")
 async def stream_music_track(request: Request, chat_id: int, msg_id: int):
+    # Kiểm tra trạng thái phê duyệt nếu người dùng có session đăng nhập
+    music_user_id = request.session.get("music_user_id")
+    if music_user_id:
+        try:
+            u_check = await db.dbs["tracking"]["music_users"].find_one({"_id": music_user_id})
+            if u_check and u_check.get("is_active") is False:
+                raise HTTPException(status_code=403, detail="Tài khoản của bạn đang chờ Quản trị viên phê duyệt.")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
     cache_key = f"{abs(chat_id)}_{msg_id}"
     dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
     json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")

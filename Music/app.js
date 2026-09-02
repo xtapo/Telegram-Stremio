@@ -958,6 +958,12 @@ class XTAPOMusicApp {
                     const existingBanner = document.getElementById('channelWarningBanner');
                     if (existingBanner) existingBanner.remove();
                 }
+            } else if (data.status === 'pending_approval' && data.user) {
+                this.currentUser = data.user;
+                this.updateAuthUI(true);
+                this.stopHeartbeat();
+                const pendingMsg = "Tài khoản Telegram của bạn đang chờ Quản trị viên phê duyệt. Vui lòng liên hệ Admin để được cấp quyền sử dụng!";
+                this.showChannelWarningBanner(pendingMsg);
             } else {
                 this.currentUser = null;
                 this.stopHeartbeat();
@@ -989,7 +995,7 @@ class XTAPOMusicApp {
         banner.innerHTML = `
             <div class="channel-warning-content">
                 <span class="warning-icon">⚠️</span>
-                <span class="warning-text"><b>Cảnh báo:</b> ${msg}</span>
+                <span class="warning-text"><b>Thông báo:</b> ${msg}</span>
             </div>
             <button class="channel-warning-close" onclick="this.parentElement.remove()" title="Đóng">&times;</button>
         `;
@@ -1001,7 +1007,11 @@ class XTAPOMusicApp {
         if (isLoggedIn && this.currentUser) {
             this.userAvatarImg.src = this.currentUser.avatar_url;
             const name = this.currentUser.display_name || this.currentUser.username;
-            if (this.currentUser.is_channel_member === false) {
+            if (this.currentUser.is_active === false) {
+                this.userDisplayName.textContent = name + " (Chờ duyệt)";
+                this.userDisplayName.style.color = "#f59e0b";
+                this.userDisplayName.title = "Tài khoản đang chờ Quản trị viên phê duyệt";
+            } else if (this.currentUser.is_channel_member === false) {
                 this.userDisplayName.textContent = name + " (Chưa vào Channel)";
                 this.userDisplayName.style.color = "#f59e0b";
                 this.userDisplayName.title = "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin";
@@ -1327,7 +1337,7 @@ class XTAPOMusicApp {
                 this.btnVerifyPhoneCode.innerHTML = '<i class="fa-solid fa-circle-check" style="margin-right: 6px;"></i> Xác Nhận Đăng Nhập';
             }
 
-            if (data.status === 'success' && data.user) {
+            if ((data.status === 'success' || data.status === 'pending_approval') && data.user) {
                 this.handleQrSuccess(data);
             } else if (data.status === 'needs_2fa') {
                 if (this.phoneStepOtp) this.phoneStepOtp.style.display = 'none';
@@ -1375,7 +1385,7 @@ class XTAPOMusicApp {
                 this.btnSubmitPhone2Fa.textContent = "Xác Nhận Đăng Nhập";
             }
 
-            if (data.status === 'success' && data.user) {
+            if ((data.status === 'success' || data.status === 'pending_approval') && data.user) {
                 this.handleQrSuccess(data);
             } else {
                 this.showToast(data.message || "Mật khẩu 2FA không chính xác.");
@@ -1530,7 +1540,7 @@ class XTAPOMusicApp {
                 const res = await fetch(`/api/music/auth/telegram/qr/status?session_id=${encodeURIComponent(sessionId)}`);
                 const data = await res.json();
 
-                if (data.status === 'success' && data.user) {
+                if ((data.status === 'success' || data.status === 'pending_approval') && data.user) {
                     this.handleQrSuccess(data);
                 } else if (data.status === 'needs_2fa') {
                     if (this.qr2FaSection) {
@@ -1585,7 +1595,7 @@ class XTAPOMusicApp {
             const data = await res.json();
             if (this.btnSubmit2Fa) this.btnSubmit2Fa.textContent = "Xác Nhận Đăng Nhập";
 
-            if (data.status === 'success' && data.user) {
+            if ((data.status === 'success' || data.status === 'pending_approval') && data.user) {
                 this.handleQrSuccess(data);
             } else {
                 this.showToast(data.message || "Mật khẩu 2FA không chính xác.");
@@ -1598,9 +1608,20 @@ class XTAPOMusicApp {
 
     async handleQrSuccess(data) {
         this.stopQrPolling();
-        this.showToast(`🎉 Đăng nhập Telegram thành công! Chào mừng ${data.user.display_name}!`);
         this.authModal.classList.remove('open');
         if (this.qr2FaInput) this.qr2FaInput.value = '';
+
+        if (data.status === 'pending_approval' || data.user?.is_active === false) {
+            const userName = data.user?.display_name || 'Bạn';
+            this.showToast(`⏳ Đăng nhập thành công! Tài khoản đang chờ Quản trị viên phê duyệt.`, 7000);
+            setTimeout(() => {
+                alert(`⏳ Chào mừng ${userName}!\n\nTài khoản Telegram của bạn đã liên kết thành công vào hệ thống. Vì lý do bảo mật, tài khoản đang ở trạng thái CHỜ DUYỆT.\n\nVui lòng liên hệ Quản trị viên để được kích hoạt và bắt đầu nghe nhạc.`);
+            }, 400);
+            await this.fetchUserProfile();
+            return;
+        }
+
+        this.showToast(`🎉 Đăng nhập Telegram thành công! Chào mừng ${data.user.display_name}!`);
 
         // Kiểm tra và hiển thị cảnh báo nếu chưa tham gia Channel thành viên
         if (data.is_channel_member === false || data.user?.is_channel_member === false || data.channel_warning) {

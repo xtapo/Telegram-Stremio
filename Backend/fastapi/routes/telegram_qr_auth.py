@@ -70,15 +70,18 @@ async def get_user_tg_client(user_id: str) -> Optional[Client]:
     if not user_id:
         return None
 
-    client = _USER_CLIENT_POOL.get(user_id)
-    if client and getattr(client, "is_connected", False):
-        return client
-
     try:
         coll = db.dbs["tracking"]["music_users"]
         user_doc = await coll.find_one({"_id": user_id})
         if not user_doc or not user_doc.get("telegram_session"):
             return None
+        # Kiểm tra nếu tài khoản chưa được Quản trị viên duyệt / bị khóa
+        if user_doc.get("is_active") is False:
+            return None
+
+        client = _USER_CLIENT_POOL.get(user_id)
+        if client and getattr(client, "is_connected", False):
+            return client
 
         session_str = user_doc["telegram_session"]
         new_client = Client(
@@ -225,7 +228,7 @@ async def init_telegram_qr_login():
                             except Exception:
                                 pass
                         user_data = await _finalize_qr_login(client, auth_user=auth_user)
-                        _ACTIVE_QR_SESSIONS[session_id]["status"] = "success"
+                        _ACTIVE_QR_SESSIONS[session_id]["status"] = user_data.get("status", "success")
                         _ACTIVE_QR_SESSIONS[session_id]["user_data"] = user_data
             except SessionPasswordNeeded:
                 LOGGER.info(f"[QR AUTH] Tài khoản cần xác thực 2FA (Session: {session_id})")
@@ -323,8 +326,25 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
     except Exception as e:
         LOGGER.warning(f"[QR AUTH] Kiểm tra channel membership: {e}")
 
-    # Cập nhật thông tin người dùng vào MongoDB
+    # Kiểm tra trạng thái is_active:
+    # 1. Nếu tài khoản đã tồn tại: giữ nguyên trạng thái cũ (không tự ý kích hoạt)
+    # 2. Nếu tài khoản mới:
+    #    - Tự động duyệt nếu là OWNER hoặc Approver
+    #    - Cần Quản trị viên duyệt (is_active = False) đối với tất cả tài khoản khác
     coll = db.dbs["tracking"]["music_users"]
+    existing_user = await coll.find_one({"_id": user_id})
+
+    if existing_user is not None:
+        is_active = bool(existing_user.get("is_active", False))
+    else:
+        from Backend.helper.settings_manager import SettingsManager
+        approver_ids = SettingsManager.current().approver_ids or []
+        if user_me.id == Telegram.OWNER_ID or user_me.id in approver_ids:
+            is_active = True
+        else:
+            is_active = False
+
+    # Cập nhật thông tin người dùng vào MongoDB
     user_doc = {
         "_id": user_id,
         "username": username,
@@ -332,7 +352,7 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
         "avatar_url": avatar_url,
         "telegram_id": user_me.id,
         "telegram_session": session_str,
-        "is_active": True,
+        "is_active": is_active,
         "is_channel_member": is_channel_member,
         "auth_type": "telegram_qr",
         "last_login": time.time()
@@ -351,42 +371,62 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
         upsert=True
     )
 
-    # Đăng ký Client vào user pool để phục vụ streaming trực tiếp
-    _USER_CLIENT_POOL[user_id] = user_client
+    if is_active:
+        # Đăng ký Client vào user pool để phục vụ streaming trực tiếp
+        _USER_CLIENT_POOL[user_id] = user_client
+        LOGGER.info(f"[QR AUTH SUCCESS] Người dùng '{display_name}' (ID: {user_me.id}) đã đăng nhập thành công qua Telegram! Channel Member: {is_channel_member}")
 
-    LOGGER.info(f"[QR AUTH SUCCESS] Người dùng '{display_name}' (ID: {user_me.id}) đã đăng nhập thành công qua Telegram! Channel Member: {is_channel_member}")
-
-    return {
-        "status": "success",
-        "message": f"Chào mừng {display_name}!",
-        "is_channel_member": is_channel_member,
-        "channel_warning": channel_warning,
-        "user": {
-            "id": user_id,
-            "username": username,
-            "display_name": display_name,
-            "avatar_url": avatar_url,
-            "telegram_id": user_me.id,
-            "is_active": True,
+        return {
+            "status": "success",
+            "message": f"Chào mừng {display_name}!",
             "is_channel_member": is_channel_member,
             "channel_warning": channel_warning,
-            "auth_type": "telegram_qr"
+            "user": {
+                "id": user_id,
+                "username": username,
+                "display_name": display_name,
+                "avatar_url": avatar_url,
+                "telegram_id": user_me.id,
+                "is_active": True,
+                "is_channel_member": is_channel_member,
+                "channel_warning": channel_warning,
+                "auth_type": "telegram_qr"
+            }
         }
-    }
+    else:
+        LOGGER.info(f"[QR AUTH PENDING] Người dùng Telegram '{display_name}' (ID: {user_me.id}) vừa đăng nhập, trạng thái: CHỜ DUYỆT")
+
+        return {
+            "status": "pending_approval",
+            "message": f"Tài khoản Telegram của bạn đã được kết nối và đang chờ Quản trị viên phê duyệt quyền sử dụng. Vui lòng liên hệ Admin!",
+            "is_channel_member": is_channel_member,
+            "channel_warning": channel_warning,
+            "user": {
+                "id": user_id,
+                "username": username,
+                "display_name": display_name,
+                "avatar_url": avatar_url,
+                "telegram_id": user_me.id,
+                "is_active": False,
+                "is_channel_member": is_channel_member,
+                "channel_warning": channel_warning,
+                "auth_type": "telegram_qr"
+            }
+        }
 
 
 @qr_auth_router.get("/api/music/auth/telegram/qr/status")
 async def check_telegram_qr_status(session_id: str, request: Request):
     """
-    Thăm dò trạng thái mã QR (Pending, Success, Needs_2FA, Expired)
+    Thăm dò trạng thái mã QR (Pending, Success, Pending_Approval, Needs_2FA, Expired)
     Lắng nghe trạng thái từ RawUpdateHandler (không gọi ExportLoginToken lặp lại để tránh hủy token).
     """
     sdata = _ACTIVE_QR_SESSIONS.get(session_id)
     if not sdata or not sdata.get("client"):
         return {"status": "expired", "message": "Phiên đăng nhập không tồn tại hoặc đã hết hạn."}
 
-    # Nếu đã thành công
-    if sdata.get("status") == "success" and sdata.get("user_data"):
+    # Nếu đã thành công hoặc đang chờ phê duyệt
+    if sdata.get("status") in ("success", "pending_approval") and sdata.get("user_data"):
         user_info = sdata["user_data"].get("user", {})
         request.session["music_user_id"] = user_info.get("id")
         request.session["music_username"] = user_info.get("username")

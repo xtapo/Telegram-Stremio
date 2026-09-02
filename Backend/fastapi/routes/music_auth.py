@@ -138,13 +138,11 @@ async def require_music_auth(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để sử dụng tính năng này.")
     
-    # Kiểm tra xem user có bị khóa không
+    # Kiểm tra xem user có được duyệt / hoạt động không
     coll = db.dbs["tracking"]["music_users"]
     user = await coll.find_one({"_id": user_id})
     if not user or user.get("is_active") is False:
-        request.session.pop("music_user_id", None)
-        request.session.pop("music_username", None)
-        raise HTTPException(status_code=403, detail="Tài khoản của bạn đã bị khóa hoặc không tồn tại.")
+        raise HTTPException(status_code=403, detail="Tài khoản của bạn đang chờ Quản trị viên phê duyệt hoặc đã bị tạm khóa.")
     return user_id
 
 
@@ -332,10 +330,26 @@ async def get_music_profile(request: Request):
     try:
         coll = db.dbs["tracking"]["music_users"]
         user = await coll.find_one({"_id": user_id})
-        if not user or user.get("is_active") is False:
+        if not user:
             request.session.pop("music_user_id", None)
             request.session.pop("music_username", None)
             return {"status": "guest", "user": None}
+
+        if user.get("is_active") is False:
+            return {
+                "status": "pending_approval",
+                "message": "Tài khoản Telegram của bạn đang chờ Quản trị viên phê duyệt quyền sử dụng.",
+                "user": {
+                    "id": user["_id"],
+                    "username": user["username"],
+                    "display_name": user.get("display_name", user["username"]),
+                    "avatar_url": user.get("avatar_url", ""),
+                    "is_active": False,
+                    "is_channel_member": user.get("is_channel_member", True),
+                    "channel_warning": user.get("channel_warning"),
+                    "auth_type": user.get("auth_type", "password")
+                }
+            }
             
         is_member = user.get("is_channel_member")
         if is_member is None:
@@ -746,10 +760,34 @@ async def get_all_music_users(_: bool = Depends(require_auth)):
             "stats": {
                 "total": len(users),
                 "online": online_count,
-                "active": sum(1 for u in users if u.get("is_active") is not False),
+                "active": sum(1 for u in users if u.get("is_active") is True),
+                "pending": sum(1 for u in users if u.get("is_active") is False),
                 "banned": sum(1 for u in users if u.get("is_active") is False)
             }
         })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@auth_router.post("/api/music/admin/users/{user_id}/approve")
+async def admin_approve_music_user(user_id: str, _: bool = Depends(require_auth)):
+    """Admin phê duyệt tài khoản người dùng"""
+    try:
+        coll = db.dbs["tracking"]["music_users"]
+        user = await coll.find_one({"_id": user_id})
+        if not user:
+            return JSONResponse(status_code=404, content={"status": "error", "message": "Không tìm thấy người dùng."})
+
+        await coll.update_one(
+            {"_id": user_id},
+            {"$set": {"is_active": True, "approved_at": time.time()}}
+        )
+
+        display_name = user.get("display_name") or user.get("username")
+        return JSONResponse(
+            status_code=200, 
+            content={"status": "success", "message": f"Đã phê duyệt tài khoản '{display_name}' thành công!", "is_active": True}
+        )
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
