@@ -2856,67 +2856,7 @@
         // ═══════════════════════════════════════════════════════════════════════════
         const tvDeviceId = localStorage.getItem('xtapo_tv_device_id') || ('tv_' + Math.random().toString(36).substring(2, 9));
         try { localStorage.setItem('xtapo_tv_device_id', tvDeviceId); } catch(e) {}
-        let tvSyncWs = null;
-        let tvSyncReconnectTimer = null;
-        let tvSyncPingInterval = null;
         let lastTvSyncSentAt = 0;
-        let tvSyncWsRetryCount = 0;
-
-        function initTvMusicSync() {
-            if (tvSyncWsRetryCount > 2) {
-                // Proxy không hỗ trợ WebSocket -> chuyển sang REST Heartbeat mượt mà
-                return;
-            }
-
-            try {
-                if (tvSyncWs) {
-                    try { tvSyncWs.close(); } catch(e) {}
-                    tvSyncWs = null;
-                }
-
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                let wsUrl = `${protocol}//${window.location.host}/api/music/sync/ws?device_id=${encodeURIComponent(tvDeviceId)}`;
-                if (currentUser && currentUser._id) {
-                    wsUrl += `&user_id=${encodeURIComponent(currentUser._id)}`;
-                }
-
-                tvSyncWsRetryCount++;
-                tvSyncWs = new WebSocket(wsUrl);
-
-                tvSyncWs.onopen = () => {
-                    tvSyncWsRetryCount = 0;
-                    sendTvSyncRegister();
-
-                    clearInterval(tvSyncPingInterval);
-                    tvSyncPingInterval = setInterval(() => {
-                        if (tvSyncWs && tvSyncWs.readyState === WebSocket.OPEN) {
-                            tvSyncWs.send(JSON.stringify({ type: 'PING' }));
-                        }
-                    }, 25000);
-                };
-
-                tvSyncWs.onmessage = (event) => {
-                    try {
-                        const msg = JSON.parse(event.data);
-                        handleTvSyncMessage(msg);
-                    } catch (err) {}
-                };
-
-                tvSyncWs.onerror = () => {
-                    // Im lặng xử lý để không spam console
-                };
-
-                tvSyncWs.onclose = () => {
-                    clearInterval(tvSyncPingInterval);
-                    clearTimeout(tvSyncReconnectTimer);
-                    if (tvSyncWsRetryCount <= 2) {
-                        tvSyncReconnectTimer = setTimeout(() => {
-                            initTvMusicSync();
-                        }, 5000);
-                    }
-                };
-            } catch (e) {}
-        }
 
         async function sendTvHeartbeat() {
             try {
@@ -3157,11 +3097,10 @@
             get audio() { return audio; }
         };
 
-        // Initialize: Kiểm tra trạng thái đăng nhập & Khởi tạo WebSocket Sync & REST Heartbeat
+        // Initialize: Kiểm tra trạng thái đăng nhập & Khởi tạo REST Heartbeat
         checkUserProfile();
-        initTvMusicSync();
         sendTvHeartbeat();
-        setInterval(sendTvHeartbeat, 2200);
+        setInterval(sendTvHeartbeat, 1800);
     })();
     </script>
 </body>

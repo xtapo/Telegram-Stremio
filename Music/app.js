@@ -8182,60 +8182,8 @@ class XTAPOMusicApp {
     }
 
     initMusicSync() {
-        if ((this._syncRetryCount || 0) > 2) {
-            // Không hỗ trợ WebSocket qua Proxy -> Chuyển sang REST Heartbeat mượt mà
-            return;
-        }
-
-        try {
-            if (this.syncWs) {
-                try { this.syncWs.close(); } catch(e) {}
-                this.syncWs = null;
-            }
-
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            let wsUrl = `${protocol}//${window.location.host}/api/music/sync/ws?device_id=${encodeURIComponent(this.syncDeviceId)}`;
-            if (this.currentUser && this.currentUser._id) {
-                wsUrl += `&user_id=${encodeURIComponent(this.currentUser._id)}`;
-            }
-
-            this._syncRetryCount = (this._syncRetryCount || 0) + 1;
-            this.syncWs = new WebSocket(wsUrl);
-
-            this.syncWs.onopen = () => {
-                console.log('[Spotify Connect] Đã kết nối WebSocket Hub thành công!');
-                this._syncRetryCount = 0;
-                this.sendSyncRegister();
-                
-                clearInterval(this.syncPingInterval);
-                this.syncPingInterval = setInterval(() => {
-                    if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
-                        this.syncWs.send(JSON.stringify({ type: 'PING' }));
-                    }
-                }, 25000);
-            };
-
-            this.syncWs.onmessage = (event) => {
-                try {
-                    const msg = JSON.parse(event.data);
-                    this.handleSyncMessage(msg);
-                } catch (err) {}
-            };
-
-            this.syncWs.onerror = () => {
-                // Im lặng xử lý, đã có kênh REST Heartbeat dự phòng
-            };
-
-            this.syncWs.onclose = () => {
-                clearInterval(this.syncPingInterval);
-                clearTimeout(this.syncWsReconnectTimer);
-                if (this._syncRetryCount <= 2) {
-                    this.syncWsReconnectTimer = setTimeout(() => {
-                        this.initMusicSync();
-                    }, 5000);
-                }
-            };
-        } catch (e) {}
+        // Vận hành 100% bằng REST Smart Heartbeat & Command Hub (Không dùng WebSocket)
+        this.sendSyncHeartbeat();
     }
 
     async sendSyncHeartbeat() {
@@ -8295,64 +8243,16 @@ class XTAPOMusicApp {
 
     sendSyncRegister() {
         this.sendSyncHeartbeat();
-        if (!this.syncWs || this.syncWs.readyState !== WebSocket.OPEN) return;
-        const payload = {
-            device_name: this.syncDeviceName,
-            device_type: this.syncDeviceType,
-            is_active_player: !this.remoteTargetDeviceId && this.isPlaying,
-            user_id: this.currentUser ? this.currentUser._id : null,
-            username: this.currentUser ? (this.currentUser.display_name || this.currentUser.username) : null,
-            current_state: {
-                is_playing: this.isPlaying,
-                current_time: this.audio ? this.audio.currentTime : 0,
-                duration: this.audio ? this.audio.duration : 0,
-                volume: this.volume || 0.85,
-                album_id: this.currentAlbum ? this.currentAlbum.id : null,
-                track_index: this.currentTrackIndex,
-                track: this.currentTrack
-            }
-        };
-        this.syncWs.send(JSON.stringify({
-            type: 'REGISTER',
-            payload: payload
-        }));
     }
 
     sendSyncState() {
         if (this.remoteTargetDeviceId) return; // Không gửi state nếu máy này chỉ là Remote Controller
-
-        const track = this.currentTrack;
-        const album = this.currentAlbum;
-        const payload = {
-            is_active_player: true,
-            is_playing: this.isPlaying,
-            current_time: this.audio ? (this.audio.currentTime || 0) : 0,
-            duration: this.audio ? (this.audio.duration || 0) : 0,
-            volume: this.volume || 0.85,
-            album_id: album ? album.id : null,
-            track_index: this.currentTrackIndex,
-            track: track ? {
-                id: track.id,
-                name: track.name,
-                artist: track.artist || (album ? album.artist : ''),
-                album: album ? album.title : '',
-                coverUrl: this.getTrackCover(track, album),
-                duration: track.duration,
-                previewUrl: track.previewUrl
-            } : null
-        };
-
-        if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
-            this.syncWs.send(JSON.stringify({
-                type: 'STATE_UPDATE',
-                payload: payload
-            }));
-        }
+        this.sendSyncHeartbeat();
     }
 
     throttledSendSyncState() {
         const now = Date.now();
-        if (now - this.lastSyncStateSentAt > 1000) {
+        if (now - this.lastSyncStateSentAt > 1200) {
             this.lastSyncStateSentAt = now;
             this.sendSyncState();
         }
@@ -8360,21 +8260,6 @@ class XTAPOMusicApp {
 
     async sendSyncCommand(command, payload = {}, targetDeviceId = null) {
         const targetId = targetDeviceId || this.remoteTargetDeviceId;
-        const msg = {
-            type: 'COMMAND',
-            command: command,
-            target_device_id: targetId,
-            payload: payload
-        };
-
-        // 1. Thử gửi qua WebSocket nếu đang kết nối
-        if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
-            try {
-                this.syncWs.send(JSON.stringify(msg));
-            } catch(e) {}
-        }
-
-        // 2. Đồng thời gửi qua REST API Command Hub (Đảm bảo 100% lệnh được chuyển đi kể cả khi WS fail)
         try {
             await fetch('/api/music/sync/command', {
                 method: 'POST',
