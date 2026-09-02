@@ -3000,7 +3000,7 @@
                 
                 const plTitle = payload.album_title || payload.album_name || payload.track?.album || 'Danh Sách Phát';
                 const plArtist = payload.album_artist || payload.track?.artist || 'Tuyển Tập';
-                const plCover = payload.album_cover || payload.track?.coverUrl || '/music/icon-192.png';
+                const plCover = payload.album_cover || payload.track?.coverUrl || getTrackCover(payload.track) || '/music/icon-192.png';
 
                 currentActiveGroup = {
                     id: albumId || 'remote_playlist',
@@ -3009,7 +3009,20 @@
                     coverUrl: plCover
                 };
                 
-                // Cập nhật Cột 2 (itemsContainer) hiển thị Card Playlist đồng bộ
+                // 1. Cập nhật Khung Showcase To Trên Đỉnh Cột 3
+                if (showcaseCover) {
+                    showcaseCover.src = plCover;
+                    showcaseCover.onerror = function() { this.src = '/music/icon-192.png'; };
+                }
+                if (showcaseTitle) showcaseTitle.textContent = plTitle;
+                if (showcaseArtist) showcaseArtist.textContent = `${plArtist} • Tổng cộng ${currentTracklist.length} bài hát`;
+                if (showcaseYear) showcaseYear.textContent = payload.track?.year || '2026';
+                if (showcaseBadge) showcaseBadge.textContent = 'ĐỒNG BỘ TỪ XA';
+
+                // 2. Bỏ highlight các Tab bên Cột 1
+                document.querySelectorAll('.tv-tab-item').forEach(t => t.classList.remove('active'));
+
+                // 3. Cập nhật Cột 2 (itemsContainer) hiển thị Card Playlist đồng bộ
                 if (itemsContainer) {
                     if (itemsCategoryTitle) itemsCategoryTitle.textContent = `ĐANG PHÁT TỪ XA (1)`;
                     if (activeCategoryBadge) activeCategoryBadge.textContent = 'REMOTE SYNC';
@@ -3024,7 +3037,7 @@
                     `;
                 }
 
-                // Cập nhật Cột 3 Header
+                // 4. Cập nhật Tiêu đề Cột 3 (Danh sách bài hát)
                 if (currentTracklistHeader) {
                     currentTracklistHeader.textContent = `${plTitle.toUpperCase()} (${currentTracklist.length} BÀI)`;
                 }
