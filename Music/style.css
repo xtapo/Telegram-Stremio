@@ -105,23 +105,22 @@ html, body {
     background-size: cover;
     background-position: center 35%;
     background-repeat: no-repeat;
-    filter: blur(80px) saturate(1.6) brightness(0.38);
-    transform: scale(1.2) translateZ(0);
+    filter: blur(45px) saturate(1.5) brightness(0.4);
+    transform: scale(1.15) translateZ(0);
     opacity: 0;
     transition: opacity 1.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 1.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-    will-change: opacity, transform;
 }
 
 .backdrop-art.active {
     opacity: 1;
-    transform: scale(1.08) translateZ(0);
+    transform: scale(1.05) translateZ(0);
 }
 
 .backdrop-glow {
     position: absolute;
     border-radius: 50%;
-    filter: blur(120px);
-    opacity: 0.28;
+    filter: blur(60px);
+    opacity: 0.25;
     mix-blend-mode: screen;
     transition: background 1.2s ease, transform 1.2s ease;
 }
@@ -413,28 +412,6 @@ html, body {
 
 .label-company {
     color: var(--text-secondary);
-}
-
-/* Audio Visualizer Waveform */
-.visualizer-container {
-    width: 100%;
-    max-width: 480px;
-    height: 42px;
-    margin-bottom: 20px;
-    background: rgba(0, 0, 0, 0.35);
-    border-radius: 12px;
-    padding: 6px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-sizing: border-box;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-}
-
-#visualizerCanvas {
-    width: 100%;
-    height: 100%;
-    display: block;
 }
 
 /* Tracklist */
@@ -1869,13 +1846,6 @@ html, body {
         gap: 5px;
     }
 
-    .visualizer-container {
-        height: 24px;
-        margin-bottom: 6px;
-        max-width: 320px;
-        padding: 2px 6px;
-    }
-
     .tracklist-container {
         padding: 6px 10px;
         border-radius: var(--radius-sm);
@@ -2046,10 +2016,6 @@ html, body {
 
     .top-nav {
         height: 44px;
-    }
-
-    .visualizer-container {
-        display: none;
     }
 
     .album-metadata-snippet {
@@ -2254,12 +2220,6 @@ html, body {
         flex-wrap: wrap;
         gap: 6px;
         word-break: break-word;
-    }
-    
-    /* Tắt và ẩn hoàn toàn sóng nhạc trên Mobile */
-    .visualizer-container,
-    #visualizerCanvas {
-        display: none !important;
     }
 
     .tracklist-container {
@@ -6161,7 +6121,7 @@ body.tv-lite * {
     text-shadow: none !important;
 }
 
-/* Tắt Visualizer Canvas 60fps & Dynamic Blur Backdrop */
+/* Tắt Dynamic Blur Backdrop trên TV */
 body.tv-mode .dynamic-backdrop,
 body.tv-lite .dynamic-backdrop {
     background: #090c10 !important;
@@ -6170,11 +6130,9 @@ body.tv-lite .dynamic-backdrop {
 body.tv-mode .backdrop-art,
 body.tv-mode .backdrop-glow,
 body.tv-mode .backdrop-overlay,
-body.tv-mode .visualizer-container,
 body.tv-lite .backdrop-art,
 body.tv-lite .backdrop-glow,
-body.tv-lite .backdrop-overlay,
-body.tv-lite .visualizer-container {
+body.tv-lite .backdrop-overlay {
     display: none !important;
 }
 

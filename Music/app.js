@@ -280,11 +280,6 @@ class XTAPOMusicApp {
         this.mobileMenuBackdrop = document.getElementById('mobileMenuBackdrop');
         this.mobileSelectAlbumBtn = document.getElementById('mobileSelectAlbumBtn');
 
-        // Visualizer Canvas
-        this.canvas = document.getElementById('visualizerCanvas');
-        this.canvasCtx = this.canvas.getContext('2d');
-        this.visualizerAnimationId = null;
-
         // Telegram Storage & Scanner Elements
         this.albums = [...ALBUMS_DATABASE];
         this.albumCountBadge = document.getElementById('albumCountBadge');
@@ -684,7 +679,6 @@ class XTAPOMusicApp {
         setInterval(() => this.sendSyncHeartbeat(), 2200);
         this.setupAuthEvents();
         this.setupMediaSession();
-        this.setupVisualizer();
         this.setupTvMode();
         this.setupSpatialNavigation();
         this.setupKeyboardShortcuts();
@@ -2389,12 +2383,17 @@ class XTAPOMusicApp {
     preloadCoversForCurrentAlbum() {
         const album = this.currentAlbum;
         if (!album || !album.tracks || album.tracks.length === 0) return;
-        const start = Math.max(0, this.currentTrackIndex - 2);
-        const end = Math.min(album.tracks.length, this.currentTrackIndex + 20);
+        if (!this._preloadedCoversSet) this._preloadedCoversSet = new Set();
+        if (this._preloadedCoversSet.size > 80) this._preloadedCoversSet.clear();
+
+        // Chỉ preload trước ảnh bìa của 2 bài kế tiếp để tối ưu 100% RAM và băng thông
+        const start = this.currentTrackIndex + 1;
+        const end = Math.min(album.tracks.length, this.currentTrackIndex + 3);
         for (let i = start; i < end; i++) {
             const tr = album.tracks[i];
             const cUrl = (tr && tr.coverUrl) || album.coverUrl;
-            if (cUrl && typeof cUrl === 'string' && !cUrl.startsWith('data:')) {
+            if (cUrl && typeof cUrl === 'string' && !cUrl.startsWith('data:') && !this._preloadedCoversSet.has(cUrl)) {
+                this._preloadedCoversSet.add(cUrl);
                 const img = new Image();
                 img.src = cUrl;
             }
@@ -2403,19 +2402,13 @@ class XTAPOMusicApp {
 
     preloadNextTrack() {
         if (!this.currentAlbum || !this.currentAlbum.tracks || this.currentAlbum.tracks.length <= 1) return;
-        let nextIdx;
-        if (this.isShuffle) {
-            nextIdx = (this.currentTrackIndex + 1) % this.currentAlbum.tracks.length;
-        } else {
-            nextIdx = (this.currentTrackIndex + 1) % this.currentAlbum.tracks.length;
-        }
+        const nextIdx = (this.currentTrackIndex + 1) % this.currentAlbum.tracks.length;
         const nextTrack = this.currentAlbum.tracks[nextIdx];
         if (nextTrack && nextTrack.previewUrl && nextTrack.previewUrl !== this._preloadedTrackUrl) {
             this._preloadedTrackUrl = nextTrack.previewUrl;
             if (this.preloaderAudio) {
+                this.preloaderAudio.preload = 'metadata';
                 this.preloaderAudio.src = nextTrack.previewUrl;
-                this.preloaderAudio.load();
-                console.log(`[Music Preloader] Đang tải ngầm bài kế tiếp: ${nextTrack.name}`);
             }
         }
     }
@@ -3037,153 +3030,6 @@ class XTAPOMusicApp {
         } else {
             this.volHighIcon.style.display = 'block';
             this.volMuteIcon.style.display = 'none';
-        }
-    }
-
-    // --- Visualizer Waveform Animation ---
-    setupVisualizer() {
-        const ctx = this.canvasCtx;
-        if (!this.canvas || !ctx) return;
-
-        const numBars = 36;
-        let dpr = window.devicePixelRatio || 1;
-
-        const isMobileScreen = () => window.innerWidth <= 768;
-
-        const resizeCanvas = () => {
-            if (isMobileScreen()) {
-                if (this.visualizerAnimationId) {
-                    cancelAnimationFrame(this.visualizerAnimationId);
-                    this.visualizerAnimationId = null;
-                }
-                return;
-            }
-            if (this.canvas) {
-                const rect = this.canvas.getBoundingClientRect();
-                dpr = window.devicePixelRatio || 1;
-                const cssWidth = Math.floor(rect.width) || 380;
-                const cssHeight = Math.floor(rect.height) || 36;
-                
-                this.canvas.width = Math.floor(cssWidth * dpr);
-                this.canvas.height = Math.floor(cssHeight * dpr);
-            }
-        };
-
-        window.addEventListener('resize', () => {
-            resizeCanvas();
-            if (!isMobileScreen() && !this.visualizerAnimationId && !document.hidden) {
-                draw();
-            }
-        });
-        setTimeout(resizeCanvas, 100);
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                if (this.visualizerAnimationId) {
-                    cancelAnimationFrame(this.visualizerAnimationId);
-                    this.visualizerAnimationId = null;
-                }
-            } else {
-                if (!isMobileScreen() && !this.visualizerAnimationId) {
-                    draw();
-                }
-            }
-        });
-
-        const draw = () => {
-            // Tắt hoàn toàn trên di động, TV Lite hoặc khi tab bị ẩn để giải phóng GPU/CPU 100%
-            if (isMobileScreen() || document.hidden || this.isTvMode) {
-                if (this.visualizerAnimationId) {
-                    cancelAnimationFrame(this.visualizerAnimationId);
-                    this.visualizerAnimationId = null;
-                }
-                return;
-            }
-
-            if (!this.canvas || !ctx) return;
-            const w = this.canvas.width;
-            const h = this.canvas.height;
-            if (w === 0 || h === 0) {
-                this.visualizerAnimationId = requestAnimationFrame(draw);
-                return;
-            }
-
-            ctx.clearRect(0, 0, w, h);
-
-            const gap = 3 * dpr;
-            const totalGaps = (numBars - 1) * gap;
-            const barWidth = Math.max(3 * dpr, (w - totalGaps) / numBars);
-            const radius = Math.min(barWidth / 2, 4 * dpr);
-
-            const time = Date.now() * 0.004;
-
-            let hasRealSignal = false;
-            if (this.analyser && this.dataArray && this.isPlaying) {
-                this.analyser.getByteFrequencyData(this.dataArray);
-                for (let j = 0; j < Math.min(12, this.dataArray.length); j++) {
-                    if (this.dataArray[j] > 0) {
-                        hasRealSignal = true;
-                        break;
-                    }
-                }
-            }
-
-            for (let i = 0; i < numBars; i++) {
-                let barHeight;
-                if (this.isPlaying) {
-                    if (hasRealSignal) {
-                        // LẤY TẦN SỐ ÂM THANH THỰC TẾ 100% CỦA BÀI HÁT ĐANG PHÁT
-                        const freqIdx = Math.min(this.dataArray.length - 1, Math.floor((i / numBars) * (this.dataArray.length * 0.85)));
-                        const freqVal = this.dataArray[freqIdx] || 0; // 0..255
-                        const percent = freqVal / 255;
-                        const minH = 6 * dpr;
-                        const maxH = h - (4 * dpr);
-                        barHeight = Math.max(minH, minH + (percent * (maxH - minH)));
-                    } else {
-                        // Sóng âm thanh đa tần sống động (Bass ở đầu, Mid ở giữa, Treble ở cuối)
-                        const harmonic1 = Math.sin(i * 0.35 + time * 1.5);
-                        const harmonic2 = Math.cos(i * 0.22 - time * 2.1);
-                        const harmonic3 = Math.sin(i * 0.7 + time * 3.0) * 0.4;
-                        const combined = Math.abs(harmonic1 * 0.5 + harmonic2 * 0.35 + harmonic3);
-                        const minH = 6 * dpr;
-                        const maxH = h - (4 * dpr);
-                        barHeight = Math.max(minH, Math.min(maxH, combined * maxH + (Math.sin(time * 5 + i) * 2 * dpr)));
-                    }
-                } else {
-                    // Trạng thái nghỉ: Sóng thở nhẹ nhàng êm ái
-                    const idle = Math.sin(i * 0.25 + time * 0.5) * 0.5 + 0.5;
-                    barHeight = (5 + idle * 6) * dpr;
-                }
-
-                const x = i * (barWidth + gap);
-                const y = h - barHeight;
-
-                const grad = ctx.createLinearGradient(0, h, 0, 0);
-                if (this.isPlaying) {
-                    grad.addColorStop(0, '#f59e0b');
-                    grad.addColorStop(0.45, '#fcbf47');
-                    grad.addColorStop(0.8, '#ff6dc4');
-                    grad.addColorStop(1, '#38bdf8');
-                } else {
-                    grad.addColorStop(0, 'rgba(252, 191, 71, 0.4)');
-                    grad.addColorStop(1, 'rgba(255, 109, 196, 0.3)');
-                }
-
-                ctx.fillStyle = grad;
-                ctx.beginPath();
-                if (ctx.roundRect) {
-                    ctx.roundRect(x, y, barWidth, barHeight, [radius, radius, 1, 1]);
-                } else {
-                    ctx.rect(x, y, barWidth, barHeight);
-                }
-                ctx.fill();
-            }
-
-            this.visualizerAnimationId = requestAnimationFrame(draw);
-        };
-
-        if (!isMobileScreen()) {
-            draw();
         }
     }
 
@@ -6795,11 +6641,16 @@ class XTAPOMusicApp {
 
     startLyricsSyncLoop() {
         if (this._lyricsSyncRafId) cancelAnimationFrame(this._lyricsSyncRafId);
-        const loop = () => {
+        let lastSyncTime = 0;
+        const syncInterval = 1000 / 15; // 15 FPS (~66ms) tối ưu CPU & tiết kiệm pin tuyệt đối
+        const loop = (now) => {
             if (this.isPlaying) {
-                const curTime = this.synthesizerActive ? this.synthTime : (this.audio.currentTime || 0);
-                this.syncLyricsTime(curTime);
                 this._lyricsSyncRafId = requestAnimationFrame(loop);
+                if (now - lastSyncTime >= syncInterval) {
+                    lastSyncTime = now;
+                    const curTime = this.synthesizerActive ? this.synthTime : (this.audio.currentTime || 0);
+                    this.syncLyricsTime(curTime);
+                }
             }
         };
         this._lyricsSyncRafId = requestAnimationFrame(loop);
@@ -7182,36 +7033,50 @@ class XTAPOMusicApp {
     }
 
     updateActiveLyricClasses(activeIdx) {
+        if (this._prevActiveLyricIdx === activeIdx) return;
+        const prevIdx = this._prevActiveLyricIdx;
+        this._prevActiveLyricIdx = activeIdx;
+
         // 1. Update Hero Lyrics Elements
         if (this.heroLyricsLines) {
-            const heroEls = this.heroLyricsLines.querySelectorAll('.lyrics-line');
-            heroEls.forEach((el, idx) => {
-                if (idx === activeIdx) {
-                    el.classList.add('active');
-                    el.classList.remove('past');
-                } else if (idx < activeIdx) {
-                    el.classList.add('past');
-                    el.classList.remove('active');
-                } else {
-                    el.classList.remove('active', 'past');
+            const heroChildren = this.heroLyricsLines.children;
+            const len = heroChildren.length;
+            if (prevIdx !== undefined && prevIdx >= 0 && prevIdx < len) {
+                const prevEl = heroChildren[prevIdx];
+                if (prevEl) {
+                    prevEl.classList.remove('active');
+                    if (prevIdx < activeIdx) prevEl.classList.add('past');
+                    else prevEl.classList.remove('past');
                 }
-            });
+            }
+            if (activeIdx >= 0 && activeIdx < len) {
+                const curEl = heroChildren[activeIdx];
+                if (curEl) {
+                    curEl.classList.add('active');
+                    curEl.classList.remove('past');
+                }
+            }
         }
 
-        // 2. Update Karaoke Modal Elements
-        if (this.karaokeLinesList) {
-            const karaokeEls = this.karaokeLinesList.querySelectorAll('.karaoke-line');
-            karaokeEls.forEach((el, idx) => {
-                if (idx === activeIdx) {
-                    el.classList.add('active');
-                    el.classList.remove('past');
-                } else if (idx < activeIdx) {
-                    el.classList.add('past');
-                    el.classList.remove('active');
-                } else {
-                    el.classList.remove('active', 'past');
+        // 2. Update Karaoke Modal Elements (Chỉ update nếu modal đang mở)
+        if (this.karaokeLinesList && this.lyricsModal && this.lyricsModal.classList.contains('open')) {
+            const karaokeChildren = this.karaokeLinesList.children;
+            const len = karaokeChildren.length;
+            if (prevIdx !== undefined && prevIdx >= 0 && prevIdx < len) {
+                const prevEl = karaokeChildren[prevIdx];
+                if (prevEl) {
+                    prevEl.classList.remove('active');
+                    if (prevIdx < activeIdx) prevEl.classList.add('past');
+                    else prevEl.classList.remove('past');
                 }
-            });
+            }
+            if (activeIdx >= 0 && activeIdx < len) {
+                const curEl = karaokeChildren[activeIdx];
+                if (curEl) {
+                    curEl.classList.add('active');
+                    curEl.classList.remove('past');
+                }
+            }
         }
     }
 
@@ -8351,8 +8216,14 @@ class XTAPOMusicApp {
                 const data = await res.json();
                 if (data.status === 'success') {
                     if (data.devices) {
+                        const prevDevicesJson = this._lastDevicesJson || '';
+                        const nextDevicesJson = JSON.stringify(data.devices.map(d => ({ id: d.device_id, name: d.device_name, type: d.device_type, is_active: d.is_active_player, playing: d.current_state?.is_playing })));
                         this.availableDevices = data.devices;
-                        this.renderDevicesList();
+                        const isModalOpen = this.deviceModal && this.deviceModal.classList.contains('open');
+                        if (isModalOpen || prevDevicesJson !== nextDevicesJson) {
+                            this._lastDevicesJson = nextDevicesJson;
+                            this.renderDevicesList();
+                        }
                     }
                     if (Array.isArray(data.commands) && data.commands.length > 0) {
                         for (const cmd of data.commands) {
