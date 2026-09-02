@@ -476,7 +476,7 @@
                         <label class="block text-[11px] font-bold uppercase text-amber-300 mb-1">
                             <i class="fa-solid fa-play text-[10px] mr-1"></i> Từ Tin Nhắn ID (From ID):
                         </label>
-                        <input type="number" id="scan-from-msg-id" min="1" placeholder="Ví dụ: 1 hoặc 5000"
+                        <input type="number" id="scan-from-msg-id" min="1" placeholder="Ví dụ: 1 hoặc 5000" oninput="onFromIdInputChange()"
                                class="w-full px-3 py-2 rounded-xl bg-background text-text border border-amber-500/40 text-xs font-mono focus:ring-2 focus:ring-amber-400">
                     </div>
                     <div>
@@ -2991,17 +2991,31 @@ async function resetChannelProgress(chatId, event) {
     }
 }
 
+function onFromIdInputChange() {
+    const rawVal = parseInt(document.getElementById('scan-from-msg-id').value || '0', 10);
+    const select = document.getElementById('scan-limit-select');
+    if (rawVal > 0 && select && select.value !== 'custom') {
+        select.value = 'custom';
+        onScanLimitChange();
+    }
+}
+
 function autoFillFromLastScanned() {
     const checkedBoxes = Array.from(document.querySelectorAll('.channel-scan-checkbox:checked'));
     if (checkedBoxes.length === 0) {
         alertToast('Vui lòng tích chọn ít nhất 1 kênh trước!');
         return;
     }
+    const select = document.getElementById('scan-limit-select');
+    if (select) {
+        select.value = 'custom';
+        onScanLimitChange();
+    }
     const firstChId = checkedBoxes[0].value;
     const ch = configuredChannels.find(c => String(c.id) === String(firstChId));
     if (ch && ch.last_scanned_id > 0) {
         document.getElementById('scan-from-msg-id').value = ch.last_scanned_id + 1;
-        alertToast(`Đã điền From ID = #${ch.last_scanned_id + 1} từ mốc kênh "${ch.name || ch.id}"`);
+        alertToast(`Đã chọn quét dải tùy chỉnh: Bắt đầu từ ID #${ch.last_scanned_id + 1}`);
     } else {
         document.getElementById('scan-from-msg-id').value = 1;
         alertToast('Kênh chưa quét mốc nào, đã điền From ID = 1');
@@ -3084,19 +3098,24 @@ async function startMusicScan() {
     }
 
     const limitSelect = document.getElementById('scan-limit-select').value;
+    const inputFrom = parseInt(document.getElementById('scan-from-msg-id').value || '0', 10);
+    const inputTo = parseInt(document.getElementById('scan-to-msg-id').value || '0', 10);
+
     let limit = 100;
     let resume = false;
     let fromMsgId = 0;
     let toMsgId = 0;
 
-    if (limitSelect === 'custom') {
-        fromMsgId = parseInt(document.getElementById('scan-from-msg-id').value || '0', 10);
-        toMsgId = parseInt(document.getElementById('scan-to-msg-id').value || '0', 10);
+    // Ưu tiên tuyệt đối: Nếu có nhập From ID > 0 hoặc chọn chế độ tùy chỉnh
+    if (inputFrom > 0 || limitSelect === 'custom') {
+        fromMsgId = inputFrom;
+        toMsgId = inputTo;
         if (fromMsgId <= 0) {
             alertToast('Vui lòng nhập ID tin nhắn bắt đầu (From ID > 0)!');
             return;
         }
         limit = 0;
+        resume = false;
     } else if (limitSelect === 'resume') {
         resume = true;
         limit = -1;

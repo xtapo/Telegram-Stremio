@@ -1979,20 +1979,25 @@ async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
     if not channels:
         raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất 1 kênh để quét.")
 
-    resume = bool(payload.get("resume", False))
-    raw_limit = payload.get("limit", "resume")
-    if str(raw_limit).lower() == "resume" or resume:
-        limit = -1
-        resume = True
-    else:
-        try:
-            val = int(raw_limit)
-            limit = 0 if val == 0 else max(val, 5)
-        except (ValueError, TypeError):
-            limit = 100
-
     from_msg_id = max(0, int(payload.get("from_msg_id", 0) or 0))
     to_msg_id = max(0, int(payload.get("to_msg_id", 0) or 0))
+
+    if from_msg_id > 0:
+        resume = False
+        limit = 0
+    else:
+        resume = bool(payload.get("resume", False))
+        raw_limit = payload.get("limit", "resume")
+        if str(raw_limit).lower() == "resume" or resume:
+            limit = -1
+            resume = True
+        else:
+            try:
+                val = int(raw_limit)
+                limit = 0 if val == 0 else max(val, 5)
+            except (ValueError, TypeError):
+                limit = 100
+
     mode = str(payload.get("mode", "append")).lower()
     auto_scrape = bool(payload.get("auto_scrape", True))
     default_artist = str(payload.get("default_artist", "")).strip()
