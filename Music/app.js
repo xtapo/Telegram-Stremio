@@ -3723,7 +3723,7 @@ class XTAPOMusicApp {
 
         // Lắng nghe sự kiện hashchange của trình duyệt (hỗ trợ nút Back/Forward và Deep link)
         window.addEventListener('hashchange', () => {
-            this.restoreViewStateFromHash();
+            this.restoreActiveView();
         });
 
         // Lưu trạng thái & vị trí cuộn chuột trước khi tải lại trang
@@ -3737,6 +3737,7 @@ class XTAPOMusicApp {
 
     // --- State Persistence & URL Deep Linking ---
     savePlayerState() {
+        if (this.isRestoringState) return;
         try {
             const album = this.currentAlbum;
             const track = this.currentTrack;
@@ -3800,14 +3801,22 @@ class XTAPOMusicApp {
     }
 
     restorePlayerState() {
+        this.isRestoringState = true;
         try {
             const raw = localStorage.getItem('xtapo_music_player_state');
-            if (!raw) return false;
+            if (!raw) {
+                this.isRestoringState = false;
+                return false;
+            }
             const state = JSON.parse(raw);
-            if (!state) return false;
+            if (!state) {
+                this.isRestoringState = false;
+                return false;
+            }
 
             // Nếu người dùng đã đăng nhập mà state trước đó là demo, bỏ qua không khôi phục demo
             if (this.currentUser && (state.isDemo || (state.albumId && String(state.albumId).startsWith('shania-')))) {
+                this.isRestoringState = false;
                 return false;
             }
 
@@ -3843,17 +3852,30 @@ class XTAPOMusicApp {
 
             // 2. Phục hồi danh sách phát / hàng đợi bài hát
             const targetTrackIdx = (typeof state.trackIndex === 'number' && state.trackIndex >= 0) ? state.trackIndex : 0;
+            
+            const resolveExactIdx = (tracks, fallbackIdx) => {
+                if (state.trackChatId && state.trackMsgId && tracks && tracks.length > 0) {
+                    const exactIdx = tracks.findIndex(t => {
+                        const tChat = t.chatId || t.chat_id;
+                        const tMsg = t.msgId || t.msg_id;
+                        return String(tChat) === String(state.trackChatId) && String(tMsg) === String(state.trackMsgId);
+                    });
+                    if (exactIdx !== -1) return exactIdx;
+                }
+                return fallbackIdx;
+            };
 
             if (state.isFavoriteMode && this.favoriteTracks && this.favoriteTracks.length > 0) {
-                this.playFavoritesQueue(targetTrackIdx, false, false);
+                this.playFavoritesQueue(resolveExactIdx(this.favoriteTracks, targetTrackIdx), false, false);
                 if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
             } else if (state.activePlaylistId && this.playlists && this.playlists.length > 0) {
                 const pl = this.playlists.find(p => String(p.id) === String(state.activePlaylistId));
                 if (pl && pl.tracks && pl.tracks.length > 0) {
-                    this.playPlaylist(pl, targetTrackIdx, false);
+                    this.playPlaylist(pl, resolveExactIdx(pl.tracks, targetTrackIdx), false);
                 } else {
                     const albumIdx = this.findAlbumIndex(state);
-                    this.loadAlbum(albumIdx, targetTrackIdx, false);
+                    const tracks = this.albums[albumIdx] ? this.albums[albumIdx].tracks : [];
+                    this.loadAlbum(albumIdx, resolveExactIdx(tracks, targetTrackIdx), false);
                 }
             } else if (state.activeArtist) {
                 this.playArtistQueueByName(state.activeArtist, targetTrackIdx, false);
@@ -3863,7 +3885,8 @@ class XTAPOMusicApp {
                 this.playCountryQueueByName(state.activeCountry, targetTrackIdx, false);
             } else {
                 const albumIdx = this.findAlbumIndex(state);
-                this.loadAlbum(albumIdx, targetTrackIdx, false);
+                const tracks = this.albums[albumIdx] ? this.albums[albumIdx].tracks : [];
+                this.loadAlbum(albumIdx, resolveExactIdx(tracks, targetTrackIdx), false);
             }
 
             // 3. Phục hồi thời gian đang phát (Seek đến giây trước đó ở trạng thái Pause)
@@ -3891,9 +3914,11 @@ class XTAPOMusicApp {
                 }
             }
 
+            this.isRestoringState = false;
             return true;
         } catch (e) {
             console.error('Lỗi khi khôi phục player state:', e);
+            this.isRestoringState = false;
             return false;
         }
     }
