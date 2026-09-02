@@ -2904,66 +2904,17 @@
 
         function sendTvSyncRegister() {
             sendTvHeartbeat();
-            if (!tvSyncWs || tvSyncWs.readyState !== WebSocket.OPEN) return;
-            const curTr = currentTracklist?.[currentPlayingTrackIdx];
-            const payload = {
-                device_name: 'XTAPO Android TV',
-                device_type: 'tv',
-                is_active_player: isPlaying,
-                user_id: currentUser ? currentUser._id : null,
-                username: currentUser ? (currentUser.display_name || currentUser.username) : null,
-                current_state: {
-                    is_playing: isPlaying,
-                    current_time: audio ? audio.currentTime : 0,
-                    duration: audio ? audio.duration : 0,
-                    volume: audio ? audio.volume : 1.0,
-                    album_id: currentActiveGroup ? currentActiveGroup.id : null,
-                    track_index: currentPlayingTrackIdx,
-                    track: curTr ? {
-                        id: curTr.id,
-                        name: curTr.name || curTr.title,
-                        artist: curTr.artist || 'XTAPO TV',
-                        coverUrl: getTrackCover(curTr),
-                        duration: curTr.duration
-                    } : null
-                }
-            };
-            tvSyncWs.send(JSON.stringify({
-                type: 'REGISTER',
-                payload: payload
-            }));
         }
 
         function sendTvSyncState() {
-            if (!tvSyncWs || tvSyncWs.readyState !== WebSocket.OPEN) return;
-            const curTr = currentTracklist?.[currentPlayingTrackIdx];
-            const payload = {
-                is_active_player: true,
-                is_playing: isPlaying,
-                current_time: audio ? audio.currentTime : 0,
-                duration: audio ? audio.duration : 0,
-                volume: audio ? audio.volume : 1.0,
-                album_id: currentActiveGroup ? currentActiveGroup.id : null,
-                track_index: currentPlayingTrackIdx,
-                track: curTr ? {
-                    id: curTr.id,
-                    name: curTr.name || curTr.title,
-                    artist: curTr.artist || 'XTAPO TV',
-                    coverUrl: getTrackCover(curTr),
-                    duration: curTr.duration
-                } : null
-            };
-            tvSyncWs.send(JSON.stringify({
-                type: 'STATE_UPDATE',
-                payload: payload
-            }));
+            sendTvHeartbeat();
         }
 
         function throttledSendTvSyncState() {
             const now = Date.now();
-            if (now - lastTvSyncSentAt > 1000) {
+            if (now - lastTvSyncSentAt > 1200) {
                 lastTvSyncSentAt = now;
-                sendTvSyncState();
+                sendTvHeartbeat();
             }
         }
 
