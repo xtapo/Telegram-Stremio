@@ -1850,7 +1850,8 @@
         // ─── RENDER PANEL 3: DANH SÁCH BÀI HÁT (PHÂN TRANG 50 BÀI/TRANG - 0% LAG) ───
         function renderTracklist() {
             trackContainer.innerHTML = '';
-            currentTracklistHeader.textContent = `DANH SÁCH BÀI HÁT (${currentTracklist.length} BÀI)`;
+            const grpTitle = currentActiveGroup?.title || 'DANH SÁCH BÀI HÁT';
+            currentTracklistHeader.textContent = `${grpTitle.toUpperCase()} (${currentTracklist.length} BÀI)`;
 
             if (currentTracklist.length === 0) {
                 if (trackPaginationBar) trackPaginationBar.style.display = 'none';
@@ -1987,7 +1988,9 @@
             const track = currentTracklist?.[currentPlayingTrackIdx];
             if (track) {
                 playerTrackTitle.textContent = track.name || track.title || 'Đang phát';
-                playerArtistName.textContent = track.artist || currentActiveGroup?.title || 'XTAPO MUSIC';
+                const artistStr = track.artist || 'XTAPO MUSIC';
+                const groupStr = currentActiveGroup?.title ? ` • [${currentActiveGroup.title}]` : '';
+                playerArtistName.textContent = `${artistStr}${groupStr}`;
                 const correctCover = getTrackCover(track);
                 playerCoverImg.src = correctCover;
                 playerCoverImg.onerror = function() { this.src = '/music/icon-192.png'; };
@@ -2964,8 +2967,8 @@
                 currentTrackPage = Math.floor(currentPlayingTrackIdx / TRACKS_PAGE_SIZE) + 1;
                 
                 const plTitle = payload.album_title || payload.album_name || payload.track?.album || 'Danh Sách Phát';
-                const plArtist = payload.album_artist || payload.track?.artist || 'XTAPO TV';
-                const plCover = payload.album_cover || payload.track?.coverUrl || '';
+                const plArtist = payload.album_artist || payload.track?.artist || 'Tuyển Tập';
+                const plCover = payload.album_cover || payload.track?.coverUrl || '/music/icon-192.png';
 
                 currentActiveGroup = {
                     id: albumId || 'remote_playlist',
@@ -2974,13 +2977,17 @@
                     coverUrl: plCover
                 };
                 
-                // Cập nhật Cột 2 trên TV hiển thị group danh sách phát đồng bộ
-                if (groupContainer) {
-                    groupContainer.innerHTML = `
-                        <div class="tv-group-card focusable selected" tabindex="0" style="background: rgba(2, 132, 199, 0.25); border: 1.5px solid var(--accent);">
-                            <img src="${plCover || '/music/icon-192.png'}" onerror="this.src='/music/icon-192.png'">
-                            <div class="tv-group-card-title">${escapeHtml(plTitle)}</div>
-                            <div class="tv-group-card-sub">📡 Đồng bộ từ Điện thoại • ${currentTracklist.length} bài</div>
+                // Cập nhật Cột 2 (itemsContainer) hiển thị Card Playlist đồng bộ
+                if (itemsContainer) {
+                    if (itemsCategoryTitle) itemsCategoryTitle.textContent = `ĐANG PHÁT TỪ XA (1)`;
+                    if (activeCategoryBadge) activeCategoryBadge.textContent = 'REMOTE SYNC';
+                    itemsContainer.innerHTML = `
+                        <div class="tv-card-item focusable active" tabindex="0" data-idx="0" style="background: rgba(2, 132, 199, 0.25); border: 2px solid #0284c7; border-radius: 12px; margin-bottom: 12px;">
+                            <img src="${plCover}" class="tv-card-cover" alt="" onerror="this.src='/music/icon-192.png'">
+                            <div class="tv-card-info">
+                                <div class="tv-card-title" style="color: #38bdf8; font-weight: 700;">${escapeHtml(plTitle)}</div>
+                                <div class="tv-card-sub">📡 Đồng bộ từ Điện thoại / PC • ${currentTracklist.length} bài</div>
+                            </div>
                         </div>
                     `;
                 }
