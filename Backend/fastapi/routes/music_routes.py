@@ -682,12 +682,27 @@ async def _db_load_channels() -> list:
             cursor = db.dbs["tracking"]["music_channels"].find()
             docs = [d async for d in cursor]
             if docs:
-                channels = [{"id": str(d.get("id") or d.get("_id")), "name": d.get("name", ""), "username": d.get("username", "")} for d in docs]
+                channels = [
+                    {
+                        "id": str(d.get("id") or d.get("_id")),
+                        "name": d.get("name", ""),
+                        "username": d.get("username", ""),
+                        "last_scanned_id": int(d.get("last_scanned_id", 0) or 0),
+                        "last_scanned_at": str(d.get("last_scanned_at", "") or ""),
+                        "total_tracks": int(d.get("total_tracks", 0) or 0),
+                    }
+                    for d in docs
+                ]
                 _save_channels_file(channels)
                 return channels
     except Exception as e:
         LOGGER.warning(f"[MUSIC DB] Could not read channels from MongoDB: {e}")
-    return _load_channels_file()
+    raw_list = _load_channels_file()
+    for item in raw_list:
+        item["last_scanned_id"] = int(item.get("last_scanned_id", 0) or 0)
+        item["last_scanned_at"] = str(item.get("last_scanned_at", "") or "")
+        item["total_tracks"] = int(item.get("total_tracks", 0) or 0)
+    return raw_list
 
 
 async def _db_save_channels(channels: list):
@@ -700,9 +715,18 @@ async def _db_save_channels(channels: list):
                 await coll.delete_many({"_id": {"$nin": curr_ids}})
                 for c in channels:
                     ch_id = str(c.get("id"))
+                    doc = {
+                        "_id": ch_id,
+                        "id": ch_id,
+                        "name": c.get("name", ""),
+                        "username": c.get("username", ""),
+                        "last_scanned_id": int(c.get("last_scanned_id", 0) or 0),
+                        "last_scanned_at": str(c.get("last_scanned_at", "") or ""),
+                        "total_tracks": int(c.get("total_tracks", 0) or 0),
+                    }
                     await coll.update_one(
                         {"_id": ch_id},
-                        {"$set": {"_id": ch_id, "id": ch_id, "name": c.get("name", ""), "username": c.get("username", "")}},
+                        {"$set": doc},
                         upsert=True
                     )
             else:
@@ -710,6 +734,40 @@ async def _db_save_channels(channels: list):
             LOGGER.info(f"[MUSIC DB] Đã đồng bộ {len(channels)} kênh lên MongoDB.")
     except Exception as e:
         LOGGER.warning(f"[MUSIC DB] Could not save channels to MongoDB: {e}")
+
+
+async def _db_update_channel_progress(chat_id: str, last_scanned_id: int, last_scanned_at: str = "", total_tracks: int = 0):
+    channels = await _db_load_channels()
+    target_str = str(chat_id)
+    updated = False
+    now_str = last_scanned_at or time.strftime("%H:%M %d/%m/%Y")
+
+    for ch in channels:
+        if str(ch.get("id")) == target_str:
+            curr_last = int(ch.get("last_scanned_id", 0) or 0)
+            if last_scanned_id > curr_last:
+                ch["last_scanned_id"] = int(last_scanned_id)
+                ch["last_scanned_at"] = now_str
+                updated = True
+            if total_tracks > 0:
+                ch["total_tracks"] = int(total_tracks)
+                updated = True
+            break
+
+    if updated:
+        _save_channels_file(channels)
+        try:
+            if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+                coll = db.dbs["tracking"]["music_channels"]
+                update_fields = {"last_scanned_id": int(last_scanned_id), "last_scanned_at": now_str}
+                if total_tracks > 0:
+                    update_fields["total_tracks"] = int(total_tracks)
+                await coll.update_one(
+                    {"_id": target_str},
+                    {"$set": update_fields}
+                )
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC DB] Could not update channel progress: {e}")
 
 
 _IN_MEMORY_LIBRARY_CACHE = None
@@ -1233,7 +1291,14 @@ async def get_music_channels(_: bool = Depends(require_auth)):
             from Backend.helper.settings_manager import SettingsManager
             auth_ch = SettingsManager.current().auth_channels or []
             for ch in auth_ch:
-                saved.append({"id": str(ch), "name": str(ch), "username": ""})
+                saved.append({
+                    "id": str(ch),
+                    "name": str(ch),
+                    "username": "",
+                    "last_scanned_id": 0,
+                    "last_scanned_at": "",
+                    "total_tracks": 0
+                })
         except Exception:
             pass
 
@@ -1241,6 +1306,9 @@ async def get_music_channels(_: bool = Depends(require_auth)):
         ch_id = item.get("id") or item.get("chat_id")
         ch_name = item.get("name") or str(ch_id)
         ch_user = item.get("username") or ""
+        last_scanned_id = int(item.get("last_scanned_id", 0) or 0)
+        last_scanned_at = str(item.get("last_scanned_at", "") or "")
+        total_tracks = int(item.get("total_tracks", 0) or 0)
 
         if client:
             try:
@@ -1254,7 +1322,10 @@ async def get_music_channels(_: bool = Depends(require_auth)):
         result.append({
             "id": str(ch_id),
             "name": ch_name,
-            "username": ch_user
+            "username": ch_user,
+            "last_scanned_id": last_scanned_id,
+            "last_scanned_at": last_scanned_at,
+            "total_tracks": total_tracks
         })
     return {"status": "success", "channels": result}
 
@@ -1289,7 +1360,14 @@ async def add_music_channel(payload: dict, _: bool = Depends(require_auth)):
         if str(item.get("id")) == str(resolved_id):
             return {"status": "success", "message": "Kênh đã tồn tại trong danh sách.", "channel": item}
 
-    new_ch = {"id": str(resolved_id), "name": ch_name, "username": ch_user}
+    new_ch = {
+        "id": str(resolved_id),
+        "name": ch_name,
+        "username": ch_user,
+        "last_scanned_id": 0,
+        "last_scanned_at": "",
+        "total_tracks": 0
+    }
     saved.append(new_ch)
     await _db_save_channels(saved)
     return {"status": "success", "message": f"Đã thêm kênh '{ch_name}' thành công!", "channel": new_ch}
@@ -1301,6 +1379,23 @@ async def delete_music_channel(chat_id: str, _: bool = Depends(require_auth)):
     new_list = [c for c in saved if str(c.get("id")) != str(chat_id)]
     await _db_save_channels(new_list)
     return {"status": "success", "message": "Đã xóa kênh khỏi danh sách quản lý."}
+
+
+@router.post("/api/music/channels/{chat_id}/reset-progress")
+async def reset_music_channel_progress(chat_id: str, _: bool = Depends(require_auth)):
+    saved = await _db_load_channels()
+    found = False
+    target_str = str(chat_id).strip()
+    for item in saved:
+        if str(item.get("id")) == target_str:
+            item["last_scanned_id"] = 0
+            item["last_scanned_at"] = ""
+            found = True
+            break
+    if found:
+        await _db_save_channels(saved)
+        return {"status": "success", "message": "Đã đặt lại mốc quét cho kênh về 0."}
+    raise HTTPException(status_code=404, detail="Không tìm thấy kênh trong danh sách.")
 
 
 # ── 3.5 Quản lý Playlist (Bị thay thế bởi Playlist Cá Nhân theo User) ─────────
@@ -1318,6 +1413,8 @@ class MusicScanManager:
         self._total_channels: int = 0
         self._processed_messages: int = 0
         self._target_messages: int = 0
+        self._current_msg_id: int = 0
+        self._target_msg_id: int = 0
         self._found_tracks_count: int = 0
         self._duplicates_removed: int = 0
         self._current_track: str = ""
@@ -1339,6 +1436,8 @@ class MusicScanManager:
             "total_channels": self._total_channels,
             "processed_messages": self._processed_messages,
             "target_messages": self._target_messages,
+            "current_msg_id": self._current_msg_id,
+            "target_msg_id": self._target_msg_id,
             "found_tracks_count": self._found_tracks_count,
             "duplicates_removed": self._duplicates_removed,
             "current_track": self._current_track,
@@ -1357,6 +1456,7 @@ class MusicScanManager:
         self,
         channels: list,
         limit: int = 100,
+        resume: bool = False,
         mode: str = "append",
         auto_scrape: bool = True,
         default_artist: str = "",
@@ -1374,6 +1474,8 @@ class MusicScanManager:
         self._cancel_requested = False
         self._status = "running"
         self._processed_messages = 0
+        self._current_msg_id = 0
+        self._target_msg_id = 0
         if from_msg_id > 0 and to_msg_id >= from_msg_id:
             self._target_messages = len(channels) * (to_msg_id - from_msg_id + 1)
         elif limit > 0:
@@ -1395,6 +1497,7 @@ class MusicScanManager:
             self._run_scan_loop(
                 channels=channels,
                 limit=limit,
+                resume=resume,
                 mode=mode,
                 auto_scrape=auto_scrape,
                 default_artist=default_artist,
@@ -1420,6 +1523,7 @@ class MusicScanManager:
         self,
         channels: list,
         limit: int,
+        resume: bool,
         mode: str,
         auto_scrape: bool,
         default_artist: str,
@@ -1433,6 +1537,8 @@ class MusicScanManager:
             audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
             from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title, classify_genre_and_country
             from Backend.helper.metadata.audio_fingerprint import recognize_audio_from_telegram
+
+            saved_channels_map = {str(c.get("id")): c for c in await _db_load_channels()}
 
             for idx, raw_ch in enumerate(channels, 1):
                 if self._cancel_requested:
@@ -1464,135 +1570,86 @@ class MusicScanManager:
                 self._current_channel_title = chat_title
                 self._log(f"Đang quét kênh [{idx}/{len(channels)}]: {chat_title} ({self._current_channel_id})")
 
-                messages_to_process = []
+                # Tìm mốc quét đã lưu trước đó của kênh
+                ch_saved = saved_channels_map.get(self._current_channel_id) or {}
+                last_checkpoint_id = int(ch_saved.get("last_scanned_id", 0) or 0)
+                highest_seen_id = last_checkpoint_id
 
-                # ── 1. Quét theo dải ID tin nhắn tùy chỉnh (From -> To) ──
-                if from_msg_id > 0:
-                    curr_to = to_msg_id
-                    if curr_to <= 0 or curr_to < from_msg_id:
-                        try:
-                            probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
-                            v_ids = [m.id for m in probe if m]
-                            curr_to = max(v_ids) if v_ids else from_msg_id + 500
-                        except Exception:
-                            curr_to = from_msg_id + 500
-
-                    scan_range = list(range(from_msg_id, curr_to + 1))
-                    self._log(f"Quét dải ID tin nhắn #{from_msg_id} -> #{curr_to} (Tổng {len(scan_range)} tin nhắn)...")
-                    for i in range(0, len(scan_range), 50):
-                        if self._cancel_requested:
+                # Dò ID tin nhắn mới nhất của kênh
+                latest_msg_id = 0
+                try:
+                    async for m in client.get_chat_history(resolved_chat_id, limit=1):
+                        if m and m.id:
+                            latest_msg_id = m.id
                             break
-                        sub_ids = scan_range[i:i+50]
-                        try:
-                            b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                            for m in b_msgs:
-                                if m:
-                                    messages_to_process.append(m)
-                        except FloodWait as fw:
-                            self._log(f"FloodWait {fw.value}s trong batch — đang tự động chờ...")
-                            await asyncio.sleep(fw.value + 1)
-                            b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                            for m in b_msgs:
-                                if m:
-                                    messages_to_process.append(m)
-                        except Exception as e:
-                            self._log(f"Lỗi lấy cụm tin nhắn {sub_ids[0]}-{sub_ids[-1]}: {e}")
-                        await asyncio.sleep(0.04)
+                except Exception:
+                    pass
 
-                # ── 2. Quét Toàn Bộ Lịch Sử Kênh (limit == 0) ──
+                # Xác định dải quét scan_from -> scan_to
+                if from_msg_id > 0:
+                    scan_from = from_msg_id
+                    scan_to = to_msg_id if (to_msg_id > 0 and to_msg_id >= from_msg_id) else (latest_msg_id or (from_msg_id + 500))
+                elif resume or limit == -1:
+                    if last_checkpoint_id > 0:
+                        scan_from = last_checkpoint_id + 1
+                        if latest_msg_id > 0 and scan_from > latest_msg_id:
+                            self._log(f"Kênh '{chat_title}' đã ở trạng thái mới nhất (đã quét tới ID #{last_checkpoint_id}). Không có bài mới.")
+                            continue
+                    else:
+                        scan_from = 1
+                    scan_to = latest_msg_id or (scan_from + 500)
                 elif limit == 0:
-                    self._log("Chế độ quét toàn bộ lịch sử kênh...")
-                    try:
-                        async for msg in client.get_chat_history(resolved_chat_id):
-                            if self._cancel_requested:
-                                break
-                            if msg:
-                                messages_to_process.append(msg)
-                    except FloodWait as fw:
-                        self._log(f"FloodWait {fw.value}s — đang tự động chờ...")
-                        await asyncio.sleep(fw.value + 1)
-                        try:
-                            async for msg in client.get_chat_history(resolved_chat_id):
-                                if self._cancel_requested:
-                                    break
-                                if msg:
-                                    messages_to_process.append(msg)
-                        except Exception as e:
-                            self._log(f"Thử lại get_chat_history thất bại: {e}")
-                    except Exception as hist_err:
-                        self._log(f"get_chat_history ({hist_err}), fallback dò batch toàn bộ...")
-                        try:
-                            probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
-                            v_ids = [m.id for m in probe if m]
-                            max_id = max(v_ids) if v_ids else 1000
-                            scan_range = list(range(1, max_id + 1))
-                            for i in range(0, len(scan_range), 50):
-                                if self._cancel_requested:
-                                    break
-                                sub_ids = scan_range[i:i+50]
-                                try:
-                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                                    for m in b_msgs:
-                                        if m:
-                                            messages_to_process.append(m)
-                                except FloodWait as fw:
-                                    self._log(f"FloodWait {fw.value}s trong batch — đang chờ...")
-                                    await asyncio.sleep(fw.value + 1)
-                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                                    for m in b_msgs:
-                                        if m:
-                                            messages_to_process.append(m)
-                                await asyncio.sleep(0.04)
-                        except Exception as b_err:
-                            self._log(f"Lỗi đọc tin nhắn {chat_title}: {b_err}")
-                            continue
-
-                # ── 3. Quét theo số lượng tin nhắn gần nhất (limit > 0) ──
+                    scan_from = 1
+                    scan_to = latest_msg_id or 1000
+                elif limit > 0:
+                    if latest_msg_id > 0:
+                        scan_from = max(1, latest_msg_id - limit + 1)
+                        scan_to = latest_msg_id
+                    else:
+                        scan_from = 1
+                        scan_to = limit
                 else:
+                    scan_from = 1
+                    scan_to = latest_msg_id or 100
+
+                self._current_msg_id = scan_from
+                self._target_msg_id = scan_to
+                scan_range = list(range(scan_from, scan_to + 1))
+                self._log(f"Quét dải ID tin nhắn #{scan_from} -> #{scan_to} (Tổng {len(scan_range)} tin nhắn)...")
+
+                messages_to_process = []
+                batch_size = 50
+                for i in range(0, len(scan_range), batch_size):
+                    if self._cancel_requested:
+                        break
+                    sub_ids = scan_range[i:i + batch_size]
+                    self._current_msg_id = sub_ids[-1]
                     try:
-                        async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
-                            if self._cancel_requested:
-                                break
-                            if msg:
-                                messages_to_process.append(msg)
+                        b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                        for m in b_msgs:
+                            if m:
+                                messages_to_process.append(m)
+                                if m.id > highest_seen_id:
+                                    highest_seen_id = m.id
                     except FloodWait as fw:
-                        self._log(f"Telegram yêu cầu tạm dừng {fw.value}s (FloodWait) — đang tự động chờ...")
+                        self._log(f"FloodWait {fw.value}s trong batch — đang tự động chờ...")
                         await asyncio.sleep(fw.value + 1)
                         try:
-                            async for msg in client.get_chat_history(resolved_chat_id, limit=limit):
-                                if self._cancel_requested:
-                                    break
-                                if msg:
-                                    messages_to_process.append(msg)
-                        except Exception as e:
-                            self._log(f"Thử lại get_chat_history thất bại: {e}")
-                    except Exception as hist_err:
-                        self._log(f"get_chat_history failed ({hist_err}), thử dò batch...")
-                        try:
-                            probe = await client.get_messages(resolved_chat_id, list(range(1, 20)))
-                            v_ids = [m.id for m in probe if m]
-                            max_id = max(v_ids) if v_ids else 100
-                            scan_range = list(range(max(1, max_id - limit), max_id + 1))
-                            for i in range(0, len(scan_range), 50):
-                                if self._cancel_requested:
-                                    break
-                                sub_ids = scan_range[i:i+50]
-                                try:
-                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                                    for m in b_msgs:
-                                        if m:
-                                            messages_to_process.append(m)
-                                except FloodWait as fw:
-                                    self._log(f"FloodWait {fw.value}s trong batch — đang chờ...")
-                                    await asyncio.sleep(fw.value + 1)
-                                    b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                                    for m in b_msgs:
-                                        if m:
-                                            messages_to_process.append(m)
-                                await asyncio.sleep(0.04)
-                        except Exception as b_err:
-                            self._log(f"Lỗi đọc tin nhắn {chat_title}: {b_err}")
-                            continue
+                            b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
+                            for m in b_msgs:
+                                if m:
+                                    messages_to_process.append(m)
+                                    if m.id > highest_seen_id:
+                                        highest_seen_id = m.id
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        self._log(f"Lỗi lấy cụm tin nhắn {sub_ids[0]}-{sub_ids[-1]}: {e}")
+
+                    # Cập nhật mốc quét ID tức thì sau mỗi cụm
+                    checkpoint_to_save = max(highest_seen_id, sub_ids[-1])
+                    await _db_update_channel_progress(self._current_channel_id, checkpoint_to_save)
+                    await asyncio.sleep(0.04)
 
                 media_group_context = {}
                 nearby_text_context = {}
@@ -1769,6 +1826,10 @@ class MusicScanManager:
                     except Exception:
                         continue
 
+                # Cập nhật số bài hát của kênh vào DB
+                ch_tracks_total = len([t for t in all_scanned_tracks if str(t.get("chat_id")) == str(resolved_chat_id)])
+                await _db_update_channel_progress(self._current_channel_id, max(highest_seen_id, scan_to), total_tracks=ch_tracks_total)
+
             if self._cancel_requested:
                 self._status = "cancelled"
                 self._end_time = time.time()
@@ -1898,8 +1959,18 @@ async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
     if not channels:
         raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất 1 kênh để quét.")
 
-    raw_limit = int(payload.get("limit", 100))
-    limit = 0 if raw_limit == 0 else max(raw_limit, 5)
+    resume = bool(payload.get("resume", False))
+    raw_limit = payload.get("limit", "resume")
+    if str(raw_limit).lower() == "resume" or resume:
+        limit = -1
+        resume = True
+    else:
+        try:
+            val = int(raw_limit)
+            limit = 0 if val == 0 else max(val, 5)
+        except (ValueError, TypeError):
+            limit = 100
+
     from_msg_id = max(0, int(payload.get("from_msg_id", 0) or 0))
     to_msg_id = max(0, int(payload.get("to_msg_id", 0) or 0))
     mode = str(payload.get("mode", "append")).lower()
@@ -1910,6 +1981,7 @@ async def start_music_scan_api(payload: dict, _: bool = Depends(require_auth)):
     result = await music_scan_manager.start(
         channels=channels,
         limit=limit,
+        resume=resume,
         mode=mode,
         auto_scrape=auto_scrape,
         default_artist=default_artist,

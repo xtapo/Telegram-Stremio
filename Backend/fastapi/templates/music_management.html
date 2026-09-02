@@ -444,10 +444,11 @@
                 <div>
                     <label class="block text-xs font-bold uppercase text-text-secondary mb-1">Số Tin Nhắn Quét / Kênh:</label>
                     <select id="scan-limit-select" onchange="onScanLimitChange()" class="w-full px-3 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary">
+                        <option value="resume" selected>⚡ Tiếp tục từ mốc đã quét (ID cuối -> Mới nhất)</option>
                         <option value="50">50 tin nhắn gần nhất</option>
-                        <option value="100" selected>100 tin nhắn</option>
-                        <option value="250">250 tin nhắn</option>
-                        <option value="500">500 tin nhắn</option>
+                        <option value="100">100 tin nhắn gần nhất</option>
+                        <option value="250">250 tin nhắn gần nhất</option>
+                        <option value="500">500 tin nhắn gần nhất</option>
                         <option value="1000">1,000 tin nhắn (Quét sâu)</option>
                         <option value="2500">2,500 tin nhắn</option>
                         <option value="5000">5,000 tin nhắn</option>
@@ -455,7 +456,7 @@
                         <option value="25000">25,000 tin nhắn</option>
                         <option value="50000">50,000 tin nhắn</option>
                         <option value="100000">100,000 tin nhắn</option>
-                        <option value="0">🌟 Quét Toàn Bộ Kênh (Không giới hạn)</option>
+                        <option value="0">🌟 Quét Toàn Bộ Kênh (Từ tin nhắn #1 đến mới nhất)</option>
                         <option value="custom">🎯 Quét Theo Dải ID Tin Nhắn (Tùy chỉnh)</option>
                     </select>
                 </div>
@@ -469,20 +470,28 @@
             </div>
 
             <!-- Custom Message ID Range Container (Expandable) -->
-            <div id="scan-range-container" class="hidden grid grid-cols-2 gap-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 animate-fadeIn">
-                <div>
-                    <label class="block text-[11px] font-bold uppercase text-amber-300 mb-1">
-                        <i class="fa-solid fa-play text-[10px] mr-1"></i> Từ Tin Nhắn ID (From ID):
-                    </label>
-                    <input type="number" id="scan-from-msg-id" min="1" placeholder="Ví dụ: 1 hoặc 5000"
-                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-amber-500/40 text-xs font-mono focus:ring-2 focus:ring-amber-400">
+            <div id="scan-range-container" class="hidden p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 animate-fadeIn space-y-2.5">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-bold uppercase text-amber-300 mb-1">
+                            <i class="fa-solid fa-play text-[10px] mr-1"></i> Từ Tin Nhắn ID (From ID):
+                        </label>
+                        <input type="number" id="scan-from-msg-id" min="1" placeholder="Ví dụ: 1 hoặc 5000"
+                               class="w-full px-3 py-2 rounded-xl bg-background text-text border border-amber-500/40 text-xs font-mono focus:ring-2 focus:ring-amber-400">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold uppercase text-amber-300 mb-1">
+                            <i class="fa-solid fa-flag-checkered text-[10px] mr-1"></i> Đến Tin Nhắn ID (To ID):
+                        </label>
+                        <input type="number" id="scan-to-msg-id" min="1" placeholder="Ví dụ: 25000 (để trống = mới nhất)"
+                               class="w-full px-3 py-2 rounded-xl bg-background text-text border border-amber-500/40 text-xs font-mono focus:ring-2 focus:ring-amber-400">
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-[11px] font-bold uppercase text-amber-300 mb-1">
-                        <i class="fa-solid fa-flag-checkered text-[10px] mr-1"></i> Đến Tin Nhắn ID (To ID):
-                    </label>
-                    <input type="number" id="scan-to-msg-id" min="1" placeholder="Ví dụ: 25000 (để trống = mới nhất)"
-                           class="w-full px-3 py-2 rounded-xl bg-background text-text border border-amber-500/40 text-xs font-mono focus:ring-2 focus:ring-amber-400">
+                <div class="flex items-center justify-between text-[11px] text-amber-200/90 pt-1.5 border-t border-amber-500/20 flex-wrap gap-2">
+                    <span><i class="fa-solid fa-lightbulb mr-1 text-amber-400"></i> Quét một khoảng ID cụ thể trong kênh.</span>
+                    <button type="button" onclick="autoFillFromLastScanned()" class="text-xs font-bold text-amber-300 hover:text-amber-100 hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-bolt"></i> Điền mốc đã quét (+1)
+                    </button>
                 </div>
             </div>
 
@@ -2909,25 +2918,83 @@ function renderChannelsList() {
 
     configuredChannels.forEach((ch, idx) => {
         const chip = document.createElement('div');
-        chip.className = 'flex items-center justify-between p-2.5 rounded-xl bg-surface/70 border border-hairline hover:border-primary/50 transition';
+        chip.className = 'flex items-center justify-between p-3 rounded-2xl bg-surface/70 border border-hairline hover:border-primary/50 transition gap-2';
         
+        const lastId = parseInt(ch.last_scanned_id || 0, 10);
+        const lastTime = ch.last_scanned_at || '';
+        const tracksCount = parseInt(ch.total_tracks || 0, 10);
+
         chip.innerHTML = `
-            <label class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none">
-                <input type="checkbox" value="${ch.id}" checked class="channel-scan-checkbox w-4 h-4 accent-primary cursor-pointer rounded shrink-0">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-1.5">
-                        <span class="text-xs font-bold text-text truncate">${ch.name || ch.id}</span>
+            <label class="flex items-start gap-3 min-w-0 flex-1 cursor-pointer select-none">
+                <input type="checkbox" value="${ch.id}" checked class="channel-scan-checkbox w-4 h-4 accent-primary cursor-pointer rounded shrink-0 mt-0.5">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-xs font-bold text-text truncate max-w-[200px]">${ch.name || ch.id}</span>
                         ${ch.username ? `<span class="text-[10px] text-sky-400 font-semibold truncate">@${ch.username}</span>` : ''}
                     </div>
-                    <span class="text-[10px] text-text-secondary font-mono">${ch.id}</span>
+                    <div class="text-[10px] text-text-secondary font-mono">${ch.id}</div>
+                    <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                        ${lastId > 0 ? `
+                            <span class="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                <i class="fa-solid fa-bookmark text-[9px]"></i> Đã quét tới ID: #${lastId}
+                            </span>
+                            ${lastTime ? `<span class="text-[10px] text-text-secondary"><i class="fa-regular fa-clock text-[9px] mr-1"></i>${lastTime}</span>` : ''}
+                            ${tracksCount > 0 ? `<span class="text-[10px] text-primary font-semibold"><i class="fa-solid fa-music text-[9px] mr-1"></i>${tracksCount} bài</span>` : ''}
+                            <button type="button" onclick="resetChannelProgress('${ch.id}', event)" class="text-[10px] text-amber-400/90 hover:text-amber-300 hover:underline flex items-center gap-0.5 ml-auto" title="Đặt lại mốc quét về 0 để quét lại từ đầu">
+                                <i class="fa-solid fa-arrows-rotate text-[9px]"></i> Đặt lại mốc
+                            </button>
+                        ` : `
+                            <span class="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/5 text-text-secondary border border-hairline">
+                                <i class="fa-regular fa-circle text-[8px]"></i> Chưa quét mốc nào
+                            </span>
+                        `}
+                    </div>
                 </div>
             </label>
-            <button type="button" onclick="deleteChannel('${ch.id}')" class="w-7 h-7 rounded-lg hover:bg-red-500/20 text-text-secondary hover:text-red-400 transition flex items-center justify-center shrink-0 ml-2" title="Xóa kênh">
-                <i class="fa-solid fa-trash-can text-[11px]"></i>
+            <button type="button" onclick="deleteChannel('${ch.id}')" class="w-8 h-8 rounded-xl hover:bg-red-500/20 text-text-secondary hover:text-red-400 transition flex items-center justify-center shrink-0 ml-1 self-start" title="Xóa kênh">
+                <i class="fa-solid fa-trash-can text-xs"></i>
             </button>
         `;
         container.appendChild(chip);
     });
+}
+
+async function resetChannelProgress(chatId, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (!confirm('Bạn có chắc muốn đặt lại mốc quét của kênh này về 0 (để lần sau quét lại từ đầu)?')) return;
+
+    try {
+        const res = await fetch(`/api/music/channels/${encodeURIComponent(chatId)}/reset-progress`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            alertToast('Đã đặt lại mốc quét cho kênh!');
+            loadChannelsList();
+        } else {
+            alertToast(data.detail || data.message || 'Lỗi đặt lại mốc.');
+        }
+    } catch (e) {
+        alertToast('Lỗi kết nối: ' + e.message);
+    }
+}
+
+function autoFillFromLastScanned() {
+    const checkedBoxes = Array.from(document.querySelectorAll('.channel-scan-checkbox:checked'));
+    if (checkedBoxes.length === 0) {
+        alertToast('Vui lòng tích chọn ít nhất 1 kênh trước!');
+        return;
+    }
+    const firstChId = checkedBoxes[0].value;
+    const ch = configuredChannels.find(c => String(c.id) === String(firstChId));
+    if (ch && ch.last_scanned_id > 0) {
+        document.getElementById('scan-from-msg-id').value = ch.last_scanned_id + 1;
+        alertToast(`Đã điền From ID = #${ch.last_scanned_id + 1} từ mốc kênh "${ch.name || ch.id}"`);
+    } else {
+        document.getElementById('scan-from-msg-id').value = 1;
+        alertToast('Kênh chưa quét mốc nào, đã điền From ID = 1');
+    }
 }
 
 function selectAllChannels(checked) {
@@ -3007,6 +3074,7 @@ async function startMusicScan() {
 
     const limitSelect = document.getElementById('scan-limit-select').value;
     let limit = 100;
+    let resume = false;
     let fromMsgId = 0;
     let toMsgId = 0;
 
@@ -3018,6 +3086,9 @@ async function startMusicScan() {
             return;
         }
         limit = 0;
+    } else if (limitSelect === 'resume') {
+        resume = true;
+        limit = -1;
     } else {
         limit = parseInt(limitSelect, 10);
     }
@@ -3037,6 +3108,7 @@ async function startMusicScan() {
             body: JSON.stringify({
                 channels: selectedChannels,
                 limit,
+                resume,
                 from_msg_id: fromMsgId,
                 to_msg_id: toMsgId,
                 mode,
@@ -3077,13 +3149,20 @@ async function pollScanStatus() {
 
         // Update UI metrics
         document.getElementById('scan-stat-channel-idx').textContent = `${data.channel_index || 0} / ${data.total_channels || 0}`;
-        document.getElementById('scan-stat-msgs').textContent = data.processed_messages || 0;
+        if (data.current_msg_id > 0) {
+            document.getElementById('scan-stat-msgs').textContent = `#${data.current_msg_id}`;
+        } else {
+            document.getElementById('scan-stat-msgs').textContent = data.processed_messages || 0;
+        }
         document.getElementById('scan-stat-found').textContent = data.found_tracks_count || 0;
         document.getElementById('scan-stat-dups').textContent = data.duplicates_removed || 0;
         document.getElementById('scan-live-elapsed').textContent = `${data.elapsed_seconds || 0}s`;
 
         document.getElementById('scan-current-track-name').textContent = data.current_track || 'Đang duyệt tin nhắn...';
-        document.getElementById('scan-progress-channel-label').textContent = data.current_channel_title ? `Kênh: ${data.current_channel_title}` : 'Đang quét...';
+        const chProgressDetail = (data.current_msg_id > 0 && data.target_msg_id > 0)
+            ? ` • Tin nhắn #${data.current_msg_id} / #${data.target_msg_id}`
+            : '';
+        document.getElementById('scan-progress-channel-label').textContent = (data.current_channel_title ? `Kênh: ${data.current_channel_title}` : 'Đang quét...') + chProgressDetail;
 
         // Calculate percentage
         let percent = 0;
