@@ -1766,7 +1766,7 @@ class XTAPOMusicApp {
                     <button class="nav-btn icon-btn" style="width: 30px; height: 30px; border-radius: 50%; background: var(--color-primary); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Phát bài này">
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     </button>
-                    <button class="fav-remove-btn" title="Xóa khỏi danh sách yêu thích" data-chat-id="${track.chatId}" data-msg-id="${track.msgId}">
+                    <button class="fav-remove-btn" title="Bỏ khỏi yêu thích (Xóa bài này)" data-chat-id="${track.chatId || ''}" data-msg-id="${track.msgId || ''}" data-name="${this.escapeHtml(track.name)}">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="color: #ef4444;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                     </button>
                 </div>
@@ -1786,7 +1786,8 @@ class XTAPOMusicApp {
                     e.stopPropagation();
                     const cid = removeBtn.getAttribute('data-chat-id');
                     const mid = removeBtn.getAttribute('data-msg-id');
-                    await this.removeFavoriteItem(cid, mid);
+                    const name = removeBtn.getAttribute('data-name');
+                    await this.removeFavoriteItem(cid, mid, name);
                 });
             }
 
@@ -1794,19 +1795,32 @@ class XTAPOMusicApp {
         });
     }
 
-    async removeFavoriteItem(chatId, msgId) {
+    async removeFavoriteItem(chatId, msgId, trackName = '') {
         try {
             const res = await fetch('/api/music/user/favorites/toggle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, msg_id: msgId })
+                body: JSON.stringify({ chat_id: chatId, msg_id: msgId, name: trackName })
             });
             const data = await res.json();
             if (data.status === 'success') {
-                this.favoriteTracks = this.favoriteTracks.filter(f => !(String(f.chat_id) === String(chatId) && String(f.msg_id) === String(msgId)));
+                this.favoriteTracks = this.favoriteTracks.filter(f => {
+                    const cid = f.chat_id || f.chatId;
+                    const mid = f.msg_id || f.msgId;
+                    if (chatId && mid && String(cid) === String(chatId) && String(mid) === String(msgId)) return false;
+                    if (mid && msgId && String(mid) === String(msgId)) return false;
+                    if (trackName && (f.title === trackName || f.name === trackName)) return false;
+                    return true;
+                });
                 this.updateFavoriteBtnState();
                 this.renderFavoritesList(this.favSearchInput ? this.favSearchInput.value.trim() : '');
                 this.showToast("Đã xóa bài hát khỏi danh sách yêu thích 🤍");
+
+                // If currently playing favorites queue, update live queue
+                if (this.currentAlbum && this.currentAlbum.id === 'favorites-queue') {
+                    this.currentAlbum.tracks = this.favoriteTracks;
+                    this.renderTracklist();
+                }
             }
         } catch (e) {
             this.showToast("Lỗi khi xóa bài hát");
@@ -2324,6 +2338,29 @@ class XTAPOMusicApp {
         li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}${(!this.isPlaying && idx === this.currentTrackIndex) ? ' paused' : ''}`;
         li.setAttribute('data-index', idx);
         const trackName = track.name || 'Không có tên';
+        const isCustomPlaylist = Boolean(this.activePlaylistId || (this.currentAlbum && String(this.currentAlbum.id).startsWith('pl-')));
+        const isFavQueue = Boolean(this.currentAlbum && this.currentAlbum.id === 'favorites-queue');
+
+        let actionBtnHtml = `
+            <button class="track-add-playlist-btn" title="Thêm vào Playlist">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>
+            </button>
+        `;
+
+        if (isCustomPlaylist) {
+            actionBtnHtml = `
+                <button class="track-remove-from-pl-btn" title="Xóa bài này khỏi Playlist" style="background: transparent; border: none; color: #f87171; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+            `;
+        } else if (isFavQueue) {
+            actionBtnHtml = `
+                <button class="track-remove-fav-btn" title="Bỏ khỏi danh sách yêu thích" style="background: transparent; border: none; color: #ef4444; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                </button>
+            `;
+        }
+
         li.innerHTML = `
             <div class="track-item-left">
                 <span class="track-number">${idx + 1}</span>
@@ -2334,10 +2371,8 @@ class XTAPOMusicApp {
                 </div>
                 <span class="track-name" title="${this.escapeHtml(trackName)}">${this.escapeHtml(trackName)}</span>
             </div>
-            <div class="track-item-right">
-                <button class="track-add-playlist-btn" title="Thêm vào Playlist">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>
-                </button>
+            <div class="track-item-right" style="display: flex; align-items: center; gap: 8px;">
+                ${actionBtnHtml}
                 <span class="track-duration">${track.duration || '--:--'}</span>
             </div>
         `;
@@ -2350,8 +2385,25 @@ class XTAPOMusicApp {
             });
         }
 
+        const removePlBtn = li.querySelector('.track-remove-from-pl-btn');
+        if (removePlBtn) {
+            removePlBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const pid = this.activePlaylistId || (this.currentAlbum && String(this.currentAlbum.id).replace('pl-', ''));
+                this.removeTrackFromPlaylist(pid, track, idx);
+            });
+        }
+
+        const removeFavBtn = li.querySelector('.track-remove-fav-btn');
+        if (removeFavBtn) {
+            removeFavBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeFavoriteItem(track.chatId, track.msgId, track.name);
+            });
+        }
+
         li.addEventListener('click', (e) => {
-            if (e.target.closest('.track-add-playlist-btn')) return;
+            if (e.target.closest('.track-add-playlist-btn') || e.target.closest('.track-remove-from-pl-btn') || e.target.closest('.track-remove-fav-btn')) return;
             if (this.remoteTargetDeviceId) {
                 // Khi đang điều khiển thiết bị từ xa -> luôn gửi lệnh phát bài này sang TV
                 this.loadTrack(idx, true);
@@ -4771,33 +4823,41 @@ class XTAPOMusicApp {
             const trackCount = (pl.tracks && Array.isArray(pl.tracks)) ? pl.tracks.length : 0;
             const item = document.createElement('div');
             item.className = 'playlist-card-item';
+            item.style.flexDirection = 'column';
+            item.style.alignItems = 'stretch';
             item.innerHTML = `
-                <div class="playlist-card-left">
-                    <div class="playlist-icon-badge">🎵</div>
-                    <div class="playlist-card-info">
-                        <h4>${this.escapeHtml(pl.name)}</h4>
-                        <p>${trackCount} bài hát • Tạo lúc ${new Date((pl.created_at || Date.now()/1000) * 1000).toLocaleDateString('vi-VN')}</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 10px;">
+                    <div class="playlist-card-left" style="cursor: pointer;">
+                        <div class="playlist-icon-badge">🎵</div>
+                        <div class="playlist-card-info">
+                            <h4>${this.escapeHtml(pl.name)}</h4>
+                            <p>${trackCount} bài hát • Tạo lúc ${new Date((pl.created_at || Date.now()/1000) * 1000).toLocaleDateString('vi-VN')}</p>
+                        </div>
+                    </div>
+                    <div class="playlist-card-actions">
+                        <button class="pl-action-badge gold-badge btn-play-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Phát playlist">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            <span>Phát</span>
+                        </button>
+                        <button class="pl-action-badge btn-toggle-tracks" style="background: rgba(255,255,255,0.06); color: #e2e8f0;" title="Xem và quản lý danh sách bài hát trong playlist">
+                            <span>Chi tiết ▾</span>
+                        </button>
+                        <button class="pl-action-badge blue-badge btn-m3u8-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Xuất file playlist M3U8">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                            <span>.M3U8</span>
+                        </button>
+                        <button class="pl-action-badge btn-zip-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Tải toàn bộ nhạc (.ZIP)">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 10v-3h-4v-2h4V8l4 4-4 4z"/></svg>
+                            <span>Zip</span>
+                        </button>
+                        <button class="btn-delete-playlist" title="Xóa playlist này">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                        </button>
                     </div>
                 </div>
-                <div class="playlist-card-actions">
-                    <button class="pl-action-badge gold-badge btn-play-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Phát playlist">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                        <span>Phát</span>
-                    </button>
-                    <button class="pl-action-badge blue-badge btn-m3u8-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Xuất file playlist M3U8">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-                        <span>.M3U8</span>
-                    </button>
-                    <button class="pl-action-badge btn-pls-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Xuất file playlist PLS">
-                        <span>.PLS</span>
-                    </button>
-                    <button class="pl-action-badge btn-zip-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Tải toàn bộ nhạc trong playlist (.ZIP)">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 10v-3h-4v-2h4V8l4 4-4 4z"/></svg>
-                        <span>Zip</span>
-                    </button>
-                    <button class="btn-delete-playlist" title="Xóa playlist này">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                    </button>
+                <!-- Collapsible Tracklist inside playlist card -->
+                <div class="playlist-tracks-drawer" style="display: none; width: 100%; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); max-height: 220px; overflow-y: auto;">
+                    ${trackCount === 0 ? '<div style="color: var(--text-muted); font-size: 0.8rem; text-align: center; padding: 10px;">Chưa có bài hát nào trong playlist này.</div>' : ''}
                 </div>
             `;
 
@@ -4809,6 +4869,51 @@ class XTAPOMusicApp {
                 });
             }
 
+            const tracksDrawer = item.querySelector('.playlist-tracks-drawer');
+            const toggleTracksBtn = item.querySelector('.btn-toggle-tracks');
+            if (toggleTracksBtn && tracksDrawer) {
+                toggleTracksBtn.addEventListener('click', () => {
+                    const isOpen = tracksDrawer.style.display === 'block';
+                    tracksDrawer.style.display = isOpen ? 'none' : 'block';
+                    toggleTracksBtn.innerHTML = isOpen ? 'Chi tiết ▾' : 'Thu gọn ▴';
+                });
+
+                if (pl.tracks && pl.tracks.length > 0) {
+                    pl.tracks.forEach((track, tIdx) => {
+                        const trRow = document.createElement('div');
+                        trRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.02); margin-bottom: 4px; transition: all 0.2s;';
+                        trRow.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                                <span style="font-size: 0.72rem; color: var(--text-muted); width: 20px;">${tIdx + 1}</span>
+                                <div style="font-size: 0.82rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    ${this.escapeHtml(track.name)} 
+                                    <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">• ${this.escapeHtml(track.artist || '')}</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 0.72rem; color: var(--text-muted);">${track.duration || ''}</span>
+                                <button class="pl-single-track-del-btn" title="Xóa bài hát này khỏi playlist" style="background: transparent; border: none; color: #f87171; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px;">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                </button>
+                            </div>
+                        `;
+
+                        trRow.onmouseenter = () => trRow.style.background = 'rgba(255,255,255,0.06)';
+                        trRow.onmouseleave = () => trRow.style.background = 'rgba(255,255,255,0.02)';
+
+                        const singleDelBtn = trRow.querySelector('.pl-single-track-del-btn');
+                        if (singleDelBtn) {
+                            singleDelBtn.addEventListener('click', async (e) => {
+                                e.stopPropagation();
+                                await this.removeTrackFromPlaylist(pl.id, track, tIdx);
+                            });
+                        }
+
+                        tracksDrawer.appendChild(trRow);
+                    });
+                }
+            }
+
             const m3u8Btn = item.querySelector('.btn-m3u8-playlist');
             if (m3u8Btn && trackCount > 0) {
                 m3u8Btn.addEventListener('click', () => {
@@ -4817,13 +4922,6 @@ class XTAPOMusicApp {
                         urlPath: `/api/music/playlist/user/playlist/${encodeURIComponent(pl.id)}.m3u8`,
                         tracks: pl.tracks
                     });
-                });
-            }
-
-            const plsBtn = item.querySelector('.btn-pls-playlist');
-            if (plsBtn && trackCount > 0) {
-                plsBtn.addEventListener('click', () => {
-                    this.exportPLS(`Playlist_${pl.name}`, pl.tracks);
                 });
             }
 
@@ -4845,6 +4943,52 @@ class XTAPOMusicApp {
 
             this.playlistGrid.appendChild(item);
         });
+    }
+
+    async removeTrackFromPlaylist(playlistId, track, trackIndex = null) {
+        if (!playlistId) return;
+        const targetPl = this.playlists.find(p => p.id === playlistId || `pl-${p.id}` === playlistId);
+        if (!targetPl) return;
+
+        const currentTracks = targetPl.tracks || [];
+        const newTracks = currentTracks.filter((t, i) => {
+            if (trackIndex !== null && i === trackIndex) return false;
+            if (track.msgId && t.msgId && String(t.msgId) === String(track.msgId)) return false;
+            if (track.name && t.name === track.name) return false;
+            return true;
+        });
+
+        try {
+            const res = await fetch(`/api/music/user/playlists/${targetPl.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tracks: newTracks })
+            });
+            if (res.ok) {
+                targetPl.tracks = newTracks;
+                this.showToast(`Đã xóa "${track.name}" khỏi playlist "${targetPl.name}"!`);
+                
+                // If playlist modal is open, re-render
+                this.renderPlaylists();
+                
+                // If currently playing this playlist, update active album
+                if (this.currentAlbum && (this.currentAlbum.id === `pl-${targetPl.id}` || this.activePlaylistId === targetPl.id)) {
+                    this.currentAlbum.tracks = newTracks;
+                    if (this.currentTrackIndex >= newTracks.length) {
+                        this.currentTrackIndex = Math.max(0, newTracks.length - 1);
+                    }
+                    this.renderTracklist();
+                    if (newTracks.length === 0) {
+                        this.pause();
+                        this.showToast('Playlist hiện không còn bài hát nào.');
+                    }
+                }
+            } else {
+                this.showToast('Lỗi khi xóa bài hát khỏi playlist');
+            }
+        } catch (e) {
+            this.showToast('Lỗi khi xóa bài hát khỏi playlist');
+        }
     }
 
     async handleCreatePlaylist() {
