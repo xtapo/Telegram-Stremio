@@ -3005,10 +3005,57 @@ async def cancel_shazam_api(_: bool = Depends(require_auth)):
 
 # ── 9. Quản Lý Thông Tin & Ảnh Nghệ Sĩ (Artist Metadata & Images) ────────────
 
+def _normalize_country_name(country_raw: str, country_code: str = "") -> str:
+    """
+    Chuẩn hóa tên quốc gia từ các nguồn API (TheAudioDB, MusicBrainz, Last.fm)
+    về bộ phân loại chuẩn của hệ thống:
+    'Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản', 'Thái Lan', 'Latin / Tây Ban Nha', 'Pháp / Châu Âu', 'Quốc Tế'
+    """
+    if not country_raw and not country_code:
+        return ""
+    
+    code = (country_code or "").upper().strip()
+    c = (country_raw or "").lower().strip()
+    
+    # 1. Việt Nam
+    if code == "VN" or "vietnam" in c or "việt nam" in c or "viet nam" in c:
+        return "Việt Nam"
+    
+    # 2. Hàn Quốc
+    if code in ["KR", "KP"] or "korea" in c or "hàn quốc" in c or "south korea" in c:
+        return "Hàn Quốc"
+        
+    # 3. Nhật Bản
+    if code == "JP" or "japan" in c or "nhật bản" in c or "nippon" in c:
+        return "Nhật Bản"
+        
+    # 4. Hoa Ngữ
+    if code in ["CN", "TW", "HK", "MO"] or "china" in c or "taiwan" in c or "hong kong" in c or "hoa ngữ" in c or "trung quốc" in c or "đài loan" in c:
+        return "Hoa Ngữ"
+        
+    # 5. Thái Lan
+    if code == "TH" or "thailand" in c or "thái lan" in c or "thai" in c:
+        return "Thái Lan"
+        
+    # 6. Pháp / Châu Âu
+    if code in ["FR", "BE", "CH", "MC"] or "france" in c or "french" in c or "pháp" in c or "belgium" in c or "switzerland" in c:
+        return "Pháp / Châu Âu"
+        
+    # 7. Latin / Tây Ban Nha
+    if code in ["ES", "MX", "CO", "AR", "PR", "BR", "CL", "PE", "VE", "CU", "DO", "GT", "EC"] or any(k in c for k in ["spain", "mexico", "colombia", "argentina", "puerto rico", "brazil", "latin", "chile", "peru", "tây ban nha"]):
+        return "Latin / Tây Ban Nha"
+        
+    # 8. Âu Mỹ (US, UK, CA, AU, NZ, DE, IT, NL, SE, NO, DK, FI, IE, AT, PL, etc.)
+    if code in ["US", "GB", "UK", "CA", "AU", "NZ", "DE", "IT", "NL", "SE", "NO", "DK", "FI", "IE", "AT", "PL", "RU", "UA", "CZ", "GR", "PT", "RO", "HU"] or any(k in c for k in ["united states", "united kingdom", "great britain", "england", "scotland", "canada", "australia", "germany", "sweden", "norway", "netherlands", "italy", "ireland", "denmark", "finland", "new zealand", "austria", "russia", "âu mỹ", "american", "british", "usa"]):
+        return "Âu Mỹ"
+        
+    return "Quốc Tế"
+
+
 async def _search_artist_online_helper(name: str):
     """
-    Tìm kiếm thông tin, ảnh chân dung, ảnh fanart 1080p, banner và tiểu sử (Bio)
-    từ Deezer, TheAudioDB, Last.fm và Apple Music
+    Tìm kiếm thông tin, ảnh chân dung, ảnh fanart 1080p, banner, quốc gia và tiểu sử (Bio)
+    từ Deezer, TheAudioDB, MusicBrainz, Last.fm và Apple Music
     """
     import httpx
     import urllib.parse
@@ -3045,7 +3092,7 @@ async def _search_artist_online_helper(name: str):
     except Exception as e:
         LOGGER.warning(f"[ARTIST SEARCH] Deezer search error for '{cleaned_name}': {e}")
 
-    # 2. TheAudioDB (Ảnh chân dung, Fanart nền 1080p, Banner, Logo trong suốt, Tiểu sử)
+    # 2. TheAudioDB (Ảnh chân dung, Fanart nền 1080p, Banner, Quốc Gia, Tiểu sử)
     try:
         tadb_url = f"https://www.theaudiodb.com/api/v1/json/2/search.php?s={urllib.parse.quote(cleaned_name)}"
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
@@ -3058,6 +3105,9 @@ async def _search_artist_online_helper(name: str):
                     bio_en = art.get("strBiographyEN") or ""
                     bio = bio_vi if bio_vi else bio_en
                     genre = art.get("strGenre") or ""
+                    str_country = art.get("strCountry") or ""
+                    str_country_code = art.get("strCountryCode") or ""
+                    country_normalized = _normalize_country_name(str_country, str_country_code)
                     
                     thumb = art.get("strArtistThumb")
                     if thumb and thumb not in seen_urls:
@@ -3069,6 +3119,8 @@ async def _search_artist_online_helper(name: str):
                             "preview_url": thumb,
                             "bio": bio,
                             "genre": genre,
+                            "country": country_normalized,
+                            "country_raw": str_country,
                             "type": "portrait",
                             "source": "TheAudioDB"
                         })
@@ -3083,13 +3135,39 @@ async def _search_artist_online_helper(name: str):
                             "preview_url": fanart,
                             "bio": bio,
                             "genre": genre,
+                            "country": country_normalized,
                             "type": "fanart",
                             "source": "TheAudioDB Fanart"
                         })
     except Exception as e:
         LOGGER.warning(f"[ARTIST SEARCH] TheAudioDB error for '{cleaned_name}': {e}")
 
-    # 3. Last.fm (Tiểu sử phong phú + Danh sách Tags Thể Loại)
+    # 3. MusicBrainz API (Kho cơ sở dữ liệu nghệ sĩ nguồn mở quốc tế - Tra cứu Quốc Gia chuẩn xác)
+    try:
+        mb_url = f"https://musicbrainz.org/ws/2/artist/?query=artist:{urllib.parse.quote(cleaned_name)}&fmt=json&limit=3"
+        mb_headers = {"User-Agent": "XTAPOMusic/1.0 ( support@xtapo.com )"}
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            resp = await client.get(mb_url, headers=mb_headers)
+            if resp.status_code == 200:
+                mb_data = resp.json()
+                for mb_art in mb_data.get("artists", []):
+                    mb_country = mb_art.get("country", "")
+                    mb_area = (mb_art.get("area") or {}).get("name", "") or (mb_art.get("begin-area") or {}).get("name", "")
+                    mb_c = _normalize_country_name(mb_area, mb_country)
+                    if mb_c:
+                        results.append({
+                            "name": mb_art.get("name", cleaned_name),
+                            "country": mb_c,
+                            "country_code": mb_country,
+                            "area": mb_area,
+                            "type": "meta",
+                            "source": "MusicBrainz"
+                        })
+                        break
+    except Exception as e:
+        LOGGER.debug(f"[ARTIST SEARCH] MusicBrainz query note for '{cleaned_name}': {e}")
+
+    # 4. Last.fm (Tiểu sử phong phú + Danh sách Tags Thể Loại)
     try:
         lfm_url = f"https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist={urllib.parse.quote(cleaned_name)}&api_key=b25b959554ed76058ac220b7b2e0a026&format=json"
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
@@ -3112,7 +3190,7 @@ async def _search_artist_online_helper(name: str):
     except Exception as e:
         LOGGER.warning(f"[ARTIST SEARCH] Last.fm error for '{cleaned_name}': {e}")
 
-    # 4. Apple Music / iTunes (Tìm thêm thể loại chính thức)
+    # 5. Apple Music / iTunes (Tìm thêm thể loại chính thức)
     try:
         url = f"https://itunes.apple.com/search?term={urllib.parse.quote(cleaned_name)}&entity=musicArtist&limit=4"
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
@@ -3134,7 +3212,7 @@ async def _search_artist_online_helper(name: str):
 @router.get("/api/music/artists")
 async def get_all_artists():
     """
-    Lấy danh sách tất cả ca sĩ được trích xuất từ thư viện nhạc kèm ảnh và metadata
+    Lấy danh sách tất cả ca sĩ được trích xuất từ thư viện nhạc kèm ảnh, quốc gia và metadata
     """
     try:
         albums = await _db_load_library()
@@ -3178,6 +3256,7 @@ async def get_all_artists():
             avatar_url = (cached.get("avatar_url") if cached else "") or data["sample_track_cover"] or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop"
             banner_url = (cached.get("banner_url") if cached else "") or avatar_url
             bio = cached.get("bio", "") if cached else ""
+            country = cached.get("country", "") if cached else ""
             genres = list(set(list(data["genres"]) + (cached.get("genres", []) if cached else [])))
 
             artists_list.append({
@@ -3185,6 +3264,7 @@ async def get_all_artists():
                 "avatar_url": avatar_url,
                 "banner_url": banner_url,
                 "bio": bio,
+                "country": country,
                 "genres": genres,
                 "fans_count": cached.get("fans_count", 0) if cached else 0,
                 "has_custom_avatar": bool(cached and cached.get("avatar_url")),
@@ -3203,7 +3283,7 @@ async def get_all_artists():
 @router.get("/api/music/artist/search-online")
 async def search_artist_online(name: str = Query(..., min_length=1), _: bool = Depends(require_auth)):
     """
-    Tìm kiếm ảnh chân dung và profile ca sĩ từ Deezer / Apple Music
+    Tìm kiếm ảnh chân dung và profile ca sĩ từ Deezer / TheAudioDB / MusicBrainz / Apple Music
     """
     try:
         results = await _search_artist_online_helper(name)
@@ -3216,12 +3296,13 @@ async def search_artist_online(name: str = Query(..., min_length=1), _: bool = D
 @router.post("/api/music/artist/update")
 async def update_artist_metadata(payload: dict, _: bool = Depends(require_auth)):
     """
-    Admin cập nhật thông tin và ảnh đại diện cho ca sĩ
+    Admin cập nhật thông tin, quốc gia và ảnh đại diện cho ca sĩ
     """
     name = payload.get("name", "").strip()
     avatar_url = payload.get("avatar_url", "").strip()
     banner_url = payload.get("banner_url", "").strip()
     bio = payload.get("bio", "").strip()
+    country = payload.get("country", "").strip()
     genres = payload.get("genres", [])
 
     if not name:
@@ -3236,6 +3317,7 @@ async def update_artist_metadata(payload: dict, _: bool = Depends(require_auth))
             "avatar_url": avatar_url,
             "banner_url": banner_url or avatar_url,
             "bio": bio,
+            "country": country,
             "genres": genres if isinstance(genres, list) else [],
             "updated_at": time.time()
         }
@@ -3250,8 +3332,8 @@ async def update_artist_metadata(payload: dict, _: bool = Depends(require_auth))
 @router.post("/api/music/artists/auto-fetch")
 async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
     """
-    Tiến trình quét ngầm tự động tìm & lưu ảnh chân dung HD, fanart, bio và thể loại cho toàn bộ ca sĩ trong thư viện
-    kết hợp 4 nguồn: Deezer, TheAudioDB, Last.fm và Apple Music
+    Tiến trình quét ngầm tự động tìm & lưu ảnh chân dung HD, fanart, quốc gia, bio và thể loại cho toàn bộ ca sĩ trong thư viện
+    kết hợp 5 nguồn: TheAudioDB, MusicBrainz, Deezer, Last.fm và Apple Music
     """
     try:
         albums = await _db_load_library()
@@ -3268,13 +3350,13 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
         updated_count = 0
         
         for art_name in artists_to_search:
-            if not art_name or art_name.lower() in ["unknown", "unknown artist", "va", "various artists"]:
+            if not art_name or art_name.lower() in ["unknown", "unknown artist", "va", "various artists", "various artist", "nhiều ca sĩ", "nhạc tuyển chọn"]:
                 continue
                 
             slug = art_name.lower().strip()
             existing = await coll.find_one({"_id": slug})
-            if existing and existing.get("avatar_url") and existing.get("bio"):
-                continue  # Đã có đầy đủ ảnh và tiểu sử
+            if existing and existing.get("avatar_url") and existing.get("bio") and existing.get("country"):
+                continue  # Đã có đầy đủ ảnh, tiểu sử và quốc gia
                 
             matches = await _search_artist_online_helper(art_name)
             if matches:
@@ -3289,7 +3371,10 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
                 # 3. Tìm bio tốt nhất
                 bio_match = next((m for m in matches if m.get("bio")), None)
                 
-                # 4. Gom thể loại
+                # 4. Tìm quốc gia từ TheAudioDB hoặc MusicBrainz
+                country_match = next((m["country"] for m in matches if m.get("country")), "")
+                
+                # 5. Gom thể loại
                 genres = []
                 for m in matches:
                     if m.get("tags"):
@@ -3303,16 +3388,18 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
                 avatar_url = avatar_match["avatar_url"] if avatar_match else (existing.get("avatar_url") if existing else "")
                 banner_url = fanart_match["banner_url"] if fanart_match else (avatar_match.get("banner_url") if avatar_match else avatar_url)
                 bio = bio_match["bio"] if bio_match else (existing.get("bio") if existing else "")
+                country = country_match or (existing.get("country") if existing else "")
                 
-                if avatar_url or bio or genres:
+                if avatar_url or bio or genres or country:
                     doc = {
                         "name": art_name,
                         "avatar_url": avatar_url,
                         "banner_url": banner_url or avatar_url,
                         "bio": bio,
+                        "country": country,
                         "genres": genres[:5],
                         "fans_count": avatar_match.get("fans_count", 0) if avatar_match else 0,
-                        "source": "Deezer + TheAudioDB + Last.fm",
+                        "source": "Deezer + TheAudioDB + MusicBrainz + Last.fm",
                         "updated_at": time.time()
                     }
                     await coll.update_one({"_id": slug}, {"$set": doc}, upsert=True)
@@ -3325,7 +3412,7 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
         return JSONResponse(content={
             "status": "success", 
             "count": updated_count, 
-            "message": f"Đã tự động tải và cập nhật ảnh chân dung HD, Fanart & Tiểu sử cho {updated_count} ca sĩ!"
+            "message": f"Đã tự động tải và cập nhật ảnh chân dung HD, Fanart, Quốc Gia & Tiểu sử cho {updated_count} ca sĩ!"
         })
     except Exception as e:
         LOGGER.error(f"[AUTO FETCH ARTISTS] Lỗi: {e}")

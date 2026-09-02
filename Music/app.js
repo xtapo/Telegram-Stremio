@@ -5450,6 +5450,13 @@ class XTAPOMusicApp {
             return 'Quốc Tế';
         }
 
+        // 0. Highest priority: Online API synced / Database cached country
+        const norm = lowName.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').trim();
+        const cached = this.artistCacheMap ? (this.artistCacheMap.get(lowName) || this.artistCacheMap.get(norm)) : null;
+        if (cached && cached.country && cached.country.trim()) {
+            return cached.country.trim();
+        }
+
         // 1. Script checks on Artist Name
         if (_JP_CHAR_REGEX.test(rawName)) return 'Nhật Bản';
         if (_KR_CHAR_REGEX.test(rawName)) return 'Hàn Quốc';
@@ -5458,8 +5465,6 @@ class XTAPOMusicApp {
         if (_VN_DIACRITICS_REGEX.test(rawName)) return 'Việt Nam';
 
         // 2. Exact or normalized dictionary checks
-        const norm = lowName.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').trim();
-
         if (_JP_ARTISTS_SET.has(lowName) || _JP_ARTISTS_SET.has(norm)) return 'Nhật Bản';
         if (_KR_ARTISTS_SET.has(lowName) || _KR_ARTISTS_SET.has(norm)) return 'Hàn Quốc';
         if (_CN_ARTISTS_SET.has(lowName) || _CN_ARTISTS_SET.has(norm)) return 'Hoa Ngữ';
