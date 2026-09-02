@@ -2175,6 +2175,14 @@ class XTAPOMusicApp {
 
         li.addEventListener('click', (e) => {
             if (e.target.closest('.track-add-playlist-btn')) return;
+            if (this.remoteTargetDeviceId) {
+                // Khi đang điều khiển thiết bị từ xa -> luôn gửi lệnh phát bài này sang TV
+                this.loadTrack(idx, true);
+                if (isModal) {
+                    this.closeModal(this.tracklistModal);
+                }
+                return;
+            }
             if (this.currentTrackIndex === idx && this.isPlaying) {
                 this.pause();
             } else if (this.currentTrackIndex === idx && !this.isPlaying) {
@@ -2563,6 +2571,13 @@ class XTAPOMusicApp {
     }
 
     play() {
+        if (this.remoteTargetDeviceId) {
+            this.isPlaying = true;
+            this.updatePlayStateVisuals(true);
+            this.sendSyncCommand('RESUME', {});
+            return;
+        }
+
         const album = this.currentAlbum;
         if (album && !album.isDemo && !this.currentUser) {
             this.authModal.classList.add('open');
@@ -2601,9 +2616,13 @@ class XTAPOMusicApp {
     pause() {
         this.isPlaying = false;
         this.stopLyricsSyncLoop();
-        this.audio.pause();
         this.stopAudioSynth();
         this.updatePlayStateVisuals(false);
+        if (this.remoteTargetDeviceId) {
+            this.sendSyncCommand('PAUSE', {});
+            return;
+        }
+        this.audio.pause();
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = 'paused';
         }
