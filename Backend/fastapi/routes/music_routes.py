@@ -812,7 +812,7 @@ async def _db_load_library(force_reload: bool = False) -> list:
         if db and hasattr(db, "dbs") and "tracking" in db.dbs:
             doc = await asyncio.wait_for(
                 db.dbs["tracking"]["music_library"].find_one({"_id": "telegram_music_library"}),
-                timeout=5.0
+                timeout=15.0
             )
             if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
                 _IN_MEMORY_LIBRARY_CACHE = doc["albums"]
@@ -824,7 +824,7 @@ async def _db_load_library(force_reload: bool = False) -> list:
                     pass
                 return doc["albums"]
     except asyncio.TimeoutError:
-        LOGGER.warning("[MUSIC DB] MongoDB load library query timed out (5s). Using fallback.")
+        LOGGER.warning("[MUSIC DB] MongoDB load library query timed out (15s). Using fallback.")
     except Exception as e:
         LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
 
@@ -3241,11 +3241,15 @@ async def get_all_artists():
                     artist_map[t_artist]["genres"].add(t.get("genre").strip())
 
         # 2. Lấy metadata đã cache từ MongoDB collection `music_artists`
-        coll = db.dbs["tracking"]["music_artists"]
-        cached_cursor = coll.find()
         cached_map = {}
-        async for doc in cached_cursor:
-            cached_map[doc["_id"]] = doc
+        try:
+            if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+                coll = db.dbs["tracking"]["music_artists"]
+                cached_cursor = coll.find()
+                async for doc in cached_cursor:
+                    cached_map[doc["_id"]] = doc
+        except Exception as e:
+            LOGGER.warning(f"[GET ARTISTS] Could not read cached artists from MongoDB: {e}")
 
         # 3. Tổng hợp kết quả
         artists_list = []
