@@ -363,23 +363,25 @@ def _extract_filename_from_headers(headers: httpx.Headers, default_name: str = "
 async def _get_upload_client():
     """
     Ưu tiên lấy Userbot (User Session) để đạt tốc độ upload tối đa và hỗ trợ file lớn đến 2GB/4GB.
-    Nếu chưa kích hoạt, tự động thử kích hoạt từ session đã lưu trong database.
+    Nếu chưa kích hoạt hoặc bị ngắt kết nối socket, tự động khởi động lại từ session đã lưu trong database.
     Fallback về StreamBot nếu không có Userbot.
     """
-    # 1. Kiểm tra Userbot đang kết nối
+    # 1. Kiểm tra Userbot đang kết nối tốt
     if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
         return botmod.Userbot, "user_session"
 
-    # 2. Thử kích hoạt Userbot từ DB
+    # 2. Thử kích hoạt lại / kết nối lại Userbot từ DB
     try:
-        from Backend.helper.session_auth import get_active_session_string, _activate
+        from Backend.helper.session_auth import get_active_session_string, _activate, _deactivate
         session_str = await get_active_session_string()
         if session_str:
+            if botmod.Userbot and not getattr(botmod.Userbot, "is_connected", False):
+                await _deactivate()
             await _activate(session_str)
             if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
                 return botmod.Userbot, "user_session"
     except Exception as e:
-        LOGGER.warning(f"[GDRIVE UPLOAD] Không thể kích hoạt Userbot: {e}")
+        LOGGER.warning(f"[GDRIVE UPLOAD] Không thể kết nối lại Userbot: {e}")
 
     # 3. Fallback StreamBot
     return StreamBot, "bot"
@@ -965,75 +967,73 @@ class GoogleDriveUploadManager:
 
                     thumb_path = await self._download_cover_image(cover_url, work_dir) if cover_url else None
 
-                    start_up = time.time()
-                    last_up_time = 0
-                    last_bytes = 0
-
-                    def _progress_cb(current, total):
-                        nonlocal last_up_time, last_bytes
-                        self._upload_bytes = current
-                        self._upload_total = total
-                        if total > 0:
-                            self._upload_percent = min(100, int((current / total) * 100))
-                        now = time.time()
-                        if now - last_up_time >= 0.5:
-                            delta_time = now - last_up_time if last_up_time > 0 else (now - start_up)
-                            delta_bytes = current - last_bytes if last_up_time > 0 else current
-                            last_up_time = now
-                            last_bytes = current
-                            if delta_time > 0 and delta_bytes >= 0:
-                                mbps = (delta_bytes / (1024 * 1024)) / delta_time
-                                self._speed_str = f"{mbps:.2f} MB/s"
-
                     caption = f"🎵 {title_candidate}\n👤 {artist_candidate or 'Unknown Artist'}\n💿 {album_candidate or 'Single'}"
+                    ext_f = os.path.splitext(file_path)[1].lower()
 
                     sent_msg = None
-                    try:
-                        ext_f = os.path.splitext(file_path)[1].lower()
-                        if send_as_document or ext_f in (".dsf", ".dff", ".ape"):
-                            sent_msg = await client.send_document(
-                                chat_id=target_chat_id,
-                                document=file_path,
-                                caption=caption,
-                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                                force_document=True,
-                                progress=_progress_cb
-                            )
-                        else:
-                            sent_msg = await client.send_audio(
-                                chat_id=target_chat_id,
-                                audio=file_path,
-                                caption=caption,
-                                title=title_candidate,
-                                performer=artist_candidate or None,
-                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                                progress=_progress_cb
-                            )
-                    except FloodWait as fw:
-                        self._log(f"Telegram yêu cầu chờ FloodWait {fw.value}s — đang tự động tạm dừng...", "warn")
-                        await asyncio.sleep(fw.value + 1)
-                        if send_as_document:
-                            sent_msg = await client.send_document(
-                                chat_id=target_chat_id,
-                                document=file_path,
-                                caption=caption,
-                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                                force_document=True,
-                                progress=_progress_cb
-                            )
-                        else:
-                            sent_msg = await client.send_audio(
-                                chat_id=target_chat_id,
-                                audio=file_path,
-                                caption=caption,
-                                title=title_candidate,
-                                performer=artist_candidate or None,
-                                thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
-                                progress=_progress_cb
-                            )
-                    except Exception as upload_err:
-                        self._log(f"❌ Lỗi khi upload bài '{raw_filename}': {upload_err}", "error")
-                        continue
+                    max_attempts = 3
+
+                    for attempt in range(1, max_attempts + 1):
+                        if self._cancel_requested:
+                            break
+
+                        start_up = time.time()
+                        last_up_time = 0
+                        last_bytes = 0
+
+                        def _progress_cb(current, total):
+                            nonlocal last_up_time, last_bytes
+                            self._upload_bytes = current
+                            self._upload_total = total
+                            if total > 0:
+                                self._upload_percent = min(100, int((current / total) * 100))
+                            now = time.time()
+                            if now - last_up_time >= 0.5:
+                                delta_time = now - last_up_time if last_up_time > 0 else (now - start_up)
+                                delta_bytes = current - last_bytes if last_up_time > 0 else current
+                                last_up_time = now
+                                last_bytes = current
+                                if delta_time > 0 and delta_bytes >= 0:
+                                    mbps = (delta_bytes / (1024 * 1024)) / delta_time
+                                    self._speed_str = f"{mbps:.2f} MB/s"
+
+                        try:
+                            # Đảm bảo client đang kết nối tốt
+                            if not getattr(client, "is_connected", False):
+                                client, client_type = await _get_upload_client()
+
+                            if send_as_document or ext_f in (".dsf", ".dff", ".ape"):
+                                sent_msg = await client.send_document(
+                                    chat_id=target_chat_id,
+                                    document=file_path,
+                                    caption=caption,
+                                    thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+                                    force_document=True,
+                                    progress=_progress_cb
+                                )
+                            else:
+                                sent_msg = await client.send_audio(
+                                    chat_id=target_chat_id,
+                                    audio=file_path,
+                                    caption=caption,
+                                    title=title_candidate,
+                                    performer=artist_candidate or None,
+                                    thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None,
+                                    progress=_progress_cb
+                                )
+                            # Nếu gửi thành công thì thoát retry loop
+                            break
+
+                        except FloodWait as fw:
+                            self._log(f"Telegram yêu cầu chờ FloodWait {fw.value}s — đang tự động tạm dừng...", "warn")
+                            await asyncio.sleep(fw.value + 1)
+                        except (OSError, ConnectionError, Exception) as upload_err:
+                            if attempt < max_attempts and not self._cancel_requested:
+                                self._log(f"⚠️ Mạng Telegram bị ngắt quãng ({upload_err}). Đang khôi phục kết nối và thử lại lần {attempt + 1}/{max_attempts} sau 2.5s...", "warn")
+                                await asyncio.sleep(2.5)
+                                client, client_type = await _get_upload_client()
+                            else:
+                                self._log(f"❌ Lỗi khi upload bài '{raw_filename}' sau {max_attempts} lần thử: {upload_err}", "error")
 
                     if sent_msg:
                         self._log(f"✅ Đã upload [{track_idx}/{len(files_to_upload)}]: {title_candidate} - {artist_candidate} (Msg #{sent_msg.id})", "success")
