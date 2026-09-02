@@ -151,14 +151,122 @@ const _KR_CHAR_REGEX = /[\uac00-\ud7a3\u1100-\u11ff\u3130-\u318f]/;
 const _JP_CHAR_REGEX = /[\u3040-\u309f\u30a0-\u30ff]/;
 const _CN_CHAR_REGEX = /[\u4e00-\u9fff]/;
 const _TH_CHAR_REGEX = /[\u0e00-\u0e7f]/;
-const _KR_KWS = ['k-pop', 'kpop', 'korean', 'ost hàn', 'bts', 'blackpink', 'iu', 'exo', 'twice', 'newjeans', 'stray kids', 'bigbang', 'snsd', 'girls\' generation', 'red velvet', 'seventeen', 'ive', 'aespa', 'taeyeon', 'psy', 'g-dragon', 'nct', 'enhypen', 'txt', 'itzy', 'lesserafim', 'le sserafim', 'shinee', 'super junior', 'mamamoo', 'ateez', 'got7', 'gfriend', 'stayc', 'treasure', 'nmixx', 'day6', 'akmu', 'baekhyun', 'jungkook', 'jimin', 'zico', 'crush', 'dean'];
-const _JP_KWS = ['j-pop', 'jpop', 'anime', 'japanese', 'utada hikaru', 'yoasobi', 'kenshi yonezu', 'aimer', 'radwimps', 'one ok rock', 'official hige dandism', 'x japan', 'milet', 'ayumi hamasaki', 'namie amuro', 'king gnu', 'ado', 'eve', 'vocaloid', 'hatsune miku', 'flow', 'sawano hiroyuki', 'joe hisaishi'];
-const _CN_KWS = ['c-pop', 'cpop', 'mandopop', 'cantopop', 'nhạc hoa', 'nhạc trung', 'lời hoa', 'jay chou', 'châu kiệt luân', 'vương phi', 'faye wong', 'lâm tuấn kiệt', 'jj lin', 'đặng tử kỳ', 'g.e.m', 'lý vinh hạo', 'tiêu chiến', 'vương nhất bác', 'trương học hữu', 'lưu đức hoa', 'quách phú thành', 'lê minh', 'trần dịch tấn', 'châu thâm', 'zhou shen', 'phượng hoàng truyền kỳ'];
-const _TH_KWS = ['t-pop', 'tpop', 'thai pop', 'nhạc thái', 'ost thái', 'jeff satur', 'billkin', 'pp krit', 'nanon', 'bright vachirawit', 'three man down', 'tilly birds', 'bowkylion', 'violette wautier', 'milli', 'f.hero', 'non kul', 'the toys', 'ink waruntorn', 'scrubb', 'cocktail', 'bodyslam', 'getsunova', 'palmy', 'stamp apiwat'];
-const _LATIN_KWS = ['latin', 'reggaeton', 'bachata', 'salsa', 'despacito', 'spanish pop', 'musica latina', 'bad bunny', 'daddy yankee', 'luis fonsi', 'j balvin', 'shakira', 'rosalia', 'rosalía', 'maluma', 'enrique iglesias', 'camila cabello', 'ozuna', 'rauw alejandro', 'anuel aa', 'karol g', 'becky g', 'ricky martin', 'jennifer lopez', 'pitbull', 'gipsy kings', 'alvaro soler'];
-const _FR_KWS = ['chanson', 'french pop', 'nhạc pháp', 'lời pháp', 'france gall', 'french chanson', 'indila', 'stromae', 'carla bruni', 'edith piaf', 'alizee', 'alizée', 'kendji girac', 'angele', 'angèle', 'zaz', 'gims', 'aya nakamura', 'claude francois', 'charles aznavour'];
-const _VN_KWS = ['v-pop', 'vpop', 'nhạc việt', 'nhac viet', 'bolero', 'trữ tình', 'nhạc vàng', 'rap việt', 'lời việt', 'nhạc trẻ', 'sơn tùng', 'đen vâu', 'mỹ tâm', 'hồ ngọc hà', 'đan trường', 'trịnh công sơn', 'lệ quyên', 'vũ.', 'chillies', 'ngọt', 'mono', 'hieuthuhai', 'erik', 'đức phúc', 'jack 97', 'soobin', 'b ray', 'karik', 'justatee', 'min', 'amee', 'phan mạnh quỳnh'];
-const _US_KWS = ['us-uk', 'usuk', 'taylor swift', 'shania twain', 'daft punk', 'the weeknd', 'bruno mars', 'adele', 'ed sheeran', 'ariana grande', 'justin bieber', 'drake', 'eminem', 'coldplay', 'maroon 5', 'billie eilish', 'dua lipa', 'beyonce', 'michael jackson', 'queen', 'beatles', 'post malone', 'lady gaga', 'rihanna', 'katy perry', 'shawn mendes', 'charlie puth', 'selena gomez', 'camila cabello', 'imagine dragons', 'linkin park', 'avicii', 'alan walker', 'marshmello', 'chainsmokers', 'david guetta', 'calvin harris', 'sia', 'sam smith', 'harry styles', 'one direction', 'avril lavigne', 'britney spears', 'celine dion', 'whitney houston', 'mariah carey', 'madonna', 'elton john', 'bon jovi', 'twenty one pilots', 'republic records'];
+
+const _KR_ARTISTS_SET = new Set([
+    'bts', 'blackpink', 'iu', 'exo', 'twice', 'newjeans', 'stray kids', 'bigbang', 'snsd', "girls' generation", 'girls generation',
+    'red velvet', 'seventeen', 'ive', 'aespa', 'taeyeon', 'psy', 'g-dragon', 'nct', 'nct 127', 'nct dream', 'nct u', 'enhypen',
+    'txt', 'tomorrow x together', 'itzy', 'lesserafim', 'le sserafim', 'shinee', 'super junior', 'mamamoo', 'ateez', 'got7',
+    'gfriend', 'stayc', 'treasure', 'nmixx', 'day6', 'akmu', 'baekhyun', 'jungkook', 'jimin', 'suga', 'j-hope', 'rm', 'jin',
+    'zico', 'crush', 'dean', 'heize', 'bol4', 'taeyang', 'daesung', 'top', 'sunmi', 'chungha', 'hyuna', 'jessi', 'hwasa',
+    'loco', 'gray', 'simon dominic', 'jay park', 'epik high', 'dynamic duo', 'dpr ian', 'dpr live', 'beenzino', 'giriboy',
+    'changmo', 'ash island', 'paul kim', 'sam kim', 'roy kim', 'lee hi', 'davichi', 'bolbbalgan4', 'urban zakapa', 'standing egg',
+    '10cm', 'melomance', 'melo-mance', 'k.will', 'kwill', 'sg wannabe', 'vibe', 'brown eyed soul', 'gummy', 'lyn', 'punch',
+    'ailee', 'baek z young', 'baek ji young', 'younha', 'zion.t', 'zion t', 'keshi', 'babymonster', 'boynextdoor', 'zerobaseone',
+    'riize', 'tws', 'kiss of life', 'illit', 'shinee', 'infinite', 'tvxq', '2pm', '2ne1', 'sistar', 'kara', 't-ara', 'miss a',
+    '4minute', 'wonder girls', 'exid', 'aoa', 'apink', 'cravity', 'the boyz', 'monsta x', 'sf9', 'pentagon', 'onf', 'oneus'
+]);
+
+const _JP_ARTISTS_SET = new Set([
+    'capcom', 'capcom sound team', 'square enix', 'square enix music', 'utada hikaru', 'yoasobi', 'kenshi yonezu', 'aimer',
+    'radwimps', 'one ok rock', 'official hige dandism', 'x japan', 'milet', 'ayumi hamasaki', 'namie amuro', 'king gnu',
+    'ado', 'eve', 'vocaloid', 'hatsune miku', 'flow', 'sawano hiroyuki', 'hiroyuki sawano', 'joe hisaishi', "l'arc-en-ciel",
+    'larc en ciel', 'l arc en ciel', 'scandal', 'babymetal', 'spyair', 'man with a mission', 'granrodeo', 'lisa', 'aimyon',
+    'vaundy', 'fujii kaze', 'yuuri', 'tani yuuki', 'back number', 'sekai no owari', 'alexandros', 'kana-boon', 'kanaboon',
+    'asian kung-fu generation', 'anonymouz', 'majiko', 'reol', 'minami', 'sayuri', 'supercell', 'egoist', 'myth & roid',
+    'claris', 'garnidelia', 'koji kondo', 'nobuo uematsu', 'yasunori mitsuda', 'yoko shimomura', 'masayoshi soken',
+    'chage and aska', 'chage & aska', 'anzen chitai', 'koji tamaki', 'midori'
+]);
+
+const _CN_ARTISTS_SET = new Set([
+    'jay chou', 'chau kiet luan', 'jj lin', 'lam tuan kiet', 'faye wong', 'vuong phi', 'teresa teng', 'dang le quan',
+    'jacky cheung', 'truong hoc huu', 'andy lau', 'luu duc hoa', 'aaron kwok', 'quach phu thanh', 'leon lai', 'le minh',
+    'eason chan', 'tran dich tan', 'g.e.m.', 'g.e.m', 'gem', 'dang tu ky', 'li ronghao', 'ly vinh hao', 'xiao zhan',
+    'tieu chien', 'wang yibo', 'vuong nhat bac', 'zhou shen', 'chau tham', 'phoenix legend', 'phuong hoang truyen ky',
+    'hoyo-mix', 'hoyo - mix', 'hoyomix', 'mihoyo', 'genshin impact', 'honkai', 'honkai: star rail', 'honkai star rail',
+    'zenless zone zero', 'tengger', 'yao si ting', 'diep huyen thanh', 'dong trinh', 'trang tam nghien', 'mong nhien',
+    'a do', 'a sang', 'hua nguy', 'uong phong', 'dao triet', 'vuong luc hoanh', 'wang leehom', 'david tao', 'nicholas tse',
+    'ta dinh phong', 'edison chen', 'tran quan hy', 'twins', 's.h.e', 'she', 'f4', 'mayday', 'ngu nguyet thien', 'beyond',
+    'hua quan kiet', 'sam hui', 'la van', 'truong quoc vinh', 'leslie cheung', 'mai diem phuong', 'anita mui', 'lam tu tuong',
+    'diep thien van', 'ly khac can', 'hacken lee', 'tan vinh lan', 'alan tam', 'vuong kiet', 'ton yen tu', 'luong tinh nhu',
+    'tieu a hien', 'truong hue muoi', 'amei', 'thai y lam', 'jolin tsai', 'duong thua lam', 'vuong tam lang', 'truong thieu ham',
+    'lam du gia', 'tieu kinh dang', 'uong to long', 'wanting', 'wanting qu', 'mao buyi', 'hua chenyu'
+]);
+
+const _VN_ARTISTS_SET = new Set([
+    'son tung m-tp', 'son tung', 'sơn tùng m-tp', 'sơn tùng', 'den vau', 'đen vâu', 'my tam', 'mỹ tâm', 'lam truong', 'lam trường',
+    'che linh', 'chế linh', 'dan truong', 'đan trường', 'le quyen', 'lệ quyên', 'tuan hung', 'tuấn hưng', 'lan nha', 'lân nhã',
+    'phi nhung', 'phuong phuong thao', 'phương phương thảo', 'jimmy nguyen', 'jimmy nguyễn', 'jimmii nguyen', 'ha anh tuan', 'hà anh tuấn',
+    'ho ngoc ha', 'hồ ngọc hà', 'trinh cong son', 'trịnh công sơn', 'khanh ly', 'khánh ly', 'nhu quynh', 'như quỳnh', 'quang dung',
+    'quang dũng', 'bang kieu', 'bằng kiều', 'dam vinh hung', 'đàm vĩnh hưng', 'cam ly', 'cẩm ly', 'quang le', 'quang lê', 'truong vu',
+    'trường vũ', 'manh quynh', 'mạnh quỳnh', 'nguyen hung', 'nguyễn hưng', 'ngoc lan', 'ngọc lan', 'y phung', 'y phụng', 'don ho',
+    'đôn hồ', 'erik', 'duc phuc', 'đức phúc', 'hoa minzy', 'hòa minzy', 'jack', 'j97', 'jack 97', 'jack - j97', 'k-icm', 'mono',
+    'hieuthuhai', 'soobin hoang son', 'soobin', 'justatee', 'karik', 'binz', 'b ray', 'wren evans', 'tlinh', 'mck', 'grey d',
+    'vu cat tuong', 'vũ cát tường', 'vu.', 'vũ.', 'chillies', 'ngot', 'ngọt', 'ca hoi hoang', 'cá hồi hoang', 'the cassette',
+    'marzuz', 'min', 'amee', 'suni ha linh', 'suni hạ linh', 'hoang dung', 'hoàng dũng', 'phan manh quynh', 'phan mạnh quỳnh',
+    'bui anh tuan', 'bùi anh tuấn', 'trung quan idol', 'trung quân', 'uyen linh', 'uyên linh', 'van mai huong', 'văn mai hương',
+    'bao anh', 'bảo anh', 'toc tien', 'tóc tiên', 'dong nhi', 'đông nhi', 'noo phuoc thinh', 'noo phước thịnh', 'isaac', 'jun pham',
+    'truc nhan', 'trúc nhân', 'ali hoang duong', 'quoc thien', 'quốc thiên', 'anh tu', 'anh tú', 'lyly', 'orange', 'phuong ly',
+    'phương ly', 'kai dinh', 'tien tien', 'tiên tiên', 'huong tram', 'hương tràm', 'bao thy', 'bảo ty', 'khoi my', 'khởi my',
+    'miu le', 'miu lê', 'khoi', 'khói', 'low g', 'tage', 'obito', 'wxrdie', '24k.right', 'rhymastic', 'touliver', 'slimv', 'masew',
+    'kimmese', 'suboi', 'bigdaddy', 'emily', 'mr siro', 'khac viet', 'khắc việt', 'khac hung', 'khắc hưng', 'nguyen tran trung quan',
+    'chau khai phong', 'châu khải phong', 'khanh phuong', 'khánh phương', 'akira phan', 'the men', 'hkt', 'vmusic', '365daband',
+    'monstar', 'uni5', 'da lab', 'dalab', 'buc tuong', 'bức tường', 'microwave', 'quang vinh', 'ung hoang phuc', 'ưng hoàng phúc',
+    'pham quynh anh', 'phạm quỳnh anh', 'thu thuy', 'thu thủy', 'luong bich huu', 'lương bích hữu', 'hat', 'h.a.t', 'may trang',
+    'mây trắng', 'mat ngoc', 'mắt ngọc', '1088', 'tam ca ao trang', 'tuan ngoc', 'tuấn ngọc', 'thai thanh', 'thái thanh', 'si phu',
+    'sĩ phú', 'le thu', 'lệ thu', 'khanh ha', 'khánh hà', 'y lan', 'ý lan', 'elvis phuong', 'elvis phương', 'ngoc son', 'ngọc sơn',
+    'giao linh', 'huong lan', 'hương lan', 'thanh tuyen', 'thanh tuyền', 'son tuyen', 'sơn tuyền', 'phuong dung', 'phương dung',
+    'hoang oanh', 'hoàng oanh', 'mai thien van', 'mai thiên vân', 'manh dinh', 'mạnh đình', 'duy khanh', 'duy khánh', 'hung cuong',
+    'hùng cường', 'tam doan', 'tâm đoan', 'ha thanh xuan', 'hà thanh xuân', 'ngoc ngu', 'ngọc ngữ', 'quoc dai', 'quốc đại',
+    'duong hong loan', 'dương hồng loan', 'quynh trang', 'quỳnh trang', 'luu anh loan', 'lưu ánh loan', 'phuong anh', 'phương anh',
+    'to my', 'tố my', 'andiez', 'vuong anh tu', 'buitruonglinh', 'captain boy', 'hurrykng', 'quang hung masterd', 'duong domic',
+    'wean', 'rhyder', 'nguyen dinh vu', 'trinh dinh quang', 'le bao binh', 'dinh tung huy', 'dat g', 'duyen phung'
+]);
+
+const _US_ARTISTS_SET = new Set([
+    'taylor swift', 'michael jackson', 'imagine dragons', 'ariana grande', 'katy perry', 'beegie adair', 'onerepublic',
+    'backstreet boys', 'lana del rey', 'coldplay', 'the weeknd', 'justin bieber', 'charlie puth', 'weezer', 'brandy',
+    'maroon 5', 'bruno mars', 'ed sheeran', 'adele', 'billie eilish', 'dua lipa', 'beyonce', 'beyoncé', 'drake', 'eminem',
+    'queen', 'the beatles', 'beatles', 'post malone', 'lady gaga', 'rihanna', 'shawn mendes', 'selena gomez', 'camila cabello',
+    'linkin park', 'avicii', 'alan walker', 'marshmello', 'the chainsmokers', 'chainsmokers', 'david guetta', 'calvin harris',
+    'sia', 'sam smith', 'harry styles', 'one direction', 'avril lavigne', 'britney spears', 'celine dion', 'whitney houston',
+    'mariah carey', 'madonna', 'elton john', 'bon jovi', 'twenty one pilots', 'green day', 'metallica', 'guns n roses', "guns n' roses",
+    'nirvana', 'ac/dc', 'pink floyd', 'led zeppelin', 'u2', 'red hot chili peppers', 'oasis', 'radiohead', 'muse', 'arctic monkeys',
+    'the killers', 'fall out boy', 'paramore', 'evanescence', 'nightwish', 'enya', 'yanni', 'hans zimmer', 'john williams',
+    'kenny g', 'richard clayderman', 'andre rieu', 'norah jones', 'diana krall', 'frank sinatra', 'louis armstrong', 'nat king cole',
+    'elvis presley', 'bob dylan', 'stevie wonder', 'ray charles', 'aretha franklin', 'marvin gaye', 'alicia keys', 'john legend',
+    'usher', 'ne-yo', 'chris brown', 'alec benjamin', 'lauv', 'lany', 'conan gray', 'troye sivan', 'benson boone', 'teddy swims',
+    'olivia rodrigo', 'sabrina carpenter', 'chappell roan', 'tate mcrae', 'gracie abrams', 'shania twain', 'daft punk', 'westlife',
+    'boyzone', 'michael learns to rock', 'mltr', 'air supply', 'scorpions', 'the carpenters', 'carpenters', 'abba', 'boney m',
+    'modern talking', 'bee gees', 'wham!', 'george michael', 'phil collins', 'sting', 'the police', 'eric clapton', 'rod stewart',
+    'bryan adams', 'richard marx', 'steve perry', 'journey', 'chicago', 'eagles', 'the rolling stones', 'fleetwood mac',
+    'aerosmith', 'kiss', 'black sabbath', 'iron maiden', 'judas priest', 'deep purple', 'the doors', 'genesis', 'keane',
+    'snow patrol', 'the script', 'bastille', 'foster the people', 'walk the moon', 'two door cinema club', 'phoenix', 'm83',
+    'mgmt', 'passion pit', 'empire of the sun', 'kygo', 'martin garrix', 'tiesto', 'tiësto', 'armin van buuren', 'hardwell',
+    'afrojack', 'zedd', 'alesso', 'galantis', 'illenium', 'gryffin', 'san holo', 'madeon', 'porter robinson', 'swedish house mafia',
+    'deadmau5', 'skrillex', 'diplo', 'major lazer', 'dj snake', 'kungs', 'lost frequencies', 'robin schulz', 'felix jaehn',
+    'jonas blue', 'sigala', 'jax jones', 'clean bandit', 'rudimental', 'disclosure', 'gorgon city', 'meduza'
+]);
+
+const _LATIN_ARTISTS_SET = new Set([
+    'bad bunny', 'daddy yankee', 'luis fonsi', 'j balvin', 'shakira', 'rosalia', 'rosalía', 'maluma', 'enrique iglesias',
+    'ozuna', 'rauw alejandro', 'anuel aa', 'karol g', 'becky g', 'ricky martin', 'jennifer lopez', 'pitbull', 'gipsy kings',
+    'alvaro soler', 'farruko', 'nicky jam', 'gente de zona', 'wisin', 'yandel', 'wisin & yandel', 'prince royce', 'romeo santos',
+    'aventura', 'marc anthony', 'juanes', 'camilo', 'sebastian yatra', 'sebastián yatra', 'manuel turizo', 'morat', 'cnco', 'reik'
+]);
+
+const _FR_ARTISTS_SET = new Set([
+    'france gall', 'indila', 'stromae', 'carla bruni', 'edith piaf', 'alizee', 'alizée', 'kendji girac', 'angele', 'angèle',
+    'zaz', 'gims', 'aya nakamura', 'claude francois', 'charles aznavour', 'joe dassin', 'lara fabian', 'mireille mathieu',
+    'jacques brel', 'georges brassens', 'serge gainsbourg', 'francoise hardy', 'christophe', 'michel polnareff', 'daniel balavoine',
+    'renaud', 'francis cabrel', 'jean-jacques goldman', 'patrick bruel', 'calogero', 'laurent voulzy', 'alain souchon', 'julien clerc',
+    'yannick noah', 'christophe mae', 'mika', 'louane', 'amir', 'vianney', 'slimane', 'claudio capeo'
+]);
+
+const _TH_ARTISTS_SET = new Set([
+    'jeff satur', 'billkin', 'pp krit', 'nanon', 'bright vachirawit', 'three man down', 'tilly birds', 'bowkylion',
+    'violette wautier', 'milli', 'f.hero', 'non kul', 'the toys', 'ink waruntorn', 'scrubb', 'cocktail', 'bodyslam',
+    'getsunova', 'palmy', 'stamp apiwat', 'nont tanont', 'proxie', 'bus', 'lykn', 'perses', 'dice'
+]);
 const _GENRE_TAXONOMY_MAP = {
     'pop': 'Pop / Ballad', 'ballad': 'Pop / Ballad', 'v-pop': 'V-Pop / Nhạc Trẻ', 'vpop': 'V-Pop / Nhạc Trẻ',
     'vietnamese pop': 'V-Pop / Nhạc Trẻ', 'vietnamese': 'V-Pop / Nhạc Trẻ', 'nhạc trẻ': 'V-Pop / Nhạc Trẻ',
@@ -4257,9 +4365,8 @@ class XTAPOMusicApp {
         const targetCountryLow = countryName.toLowerCase().trim();
 
         this.getBaseAlbums().forEach(album => {
-            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             (album.tracks || []).forEach(track => {
-                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const c = (track.country && track.country.trim()) || this.detectCountryFromTrack(track) || 'Quốc Tế';
                 if (c.toLowerCase() === targetCountryLow || (countryName === 'Quốc Tế' && !['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c))) {
                     const key = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
                     if (!seenKeys.has(key)) {
@@ -5335,6 +5442,60 @@ class XTAPOMusicApp {
         }
     }
 
+    detectCountryForArtist(artistName, artistTracks = []) {
+        if (!artistName) return 'Âu Mỹ';
+        const rawName = artistName.trim();
+        const lowName = rawName.toLowerCase();
+        if (!lowName || lowName === 'unknown' || lowName === 'unknown artist' || lowName === 'va' || lowName === 'various artists') {
+            return 'Quốc Tế';
+        }
+
+        // 1. Script checks on Artist Name
+        if (_JP_CHAR_REGEX.test(rawName)) return 'Nhật Bản';
+        if (_KR_CHAR_REGEX.test(rawName)) return 'Hàn Quốc';
+        if (_CN_CHAR_REGEX.test(rawName)) return 'Hoa Ngữ';
+        if (_TH_CHAR_REGEX.test(rawName)) return 'Thái Lan';
+        if (_VN_DIACRITICS_REGEX.test(rawName)) return 'Việt Nam';
+
+        // 2. Exact or normalized dictionary checks
+        const norm = lowName.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').trim();
+
+        if (_JP_ARTISTS_SET.has(lowName) || _JP_ARTISTS_SET.has(norm)) return 'Nhật Bản';
+        if (_KR_ARTISTS_SET.has(lowName) || _KR_ARTISTS_SET.has(norm)) return 'Hàn Quốc';
+        if (_CN_ARTISTS_SET.has(lowName) || _CN_ARTISTS_SET.has(norm)) return 'Hoa Ngữ';
+        if (_VN_ARTISTS_SET.has(lowName) || _VN_ARTISTS_SET.has(norm)) return 'Việt Nam';
+        if (_LATIN_ARTISTS_SET.has(lowName) || _LATIN_ARTISTS_SET.has(norm)) return 'Latin / Tây Ban Nha';
+        if (_FR_ARTISTS_SET.has(lowName) || _FR_ARTISTS_SET.has(norm)) return 'Pháp / Châu Âu';
+        if (_TH_ARTISTS_SET.has(lowName) || _TH_ARTISTS_SET.has(norm)) return 'Thái Lan';
+        if (_US_ARTISTS_SET.has(lowName) || _US_ARTISTS_SET.has(norm)) return 'Âu Mỹ';
+
+        // Partial match for recognizable studios / game sound teams
+        if (lowName.includes('capcom') || lowName.includes('square enix') || lowName.includes('konami') || lowName.includes('nintendo') || lowName.includes('bandai') || lowName.includes('falcom')) return 'Nhật Bản';
+        if (lowName.includes('hoyo') || lowName.includes('mihoyo') || lowName.includes('genshin') || lowName.includes('star rail') || lowName.includes('zenless')) return 'Hoa Ngữ';
+
+        // 3. Fallback: inspect track titles of this artist (only track title, never album name)
+        if (artistTracks && artistTracks.length > 0) {
+            let vnCount = 0, jpCount = 0, krCount = 0, cnCount = 0, thCount = 0;
+            const total = artistTracks.length;
+            for (let i = 0; i < total; i++) {
+                const tName = (artistTracks[i].name || artistTracks[i].title || '').trim();
+                if (_JP_CHAR_REGEX.test(tName)) jpCount++;
+                else if (_KR_CHAR_REGEX.test(tName)) krCount++;
+                else if (_CN_CHAR_REGEX.test(tName)) cnCount++;
+                else if (_TH_CHAR_REGEX.test(tName)) thCount++;
+                else if (_VN_DIACRITICS_REGEX.test(tName)) vnCount++;
+            }
+            if (jpCount > 0 && jpCount >= krCount && jpCount >= cnCount && jpCount >= vnCount) return 'Nhật Bản';
+            if (krCount > 0 && krCount >= cnCount && krCount >= vnCount) return 'Hàn Quốc';
+            if (cnCount > 0 && cnCount >= vnCount) return 'Hoa Ngữ';
+            if (thCount > 0 && thCount >= vnCount) return 'Thái Lan';
+            if (vnCount > 0 && (vnCount / total >= 0.3 || vnCount >= 2)) return 'Việt Nam';
+        }
+
+        // 4. Default for Latin text artists
+        return 'Âu Mỹ';
+    }
+
     getArtistMap() {
         if (this._cachedArtistMap && !this._libraryIndexDirty) {
             return this._cachedArtistMap;
@@ -5351,22 +5512,25 @@ class XTAPOMusicApp {
             'Quốc Tế': 0
         };
 
+        const ignoredArtists = new Set([
+            'unknown', 'unknown artist', 'va', 'various artists', 'various artist', 'nhiều ca sĩ',
+            'nhac tuyen chon', 'nhạc tuyển chọn', 'nhieu ca si', 'tuyển tập', 'unknown ca sĩ', 'various', 'artist'
+        ]);
+
         const baseAlbums = this.getBaseAlbums();
         for (let i = 0; i < baseAlbums.length; i++) {
             const album = baseAlbums[i];
-            const albArtist = (album.artist || 'Unknown Artist').trim();
-            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
+            const albArtist = (album.artist || '').trim();
             const tracks = album.tracks || [];
             for (let j = 0; j < tracks.length; j++) {
                 const track = tracks[j];
-                const trackArtist = (track.artist || albArtist || 'Unknown Artist').trim();
-                if (!trackArtist || trackArtist.toLowerCase() === 'unknown') continue;
-
-                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
-                const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
+                const trackArtist = (track.artist || albArtist || '').trim();
+                if (!trackArtist) continue;
+                const lowArt = trackArtist.toLowerCase();
+                if (ignoredArtists.has(lowArt) || lowArt.startsWith('unknown')) continue;
 
                 if (!artistMap.has(trackArtist)) {
-                    const cached = this.artistCacheMap ? this.artistCacheMap.get(trackArtist.toLowerCase().trim()) : null;
+                    const cached = this.artistCacheMap ? this.artistCacheMap.get(lowArt) : null;
                     const avatarUrl = (cached && cached.avatar_url) ? cached.avatar_url : (track.coverUrl || album.coverUrl);
                     const bannerUrl = (cached && cached.banner_url) ? cached.banner_url : avatarUrl;
                     const bio = cached ? (cached.bio || '') : '';
@@ -5379,14 +5543,14 @@ class XTAPOMusicApp {
                         bannerUrl: bannerUrl,
                         bio: bio,
                         genres: genres,
-                        countries: new Set([validCountry]),
+                        country: '',
+                        countries: new Set(),
                         albums: new Map([[album.id || album.title, album]]),
                         trackKeys: new Set([trackKey]),
                         tracks: [track]
                     });
                 } else {
                     const existing = artistMap.get(trackArtist);
-                    existing.countries.add(validCountry);
                     existing.albums.set(album.id || album.title, album);
                     const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
                     if (!existing.trackKeys.has(trackKey)) {
@@ -5397,14 +5561,20 @@ class XTAPOMusicApp {
             }
         }
 
-        countryArtistCounts['all'] = artistMap.size;
+        // Determine accurate country for each artist
         artistMap.forEach(art => {
-            art.countries.forEach(c => {
-                if (countryArtistCounts[c] !== undefined) {
-                    countryArtistCounts[c]++;
-                }
-            });
+            const c = this.detectCountryForArtist(art.name, art.tracks);
+            const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
+            art.country = validCountry;
+            art.countries = new Set([validCountry]);
+            if (countryArtistCounts[validCountry] !== undefined) {
+                countryArtistCounts[validCountry]++;
+            } else {
+                countryArtistCounts['Quốc Tế']++;
+            }
         });
+
+        countryArtistCounts['all'] = artistMap.size;
 
         this._cachedArtistMap = artistMap;
         this._cachedCountryArtistCounts = countryArtistCounts;
@@ -5462,7 +5632,11 @@ class XTAPOMusicApp {
 
         // Filter by country
         if (this.selectedArtistCountryFilter && this.selectedArtistCountryFilter !== 'all') {
-            sortedArtists = sortedArtists.filter(a => a.countries.has(this.selectedArtistCountryFilter));
+            if (this.selectedArtistCountryFilter === 'Quốc Tế') {
+                sortedArtists = sortedArtists.filter(a => a.country === 'Quốc Tế' || !['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(a.country));
+            } else {
+                sortedArtists = sortedArtists.filter(a => a.country === this.selectedArtistCountryFilter || a.countries.has(this.selectedArtistCountryFilter));
+            }
         }
 
         // Filter by search query
@@ -5807,12 +5981,11 @@ class XTAPOMusicApp {
 
         for (let i = 0; i < baseAlbums.length; i++) {
             const album = baseAlbums[i];
-            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             const tracks = album.tracks || [];
             for (let j = 0; j < tracks.length; j++) {
                 const track = tracks[j];
                 const g = this.normalizeGenre(track.genre, track);
-                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const c = (track.country && track.country.trim()) || this.detectCountryFromTrack(track) || 'Quốc Tế';
                 const validCountry = countryGenreSets[c] ? c : 'Quốc Tế';
 
                 countryGenreSets['all'].add(g);
@@ -5926,49 +6099,22 @@ class XTAPOMusicApp {
             return track._normCountry;
         }
 
-        const name = track.name || track.title || '';
-        const artist = track.artist || '';
-        const album = track.album || track.albumName || '';
-        const raw = `${name} ${artist} ${album}`;
-        const low = raw.toLowerCase();
-
-        let result = 'Âu Mỹ';
-
-        // 1. Tiếng Việt
-        if (_VN_DIACRITICS_REGEX.test(raw) || _VN_KWS.some(k => low.includes(k))) {
-            result = 'Việt Nam';
-        }
-        // 2. Hàn Quốc
-        else if (_KR_CHAR_REGEX.test(raw) || _KR_KWS.some(k => low.includes(k))) {
-            result = 'Hàn Quốc';
-        }
-        // 3. Nhật Bản
-        else if (_JP_CHAR_REGEX.test(raw) || _JP_KWS.some(k => low.includes(k))) {
-            result = 'Nhật Bản';
-        }
-        // 4. Hoa Ngữ
-        else if (_CN_CHAR_REGEX.test(raw) || _CN_KWS.some(k => low.includes(k))) {
-            result = 'Hoa Ngữ';
-        }
-        // 5. Thái Lan
-        else if (_TH_CHAR_REGEX.test(raw) || _TH_KWS.some(k => low.includes(k))) {
-            result = 'Thái Lan';
-        }
-        // 6. Latin / Tây Ban Nha
-        else if (_LATIN_KWS.some(k => low.includes(k))) {
-            result = 'Latin / Tây Ban Nha';
-        }
-        // 7. Pháp / Châu Âu
-        else if (_FR_KWS.some(k => low.includes(k))) {
-            result = 'Pháp / Châu Âu';
-        }
-        // 8. Âu Mỹ (US-UK)
-        else if (_US_KWS.some(k => low.includes(k))) {
-            result = 'Âu Mỹ';
+        const artist = (track.artist || '').trim();
+        if (artist && artist.toLowerCase() !== 'unknown' && artist.toLowerCase() !== 'unknown artist') {
+            const c = this.detectCountryForArtist(artist, [track]);
+            track._normCountry = c;
+            return c;
         }
 
-        track._normCountry = result;
-        return result;
+        const name = (track.name || track.title || '').trim();
+        if (_JP_CHAR_REGEX.test(name)) { track._normCountry = 'Nhật Bản'; return 'Nhật Bản'; }
+        if (_KR_CHAR_REGEX.test(name)) { track._normCountry = 'Hàn Quốc'; return 'Hàn Quốc'; }
+        if (_CN_CHAR_REGEX.test(name)) { track._normCountry = 'Hoa Ngữ'; return 'Hoa Ngữ'; }
+        if (_TH_CHAR_REGEX.test(name)) { track._normCountry = 'Thái Lan'; return 'Thái Lan'; }
+        if (_VN_DIACRITICS_REGEX.test(name)) { track._normCountry = 'Việt Nam'; return 'Việt Nam'; }
+
+        track._normCountry = 'Âu Mỹ';
+        return 'Âu Mỹ';
     }
 
     getCountryMap() {
@@ -6040,11 +6186,10 @@ class XTAPOMusicApp {
         const baseAlbums = this.getBaseAlbums();
         for (let i = 0; i < baseAlbums.length; i++) {
             const album = baseAlbums[i];
-            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             const tracks = album.tracks || [];
             for (let j = 0; j < tracks.length; j++) {
                 const track = tracks[j];
-                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const c = (track.country && track.country.trim()) || this.detectCountryFromTrack(track) || 'Quốc Tế';
                 const key = countryMeta[c] ? c : 'Quốc Tế';
                 const entry = countryMap.get(key);
                 if (entry) {
@@ -6530,11 +6675,10 @@ class XTAPOMusicApp {
         const baseAlbums = this.getBaseAlbums();
         for (let i = 0; i < baseAlbums.length; i++) {
             const album = baseAlbums[i];
-            const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
             const albTracks = album.tracks || [];
             for (let j = 0; j < albTracks.length; j++) {
                 const track = albTracks[j];
-                const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const c = (track.country && track.country.trim()) || this.detectCountryFromTrack(track) || 'Quốc Tế';
                 const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản', 'Thái Lan', 'Latin / Tây Ban Nha', 'Pháp / Châu Âu'].includes(c) ? c : 'Quốc Tế';
                 if (countryName && countryName !== 'all' && validCountry !== countryName) continue;
 

@@ -1712,25 +1712,25 @@
                         const tr = tracks[j];
                         let c = tr._tvC;
                         if (!c) {
-                            c = (tr.country || alb.country || '').trim();
+                            c = (tr.country || '').trim();
                             if (!c) {
                                 const trName = (tr.name || tr.title || '').toLowerCase();
-                                const trArt = (tr.artist || alb.artist || '').toLowerCase();
+                                const trArt = (tr.artist || '').toLowerCase();
                                 const full = `${trName} ${trArt}`;
 
-                                if (['bts', 'blackpink', 'iu', 'exo', 'twice', 'newjeans', 'k-pop', 'kpop'].some(k => full.includes(k)) || /[\uac00-\ud7a3]/.test(full)) {
-                                    c = 'Hàn Quốc';
-                                } else if (['yoasobi', 'kenshi yonezu', 'aimer', 'radwimps', 'j-pop', 'anime'].some(k => full.includes(k)) || /[\u3040-\u309f\u30a0-\u30ff]/.test(full)) {
+                                if (/[\u3040-\u309f\u30a0-\u30ff]/.test(full) || ['yoasobi', 'kenshi yonezu', 'aimer', 'radwimps', 'j-pop', 'anime', 'capcom', 'sawano hiroyuki', 'joe hisaishi'].some(k => full.includes(k))) {
                                     c = 'Nhật Bản';
-                                } else if (['jay chou', 'faye wong', 'jj lin', 'c-pop', 'nhạc hoa'].some(k => full.includes(k)) || /[\u4e00-\u9fff]/.test(full)) {
+                                } else if (/[\uac00-\ud7a3]/.test(full) || ['bts', 'blackpink', 'iu', 'exo', 'twice', 'newjeans', 'k-pop', 'kpop', 'taeyeon', 'snsd'].some(k => full.includes(k))) {
+                                    c = 'Hàn Quốc';
+                                } else if (/[\u4e00-\u9fff]/.test(full) || ['jay chou', 'faye wong', 'jj lin', 'c-pop', 'nhạc hoa', 'hoyo-mix', 'hoyo - mix', 'teresa teng', 'yao si ting'].some(k => full.includes(k))) {
                                     c = 'Hoa Ngữ';
-                                } else if (['jeff satur', 'billkin', 'pp krit', 'nanon', 'bright vachirawit', 'three man down', 'tilly birds', 't-pop', 'nhạc thái'].some(k => full.includes(k)) || /[\u0e00-\u0e7f]/.test(full)) {
+                                } else if (/[\u0e00-\u0e7f]/.test(full) || ['jeff satur', 'billkin', 'pp krit', 'nanon', 'bright vachirawit', 'three man down', 'tilly birds', 't-pop', 'nhạc thái'].some(k => full.includes(k))) {
                                     c = 'Thái Lan';
                                 } else if (['latin', 'reggaeton', 'bachata', 'salsa', 'bad bunny', 'daddy yankee', 'shakira', 'despacito', 'maluma', 'enrique iglesias'].some(k => full.includes(k))) {
                                     c = 'Latin / Tây Ban Nha';
                                 } else if (['chanson', 'french pop', 'nhạc pháp', 'lời pháp', 'indila', 'stromae', 'carla bruni', 'edith piaf'].some(k => full.includes(k))) {
                                     c = 'Pháp / Châu Âu';
-                                } else if (/[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]/.test(full)) {
+                                } else if (/[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]/.test(full) || ['sơn tùng', 'đen vâu', 'mỹ tâm', 'đan trường', 'chế linh', 'lệ quyên', 'tuấn hưng', 'phi nhung'].some(k => full.includes(k))) {
                                     c = 'Việt Nam';
                                 } else {
                                     c = 'Âu Mỹ';
