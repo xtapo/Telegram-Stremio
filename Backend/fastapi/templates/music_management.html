@@ -1667,6 +1667,13 @@ async function loadMusicData(showToastAlert = false) {
 
     try {
         const res = await fetch('/api/music/albums');
+        if (!res.ok) {
+            console.warn(`[MUSIC UI] /api/music/albums trả về mã lỗi HTTP ${res.status}`);
+            return;
+        }
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) return;
+
         const data = await res.json();
 
         if (data.status === 'success' && data.albums) {

@@ -732,7 +732,10 @@ async def _db_load_library(force_reload: bool = False) -> list:
 
     try:
         if db and hasattr(db, "dbs") and "tracking" in db.dbs:
-            doc = await db.dbs["tracking"]["music_library"].find_one({"_id": "telegram_music_library"})
+            doc = await asyncio.wait_for(
+                db.dbs["tracking"]["music_library"].find_one({"_id": "telegram_music_library"}),
+                timeout=5.0
+            )
             if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
                 _IN_MEMORY_LIBRARY_CACHE = doc["albums"]
                 try:
@@ -742,6 +745,8 @@ async def _db_load_library(force_reload: bool = False) -> list:
                 except Exception:
                     pass
                 return doc["albums"]
+    except asyncio.TimeoutError:
+        LOGGER.warning("[MUSIC DB] MongoDB load library query timed out (5s). Using fallback.")
     except Exception as e:
         LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
 
