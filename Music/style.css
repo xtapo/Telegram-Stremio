@@ -3944,6 +3944,10 @@ html, body {
         gap: 10px;
     }
 
+    .country-card-item::before {
+        display: none;
+    }
+
     .country-flag-badge {
         font-size: 1.8rem;
     }
