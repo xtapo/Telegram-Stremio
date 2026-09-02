@@ -132,6 +132,8 @@ const EQ_PRESETS = {
     treble: { name: "Treble Booster", gains: [-3, -2, -1, 0, 0.5, 2, 4, 6, 7.5, 8], bass: 0, preamp: -1 },
     rnb: { name: "R&B / Soul", gains: [5, 4.5, 2.5, 1, -0.5, 1.5, 2, 3, 3.5, 3], bass: 4, preamp: -1.5 },
     custom: { name: "Tùy Chỉnh", gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], bass: 0, preamp: 0 }
+};
+
 // --- Static Taxonomy & Keyword Constants for Ultra-Fast Classification (Zero Garbage Collection Overhead) ---
 const _BOLERO_ARTISTS = ['nhu quynh', 'như quỳnh', 'che linh', 'chế linh', 'quang le', 'quang lê', 'truong vu', 'trường vũ', 'phi nhung', 'huong lan', 'hương lan', 'giao linh', 'manh quynh', 'mạnh quỳnh', 'le quyen', 'lệ quyên', 'tuan vu', 'tuấn vũ', 'dan nguyen', 'đan nguyên', 'ngoc son', 'ngọc sơn', 'duy khanh', 'duy khánh', 'thanh tuyen', 'thanh tuyền', 'hoang oanh', 'hoàng oanh', 'phuong dung', 'phương dung', 'mai thien van', 'mai thiên vân', 'quoc dai', 'quốc đại', 'to my', 'tố my', 'luu anh loan', 'lưu ánh loan', 'huynh nguyen cong sang'];
 const _BOLERO_KWS = ['bolero', 'trữ tình', 'nhạc vàng', 'tân cổ', 'cải lương', 'liên khúc chiều mưa', 'đò nghèo', 'áo em chưa mặc', 'con đường xưa em đi', 'sầu tím', 'chuyến tàu hoàng hôn', 'thương về miền trung', 'vọng cổ', 'dân ca'];
