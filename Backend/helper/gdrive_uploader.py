@@ -360,30 +360,45 @@ def _extract_filename_from_headers(headers: httpx.Headers, default_name: str = "
     return default_name
 
 
-async def _get_upload_client():
+_UPLOAD_USERBOT_INDEX = 0
+
+async def _get_upload_client(rotate: bool = False, exclude_client = None):
     """
-    Ưu tiên lấy Userbot (User Session) để đạt tốc độ upload tối đa và hỗ trợ file lớn đến 2GB/4GB.
-    Nếu chưa kích hoạt hoặc bị ngắt kết nối socket, tự động khởi động lại từ session đã lưu trong database.
-    Fallback về StreamBot nếu không có Userbot.
+    Ưu tiên lấy Userbot từ multi_userbots pool để đạt tốc độ upload tối đa và hỗ trợ file lớn 2GB/4GB.
+    Hỗ trợ luân phiên (Round-Robin) giữa các tài khoản User Sessions đang kết nối.
+    Tự động chuyển đổi tài khoản khi gặp FloodWait.
+    Fallback về StreamBot nếu không có Userbot nào.
     """
-    # 1. Kiểm tra Userbot đang kết nối tốt
-    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+    global _UPLOAD_USERBOT_INDEX
+
+    # 1. Thu thập tất cả active userbots
+    active_userbots = [
+        cl for cl in botmod.multi_userbots.values()
+        if getattr(cl, "is_connected", False) and (exclude_client is None or cl != exclude_client)
+    ]
+
+    if active_userbots:
+        if rotate:
+            _UPLOAD_USERBOT_INDEX = (_UPLOAD_USERBOT_INDEX + 1) % len(active_userbots)
+        else:
+            _UPLOAD_USERBOT_INDEX = _UPLOAD_USERBOT_INDEX % len(active_userbots)
+        return active_userbots[_UPLOAD_USERBOT_INDEX], "user_session"
+
+    # 2. Nếu botmod.Userbot có sẵn và đang kết nối
+    if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False) and (exclude_client is None or botmod.Userbot != exclude_client):
         return botmod.Userbot, "user_session"
 
-    # 2. Thử kích hoạt lại / kết nối lại Userbot từ DB
+    # 3. Thử nạp lại các session từ DB
     try:
-        from Backend.helper.session_auth import get_active_session_string, _activate, _deactivate
-        session_str = await get_active_session_string()
-        if session_str:
-            if botmod.Userbot and not getattr(botmod.Userbot, "is_connected", False):
-                await _deactivate()
-            await _activate(session_str)
-            if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
-                return botmod.Userbot, "user_session"
+        from Backend.helper.session_auth import activate_all_stored_sessions
+        reloaded = await activate_all_stored_sessions()
+        candidates = [cl for cl in reloaded if getattr(cl, "is_connected", False) and (exclude_client is None or cl != exclude_client)]
+        if candidates:
+            return candidates[0], "user_session"
     except Exception as e:
-        LOGGER.warning(f"[GDRIVE UPLOAD] Không thể kết nối lại Userbot: {e}")
+        LOGGER.warning(f"[GDRIVE UPLOAD] Không thể nạp lại Userbots: {e}")
 
-    # 3. Fallback StreamBot
+    # 4. Fallback StreamBot
     return StreamBot, "bot"
 
 

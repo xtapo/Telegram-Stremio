@@ -4910,17 +4910,19 @@ async function checkGDriveClientStatus() {
         if (res.ok && data.status === 'success') {
             const isUserSession = data.active_mode === 'user_session';
             if (isUserSession) {
-                if (labelEl) labelEl.textContent = '⚡ User Session (Tốc độ tối đa • Không giới hạn 2GB/4GB)';
+                const count = data.active_userbot_count || 1;
+                const countText = count > 1 ? `⚡ Multi-User Session (${count} tài khoản • Tự động xoay vòng)` : '⚡ User Session (Tốc độ tối đa • Không giới hạn 2GB/4GB)';
+                if (labelEl) labelEl.textContent = countText;
                 if (labelEl) labelEl.className = 'text-xs font-black text-emerald-400';
                 if (badgeEl) {
-                    badgeEl.textContent = '⚡ User Session';
+                    badgeEl.textContent = count > 1 ? `⚡ ${count} User Sessions` : '⚡ User Session';
                     badgeEl.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
                 }
                 if (iconEl) {
                     iconEl.className = 'w-7 h-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs';
                     iconEl.innerHTML = '<i class="fa-solid fa-bolt"></i>';
                 }
-                if (statClientEl) statClientEl.textContent = '⚡ User Session';
+                if (statClientEl) statClientEl.textContent = count > 1 ? `⚡ ${count} User Sessions` : '⚡ User Session';
             } else {
                 if (labelEl) labelEl.textContent = '🤖 Telegram Bot Client (Chưa kích hoạt User Session)';
                 if (labelEl) labelEl.className = 'text-xs font-bold text-sky-400';

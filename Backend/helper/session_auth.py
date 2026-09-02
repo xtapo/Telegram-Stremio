@@ -49,12 +49,23 @@ def _profile(me) -> dict:
 
 async def _store_session(session_string: str, profile: dict) -> None:
     encoded = await encode_string(session_string)
+    user_id = profile.get("user_id")
     doc = {
         "session": encoded,
         "active": True,
         "created_at": time.time(),
         **profile,
     }
+    # 1. Lưu vào collection danh sách multi-session
+    if user_id:
+        try:
+            await db.dbs["tracking"]["user_sessions"].update_one(
+                {"_id": str(user_id)}, {"$set": doc}, upsert=True
+            )
+        except Exception as e:
+            LOGGER.debug(f"[MULTI SESSION DB] {e}")
+
+    # 2. Lưu vào state user_session cho tương thích ngược (Primary)
     await db.dbs["tracking"]["state"].update_one(
         {"_id": "user_session"}, {"$set": doc}, upsert=True
     )
@@ -62,6 +73,24 @@ async def _store_session(session_string: str, profile: dict) -> None:
 
 async def _read_stored() -> dict:
     return await db.dbs["tracking"]["state"].find_one({"_id": "user_session"}) or {}
+
+
+async def get_all_stored_sessions() -> list:
+    """Đọc toàn bộ danh sách các User Session đã lưu trong Database"""
+    sessions = []
+    try:
+        cursor = db.dbs["tracking"]["user_sessions"].find({})
+        async for doc in cursor:
+            sessions.append(doc)
+    except Exception as e:
+        LOGGER.debug(f"[MULTI SESSIONS FETCH] {e}")
+
+    if not sessions:
+        legacy = await _read_stored()
+        if legacy and legacy.get("session"):
+            sessions.append(legacy)
+
+    return sessions
 
 
 async def get_active_session_string() -> str:
@@ -74,29 +103,87 @@ async def get_active_session_string() -> str:
         return ""
 
 
-async def _activate(session_string: str) -> None:
+async def _activate(session_string: str, user_id: int = None, profile: dict = None) -> Client:
+    """Kích hoạt 1 Userbot Client và đăng ký vào multi_userbots pool"""
     try:
-        if botmod.Userbot is None:
-            botmod.build_userbot(session_string)
-            await botmod.Userbot.start()
-            botmod.Userbot.username = getattr(botmod.Userbot.me, "username", None)
-            LOGGER.info("Userbot session activated live from stored session.")
+        uid = user_id or (profile.get("user_id") if profile else None)
+        client = botmod.build_userbot(session_string, user_id=uid)
+        if not getattr(client, "is_connected", False):
+            await client.start()
+        
+        me = getattr(client, "me", None)
+        if not me:
+            try:
+                me = await client.get_me()
+            except Exception:
+                pass
+        
+        if me:
+            client.username = getattr(me, "username", None)
+            actual_uid = me.id
+            botmod.register_userbot(actual_uid, client)
+            LOGGER.info(f"Userbot session activated: [@{client.username or actual_uid}] (ID: {actual_uid})")
+        else:
+            if uid:
+                botmod.register_userbot(uid, client)
+
         for mod in (global_search, task_manager):
             try:
                 mod._userbot_session_dead = False
             except Exception:
                 pass
+
+        return client
     except Exception as e:
-        LOGGER.warning(f"[SESSION] Live Userbot activation failed (restart to apply): {e}")
+        LOGGER.warning(f"[SESSION] Live Userbot activation failed: {e}")
+        return None
 
 
-async def _deactivate() -> None:
-    try:
+async def _deactivate(user_id: int = None) -> None:
+    """Dừng và giải phóng Userbot (hoặc toàn bộ Userbots nếu không chỉ định ID)"""
+    if user_id and user_id in botmod.multi_userbots:
+        client = botmod.unregister_userbot(user_id)
+        if client:
+            try:
+                await client.stop()
+            except Exception:
+                pass
+    else:
+        for uid, cl in list(botmod.multi_userbots.items()):
+            try:
+                await cl.stop()
+            except Exception:
+                pass
+        botmod.multi_userbots.clear()
         if botmod.Userbot is not None:
-            await botmod.Userbot.stop()
-    except Exception:
-        pass
-    botmod.Userbot = None
+            try:
+                await botmod.Userbot.stop()
+            except Exception:
+                pass
+        botmod.Userbot = None
+
+
+async def activate_all_stored_sessions() -> list:
+    """Kích hoạt toàn bộ danh sách User Sessions khi khởi động máy chủ"""
+    stored_list = await get_all_stored_sessions()
+    activated = []
+
+    for doc in stored_list:
+        if not doc.get("active", True) or not doc.get("session"):
+            continue
+        try:
+            raw_session = await decode_string(doc["session"])
+            if not raw_session:
+                continue
+            uid = doc.get("user_id")
+            client = await _activate(raw_session, user_id=uid, profile=doc)
+            if client:
+                activated.append(client)
+        except Exception as e:
+            LOGGER.warning(f"[STARTUP SESSION ACTIVATE] Error for user {doc.get('user_id')}: {e}")
+
+    LOGGER.info(f"Multi-Userbot: Đã kích hoạt {len(activated)}/{len(stored_list)} User Sessions.")
+    return activated
 
 
 async def start_login(phone: str) -> dict:
@@ -168,48 +255,101 @@ async def _finalize(login_id: str) -> dict:
     except Exception:
         pass
     await _store_session(session_string, profile)
-    await _activate(session_string)
+    await _activate(session_string, user_id=profile["user_id"], profile=profile)
     return {"status": "ok", "profile": profile}
 
 
 async def get_session_status() -> dict:
     doc = await _read_stored()
-    if not doc:
-        return {"connected": False, "profile": None}
+    multi = await get_multi_session_status()
+    if not doc and multi["total_sessions"] == 0:
+        return {"connected": False, "profile": None, "multi_sessions": multi}
     return {
-        "connected": bool(doc.get("active")),
-        "live": botmod.Userbot is not None,
+        "connected": bool(doc.get("active") or multi["active_sessions"] > 0),
+        "live": botmod.Userbot is not None or multi["active_sessions"] > 0,
         "profile": {
             "name": doc.get("name"),
             "username": doc.get("username"),
             "phone": doc.get("phone"),
             "user_id": doc.get("user_id"),
         },
+        "multi_sessions": multi
     }
 
 
-async def disconnect_session() -> dict:
-    await db.dbs["tracking"]["state"].update_one({"_id": "user_session"}, {"$set": {"active": False}})
-    await _deactivate()
+async def get_multi_session_status() -> dict:
+    """Trả về trạng thái chi tiết của tất cả các User Sessions"""
+    stored_list = await get_all_stored_sessions()
+    sessions_info = []
+
+    for doc in stored_list:
+        uid = doc.get("user_id")
+        uid_int = int(uid) if uid and str(uid).lstrip("-").isdigit() else None
+        cl = botmod.multi_userbots.get(uid_int) if uid_int else None
+        is_live = cl is not None and getattr(cl, "is_connected", False)
+
+        sessions_info.append({
+            "user_id": uid,
+            "name": doc.get("name") or "Telegram User",
+            "username": doc.get("username") or "",
+            "phone": doc.get("phone") or "",
+            "active": bool(doc.get("active", True)),
+            "connected": is_live,
+            "created_at": doc.get("created_at", 0),
+            "is_primary": bool(botmod.Userbot == cl if cl else False)
+        })
+
+    active_count = sum(1 for s in sessions_info if s["connected"])
+    return {
+        "total_sessions": len(sessions_info),
+        "active_sessions": active_count,
+        "sessions": sessions_info
+    }
+
+
+async def disconnect_session(user_id: str = None) -> dict:
+    if user_id:
+        await db.dbs["tracking"]["user_sessions"].update_one(
+            {"_id": str(user_id)}, {"$set": {"active": False}}
+        )
+        uid_int = int(user_id) if str(user_id).lstrip("-").isdigit() else None
+        if uid_int:
+            await _deactivate(user_id=uid_int)
+    else:
+        await db.dbs["tracking"]["state"].update_one({"_id": "user_session"}, {"$set": {"active": False}})
+        await _deactivate()
     return {"ok": True}
 
 
-async def reconnect_session() -> dict:
-    session_string = None
-    doc = await _read_stored()
-    if doc and doc.get("session"):
-        try:
-            session_string = await decode_string(doc["session"])
-        except Exception:
-            session_string = None
-    if not session_string:
-        raise ValueError("No stored session to reconnect.")
-    await db.dbs["tracking"]["state"].update_one({"_id": "user_session"}, {"$set": {"active": True}})
-    await _activate(session_string)
+async def reconnect_session(user_id: str = None) -> dict:
+    if user_id:
+        doc = await db.dbs["tracking"]["user_sessions"].find_one({"_id": str(user_id)})
+        if not doc or not doc.get("session"):
+            raise ValueError(f"Không tìm thấy session cho User ID {user_id}")
+        session_str = await decode_string(doc["session"])
+        if not session_str:
+            raise ValueError("Không thể giải mã session string.")
+        await db.dbs["tracking"]["user_sessions"].update_one(
+            {"_id": str(user_id)}, {"$set": {"active": True}}
+        )
+        uid_int = int(user_id) if str(user_id).lstrip("-").isdigit() else None
+        await _activate(session_str, user_id=uid_int, profile=doc)
+    else:
+        session_string = await get_active_session_string()
+        if not session_string:
+            raise ValueError("No stored session to reconnect.")
+        await db.dbs["tracking"]["state"].update_one({"_id": "user_session"}, {"$set": {"active": True}})
+        await _activate(session_string)
     return {"ok": True}
 
 
-async def remove_session() -> dict:
-    await _deactivate()
-    await db.dbs["tracking"]["state"].delete_one({"_id": "user_session"})
+async def remove_session(user_id: str = None) -> dict:
+    if user_id:
+        uid_int = int(user_id) if str(user_id).lstrip("-").isdigit() else None
+        if uid_int:
+            await _deactivate(user_id=uid_int)
+        await db.dbs["tracking"]["user_sessions"].delete_one({"_id": str(user_id)})
+    else:
+        await _deactivate()
+        await db.dbs["tracking"]["state"].delete_one({"_id": "user_session"})
     return {"ok": True}

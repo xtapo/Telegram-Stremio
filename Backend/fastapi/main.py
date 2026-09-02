@@ -55,6 +55,7 @@ from Backend.fastapi.routes.api_routes import (
     session_disconnect_api,
     session_reconnect_api,
     session_remove_api,
+    get_multi_sessions_api,
     get_custom_catalog_items_api,
     get_dead_links_api,
     get_media_visibility_api,
@@ -687,6 +688,24 @@ async def session_verify_code(payload: dict, _: bool = Depends(require_auth)):
 @app.post("/api/admin/settings/session/verify-password")
 async def session_verify_password(payload: dict, _: bool = Depends(require_auth)):
     return await session_verify_password_api(payload)
+
+@app.get("/api/admin/settings/sessions/list")
+async def sessions_list_get(_: bool = Depends(require_auth)):
+    return await get_multi_sessions_api()
+
+@app.post("/api/admin/settings/sessions/disconnect")
+async def sessions_disconnect_post(payload: dict = None, _: bool = Depends(require_auth)):
+    uid = (payload or {}).get("user_id")
+    return await session_disconnect_api(user_id=uid)
+
+@app.post("/api/admin/settings/sessions/reconnect")
+async def sessions_reconnect_post(payload: dict = None, _: bool = Depends(require_auth)):
+    uid = (payload or {}).get("user_id")
+    return await session_reconnect_api(user_id=uid)
+
+@app.delete("/api/admin/settings/sessions/{user_id}")
+async def sessions_delete_one(user_id: str, _: bool = Depends(require_auth)):
+    return await session_remove_api(user_id=user_id)
 
 @app.post("/api/admin/settings/session/disconnect")
 async def session_disconnect(_: bool = Depends(require_auth)):

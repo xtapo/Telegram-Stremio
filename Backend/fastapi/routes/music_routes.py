@@ -1590,12 +1590,10 @@ class MusicScanManager:
                 self._current_channel_title = chat_title
                 self._log(f"Đang quét kênh [{idx}/{len(channels)}]: {chat_title} ({self._current_channel_id})")
 
-                # Tìm mốc quét đã lưu trước đó của kênh
                 ch_saved = saved_channels_map.get(self._current_channel_id) or {}
                 last_checkpoint_id = int(ch_saved.get("last_scanned_id", 0) or 0)
                 highest_seen_id = last_checkpoint_id
 
-                # Dò ID tin nhắn mới nhất của kênh
                 latest_msg_id = 0
                 try:
                     async for m in client.get_chat_history(resolved_chat_id, limit=1):
@@ -1605,7 +1603,6 @@ class MusicScanManager:
                 except Exception:
                     pass
 
-                # Xác định dải quét scan_from -> scan_to
                 if from_msg_id > 0:
                     scan_from = from_msg_id
                     scan_to = to_msg_id if (to_msg_id > 0 and to_msg_id >= from_msg_id) else (latest_msg_id or (from_msg_id + 500))
@@ -1635,220 +1632,207 @@ class MusicScanManager:
                 self._current_msg_id = scan_from
                 self._target_msg_id = scan_to
                 scan_range = list(range(scan_from, scan_to + 1))
+                self._target_messages = len(scan_range)
                 self._log(f"Quét dải ID tin nhắn #{scan_from} -> #{scan_to} (Tổng {len(scan_range)} tin nhắn)...")
 
-                messages_to_process = []
                 batch_size = 50
                 for i in range(0, len(scan_range), batch_size):
                     if self._cancel_requested:
                         break
                     sub_ids = scan_range[i:i + batch_size]
                     self._current_msg_id = sub_ids[-1]
+
+                    b_msgs = []
                     try:
                         b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                        for m in b_msgs:
-                            if m:
-                                messages_to_process.append(m)
-                                if m.id > highest_seen_id:
-                                    highest_seen_id = m.id
                     except FloodWait as fw:
-                        self._log(f"FloodWait {fw.value}s trong batch — đang tự động chờ...")
+                        self._log(f"Telegram yêu cầu chờ FloodWait {fw.value}s trong batch — đang tự động tạm dừng...")
                         await asyncio.sleep(fw.value + 1)
                         try:
                             b_msgs = await client.get_messages(resolved_chat_id, sub_ids)
-                            for m in b_msgs:
-                                if m:
-                                    messages_to_process.append(m)
-                                    if m.id > highest_seen_id:
-                                        highest_seen_id = m.id
                         except Exception:
-                            pass
+                            b_msgs = []
                     except Exception as e:
                         self._log(f"Lỗi lấy cụm tin nhắn {sub_ids[0]}-{sub_ids[-1]}: {e}")
+                        b_msgs = []
 
-                    # Cập nhật mốc quét ID tức thì sau mỗi cụm
-                    checkpoint_to_save = max(highest_seen_id, sub_ids[-1])
-                    await _db_update_channel_progress(self._current_channel_id, checkpoint_to_save)
-                    await asyncio.sleep(0.04)
+                    valid_msgs = [m for m in b_msgs if m]
+                    for m in valid_msgs:
+                        if m.id > highest_seen_id:
+                            highest_seen_id = m.id
 
-                media_group_context = {}
-                nearby_text_context = {}
-                for msg in messages_to_process:
-                    mgid = getattr(msg, "media_group_id", None)
-                    cap = getattr(msg, "caption", "") or ""
-                    txt = getattr(msg, "text", "") or ""
-                    combined = (cap + "\n" + txt).strip()
-                    if combined:
-                        c_art, c_alb = extract_context_from_text(combined)
-                        if c_art or c_alb:
-                            if mgid:
-                                media_group_context[mgid] = (c_art, c_alb, combined)
-                            nearby_text_context[msg.id] = (c_art, c_alb)
-
-                for m_idx, msg in enumerate(messages_to_process):
-                    if self._cancel_requested:
-                        break
-                    self._processed_messages += 1
-                    try:
-                        media = getattr(msg, "audio", None) or getattr(msg, "document", None)
-                        if not media:
-                            continue
-                        f_name = getattr(media, "file_name", "") or ""
-                        m_type = getattr(media, "mime_type", "") or ""
-                        is_audio = bool(getattr(msg, "audio", None)) or m_type.startswith("audio/") or f_name.lower().endswith(audio_extensions)
-                        if not is_audio:
-                            continue
-
-                        # 1. Trích xuất thông tin cơ bản từ chính file
-                        caption_text = getattr(msg, "caption", "") or ""
-                        raw_title = getattr(msg.audio, "title", None) if getattr(msg, "audio", None) else None
-                        raw_artist = getattr(msg.audio, "performer", None) if getattr(msg, "audio", None) else None
-                        raw_album = getattr(msg.audio, "album", None) if getattr(msg, "audio", None) else None
-                        duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg, "audio", None) else 0
-                        file_size_bytes = getattr(media, "file_size", 0) or 0
-
-                        # Dò DocumentAttributeAudio nếu file gửi dạng Document
-                        if not duration_sec and getattr(msg, "document", None):
-                            for attr in getattr(msg.document, "attributes", []) or []:
-                                if hasattr(attr, "duration") and attr.duration:
-                                    duration_sec = int(attr.duration)
-                                if hasattr(attr, "performer") and attr.performer and not raw_artist:
-                                    raw_artist = attr.performer
-                                if hasattr(attr, "title") and attr.title and not raw_title:
-                                    raw_title = attr.title
-
-                        # Ước lượng thời lượng nếu file audio không có metadata duration
-                        if not duration_sec and file_size_bytes > 0:
-                            est_kbps = 900 if ("flac" in f_name.lower() or "wav" in f_name.lower()) else 320
-                            duration_sec = max(45, int(file_size_bytes / (est_kbps * 125)))
-
-                        p_art, p_tit, p_alb = parse_artist_and_title(raw_title, raw_artist, raw_album, f_name, caption_text)
-
-                        # 2. Dò ngữ cảnh an toàn (Chỉ dò khi file thiếu Ca Sĩ hoặc Album)
-                        ctx_artist, ctx_album = "", ""
+                    media_group_context = {}
+                    nearby_text_context = {}
+                    for msg in valid_msgs:
                         mgid = getattr(msg, "media_group_id", None)
-                        if mgid and mgid in media_group_context:
-                            ctx_artist, ctx_album, _ = media_group_context[mgid]
-                        
-                        if not ctx_artist and not ctx_album and caption_text:
-                            ctx_artist, ctx_album = extract_context_from_text(caption_text)
+                        cap = getattr(msg, "caption", "") or ""
+                        txt = getattr(msg, "text", "") or ""
+                        combined = (cap + "\n" + txt).strip()
+                        if combined:
+                            c_art, c_alb = extract_context_from_text(combined)
+                            if c_art or c_alb:
+                                if mgid:
+                                    media_group_context[mgid] = (c_art, c_alb, combined)
+                                nearby_text_context[msg.id] = (c_art, c_alb)
 
-                        if not ctx_artist or not ctx_album:
-                            # Chỉ dò tin nhắn liền kề ngay phía trước (-1, -2), không dò xa và không dò tới trước
-                            for offset in [-1, -2]:
-                                chk_i = m_idx + offset
-                                if 0 <= chk_i < len(messages_to_process):
-                                    chk_m = messages_to_process[chk_i]
-                                    msg_date = getattr(msg, "date", None)
-                                    chk_date = getattr(chk_m, "date", None)
-                                    time_diff = abs((msg_date - chk_date).total_seconds()) if msg_date and chk_date else 0
-                                    if time_diff <= 300 and chk_m.id in nearby_text_context:
-                                        n_art, n_alb = nearby_text_context[chk_m.id]
-                                        if not ctx_artist and n_art: ctx_artist = n_art
-                                        if not ctx_album and n_alb: ctx_album = n_alb
-                                        break
+                    for m_idx, msg in enumerate(valid_msgs):
+                        if self._cancel_requested:
+                            break
+                        try:
+                            media = getattr(msg, "audio", None) or getattr(msg, "document", None)
+                            if not media:
+                                continue
+                            f_name = getattr(media, "file_name", "") or ""
+                            m_type = getattr(media, "mime_type", "") or ""
+                            is_audio = bool(getattr(msg, "audio", None)) or m_type.startswith("audio/") or f_name.lower().endswith(audio_extensions)
+                            if not is_audio:
+                                continue
 
-                        # 3. Phân cấp thông tin rõ ràng: ID3 Tag > File Name > Proximity Context > Fallback
-                        final_artist = default_artist or raw_artist or p_art or ctx_artist or "Unknown Artist"
-                        final_album = default_album or raw_album or p_alb or ctx_album or chat_title or "Telegram Music Collection"
-                        final_title = p_tit or raw_title or os.path.splitext(f_name)[0] or f"Track {msg.id}"
+                            caption_text = getattr(msg, "caption", "") or ""
+                            raw_title = getattr(msg.audio, "title", None) if getattr(msg.audio, None) else None
+                            raw_artist = getattr(msg.audio, "performer", None) if getattr(msg.audio, None) else None
+                            raw_album = getattr(msg.audio, "album", None) if getattr(msg.audio, None) else None
+                            duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg.audio, None) else 0
+                            file_size_bytes = getattr(media, "file_size", 0) or 0
 
-                        # 3.5 Audio Fingerprinting for unknown tracks
-                        fingerprint_cover = None
-                        fingerprint_genre = None
-                        if final_artist == "Unknown Artist" or final_title.lower().startswith("track") or final_title.lower().startswith("audio") or "track" in f_name.lower():
-                            fg_res = await recognize_audio_from_telegram(client, msg, chat_id=resolved_chat_id, msg_id=msg.id)
-                            if fg_res:
-                                final_title = fg_res.get("title") or final_title
-                                final_artist = fg_res.get("artist") or final_artist
-                                final_album = fg_res.get("album") or final_album
-                                fingerprint_cover = fg_res.get("cover_url")
-                                fingerprint_genre = fg_res.get("genre")
+                            if not duration_sec and getattr(msg, "document", None):
+                                for attr in getattr(msg.document, "attributes", []) or []:
+                                    if hasattr(attr, "duration") and attr.duration:
+                                        duration_sec = int(attr.duration)
+                                    if hasattr(attr, "performer") and attr.performer and not raw_artist:
+                                        raw_artist = attr.performer
+                                    if hasattr(attr, "title") and attr.title and not raw_title:
+                                        raw_title = attr.title
 
-                        audio_fmt, q_tier, calc_br = detect_audio_quality(
-                            file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
-                            duration_sec=duration_sec, caption_text=caption_text
-                        )
-                        has_cover = bool(getattr(media, "thumbs", None))
-                        fallback_cover = fingerprint_cover or (f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop")
+                            if not duration_sec and file_size_bytes > 0:
+                                est_kbps = 900 if ("flac" in f_name.lower() or "wav" in f_name.lower()) else 320
+                                duration_sec = max(45, int(file_size_bytes / (est_kbps * 125)))
 
-                        scraped_meta = None
-                        if auto_scrape:
-                            scraped_meta = await fetch_music_metadata(
-                                raw_title=final_title,
-                                raw_artist=final_artist,
-                                raw_album=final_album,
+                            p_art, p_tit, p_alb = parse_artist_and_title(raw_title, raw_artist, raw_album, f_name, caption_text)
+
+                            ctx_artist, ctx_album = "", ""
+                            mgid = getattr(msg, "media_group_id", None)
+                            if mgid and mgid in media_group_context:
+                                ctx_artist, ctx_album, _ = media_group_context[mgid]
+                            
+                            if not ctx_artist and not ctx_album and caption_text:
+                                ctx_artist, ctx_album = extract_context_from_text(caption_text)
+
+                            if not ctx_artist or not ctx_album:
+                                for offset in [-1, -2]:
+                                    chk_i = m_idx + offset
+                                    if 0 <= chk_i < len(valid_msgs):
+                                        chk_m = valid_msgs[chk_i]
+                                        msg_date = getattr(msg, "date", None)
+                                        chk_date = getattr(chk_m, "date", None)
+                                        time_diff = abs((msg_date - chk_date).total_seconds()) if msg_date and chk_date else 0
+                                        if time_diff <= 300 and chk_m.id in nearby_text_context:
+                                            n_art, n_alb = nearby_text_context[chk_m.id]
+                                            if not ctx_artist and n_art: ctx_artist = n_art
+                                            if not ctx_album and n_alb: ctx_album = n_alb
+                                            break
+
+                            final_artist = default_artist or raw_artist or p_art or ctx_artist or "Unknown Artist"
+                            final_album = default_album or raw_album or p_alb or ctx_album or chat_title or "Telegram Music Collection"
+                            final_title = p_tit or raw_title or os.path.splitext(f_name)[0] or f"Track {msg.id}"
+
+                            fingerprint_cover = None
+                            fingerprint_genre = None
+                            if final_artist == "Unknown Artist" or final_title.lower().startswith("track") or final_title.lower().startswith("audio") or "track" in f_name.lower():
+                                fg_res = await recognize_audio_from_telegram(client, msg, chat_id=resolved_chat_id, msg_id=msg.id)
+                                if fg_res:
+                                    final_title = fg_res.get("title") or final_title
+                                    final_artist = fg_res.get("artist") or final_artist
+                                    final_album = fg_res.get("album") or final_album
+                                    fingerprint_cover = fg_res.get("cover_url")
+                                    fingerprint_genre = fg_res.get("genre")
+
+                            audio_fmt, q_tier, calc_br = detect_audio_quality(
+                                file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
+                                duration_sec=duration_sec, caption_text=caption_text
+                            )
+                            has_cover = bool(getattr(media, "thumbs", None))
+                            fallback_cover = fingerprint_cover or (f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop")
+
+                            scraped_meta = None
+                            if auto_scrape:
+                                scraped_meta = await fetch_music_metadata(
+                                    raw_title=final_title,
+                                    raw_artist=final_artist,
+                                    raw_album=final_album,
+                                    file_name=f_name or "",
+                                    caption=caption_text or "",
+                                    default_artist=default_artist or "",
+                                    default_album=default_album or ""
+                                )
+
+                            if scraped_meta:
+                                t_title = scraped_meta.get("title") or final_title
+                                t_artist = scraped_meta.get("artist") or final_artist
+                                t_album = scraped_meta.get("album") or final_album
+                                t_cover = scraped_meta.get("cover_url") or fallback_cover
+                                t_year = scraped_meta.get("year", time.strftime("%Y"))
+                                t_pub = scraped_meta.get("publisher", f"Telegram: {chat_title}")
+                                t_genre = scraped_meta.get("genre") or fingerprint_genre or ""
+                                t_country = scraped_meta.get("country") or ""
+                                t_era = scraped_meta.get("era") or ""
+                            else:
+                                t_title = final_title
+                                t_artist = final_artist
+                                t_album = final_album
+                                t_cover = fallback_cover
+                                t_year = time.strftime("%Y")
+                                t_pub = f"Telegram: {chat_title}"
+                                t_genre = fingerprint_genre or ""
+                                t_country = ""
+                                t_era = ""
+
+                            cls_meta = classify_genre_and_country(
+                                title=t_title,
+                                artist=t_artist,
+                                album=t_album,
+                                raw_genre=t_genre,
                                 file_name=f_name or "",
                                 caption=caption_text or "",
-                                default_artist=default_artist or "",
-                                default_album=default_album or ""
+                                year=t_year
                             )
+                            t_genre = cls_meta["genre"]
+                            t_country = t_country or cls_meta["country"]
+                            t_era = t_era or cls_meta["era"]
 
-                        if scraped_meta:
-                            t_title = scraped_meta.get("title") or final_title
-                            t_artist = scraped_meta.get("artist") or final_artist
-                            t_album = scraped_meta.get("album") or final_album
-                            t_cover = scraped_meta.get("cover_url") or fallback_cover
-                            t_year = scraped_meta.get("year", time.strftime("%Y"))
-                            t_pub = scraped_meta.get("publisher", f"Telegram: {chat_title}")
-                            t_genre = scraped_meta.get("genre") or fingerprint_genre or ""
-                            t_country = scraped_meta.get("country") or ""
-                            t_era = scraped_meta.get("era") or ""
-                        else:
-                            t_title = final_title
-                            t_artist = final_artist
-                            t_album = final_album
-                            t_cover = fallback_cover
-                            t_year = time.strftime("%Y")
-                            t_pub = f"Telegram: {chat_title}"
-                            t_genre = fingerprint_genre or ""
-                            t_country = ""
-                            t_era = ""
+                            self._current_track = f"{t_title} - {t_artist}"
+                            all_scanned_tracks.append({
+                                "msg_id": msg.id,
+                                "chat_id": resolved_chat_id,
+                                "title": t_title.strip(),
+                                "artist": t_artist.strip(),
+                                "album": t_album.strip(),
+                                "duration": _format_duration(duration_sec),
+                                "duration_sec": duration_sec,
+                                "size": _format_size(file_size_bytes),
+                                "size_bytes": file_size_bytes,
+                                "format": audio_fmt,
+                                "qualityTier": q_tier,
+                                "bitrate": calc_br,
+                                "file_name": f_name,
+                                "cover_url": t_cover,
+                                "year": t_year,
+                                "publisher": t_pub,
+                                "genre": t_genre,
+                                "country": t_country,
+                                "era": t_era,
+                                "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
+                            })
+                            self._found_tracks_count = len(all_scanned_tracks)
+                        except Exception:
+                            continue
 
-                        # Chuẩn hóa phân loại đa chiều (Genre, Country, Era)
-                        cls_meta = classify_genre_and_country(
-                            title=t_title,
-                            artist=t_artist,
-                            album=t_album,
-                            raw_genre=t_genre,
-                            file_name=f_name or "",
-                            caption=caption_text or "",
-                            year=t_year
-                        )
-                        t_genre = cls_meta["genre"]
-                        t_country = t_country or cls_meta["country"]
-                        t_era = t_era or cls_meta["era"]
-
-                        self._current_track = f"{t_title} - {t_artist}"
-                        all_scanned_tracks.append({
-                            "msg_id": msg.id,
-                            "chat_id": resolved_chat_id,
-                            "title": t_title.strip(),
-                            "artist": t_artist.strip(),
-                            "album": t_album.strip(),
-                            "duration": _format_duration(duration_sec),
-                            "duration_sec": duration_sec,
-                            "size": _format_size(file_size_bytes),
-                            "size_bytes": file_size_bytes,
-                            "format": audio_fmt,
-                            "qualityTier": q_tier,
-                            "bitrate": calc_br,
-                            "file_name": f_name,
-                            "cover_url": t_cover,
-                            "year": t_year,
-                            "publisher": t_pub,
-                            "genre": t_genre,
-                            "country": t_country,
-                            "era": t_era,
-                            "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
-                        })
-                        self._found_tracks_count = len(all_scanned_tracks)
-                    except Exception:
-                        continue
-
-                # Cập nhật số bài hát của kênh vào DB
-                ch_tracks_total = len([t for t in all_scanned_tracks if str(t.get("chat_id")) == str(resolved_chat_id)])
-                await _db_update_channel_progress(self._current_channel_id, max(highest_seen_id, scan_to), total_tracks=ch_tracks_total)
+                    # Cập nhật số tin nhắn đã quét và checkpoint vào DB
+                    self._processed_messages += len(sub_ids)
+                    checkpoint_to_save = max(highest_seen_id, sub_ids[-1])
+                    ch_tracks_total = len([t for t in all_scanned_tracks if str(t.get("chat_id")) == str(resolved_chat_id)])
+                    await _db_update_channel_progress(self._current_channel_id, checkpoint_to_save, total_tracks=ch_tracks_total)
+                    await asyncio.sleep(0.02)
 
             if self._cancel_requested:
                 self._status = "cancelled"
@@ -3830,26 +3814,23 @@ async def save_custom_lyrics(
 
 @router.get("/api/music/uploader/client-status")
 async def get_uploader_client_status(_: bool = Depends(require_auth)):
-    """Kiểm tra trạng thái User Session và Telegram Bot Client phục vụ upload tốc độ cao"""
-    userbot_connected = bool(botmod.Userbot and getattr(botmod.Userbot, "is_connected", False))
-    stored_session_exists = False
-    
-    try:
-        from Backend.helper.session_auth import get_active_session_string
-        session_str = await get_active_session_string()
-        stored_session_exists = bool(session_str)
-    except Exception:
-        pass
-
+    """Kiểm tra trạng thái các User Sessions và Telegram Bot Client phục vụ upload tốc độ cao"""
+    from Backend.helper.session_auth import get_multi_session_status
+    multi_status = await get_multi_session_status()
+    userbot_connected = bool(botmod.Userbot and getattr(botmod.Userbot, "is_connected", False)) or multi_status["active_sessions"] > 0
+    stored_session_exists = multi_status["total_sessions"] > 0
     bot_connected = bool(getattr(StreamBot, "is_connected", False))
 
     return JSONResponse(content={
         "status": "success",
         "userbot_connected": userbot_connected,
         "stored_session_exists": stored_session_exists,
+        "active_userbot_count": multi_status["active_sessions"],
+        "total_userbot_count": multi_status["total_sessions"],
+        "multi_sessions": multi_status["sessions"],
         "bot_connected": bot_connected,
         "active_mode": "user_session" if userbot_connected or stored_session_exists else "bot",
-        "speed_tier": "⚡ Tối đa (User Session - không giới hạn 2GB/4GB)" if (userbot_connected or stored_session_exists) else "🤖 Tiêu chuẩn (Telegram Bot API)"
+        "speed_tier": f"⚡ Tối đa ({multi_status['active_sessions']} User Sessions hoạt động)" if userbot_connected else "🤖 Tiêu chuẩn (Telegram Bot API)"
     })
 
 

@@ -1701,19 +1701,24 @@ async def session_status_api():
     return await get_session_status()
 
 
-async def session_disconnect_api():
-    return await disconnect_session()
+async def session_disconnect_api(user_id: str = None):
+    return await disconnect_session(user_id=user_id)
 
 
-async def session_reconnect_api():
+async def session_reconnect_api(user_id: str = None):
     try:
-        return await reconnect_session()
+        return await reconnect_session(user_id=user_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def session_remove_api():
-    return await remove_session()
+async def session_remove_api(user_id: str = None):
+    return await remove_session(user_id=user_id)
+
+
+async def get_multi_sessions_api():
+    from Backend.helper.session_auth import get_multi_session_status
+    return await get_multi_session_status()
 
 
 
