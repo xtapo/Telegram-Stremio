@@ -1916,30 +1916,62 @@
             trackContainer.appendChild(frag);
         }
 
+        function getTrackStreamUrl(track) {
+            if (!track) return null;
+            if (track.url) return track.url;
+            if (track.stream_url) return track.stream_url;
+            if (track.previewUrl) return track.previewUrl;
+            if (track.preview_url) return track.preview_url;
+
+            const cid = track.chat_id || track.chatId;
+            const mid = track.msg_id || track.msgId;
+            if (cid && mid) {
+                return `/api/music/stream/${cid}/${mid}`;
+            }
+
+            // Tìm fallback trong rawAlbums theo tên hoặc msgId
+            if (rawAlbums && rawAlbums.length > 0) {
+                const trName = (track.name || track.title || '').trim().toLowerCase();
+                for (const alb of rawAlbums) {
+                    if (alb.tracks) {
+                        const found = alb.tracks.find(t => 
+                            (mid && String(t.msg_id || t.id) === String(mid)) || 
+                            (trName && (t.name || t.title || '').trim().toLowerCase() === trName)
+                        );
+                        if (found) {
+                            return found.url || found.stream_url || found.previewUrl || (found.chat_id && found.msg_id ? `/api/music/stream/${found.chat_id}/${found.msg_id}` : null);
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
         // ─── AUDIO PLAYBACK LOGIC ───
         function playTrack(idx) {
             if (!currentTracklist || !currentTracklist[idx]) return;
             currentPlayingTrackIdx = idx;
             const track = currentTracklist[idx];
-            const url = track.url || track.stream_url || track.previewUrl || (track.chat_id && track.msg_id ? `/api/music/stream/${track.chat_id}/${track.msg_id}` : null);
-            if (!url) return;
+            const url = getTrackStreamUrl(track);
 
             try {
                 audio.pause();
                 audio.currentTime = 0;
             } catch(e) {}
 
-            audio.src = url;
-            audio.load();
+            if (url) {
+                audio.src = url;
+                audio.load();
 
-            const p = audio.play();
-            if (p !== undefined) {
-                p.then(() => {
-                    isPlaying = true;
-                    updatePlayerUI();
-                }).catch(e => {
-                    console.log('Play catch:', e);
-                });
+                const p = audio.play();
+                if (p !== undefined) {
+                    p.then(() => {
+                        isPlaying = true;
+                        updatePlayerUI();
+                    }).catch(e => {
+                        console.log('Play catch:', e);
+                    });
+                }
             }
 
             isPlaying = true;

@@ -2269,14 +2269,27 @@ class XTAPOMusicApp {
 
         // Nếu đang ở chế độ Điều Khiển Từ Xa (Remote Controller target TV / PC khác)
         if (this.remoteTargetDeviceId) {
+            const rawList = (album && album.tracks && album.tracks.length > 0) ? album.tracks : [track];
+            const sanitizedTracks = rawList.map(t => ({
+                id: t.id,
+                msg_id: t.msgId || t.msg_id,
+                chat_id: t.chatId || t.chat_id,
+                name: t.name || t.title,
+                artist: t.artist || (album ? album.artist : 'XTAPO Music'),
+                album: t.album || (album ? album.title : 'Danh sách phát'),
+                duration: t.duration || '03:30',
+                previewUrl: t.previewUrl || (t.chatId && t.msgId ? `/api/music/stream/${t.chatId}/${t.msgId}` : (t.chat_id && t.msg_id ? `/api/music/stream/${t.chat_id}/${t.msg_id}` : null)),
+                coverUrl: this.getTrackCover(t, album)
+            }));
+
             this.sendSyncCommand('PLAY_TRACK', {
                 album_id: album ? album.id : null,
                 album_title: album ? album.title : (track.album || 'Danh sách phát'),
                 album_artist: album ? album.artist : (track.artist || 'XTAPO Music'),
                 album_cover: album ? album.coverUrl : (track.coverUrl || ''),
                 track_index: trackIndex,
-                track: track,
-                tracks: album && album.tracks && album.tracks.length > 0 ? album.tracks : [track],
+                track: sanitizedTracks[trackIndex] || track,
+                tracks: sanitizedTracks,
                 seek_time: 0
             });
             this.isPlaying = true;
@@ -8631,14 +8644,27 @@ class XTAPOMusicApp {
 
         // Gửi lệnh chuyển phát nhạc liền mạch (Seamless Hand-off)
         if (prevTrack) {
+            const rawList = (prevAlbum && prevAlbum.tracks && prevAlbum.tracks.length > 0) ? prevAlbum.tracks : [prevTrack];
+            const sanitizedTracks = rawList.map(t => ({
+                id: t.id,
+                msg_id: t.msgId || t.msg_id,
+                chat_id: t.chatId || t.chat_id,
+                name: t.name || t.title,
+                artist: t.artist || (prevAlbum ? prevAlbum.artist : 'XTAPO Music'),
+                album: t.album || (prevAlbum ? prevAlbum.title : 'Danh sách phát'),
+                duration: t.duration || '03:30',
+                previewUrl: t.previewUrl || (t.chatId && t.msgId ? `/api/music/stream/${t.chatId}/${t.msgId}` : (t.chat_id && t.msg_id ? `/api/music/stream/${t.chat_id}/${t.msg_id}` : null)),
+                coverUrl: this.getTrackCover(t, prevAlbum)
+            }));
+
             this.sendSyncCommand('TRANSFER', {
                 album_id: prevAlbum ? prevAlbum.id : null,
                 album_title: prevAlbum ? prevAlbum.title : (prevTrack.album || 'Danh sách phát'),
                 album_artist: prevAlbum ? prevAlbum.artist : (prevTrack.artist || 'XTAPO Music'),
                 album_cover: prevAlbum ? prevAlbum.coverUrl : (prevTrack.coverUrl || ''),
                 track_index: this.currentTrackIndex,
-                track: prevTrack,
-                tracks: prevAlbum && prevAlbum.tracks && prevAlbum.tracks.length > 0 ? prevAlbum.tracks : [prevTrack],
+                track: sanitizedTracks[this.currentTrackIndex] || prevTrack,
+                tracks: sanitizedTracks,
                 seek_time: prevTime,
                 is_playing: prevPlaying
             }, targetDeviceId);
