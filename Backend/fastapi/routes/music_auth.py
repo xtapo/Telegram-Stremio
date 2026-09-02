@@ -393,12 +393,51 @@ async def get_music_profile(request: Request):
 
 # ── USER DATA API (FAVORITES & PLAYLISTS) ──
 
+def _dedup_tracks(tracks: list) -> list:
+    if not tracks or not isinstance(tracks, list):
+        return []
+    seen = set()
+    deduped = []
+    for t in tracks:
+        if not isinstance(t, dict):
+            continue
+        cid = str(t.get("chat_id") or t.get("chatId") or "")
+        mid = str(t.get("msg_id") or t.get("msgId") or "")
+        name = (t.get("name") or t.get("title") or "").strip().lower()
+        artist = (t.get("artist") or "").strip().lower()
+        key = f"{cid}_{mid}" if (cid and mid) else f"{name}_{artist}"
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(t)
+    return deduped
+
+def _dedup_favorites(favs: list) -> list:
+    if not favs or not isinstance(favs, list):
+        return []
+    seen = set()
+    deduped = []
+    for f in favs:
+        if not isinstance(f, dict):
+            continue
+        cid = str(f.get("chat_id") or f.get("chatId") or "")
+        mid = str(f.get("msg_id") or f.get("msgId") or "")
+        title = (f.get("title") or f.get("name") or "").strip().lower()
+        artist = (f.get("artist") or "").strip().lower()
+        key = f"{cid}_{mid}" if (cid and mid) else f"{title}_{artist}"
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(f)
+    return deduped
+
 @auth_router.get("/api/music/user/favorites")
 async def get_user_favorites(user_id: str = Depends(require_music_auth)):
     try:
         coll = db.dbs["tracking"]["music_user_data"]
         doc = await coll.find_one({"_id": user_id})
-        favorites = doc.get("favorites", []) if doc else []
+        raw_favs = doc.get("favorites", []) if doc else []
+        favorites = _dedup_favorites(raw_favs)
+        if len(favorites) != len(raw_favs) and doc:
+            await coll.update_one({"_id": user_id}, {"$set": {"favorites": favorites}})
         return {"status": "success", "favorites": favorites}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -407,8 +446,10 @@ async def get_user_favorites(user_id: str = Depends(require_music_auth)):
 async def toggle_user_favorite(payload: dict, user_id: str = Depends(require_music_auth)):
     chat_id = payload.get("chat_id")
     msg_id = payload.get("msg_id")
-    if chat_id is None or msg_id is None:
-        return JSONResponse(status_code=400, content={"status": "error", "message": "Thiếu chat_id hoặc msg_id"})
+    track_name = (payload.get("name") or payload.get("title") or "").strip()
+    
+    if chat_id is None and msg_id is None and not track_name:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Thiếu thông tin bài hát"})
         
     try:
         coll = db.dbs["tracking"]["music_user_data"]
@@ -417,22 +458,35 @@ async def toggle_user_favorite(payload: dict, user_id: str = Depends(require_mus
             await coll.insert_one({"_id": user_id, "favorites": [], "playlists": [], "history": [], "settings": {}})
             doc = {"favorites": []}
             
-        favorites = doc.get("favorites", [])
-        target = next((f for f in favorites if str(f.get("chat_id")) == str(chat_id) and str(f.get("msg_id")) == str(msg_id)), None)
+        favorites = _dedup_favorites(doc.get("favorites", []))
+        
+        # Check if already in favorites
+        def matches(f):
+            fcid = str(f.get("chat_id") or f.get("chatId") or "")
+            fmid = str(f.get("msg_id") or f.get("msgId") or "")
+            ftitle = (f.get("title") or f.get("name") or "").strip().lower()
+            if chat_id is not None and msg_id is not None and fcid == str(chat_id) and fmid == str(msg_id):
+                return True
+            if msg_id is not None and fmid == str(msg_id) and fmid:
+                return True
+            if track_name and ftitle == track_name.lower():
+                return True
+            return False
+
+        target = next((f for f in favorites if matches(f)), None)
         
         is_favorite = False
         if target:
-            favorites = [f for f in favorites if not (str(f.get("chat_id")) == str(chat_id) and str(f.get("msg_id")) == str(msg_id))]
+            favorites = [f for f in favorites if not matches(f)]
         else:
-            cid = int(chat_id) if str(chat_id).lstrip('-').isdigit() else str(chat_id)
-            mid = int(msg_id) if str(msg_id).lstrip('-').isdigit() else str(msg_id)
-            track_name = payload.get("name") or payload.get("title") or ""
+            cid = int(chat_id) if str(chat_id).lstrip('-').isdigit() else str(chat_id) if chat_id else ""
+            mid = int(msg_id) if str(msg_id).lstrip('-').isdigit() else str(msg_id) if msg_id else ""
             artist = payload.get("artist") or ""
             cover_url = payload.get("cover_url") or payload.get("coverUrl") or ""
             favorites.append({
                 "chat_id": cid,
                 "msg_id": mid,
-                "title": track_name,
+                "title": track_name or (f"Bài #{mid}" if mid else "Bài hát"),
                 "artist": artist,
                 "cover_url": cover_url,
                 "added_at": time.time()
@@ -450,6 +504,18 @@ async def get_user_playlists(user_id: str = Depends(require_music_auth)):
         coll = db.dbs["tracking"]["music_user_data"]
         doc = await coll.find_one({"_id": user_id})
         playlists = doc.get("playlists", []) if doc else []
+        
+        # Auto-dedup tracks inside each playlist
+        changed = False
+        for p in playlists:
+            raw_tr = p.get("tracks", [])
+            deduped_tr = _dedup_tracks(raw_tr)
+            if len(deduped_tr) != len(raw_tr):
+                p["tracks"] = deduped_tr
+                changed = True
+        if changed and doc:
+            await coll.update_one({"_id": user_id}, {"$set": {"playlists": playlists}})
+            
         return {"status": "success", "playlists": playlists}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -457,6 +523,7 @@ async def get_user_playlists(user_id: str = Depends(require_music_auth)):
 @auth_router.post("/api/music/user/playlists")
 async def create_user_playlist(payload: dict, user_id: str = Depends(require_music_auth)):
     name = payload.get("name", "").strip()
+    raw_tracks = payload.get("tracks", [])
     if not name:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Vui lòng cung cấp tên Playlist."})
         
@@ -472,7 +539,7 @@ async def create_user_playlist(payload: dict, user_id: str = Depends(require_mus
         new_playlist = {
             "id": f"pl_{secrets.token_hex(8)}",
             "name": name,
-            "tracks": [],
+            "tracks": _dedup_tracks(raw_tracks),
             "created_at": time.time()
         }
         playlists.append(new_playlist)
@@ -497,7 +564,7 @@ async def update_user_playlist(playlist_id: str, payload: dict, user_id: str = D
             return JSONResponse(status_code=404, content={"status": "error", "message": "Không tìm thấy playlist."})
             
         if tracks is not None:
-            target["tracks"] = tracks
+            target["tracks"] = _dedup_tracks(tracks)
         if name is not None:
             target["name"] = name.strip()
             
