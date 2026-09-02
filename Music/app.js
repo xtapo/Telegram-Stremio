@@ -4432,7 +4432,34 @@ class XTAPOMusicApp {
             `;
 
             el.addEventListener('click', () => {
-                this.loadAlbum(item.albumIdx, item.trackIdx, true);
+                // 1. Reset any active virtual queues
+                this.activeGenre = null;
+                this.activeCountry = null;
+                this.activeArtist = null;
+                this.activePlaylistId = null;
+
+                // 2. Reset albums array to clean base catalog
+                this.albums = this.getBaseAlbums();
+
+                // 3. Find exact album index in clean albums
+                let realAlbumIdx = this.albums.findIndex(a => (a.id && a.id === item.album.id) || (a.title === item.album.title && a.artist === item.album.artist));
+                if (realAlbumIdx === -1) {
+                    realAlbumIdx = item.albumIdx < this.albums.length ? item.albumIdx : 0;
+                }
+
+                // 4. Find exact track index in that album
+                const targetAlbum = this.albums[realAlbumIdx];
+                let targetTrackIdx = -1;
+                if (targetAlbum && targetAlbum.tracks) {
+                    targetTrackIdx = targetAlbum.tracks.findIndex(t => (item.track.msgId && t.msgId === item.track.msgId) || (item.track.chatId && t.chatId === item.track.chatId && t.msgId === item.track.msgId) || t.name === item.track.name);
+                }
+                if (targetTrackIdx === -1) {
+                    targetTrackIdx = item.trackIdx || 0;
+                }
+
+                // 5. Load and play the exact album and track
+                this.loadAlbum(realAlbumIdx, targetTrackIdx, true);
+                this.renderAlbumGrid();
                 this.closeModal(this.searchModal);
                 this.showToast(`Đang phát: ${item.track.name}`);
             });
