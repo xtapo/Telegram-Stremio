@@ -58,43 +58,27 @@ def _find_7z_binary() -> Optional[str]:
 def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:
     """
     Hàm giải nén đồng bộ (chạy trong worker thread):
-    Ưu tiên zipfile chuẩn cho file .zip, sau đó đến 7z, UnRAR, py7zr và tarfile.
+    Thử lần lượt tất cả các công cụ 7-Zip, WinRAR, UnRAR, Python zip/7z/tar.
+    Trả về (success, error_or_success_message).
     """
     import subprocess
     os.makedirs(extract_dir, exist_ok=True)
     ext = os.path.splitext(archive_path)[1].lower()
 
-    # 1. Định dạng ZIP (.zip): Ưu tiên hàng đầu dùng ZipFile tích hợp sẵn của Python (nhanh, nhẹ, không tốn RAM)
-    if ext == ".zip":
-        try:
-            with zipfile.ZipFile(archive_path, 'r') as zf:
-                zf.extractall(extract_dir)
-            return True, "Đã giải nén thành công bằng Python ZipFile"
-        except Exception as e:
-            LOGGER.debug(f"ZipFile extraction note: {e}")
-
-    # 2. Định dạng TAR (.tar, .tar.gz, .tgz, .bz2, .xz)
-    if ext in (".tar", ".tar.gz", ".tgz", ".bz2", ".xz"):
-        try:
-            with tarfile.open(archive_path, 'r:*') as tf:
-                tf.extractall(extract_dir)
-            return True, "Đã giải nén thành công bằng Python TarFile"
-        except Exception as e:
-            LOGGER.debug(f"TarFile note: {e}")
-
     archiver_candidates = []
     for p in [
-        "/usr/bin/7z",
-        "/usr/bin/7za",
-        shutil.which("7z"),
-        shutil.which("7za"),
-        "/usr/bin/unrar",
-        "/usr/bin/unrar-free",
-        shutil.which("unrar"),
-        shutil.which("unrar-free"),
         r"C:\Program Files\7-Zip\7z.exe",
         r"C:\Program Files (x86)\7-Zip\7z.exe",
+        shutil.which("7z"),
+        shutil.which("7za"),
         r"C:\Windows\system32\7z.EXE",
+        "/usr/bin/7z",
+        "/usr/bin/7za",
+        "/usr/local/bin/7z",
+        shutil.which("unrar"),
+        shutil.which("unrar-free"),
+        "/usr/bin/unrar",
+        "/usr/bin/unrar-free",
         r"C:\Program Files\WinRAR\WinRAR.exe",
         r"C:\Program Files\WinRAR\UnRAR.exe",
         r"C:\Program Files (x86)\WinRAR\UnRAR.exe",
@@ -103,8 +87,20 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         if p and os.path.exists(p) and p not in archiver_candidates:
             archiver_candidates.append(p)
 
+    # Nếu đang chạy trong Linux/Docker mà chưa cài 7z, tự động cài đặt ngầm p7zip-full
+    if os.name != "nt" and not archiver_candidates and shutil.which("apt-get"):
+        try:
+            LOGGER.info("[AUTO INSTALL] Linux archiver not found in Docker. Installing p7zip-full...")
+            subprocess.run(["apt-get", "update", "-qq"], timeout=60)
+            subprocess.run(["apt-get", "install", "-y", "-qq", "--no-install-recommends", "p7zip-full", "unrar-free"], timeout=120)
+            for p in ["/usr/bin/7z", "/usr/bin/7za", "/usr/bin/unrar", "/usr/bin/unrar-free"]:
+                if os.path.exists(p) and p not in archiver_candidates:
+                    archiver_candidates.append(p)
+        except Exception as e:
+            LOGGER.warning(f"[AUTO INSTALL ERROR] {e}")
+
     last_error = ""
-    # 3. Thử công cụ CLI (7z / UnRAR) cho RAR & 7Z
+    # 1. Thử tất cả các công cụ CLI đã tìm thấy
     for archiver in archiver_candidates:
         try:
             is_winrar = "winrar" in archiver.lower() or "unrar" in archiver.lower()
@@ -113,17 +109,29 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
             else:
                 cmd = [archiver, "x", "-y", f"-o{extract_dir}", archive_path]
 
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             if res.returncode == 0:
                 LOGGER.info(f"[EXTRACT SUCCESS] Extracted with {os.path.basename(archiver)}: {archive_path}")
                 return True, f"Đã giải nén thành công bằng {os.path.basename(archiver)}"
             else:
                 err_text = (res.stderr or res.stdout or "").strip()
-                last_error = f"{os.path.basename(archiver)} exit {res.returncode}"
+                err_lines = [
+                    l.strip() for l in err_text.splitlines() 
+                    if l.strip() and not l.startswith("7-Zip") 
+                    and not l.startswith("Scanning") 
+                    and not l.startswith("Path =") 
+                    and not l.startswith("Type =") 
+                    and not l.startswith("Physical Size")
+                    and not l.startswith("Everything is Ok")
+                ]
+                err_detail = " | ".join(err_lines[:2]) if err_lines else f"Exit code {res.returncode}"
+                last_error = f"{os.path.basename(archiver)}: {err_detail}"
+                LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_text}")
         except Exception as e:
             last_error = f"{os.path.basename(archiver)}: {e}"
+            LOGGER.warning(f"[EXTRACT CLI ERROR] {e}")
 
-    # 4. Thử thư viện Python rarfile cho file .rar
+    # 2. Thử thư viện Python rarfile cho file .rar
     if ext == ".rar":
         try:
             import rarfile
@@ -138,7 +146,16 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         except Exception as e:
             if not last_error: last_error = f"rarfile: {e}"
 
-    # 5. Python py7zr (.7z)
+    # 3. Python zipfile (.zip)
+    if ext == ".zip":
+        try:
+            with zipfile.ZipFile(archive_path, 'r') as zf:
+                zf.extractall(extract_dir)
+            return True, "Đã giải nén thành công bằng Python ZipFile"
+        except Exception as e:
+            if not last_error: last_error = f"ZipFile: {e}"
+
+    # 4. Python py7zr (.7z)
     if ext == ".7z":
         try:
             import py7zr
@@ -147,6 +164,15 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
             return True, "Đã giải nén thành công bằng py7zr"
         except Exception as e:
             if not last_error: last_error = f"py7zr: {e}"
+
+    # 5. Python tarfile (.tar, .tar.gz, .tgz, .bz2, .xz)
+    if ext in (".tar", ".tar.gz", ".tgz", ".bz2", ".xz"):
+        try:
+            with tarfile.open(archive_path, 'r:*') as tf:
+                tf.extractall(extract_dir)
+            return True, "Đã giải nén thành công bằng Python TarFile"
+        except Exception as e:
+            if not last_error: last_error = f"TarFile: {e}"
 
     return False, last_error or f"Không có công cụ nào giải nén được file {ext} này hoặc file bị hỏng / có mật khẩu."
 
@@ -632,13 +658,11 @@ class GoogleDriveUploadManager:
                 last_dl_bytes = 0
 
                 with open(cache_path, "wb") as f_out:
-                    async for chunk in stream_resp.aiter_bytes(chunk_size=512 * 1024):
+                    async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
                         if self._cancel_requested:
                             return None
                         f_out.write(chunk)
                         self._download_bytes += len(chunk)
-                        # Nhường CPU cho Event Loop để máy chủ không bị freeze/lag dẫn đến restart
-                        await asyncio.sleep(0)
 
                         now = time.time()
                         if now - last_update >= 0.5:
@@ -672,7 +696,11 @@ class GoogleDriveUploadManager:
 
                 self._download_percent = 100
                 self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize / (1024 * 1024), 2)} MB)", "success")
-                return cache_path
+                try:
+                    shutil.copy2(cache_path, out_path)
+                    return out_path
+                except Exception:
+                    return cache_path
 
     async def _download_direct_url(self, url: str, work_dir: str) -> Optional[str]:
         """Tải file từ link HTTP/HTTPS trực tiếp với bộ nhớ đệm"""
@@ -689,7 +717,12 @@ class GoogleDriveUploadManager:
                         cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
                         self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua tải trực tiếp!", "success")
                         self._download_percent = 100
-                        return c_path
+                        out_path = os.path.join(work_dir, cached_fn)
+                        try:
+                            shutil.copy2(c_path, out_path)
+                            return out_path
+                        except Exception:
+                            return c_path
         except Exception:
             pass
 
@@ -716,34 +749,35 @@ class GoogleDriveUploadManager:
                     self._log(f"Bắt đầu tải trực tiếp: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
 
                     cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}_{final_filename}")
+                    out_path = os.path.join(work_dir, final_filename)
                     start_dl = time.time()
                     last_update = 0
-                    last_dl_bytes = 0
 
                     with open(cache_path, "wb") as f_out:
-                        async for chunk in stream_resp.aiter_bytes(chunk_size=512 * 1024):
+                        async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
                             if self._cancel_requested:
                                 return None
                             f_out.write(chunk)
                             self._download_bytes += len(chunk)
-                            await asyncio.sleep(0)
 
                             now = time.time()
-                            if now - last_update >= 0.5:
-                                delta_t = now - last_update if last_update > 0 else (now - start_dl)
-                                delta_b = self._download_bytes - last_dl_bytes if last_update > 0 else self._download_bytes
+                            if now - last_update > 0.5:
                                 last_update = now
-                                last_dl_bytes = self._download_bytes
                                 if total_bytes > 0:
                                     self._download_percent = min(100, int((self._download_bytes / total_bytes) * 100))
-                                if delta_t > 0 and delta_b >= 0:
-                                    mbps = (delta_b / (1024 * 1024)) / delta_t
+                                elapsed_dl = now - start_dl
+                                if elapsed_dl > 0:
+                                    mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
                                     self._speed_str = f"{mbps:.2f} MB/s"
 
                     self._download_percent = 100
                     dl_sz = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
                     self._log(f"✅ Tải thành công: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)", "success")
-                    return cache_path
+                    try:
+                        shutil.copy2(cache_path, out_path)
+                        return out_path
+                    except Exception:
+                        return cache_path
         except Exception as e:
             self._log(f"Lỗi khi tải trực tiếp: {e}", "error")
             return None
@@ -1039,13 +1073,6 @@ class GoogleDriveUploadManager:
                 except Exception:
                     pass
 
-                # Thu hồi RAM chủ động sau mỗi album để tránh OOM Killer
-                try:
-                    import gc
-                    gc.collect()
-                except Exception:
-                    pass
-
             self._status = "completed"
             self._stage = f"Hoàn tất upload toàn bộ {len(self._uploaded_tracks)} bài hát!"
             self._end_time = time.time()
@@ -1069,12 +1096,18 @@ class GoogleDriveUploadManager:
             except Exception:
                 pass
 
-            # 2. Thu hồi RAM
-            try:
-                import gc
-                gc.collect()
-            except Exception:
-                pass
+            # 2. Nếu đã hoàn tất upload thành công 100%, xóa file nén gốc trong Cache để giải phóng dung lượng
+            if self._status == "completed":
+                try:
+                    if os.path.exists(CACHE_DOWNLOAD_DIR):
+                        for fname in os.listdir(CACHE_DOWNLOAD_DIR):
+                            if fname.startswith(f"{resource_id}_"):
+                                c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                                if os.path.isfile(c_file):
+                                    os.remove(c_file)
+                                    LOGGER.info(f"[CLEANUP] Đã giải phóng file nén trong bộ nhớ đệm: {fname}")
+                except Exception:
+                    pass
 
             # 3. Quét dọn rác tự động các thư mục tạm cũ
             try:
