@@ -3,7 +3,7 @@
    High-Fidelity Vinyl Disc & Hi-Res Player Interface
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* @import removed — fonts already loaded via <link> in HTML to avoid double-fetch */
 
 /* --- CSS Variables & Design System Tokens --- */
 :root {
@@ -963,11 +963,14 @@ html, body {
     top: 0;
     left: 0;
     height: 100%;
-    width: 0%;
+    width: 100%;
     background: linear-gradient(to right, var(--accent-gold), #ffd875);
     border-radius: var(--radius-full);
     box-shadow: 0 0 8px rgba(252, 191, 71, 0.5);
     pointer-events: none;
+    transform-origin: left center;
+    transform: scaleX(0);
+    will-change: transform;
 }
 
 .progress-bar-thumb {
@@ -983,6 +986,7 @@ html, body {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
     transition: transform var(--transition-fast);
     pointer-events: none;
+    will-change: left;
 }
 
 .progress-bar-track:hover .progress-bar-thumb {
@@ -7101,8 +7105,320 @@ body.tv-lite .tv-focused {
 }
 
 
+/* ==========================================================================
+   MOBILE PERFORMANCE OPTIMIZATION
+   Giảm tải GPU, loại bỏ hiệu ứng nặng trên thiết bị di động
+   Desktop giữ nguyên toàn bộ hiệu ứng glass/blur/shadow
+   ========================================================================== */
 
+/* --- Performance hints cho mọi viewport --- */
+.track-item {
+    contain: layout style;
+}
 
+.modal-overlay {
+    contain: layout;
+}
 
+.tracklist {
+    contain: content;
+    overscroll-behavior: contain;
+}
 
+/* --- Tablet: giảm nhẹ hiệu ứng --- */
+@media (max-width: 1024px) {
+    .backdrop-glow {
+        opacity: 0.15;
+    }
 
+    .backdrop-art {
+        filter: blur(35px) saturate(1.3) brightness(0.4);
+    }
+
+    .backdrop-overlay {
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+}
+
+/* --- Mobile: tối ưu hiệu năng toàn diện --- */
+@media (max-width: 768px) {
+    /* Giảm smooth scroll → nhanh hơn khi cuộn danh sách dài */
+    html {
+        scroll-behavior: auto;
+    }
+
+    /* Dynamic Backdrop — giảm mạnh blur + glow */
+    .backdrop-art {
+        filter: blur(20px) saturate(1.2) brightness(0.35);
+    }
+
+    .backdrop-glow {
+        display: none;
+    }
+
+    .backdrop-overlay {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: radial-gradient(circle at 65% 35%, rgba(10, 12, 16, 0.5) 0%, rgba(7, 8, 11, 0.85) 65%, #050608 100%);
+    }
+
+    /* Top Nav — solid background thay vì glass */
+    .top-nav {
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        background: rgba(10, 11, 14, 0.88);
+    }
+
+    /* Tracklist Container — solid background, loại bỏ backdrop-filter */
+    .tracklist-container {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(18, 20, 26, 0.92);
+    }
+
+    /* Player Bar — giảm blur */
+    .kmusic-player-bar {
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        background: rgba(13, 14, 20, 0.97);
+    }
+
+    /* Vinyl Disc — giảm box-shadow từ 5 layers xuống 2 */
+    .vinyl-disc {
+        box-shadow:
+            0 10px 30px rgba(0, 0, 0, 0.85),
+            inset 0 0 10px rgba(0, 0, 0, 0.9);
+    }
+
+    /* Vinyl Reflection — giảm phức tạp */
+    .vinyl-reflection {
+        opacity: 0.5;
+    }
+
+    /* Album Sleeve — giảm box-shadow */
+    .album-sleeve {
+        box-shadow: -8px 10px 25px rgba(0, 0, 0, 0.6);
+    }
+
+    .album-sleeve:hover {
+        box-shadow: -8px 10px 25px rgba(0, 0, 0, 0.6);
+        transform: none;
+    }
+
+    .album-sleeve:hover .cover-image {
+        transform: none;
+    }
+
+    /* Track Item — loại bỏ hover transform (gây jank khi scroll) */
+    .track-item:hover {
+        transform: none;
+    }
+
+    .track-item {
+        transition: background var(--transition-fast);
+    }
+
+    /* Modal Overlay — solid background thay vì backdrop-filter */
+    .modal-overlay {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(0, 0, 0, 0.85);
+    }
+
+    /* Modal Card — giảm animation scale cho mượt hơn */
+    .modal-card {
+        transform: translateY(10px);
+    }
+
+    .modal-overlay.open .modal-card {
+        transform: translateY(0);
+    }
+
+    /* Telegram Modal Card — loại bỏ backdrop-filter */
+    .tg-modal-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(18, 18, 26, 0.98);
+    }
+
+    /* Auth Modal, Profile Modal — loại bỏ backdrop-filter */
+    .auth-modal-container,
+    .user-profile-modal-container {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Search Card — loại bỏ backdrop-filter */
+    .search-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Tracklist Modal Card — solid background */
+    .tracklist-modal-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Mobile Menu Drawer Panel — solid background */
+    .mobile-menu-panel {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Slide Drawer — loại bỏ backdrop-filter */
+    .drawer-panel {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Nav Button — loại bỏ backdrop-filter */
+    .nav-btn {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(26, 29, 38, 0.9);
+    }
+
+    /* Progress bar — sử dụng GPU compositing */
+    .progress-bar-fill {
+        box-shadow: none;
+    }
+
+    /* Loại bỏ glow shadow nặng cho các nút */
+    .pulse-dot {
+        box-shadow: none;
+    }
+
+    /* Toast notifications — solid background */
+    .toast {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Country detail buttons — loại bỏ backdrop-filter */
+    #btnBackToCountryList,
+    #btnBackToArtistList {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(0, 0, 0, 0.7);
+    }
+
+    /* Scrollable containers — touch optimization */
+    .tracklist,
+    .album-grid,
+    .artist-grid,
+    .genre-grid,
+    .playlist-list-container,
+    .drawer-file-list,
+    .modal-card,
+    .tracklist-modal-body,
+    .lyrics-editor-body {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+    }
+
+    /* Equalizer Modal — giảm hiệu ứng */
+    .equalizer-modal-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Karaoke/Lyrics Modal — giảm backdrop blur */
+    .karaoke-backdrop {
+        filter: blur(20px) brightness(0.3);
+    }
+
+    .karaoke-backdrop-overlay {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Download Modal — solid background */
+    .download-modal-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Sleep Timer Modal — solid background */
+    .sleep-timer-modal-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Giảm animation modalPopIn — translateY thay vì scale */
+    @keyframes modalPopIn {
+        from {
+            transform: translateY(12px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+}
+
+/* --- Ultra-small phones: aggressive optimization --- */
+@media (max-width: 480px) {
+    /* Backdrop — gần như tắt hoàn toàn */
+    .backdrop-art {
+        filter: blur(15px) saturate(1) brightness(0.3);
+    }
+
+    /* Vinyl grooves — giảm phức tạp gradient */
+    .vinyl-grooves {
+        opacity: 0.6;
+    }
+
+    /* Vinyl center label — giảm box-shadow */
+    .vinyl-center-label {
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+        outline: 1px solid rgba(252, 191, 71, 0.3);
+    }
+
+    /* Progress bar fill — no glow */
+    .progress-bar-fill {
+        background: var(--accent-gold);
+        box-shadow: none;
+    }
+
+    /* Buttons — minimal hover effects */
+    .mobile-quick-tracklist-btn:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Tối ưu transition — giảm duration */
+    .track-item {
+        transition: background 0.1s ease;
+    }
+
+    .nav-link {
+        transition: color 0.1s ease;
+    }
+
+    /* Loại bỏ active glow effects */
+    .nav-link.active::after {
+        box-shadow: none;
+    }
+}
+
+/* --- Reduce motion cho người dùng cần accessibility --- */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .vinyl-disc {
+        animation: none !important;
+    }
+
+    .backdrop-art {
+        transition: none;
+    }
+}

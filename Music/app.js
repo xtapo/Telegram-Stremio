@@ -2954,26 +2954,33 @@ class XTAPOMusicApp {
 
     // --- Audio Events ---
     setupAudioEvents() {
+        // rAF-throttled timeupdate: prevents rendering more frames than display can show
+        let _rafPending = false;
         this.audio.addEventListener('timeupdate', () => {
             if (this.synthesizerActive) return;
-            if (this.audio.duration && !isNaN(this.audio.duration)) {
-                const percent = (this.audio.currentTime / this.audio.duration) * 100;
-                this.updateProgress(percent);
-                this.timeCurrent.textContent = this.formatTime(this.audio.currentTime);
-                this.syncLyricsTime(this.audio.currentTime);
+            if (_rafPending) return;
+            _rafPending = true;
+            requestAnimationFrame(() => {
+                _rafPending = false;
+                if (this.audio.duration && !isNaN(this.audio.duration)) {
+                    const percent = (this.audio.currentTime / this.audio.duration) * 100;
+                    this.updateProgress(percent);
+                    this.timeCurrent.textContent = this.formatTime(this.audio.currentTime);
+                    this.syncLyricsTime(this.audio.currentTime);
 
-                if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
-                    try {
-                        navigator.mediaSession.setPositionState({
-                            duration: this.audio.duration,
-                            playbackRate: this.audio.playbackRate || 1,
-                            position: Math.min(this.audio.currentTime, this.audio.duration)
+                    if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+                        try {
+                            navigator.mediaSession.setPositionState({
+                                duration: this.audio.duration,
+                                playbackRate: this.audio.playbackRate || 1,
+                                position: Math.min(this.audio.currentTime, this.audio.duration)
                         });
                     } catch (e) {}
                 }
 
                 this.throttledSavePlayerState();
-            }
+                }
+            });
         });
 
         this.audio.addEventListener('loadedmetadata', () => {
@@ -3055,7 +3062,8 @@ class XTAPOMusicApp {
     }
 
     updateProgress(percent) {
-        this.progressFill.style.width = `${percent}%`;
+        const fraction = percent / 100;
+        this.progressFill.style.transform = `scaleX(${fraction})`;
         this.progressThumb.style.left = `${percent}%`;
     }
 
