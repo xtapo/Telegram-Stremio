@@ -1679,24 +1679,26 @@ class MusicScanManager:
                         if self._cancel_requested:
                             break
                         try:
-                            media = getattr(msg, "audio", None) or getattr(msg, "document", None)
+                            audio_obj = getattr(msg, "audio", None)
+                            doc_obj = getattr(msg, "document", None)
+                            media = audio_obj or doc_obj
                             if not media:
                                 continue
                             f_name = getattr(media, "file_name", "") or ""
                             m_type = getattr(media, "mime_type", "") or ""
-                            is_audio = bool(getattr(msg, "audio", None)) or m_type.startswith("audio/") or f_name.lower().endswith(audio_extensions)
+                            is_audio = bool(audio_obj) or m_type.startswith("audio/") or f_name.lower().endswith(audio_extensions)
                             if not is_audio:
                                 continue
 
                             caption_text = getattr(msg, "caption", "") or ""
-                            raw_title = getattr(msg.audio, "title", None) if getattr(msg.audio, None) else None
-                            raw_artist = getattr(msg.audio, "performer", None) if getattr(msg.audio, None) else None
-                            raw_album = getattr(msg.audio, "album", None) if getattr(msg.audio, None) else None
-                            duration_sec = getattr(msg.audio, "duration", 0) if getattr(msg.audio, None) else 0
+                            raw_title = getattr(audio_obj, "title", None) if audio_obj else None
+                            raw_artist = getattr(audio_obj, "performer", None) if audio_obj else None
+                            raw_album = getattr(audio_obj, "album", None) if audio_obj else None
+                            duration_sec = getattr(audio_obj, "duration", 0) if audio_obj else 0
                             file_size_bytes = getattr(media, "file_size", 0) or 0
 
-                            if not duration_sec and getattr(msg, "document", None):
-                                for attr in getattr(msg.document, "attributes", []) or []:
+                            if not duration_sec and doc_obj:
+                                for attr in getattr(doc_obj, "attributes", []) or []:
                                     if hasattr(attr, "duration") and attr.duration:
                                         duration_sec = int(attr.duration)
                                     if hasattr(attr, "performer") and attr.performer and not raw_artist:
