@@ -385,6 +385,25 @@ class XTAPOMusicApp {
         this.userAvatarImg = document.getElementById('userAvatarImg');
         this.userDisplayName = document.getElementById('userDisplayName');
         
+        // User Profile Modal Elements
+        this.userProfileModal = document.getElementById('userProfileModal');
+        this.closeProfileModal = document.getElementById('closeProfileModal');
+        this.profileCardAvatar = document.getElementById('profileCardAvatar');
+        this.profileDisplayName = document.getElementById('profileDisplayName');
+        this.profileUsernameTag = document.getElementById('profileUsernameTag');
+        this.profileMemberBadge = document.getElementById('profileMemberBadge');
+        this.profileAuthTypeBadge = document.getElementById('profileAuthTypeBadge');
+        this.profileFavCount = document.getElementById('profileFavCount');
+        this.profilePlaylistCount = document.getElementById('profilePlaylistCount');
+        this.profileDeviceName = document.getElementById('profileDeviceName');
+        this.profileStatFavBtn = document.getElementById('profileStatFavBtn');
+        this.profileStatPlaylistBtn = document.getElementById('profileStatPlaylistBtn');
+        this.profileStatDeviceBtn = document.getElementById('profileStatDeviceBtn');
+        this.profileMenuEqBtn = document.getElementById('profileMenuEqBtn');
+        this.profileMenuDeviceBtn = document.getElementById('profileMenuDeviceBtn');
+        this.profileMenuSleepBtn = document.getElementById('profileMenuSleepBtn');
+        this.profileLogoutBtn = document.getElementById('profileLogoutBtn');
+
         this.authModal = document.getElementById('authModal');
         this.closeAuthModal = document.getElementById('closeAuthModal');
         this.tabQrLogin = document.getElementById('tabQrLogin');
@@ -886,18 +905,66 @@ class XTAPOMusicApp {
 
     openAuthModal() {
         if (this.currentUser) {
-            if (confirm("Bạn có muốn đăng xuất không?")) {
-                this.logoutUser();
-            }
+            this.openUserProfileModal();
         } else {
             if (this.authModal) {
-                this.authModal.classList.add('open');
+                this.openModal(this.authModal);
                 this.switchAuthTab('phone');
                 this.stopQrPolling();
                 if (this.tgPhoneInput) {
                     setTimeout(() => this.tgPhoneInput.focus(), 150);
                 }
             }
+        }
+    }
+
+    openUserProfileModal() {
+        if (!this.currentUser) {
+            this.openAuthModal();
+            return;
+        }
+        this.updateUserProfileModalUI();
+        if (this.userProfileModal) {
+            this.openModal(this.userProfileModal);
+        }
+    }
+
+    updateUserProfileModalUI() {
+        if (!this.currentUser) return;
+        const u = this.currentUser;
+        const name = u.display_name || u.username || 'Người dùng';
+        const username = u.username ? (u.username.startsWith('@') ? u.username : `@${u.username}`) : `ID: ${u.id || u._id || 'N/A'}`;
+        const avatar = u.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Guest';
+
+        if (this.profileCardAvatar) this.profileCardAvatar.src = avatar;
+        if (this.profileDisplayName) this.profileDisplayName.textContent = name;
+        if (this.profileUsernameTag) this.profileUsernameTag.textContent = username;
+
+        if (this.profileMemberBadge) {
+            if (u.is_channel_member !== false) {
+                this.profileMemberBadge.textContent = '👑 Thành Viên Kênh';
+                this.profileMemberBadge.className = 'profile-status-badge badge-member';
+            } else {
+                this.profileMemberBadge.textContent = '⚠️ Chưa Vào Kênh';
+                this.profileMemberBadge.className = 'profile-status-badge badge-warning';
+            }
+        }
+
+        if (this.profileAuthTypeBadge) {
+            const authType = u.auth_type === 'qr' ? 'Telegram QR' : (u.auth_type === 'phone' ? 'Telegram Phone' : 'Tài Khoản');
+            this.profileAuthTypeBadge.textContent = authType;
+        }
+
+        if (this.profileFavCount) {
+            this.profileFavCount.textContent = (this.favoriteTracks ? this.favoriteTracks.length : 0);
+        }
+
+        if (this.profilePlaylistCount) {
+            this.profilePlaylistCount.textContent = (this.playlists ? this.playlists.length : 0);
+        }
+
+        if (this.profileDeviceName) {
+            this.profileDeviceName.textContent = this.remoteTargetDeviceId ? (this.remoteTargetName || 'Thiết bị từ xa') : (this.syncDeviceName || 'Thiết bị này');
         }
     }
 
@@ -911,8 +978,64 @@ class XTAPOMusicApp {
         
         if (this.closeAuthModal) {
             this.closeAuthModal.addEventListener('click', () => {
-                this.authModal.classList.remove('open');
+                this.closeModal(this.authModal);
                 this.stopQrPolling();
+            });
+        }
+
+        if (this.closeProfileModal) {
+            this.closeProfileModal.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+            });
+        }
+
+        if (this.profileLogoutBtn) {
+            this.profileLogoutBtn.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+                this.logoutUser();
+            });
+        }
+
+        if (this.profileStatFavBtn) {
+            this.profileStatFavBtn.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+                this.openFavoritesModal();
+            });
+        }
+
+        if (this.profileStatPlaylistBtn) {
+            this.profileStatPlaylistBtn.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+                this.loadPlaylists();
+                this.openModal(this.playlistModal);
+            });
+        }
+
+        if (this.profileStatDeviceBtn) {
+            this.profileStatDeviceBtn.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+                this.openDevicesModal();
+            });
+        }
+
+        if (this.profileMenuEqBtn) {
+            this.profileMenuEqBtn.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+                this.openEqualizerModal();
+            });
+        }
+
+        if (this.profileMenuDeviceBtn) {
+            this.profileMenuDeviceBtn.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+                this.openDevicesModal();
+            });
+        }
+
+        if (this.profileMenuSleepBtn) {
+            this.profileMenuSleepBtn.addEventListener('click', () => {
+                this.closeModal(this.userProfileModal);
+                this.openSleepTimerModal();
             });
         }
 
@@ -1427,6 +1550,8 @@ class XTAPOMusicApp {
     async logoutUser() {
         try {
             this.stopHeartbeat();
+            if (this.userProfileModal) this.closeModal(this.userProfileModal);
+            if (this.authModal) this.closeModal(this.authModal);
             await fetch('/api/music/auth/logout', { method: 'POST' });
             this.showToast("Đã đăng xuất.");
             this.currentUser = null;
@@ -3346,6 +3471,7 @@ class XTAPOMusicApp {
 
         // Mobile Nav Links Events
         const mobileLinks = [
+            { id: 'mobileNavAccount', action: () => this.openAuthModal() },
             { id: 'mobileNavMusics', action: () => {
                 this.setActiveNavLink(this.navMusics);
                 this.clearHash();
