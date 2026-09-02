@@ -3875,12 +3875,14 @@ class XTAPOMusicApp {
                     const tracks = this.albums[albumIdx] ? this.albums[albumIdx].tracks : [];
                     this.loadAlbum(albumIdx, resolveExactIdx(tracks, targetTrackIdx), false);
                 }
-            } else if (state.activeArtist) {
-                this.playArtistQueueByName(state.activeArtist, targetTrackIdx, false);
+            } else if (state.activeGenre && state.activeCountry) {
+                this.playCountryGenreQueue(state.activeCountry, state.activeGenre, targetTrackIdx, false, state);
             } else if (state.activeGenre) {
-                this.playGenreQueue(state.activeGenre, targetTrackIdx, false);
+                this.playGenreQueue(state.activeGenre, targetTrackIdx, false, state);
             } else if (state.activeCountry) {
-                this.playCountryQueueByName(state.activeCountry, targetTrackIdx, false);
+                this.playCountryQueueByName(state.activeCountry, targetTrackIdx, false, state);
+            } else if (state.activeArtist) {
+                this.playArtistQueueByName(state.activeArtist, targetTrackIdx, false, state);
             } else {
                 const albumIdx = this.findAlbumIndex(state);
                 const tracks = this.albums[albumIdx] ? this.albums[albumIdx].tracks : [];
@@ -4077,21 +4079,30 @@ class XTAPOMusicApp {
         }
     }
 
-    playArtistQueueByName(artistName, startIndex = 0, autoPlay = true) {
+    playArtistQueueByName(artistName, startIndex = 0, autoPlay = true, stateObj = null) {
         if (!artistName) return;
         this.activeArtist = artistName;
         this.activeGenre = null;
         this.activeCountry = null;
         this.activePlaylistId = null;
 
-        this.renderArtistGrid();
-        let art = this.artistMap ? (this.artistMap.get(artistName) || Array.from(this.artistMap.values()).find(a => a.name.toLowerCase() === artistName.toLowerCase())) : null;
+        const artistMap = this.getArtistMap();
+        let art = artistMap ? (artistMap.get(artistName) || Array.from(artistMap.values()).find(a => a.name.toLowerCase() === artistName.toLowerCase())) : null;
         if (art) {
-            this.playArtistQueue(art, startIndex, false, autoPlay);
+            let finalStartIndex = startIndex;
+            if (stateObj && stateObj.trackChatId && stateObj.trackMsgId && art.tracks) {
+                const exactIdx = art.tracks.findIndex(t => {
+                    const tChat = t.chatId || t.chat_id;
+                    const tMsg = t.msgId || t.msg_id;
+                    return String(tChat) === String(stateObj.trackChatId) && String(tMsg) === String(stateObj.trackMsgId);
+                });
+                if (exactIdx !== -1) finalStartIndex = exactIdx;
+            }
+            this.playArtistQueue(art, finalStartIndex, false, autoPlay);
         }
     }
 
-    playGenreQueue(genreName, startIndex = 0, autoPlay = true) {
+    playGenreQueue(genreName, startIndex = 0, autoPlay = true, stateObj = null) {
         if (!genreName) return;
         this.activeGenre = genreName;
         this.activeArtist = null;
@@ -4105,7 +4116,7 @@ class XTAPOMusicApp {
 
         this.getBaseAlbums().forEach(album => {
             (album.tracks || []).forEach(track => {
-                const g = this.normalizeGenre(track.genre, track).toLowerCase();
+                const g = this.normalizeGenre(track.genre, track).toLowerCase().trim();
                 if (g === targetGenreLow) {
                     const key = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
                     if (!seenKeys.has(key)) {
@@ -4119,6 +4130,16 @@ class XTAPOMusicApp {
 
         if (tracks.length === 0) return;
 
+        let finalStartIndex = startIndex;
+        if (stateObj && stateObj.trackChatId && stateObj.trackMsgId) {
+            const exactIdx = tracks.findIndex(t => {
+                const tChat = t.chatId || t.chat_id;
+                const tMsg = t.msgId || t.msg_id;
+                return String(tChat) === String(stateObj.trackChatId) && String(tMsg) === String(stateObj.trackMsgId);
+            });
+            if (exactIdx !== -1) finalStartIndex = exactIdx;
+        }
+
         const genreAlbum = {
             id: `genre-${encodeURIComponent(genreName)}`,
             title: `Thể Loại: ${genreName}`,
@@ -4131,13 +4152,13 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        this.setVirtualAlbum(genreAlbum, startIndex, autoPlay);
+        this.setVirtualAlbum(genreAlbum, finalStartIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát thể loại "${genreName}" (${tracks.length} bài)`);
         }
     }
 
-    playCountryQueueByName(countryName, startIndex = 0, autoPlay = true) {
+    playCountryQueueByName(countryName, startIndex = 0, autoPlay = true, stateObj = null) {
         if (!countryName) return;
         this.activeCountry = countryName;
         this.activeArtist = null;
@@ -4167,7 +4188,7 @@ class XTAPOMusicApp {
         if (tracks.length === 0) return;
 
         const cObj = { country: countryName, tracks: tracks, coverUrl: coverUrl };
-        this.playCountryQueue(cObj, false, autoPlay, startIndex);
+        this.playCountryQueue(cObj, false, autoPlay, startIndex, stateObj);
     }
 
     openModal(modal) {
@@ -6135,7 +6156,7 @@ class XTAPOMusicApp {
         renderTrackBatch(BATCH_SIZE);
     }
 
-    playCountryGenreQueue(countryName, genreName, startIndex = 0, autoPlay = true) {
+    playCountryGenreQueue(countryName, genreName, startIndex = 0, autoPlay = true, stateObj = null) {
         if (!genreName) return;
         this.activeGenre = genreName;
         this.activeCountry = countryName;
@@ -6147,14 +6168,18 @@ class XTAPOMusicApp {
         let coverUrl = '';
         const targetGenreLow = genreName.toLowerCase().trim();
 
-        this.getBaseAlbums().forEach(album => {
+        const baseAlbums = this.getBaseAlbums();
+        for (let i = 0; i < baseAlbums.length; i++) {
+            const album = baseAlbums[i];
             const albumCountry = album.country || this.detectCountryFromTrack({ name: album.title, artist: album.artist, album: album.title });
-            (album.tracks || []).forEach(track => {
+            const albTracks = album.tracks || [];
+            for (let j = 0; j < albTracks.length; j++) {
+                const track = albTracks[j];
                 const c = (track.country && track.country.trim()) || albumCountry || this.detectCountryFromTrack(track) || 'Quốc Tế';
-                const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản'].includes(c) ? c : 'Quốc Tế';
-                if (countryName && countryName !== 'all' && validCountry !== countryName) return;
+                const validCountry = ['Việt Nam', 'Âu Mỹ', 'Hàn Quốc', 'Hoa Ngữ', 'Nhật Bản', 'Thái Lan', 'Latin / Tây Ban Nha', 'Pháp / Châu Âu'].includes(c) ? c : 'Quốc Tế';
+                if (countryName && countryName !== 'all' && validCountry !== countryName) continue;
 
-                const g = ((track.genre || 'Khác').trim() || 'Khác').toLowerCase();
+                const g = this.normalizeGenre(track.genre, track).toLowerCase().trim();
                 if (g === targetGenreLow) {
                     const key = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
                     if (!seenKeys.has(key)) {
@@ -6163,12 +6188,24 @@ class XTAPOMusicApp {
                         if (!coverUrl) coverUrl = track.coverUrl || album.coverUrl;
                     }
                 }
-            });
-        });
+            }
+        }
 
         if (tracks.length === 0) {
-            this.showToast(`Không có bài hát thuộc thể loại "${genreName}" tại khu vực ${countryName}`);
+            if (autoPlay) {
+                this.showToast(`Không có bài hát thuộc thể loại "${genreName}" tại khu vực ${countryName}`);
+            }
             return;
+        }
+
+        let finalStartIndex = startIndex;
+        if (stateObj && stateObj.trackChatId && stateObj.trackMsgId) {
+            const exactIdx = tracks.findIndex(t => {
+                const tChat = t.chatId || t.chat_id;
+                const tMsg = t.msgId || t.msg_id;
+                return String(tChat) === String(stateObj.trackChatId) && String(tMsg) === String(stateObj.trackMsgId);
+            });
+            if (exactIdx !== -1) finalStartIndex = exactIdx;
         }
 
         const genreAlbum = {
@@ -6183,13 +6220,13 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        this.setVirtualAlbum(genreAlbum, startIndex, autoPlay);
+        this.setVirtualAlbum(genreAlbum, finalStartIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát "${genreName} (${countryName})" • ${tracks.length} bài hát`);
         }
     }
 
-    playCountryQueue(cObj, isShuffle = false, autoPlay = true, startIndex = 0) {
+    playCountryQueue(cObj, isShuffle = false, autoPlay = true, startIndex = 0, stateObj = null) {
         if (!cObj.tracks || cObj.tracks.length === 0) {
             this.showToast(`Không có bài hát nào của ${cObj.country} để phát!`);
             return;
@@ -6206,6 +6243,16 @@ class XTAPOMusicApp {
                 const j = Math.floor(Math.random() * (i + 1));
                 [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
             }
+        }
+
+        let finalStartIndex = startIndex;
+        if (stateObj && stateObj.trackChatId && stateObj.trackMsgId) {
+            const exactIdx = tracks.findIndex(t => {
+                const tChat = t.chatId || t.chat_id;
+                const tMsg = t.msgId || t.msg_id;
+                return String(tChat) === String(stateObj.trackChatId) && String(tMsg) === String(stateObj.trackMsgId);
+            });
+            if (exactIdx !== -1) finalStartIndex = exactIdx;
         }
 
         const meta = {
@@ -6230,7 +6277,7 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        this.setVirtualAlbum(countryAlbum, startIndex, autoPlay);
+        this.setVirtualAlbum(countryAlbum, finalStartIndex, autoPlay);
         if (autoPlay) {
             this.showToast(`Đang phát tuyển tập nhạc "${cObj.country}" (${tracks.length} bài hát)`);
         }
