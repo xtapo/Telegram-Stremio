@@ -1587,40 +1587,46 @@
                 }));
             } else if (currentTab === 'genres') {
                 const map = {};
-                rawAlbums.forEach(alb => {
-                    (alb.tracks || []).forEach(tr => {
-                        let g = (tr.genre || alb.genre || '').trim();
-                        const trName = (tr.name || tr.title || '').toLowerCase();
-                        const trArt = (tr.artist || alb.artist || '').toLowerCase();
-                        const full = `${trName} ${trArt} ${g.toLowerCase()}`;
+                for (let i = 0; i < rawAlbums.length; i++) {
+                    const alb = rawAlbums[i];
+                    const tracks = alb.tracks || [];
+                    for (let j = 0; j < tracks.length; j++) {
+                        const tr = tracks[j];
+                        let g = tr._tvG;
+                        if (!g) {
+                            g = (tr.genre || alb.genre || '').trim();
+                            const trName = (tr.name || tr.title || '').toLowerCase();
+                            const trArt = (tr.artist || alb.artist || '').toLowerCase();
+                            const full = `${trName} ${trArt} ${g.toLowerCase()}`;
 
-                        // Heuristic normalization for TV
-                        if (['nhu quynh', 'che linh', 'quang le', 'truong vu', 'phi nhung', 'huong lan', 'le quyen', 'tuan vu', 'dan nguyen', 'ngoc son', 'duy khanh', 'to my'].some(a => trArt.includes(a)) || ['bolero', 'trữ tình', 'nhạc vàng', 'tân cổ'].some(k => full.includes(k))) {
-                            g = 'Bolero / Trữ Tình';
-                        } else if (['remix', 'vinahouse', 'nonstop', 'bass boosted', 'speed up', 'dj '].some(k => trName.includes(k))) {
-                            g = 'EDM / Remix';
-                        } else if (['den vau', 'b ray', 'karik', 'justatee', 'binz', 'hieuthuhai', 'mck', 'suboi', 'rap viet'].some(a => trArt.includes(a) || full.includes(a))) {
-                            g = 'Rap / Hip-Hop';
-                        } else if (['vu.', 'chillies', 'ngot', 'trang', 'thinh suy', 'hoang dung', 'ha anh tuan', 'phan manh quynh', 'lofi', 'chill', 'acoustic'].some(a => trArt.includes(a) || full.includes(a))) {
-                            g = 'Acoustic / Chill / Lofi';
-                        } else if (['soundtrack', 'ost', 'nhạc phim'].some(k => full.includes(k))) {
-                            g = 'Nhạc Phim / OST';
-                        } else if (['tiền chiến', 'cách mạng', 'nhạc đỏ'].some(k => full.includes(k))) {
-                            g = 'Nhạc Đỏ / Cách Mạng';
-                        } else if (!g || g.toLowerCase() === 'khác' || g.toLowerCase() === 'hi-res audio') {
-                            g = 'V-Pop / Nhạc Trẻ';
+                            if (['nhu quynh', 'che linh', 'quang le', 'truong vu', 'phi nhung', 'huong lan', 'le quyen', 'tuan vu', 'dan nguyen', 'ngoc son', 'duy khanh', 'to my'].some(a => trArt.includes(a)) || ['bolero', 'trữ tình', 'nhạc vàng', 'tân cổ'].some(k => full.includes(k))) {
+                                g = 'Bolero / Trữ Tình';
+                            } else if (['remix', 'vinahouse', 'nonstop', 'bass boosted', 'speed up', 'dj '].some(k => trName.includes(k))) {
+                                g = 'EDM / Remix';
+                            } else if (['den vau', 'b ray', 'karik', 'justatee', 'binz', 'hieuthuhai', 'mck', 'suboi', 'rap viet'].some(a => trArt.includes(a) || full.includes(a))) {
+                                g = 'Rap / Hip-Hop';
+                            } else if (['vu.', 'chillies', 'ngot', 'trang', 'thinh suy', 'hoang dung', 'ha anh tuan', 'phan manh quynh', 'lofi', 'chill', 'acoustic'].some(a => trArt.includes(a) || full.includes(a))) {
+                                g = 'Acoustic / Chill / Lofi';
+                            } else if (['soundtrack', 'ost', 'nhạc phim'].some(k => full.includes(k))) {
+                                g = 'Nhạc Phim / OST';
+                            } else if (['tiền chiến', 'cách mạng', 'nhạc đỏ'].some(k => full.includes(k))) {
+                                g = 'Nhạc Đỏ / Cách Mạng';
+                            } else if (!g || g.toLowerCase() === 'khác' || g.toLowerCase() === 'hi-res audio') {
+                                g = 'V-Pop / Nhạc Trẻ';
+                            }
+                            tr._tvG = g;
                         }
 
                         if (!map[g]) {
                             map[g] = { name: g, cover: tr.coverUrl || tr.cover || alb.coverUrl || alb.cover, tracks: [], seenKeys: new Set() };
                         }
-                        const key = tr.msgId || tr.id || trName;
+                        const key = tr.msgId || tr.id || tr.name;
                         if (!map[g].seenKeys.has(key)) {
                             map[g].seenKeys.add(key);
                             map[g].tracks.push(tr);
                         }
-                    });
-                });
+                    }
+                }
                 currentItems = Object.keys(map).sort((a, b) => map[b].tracks.length - map[a].tracks.length).map(name => ({
                     type: 'genre',
                     id: name,
@@ -1633,37 +1639,44 @@
                 }));
             } else if (currentTab === 'countries') {
                 const map = {};
-                rawAlbums.forEach(alb => {
-                    (alb.tracks || []).forEach(tr => {
-                        let c = (tr.country || alb.country || '').trim();
-                        const trName = (tr.name || tr.title || '').toLowerCase();
-                        const trArt = (tr.artist || alb.artist || '').toLowerCase();
-                        const full = `${trName} ${trArt}`;
-
+                for (let i = 0; i < rawAlbums.length; i++) {
+                    const alb = rawAlbums[i];
+                    const tracks = alb.tracks || [];
+                    for (let j = 0; j < tracks.length; j++) {
+                        const tr = tracks[j];
+                        let c = tr._tvC;
                         if (!c) {
-                            if (['bts', 'blackpink', 'iu', 'exo', 'twice', 'newjeans', 'k-pop', 'kpop'].some(k => full.includes(k)) || /[\uac00-\ud7a3]/.test(full)) {
-                                c = 'Hàn Quốc';
-                            } else if (['yoasobi', 'kenshi yonezu', 'aimer', 'radwimps', 'j-pop', 'anime'].some(k => full.includes(k)) || /[\u3040-\u309f\u30a0-\u30ff]/.test(full)) {
-                                c = 'Nhật Bản';
-                            } else if (['jay chou', 'faye wong', 'jj lin', 'c-pop', 'nhạc hoa'].some(k => full.includes(k)) || /[\u4e00-\u9fff]/.test(full)) {
-                                c = 'Hoa Ngữ';
-                            } else if (/[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]/.test(full)) {
-                                c = 'Việt Nam';
-                            } else {
-                                c = 'Âu Mỹ';
+                            c = (tr.country || alb.country || '').trim();
+                            if (!c) {
+                                const trName = (tr.name || tr.title || '').toLowerCase();
+                                const trArt = (tr.artist || alb.artist || '').toLowerCase();
+                                const full = `${trName} ${trArt}`;
+
+                                if (['bts', 'blackpink', 'iu', 'exo', 'twice', 'newjeans', 'k-pop', 'kpop'].some(k => full.includes(k)) || /[\uac00-\ud7a3]/.test(full)) {
+                                    c = 'Hàn Quốc';
+                                } else if (['yoasobi', 'kenshi yonezu', 'aimer', 'radwimps', 'j-pop', 'anime'].some(k => full.includes(k)) || /[\u3040-\u309f\u30a0-\u30ff]/.test(full)) {
+                                    c = 'Nhật Bản';
+                                } else if (['jay chou', 'faye wong', 'jj lin', 'c-pop', 'nhạc hoa'].some(k => full.includes(k)) || /[\u4e00-\u9fff]/.test(full)) {
+                                    c = 'Hoa Ngữ';
+                                } else if (/[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]/.test(full)) {
+                                    c = 'Việt Nam';
+                                } else {
+                                    c = 'Âu Mỹ';
+                                }
                             }
+                            tr._tvC = c;
                         }
 
                         if (!map[c]) {
                             map[c] = { name: c, cover: tr.coverUrl || tr.cover || alb.coverUrl || alb.cover, tracks: [], seenKeys: new Set() };
                         }
-                        const key = tr.msgId || tr.id || trName;
+                        const key = tr.msgId || tr.id || tr.name;
                         if (!map[c].seenKeys.has(key)) {
                             map[c].seenKeys.add(key);
                             map[c].tracks.push(tr);
                         }
-                    });
-                });
+                    }
+                }
                 currentItems = Object.keys(map).sort((a, b) => map[b].tracks.length - map[a].tracks.length).map(name => ({
                     type: 'country',
                     id: name,
