@@ -3836,6 +3836,8 @@ html, body {
     padding-bottom: 4px;
     margin-bottom: 12px;
     scrollbar-width: none;
+    flex-shrink: 0;
+    -webkit-overflow-scrolling: touch;
 }
 
 .country-filter-tabs::-webkit-scrollbar {
@@ -3856,6 +3858,8 @@ html, body {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    flex-shrink: 0;
+    line-height: 1.2;
 }
 
 .country-filter-pill:hover {
