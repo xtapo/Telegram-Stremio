@@ -493,10 +493,30 @@ def _get_quality_score(track: dict) -> int:
     Tính điểm số chất lượng âm thanh:
     Hi-Res (24-bit/DSD) > Lossless (16-bit FLAC/WAV/ALAC) > High Quality MP3 (320k) > Standard MP3 (128k)
     """
-    tier = track.get("qualityTier", "standard")
-    bitrate = track.get("bitrate", 0) or 0
-    size = track.get("size_bytes", 0) or _parse_size_str(track.get("size", ""))
+    tier = str(track.get("qualityTier", "standard") or "standard").lower()
     
+    # Parse bitrate an toàn từ int hoặc str (ví dụ "320 kbps", "Lossless", 320)
+    raw_br = track.get("bitrate", 0)
+    bitrate = 0
+    if isinstance(raw_br, (int, float)):
+        bitrate = int(raw_br)
+    elif isinstance(raw_br, str):
+        digits = re.findall(r'\d+', raw_br)
+        if digits:
+            bitrate = int(digits[0])
+        elif "hi-res" in raw_br.lower() or "dsd" in raw_br.lower():
+            bitrate = 2000
+        elif "lossless" in raw_br.lower() or "flac" in raw_br.lower():
+            bitrate = 1000
+
+    # Parse size an toàn từ int hoặc str
+    raw_size = track.get("size_bytes", 0)
+    size = 0
+    if isinstance(raw_size, (int, float)) and raw_size > 0:
+        size = int(raw_size)
+    else:
+        size = _parse_size_str(str(track.get("size", "")))
+
     tier_weights = {
         "hi-res": 3_000_000,
         "lossless": 2_000_000,
