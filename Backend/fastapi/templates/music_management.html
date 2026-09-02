@@ -2850,6 +2850,12 @@ async function openScanModal() {
     modal.classList.remove('opacity-0', 'pointer-events-none');
     modal.querySelector('.transform').classList.remove('scale-95');
 
+    const startBtn = document.getElementById('start-scan-btn');
+    if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.innerHTML = '<i class="fa-solid fa-play"></i> Bắt Đầu Quét';
+    }
+
     // Kiểm tra xem có tiến trình quét nào đang chạy ngầm không
     try {
         const res = await fetch('/api/music/scan/status');
@@ -2879,6 +2885,11 @@ function showScanSetupView() {
     document.getElementById('scan-view-setup').classList.remove('hidden');
     document.getElementById('scan-setup-footer').classList.remove('hidden');
     document.getElementById('scan-view-progress').classList.add('hidden');
+    const startBtn = document.getElementById('start-scan-btn');
+    if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.innerHTML = '<i class="fa-solid fa-play"></i> Bắt Đầu Quét';
+    }
 }
 
 function showScanProgressView() {
@@ -3099,7 +3110,10 @@ async function startMusicScan() {
     const autoScrape = document.getElementById('scan-auto-scrape').checked;
 
     const startBtn = document.getElementById('start-scan-btn');
-    startBtn.disabled = true;
+    if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Đang khởi động...';
+    }
 
     try {
         const res = await fetch('/api/music/scan/start', {
@@ -3124,11 +3138,17 @@ async function startMusicScan() {
             startPollingScanStatus();
         } else {
             alertToast(data.detail || data.message || 'Không thể bắt đầu quét.');
-            startBtn.disabled = false;
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.innerHTML = '<i class="fa-solid fa-play"></i> Bắt Đầu Quét';
+            }
         }
     } catch (e) {
         alertToast('Lỗi kết nối: ' + e.message);
-        startBtn.disabled = false;
+        if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.innerHTML = '<i class="fa-solid fa-play"></i> Bắt Đầu Quét';
+        }
     }
 }
 
