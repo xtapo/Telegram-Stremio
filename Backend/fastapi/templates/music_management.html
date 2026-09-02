@@ -7,9 +7,9 @@
 
     <!-- Header Toolbar -->
     <section class="glass-panel rounded-3xl p-4 sm:p-5 mb-6 sm:mb-8">
-        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-2xl bg-primary/20 flex items-center justify-center text-primary text-lg border border-primary/30">
+                <div class="w-10 h-10 rounded-2xl bg-primary/20 flex items-center justify-center text-primary text-lg border border-primary/30 shrink-0">
                     <i class="fa-solid fa-music"></i>
                 </div>
                 <div>
@@ -20,40 +20,27 @@
                 </div>
             </div>
 
-            <!-- Search input -->
-            <div class="relative flex-1 max-w-md min-w-0">
-                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
-                <input type="text" id="music-search"
-                       placeholder="Tìm kiếm bài hát, ca sĩ, album..."
-                       oninput="filterMusicList(this.value)"
-                       class="w-full pl-11 pr-10 py-2.5 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition text-sm">
-                <button onclick="document.getElementById('music-search').value=''; filterMusicList('');" 
-                        class="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text text-xs">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center gap-2">
                 <button type="button" onclick="openGDriveUploadModal()"
-                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-500 shadow-lg shadow-blue-500/25 hover:brightness-110">
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-500 shadow-lg shadow-blue-500/25 hover:brightness-110">
                     <i class="fa-brands fa-google-drive text-amber-300"></i> Upload Google Drive
                 </button>
                 <button type="button" onclick="openScanModal()"
-                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-primary text-white border-primary shadow-lg shadow-primary/25 hover:brightness-110">
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border bg-primary text-white border-primary shadow-lg shadow-primary/25 hover:brightness-110">
                     <i class="fa-solid fa-satellite-dish"></i> Quét Kênh Telegram
                 </button>
                 <button type="button" onclick="openUserSessionsModal()"
-                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-600/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-600/25">
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border bg-emerald-600/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-600/25">
                     <i class="fa-solid fa-users-gear text-emerald-300"></i> User Sessions
                 </button>
                 <a href="/music" target="_blank"
-                   class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25">
+                   class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25">
                     <i class="fa-solid fa-record-vinyl"></i> Mở Vinyl Player
                 </a>
                 <button type="button" onclick="loadMusicData(true)"
-                        class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border glass-panel text-text hover:bg-surface-2 border-hairline"
-                        title="Tải lại">
+                        class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border glass-panel text-text hover:bg-surface-2 border-hairline"
+                        title="Tải lại dữ liệu">
                     <i class="fa-solid fa-rotate-right" id="refresh-icon"></i>
                 </button>
             </div>
@@ -104,7 +91,7 @@
     </div>
 
     <!-- View Mode Switch Tabs & Controls -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
         <div class="inline-flex p-1 bg-black/20 rounded-xl border border-hairline overflow-x-auto max-w-full">
             <button id="tab-albums-btn" onclick="switchTab('albums')" 
                     class="px-4 py-1.5 rounded-lg text-xs font-bold transition bg-primary text-white shadow whitespace-nowrap">
@@ -124,7 +111,20 @@
             </button>
         </div>
 
-        <div class="flex items-center gap-3 self-end sm:self-auto">
+        <div class="flex items-center gap-3 self-end sm:self-auto flex-wrap">
+            <!-- Search input for Albums/Tracks -->
+            <div id="music-search-container" class="relative w-full sm:w-64 md:w-80">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary text-xs"></i>
+                <input type="text" id="music-search"
+                       placeholder="Tìm bài hát, ca sĩ, album..."
+                       oninput="filterMusicList(this.value)"
+                       class="w-full pl-9 pr-8 py-1.5 rounded-xl bg-surface border border-hairline text-text placeholder-text-secondary text-xs focus:outline-none focus:border-primary transition">
+                <button onclick="document.getElementById('music-search').value=''; filterMusicList('');" 
+                        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
             <!-- Sort Selector -->
             <div id="sort-container" class="flex items-center gap-1.5 text-xs">
                 <span class="text-text-secondary font-medium"><i class="fa-solid fa-arrow-down-wide-short text-primary mr-1"></i>Sắp xếp:</span>
@@ -348,18 +348,18 @@
         <!-- Users Table -->
         <div class="glass-panel rounded-3xl overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
+                <table class="w-full text-left border-collapse text-sm min-w-[1150px]">
                     <thead>
                         <tr class="border-b border-hairline bg-surface text-text-secondary font-bold text-xs uppercase select-none">
                             <th class="py-3.5 px-4 w-14 text-center">Avatar</th>
-                            <th class="py-3.5 px-4">Tài Khoản & Tên</th>
-                            <th class="py-3.5 px-4 text-center">Trạng Thái Online</th>
-                            <th class="py-3.5 px-4">Thiết Bị / Trình Duyệt</th>
-                            <th class="py-3.5 px-4">Địa Chỉ IP</th>
-                            <th class="py-3.5 px-4">Đang Nghe Gì</th>
-                            <th class="py-3.5 px-4 text-center">Dữ Liệu</th>
-                            <th class="py-3.5 px-4 text-center">Khóa/Mở</th>
-                            <th class="py-3.5 px-4 text-right">Thao Tác</th>
+                            <th class="py-3.5 px-4 min-w-[200px]">Tài Khoản & Tên</th>
+                            <th class="py-3.5 px-4 text-center w-32">Trạng Thái Online</th>
+                            <th class="py-3.5 px-4 min-w-[160px]">Thiết Bị / Trình Duyệt</th>
+                            <th class="py-3.5 px-4 min-w-[140px]">Địa Chỉ IP</th>
+                            <th class="py-3.5 px-4 min-w-[200px]">Đang Nghe Gì</th>
+                            <th class="py-3.5 px-4 text-center w-28">Dữ Liệu</th>
+                            <th class="py-3.5 px-4 text-center w-28">Trạng Thái</th>
+                            <th class="py-3.5 px-4 text-right pr-5 min-w-[160px]">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody id="users-table-body" class="divide-y divide-hairline">
@@ -2442,8 +2442,11 @@ function switchTab(tab) {
 
     updateSortDropdownUI();
 
+    const musicSearchContainer = document.getElementById('music-search-container');
+
     if (tab === 'artists') {
         stopUsersAutoRefresh();
+        if (musicSearchContainer) musicSearchContainer.classList.add('hidden');
         document.getElementById('albums-view-container').classList.add('hidden');
         document.getElementById('tracks-view-container').classList.add('hidden');
         document.getElementById('users-view-container').classList.add('hidden');
@@ -2454,6 +2457,7 @@ function switchTab(tab) {
         document.getElementById('items-count-indicator').textContent = 'Đang quản lý Ca Sĩ';
         fetchArtistsData();
     } else if (tab === 'users') {
+        if (musicSearchContainer) musicSearchContainer.classList.add('hidden');
         document.getElementById('albums-view-container').classList.add('hidden');
         document.getElementById('tracks-view-container').classList.add('hidden');
         document.getElementById('artists-view-container').classList.add('hidden');
@@ -2466,6 +2470,7 @@ function switchTab(tab) {
         startUsersAutoRefresh();
     } else {
         stopUsersAutoRefresh();
+        if (musicSearchContainer) musicSearchContainer.classList.remove('hidden');
         document.getElementById('artists-view-container').classList.add('hidden');
         document.getElementById('users-view-container').classList.add('hidden');
         if (tab === 'tracks') updateTrackHeaderSortIcons();
@@ -4396,11 +4401,23 @@ function setUsersFilterTab(tab) {
         const btn = document.getElementById(`users-tab-${t}`);
         if (!btn) return;
         if (t === tab) {
-            btn.className = 'users-filter-tab px-3 py-1.5 rounded-xl text-xs font-bold bg-primary text-white transition flex items-center gap-1.5 shadow-md shadow-primary/20';
+            if (t === 'online') {
+                btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 text-black transition flex items-center gap-1.5 shadow-md shadow-emerald-500/25';
+            } else if (t === 'pending') {
+                btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-black transition flex items-center gap-1.5 shadow-md shadow-amber-500/25';
+            } else if (t === 'active') {
+                btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500 text-black transition flex items-center gap-1.5 shadow-md shadow-sky-500/25';
+            } else {
+                btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-primary text-white transition flex items-center gap-1.5 shadow-md shadow-primary/25';
+            }
         } else if (t === 'pending') {
-            btn.className = 'users-filter-tab px-3 py-1.5 rounded-xl text-xs font-bold bg-surface hover:bg-surface-2 text-amber-400 transition flex items-center gap-1.5 border border-amber-500/20';
+            btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-surface hover:bg-surface-2 text-amber-400 transition flex items-center gap-1.5 border border-amber-500/30';
+        } else if (t === 'online') {
+            btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-surface hover:bg-surface-2 text-emerald-400 transition flex items-center gap-1.5 border border-emerald-500/30';
+        } else if (t === 'active') {
+            btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-surface hover:bg-surface-2 text-sky-400 transition flex items-center gap-1.5 border border-sky-500/30';
         } else {
-            btn.className = 'users-filter-tab px-3 py-1.5 rounded-xl text-xs font-bold bg-surface hover:bg-surface-2 text-text-secondary hover:text-text transition flex items-center gap-1.5';
+            btn.className = 'users-filter-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-surface hover:bg-surface-2 text-text-secondary hover:text-text transition flex items-center gap-1.5 border border-hairline';
         }
     });
 
@@ -4581,7 +4598,7 @@ function renderUsersTable(users) {
                    <span class="text-[10px] text-emerald-400/80 font-medium">Vừa xong</span>
                </div>`
             : `<div class="inline-flex flex-col items-center gap-0.5">
-                   <span class="px-2 py-0.5 rounded-full bg-surface-2 text-text-secondary border border-hairline text-[10px] font-medium inline-flex items-center gap-1">
+                   <span class="px-2.5 py-0.5 rounded-full bg-surface-2 text-text-secondary border border-hairline text-[10px] font-medium inline-flex items-center gap-1">
                        <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
                        Offline
                    </span>
@@ -4601,22 +4618,22 @@ function renderUsersTable(users) {
             <div class="space-y-0.5">
                 <div class="flex items-center gap-1.5 text-xs font-bold text-text">
                     ${osIcon}
-                    <span class="truncate max-w-[130px]" title="${osName}">${osName}</span>
+                    <span class="truncate max-w-[140px]" title="${osName}">${osName}</span>
                 </div>
                 <div class="flex items-center gap-1 text-[10px] text-text-secondary">
                     ${browserIcon}
-                    <span class="truncate max-w-[110px]" title="${browserName}">${browserName}</span>
+                    <span class="truncate max-w-[120px]" title="${browserName}">${browserName}</span>
                     ${screenRes ? '• ' + screenRes : ''}
                 </div>
             </div>
         `;
 
-        // 4. IP Address
+        // 4. IP Address (Trình bày sáng sủa, không cắt bớt)
         const lastIp = u.last_ip || 'Chưa ghi nhận';
         const ipCell = u.last_ip 
-            ? `<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-sky-500/10 text-sky-300 border border-sky-500/20 text-xs font-mono font-bold" title="IP: ${lastIp}">
-                   <i class="fa-solid fa-network-wired text-[10px] text-sky-400"></i>
-                   <span class="truncate max-w-[110px]">${lastIp}</span>
+            ? `<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-500/10 text-sky-300 border border-sky-500/20 text-xs font-mono font-bold" title="Địa chỉ IP: ${lastIp}">
+                   <i class="fa-solid fa-network-wired text-[10px] text-sky-400 shrink-0"></i>
+                   <span class="truncate max-w-[130px]">${lastIp}</span>
                </div>`
             : `<span class="text-[11px] text-text-secondary italic">--</span>`;
 
@@ -4634,7 +4651,7 @@ function renderUsersTable(users) {
                 : `<div class="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-music"></i></div>`;
 
             liveActivityCell = `
-                <div class="flex items-center gap-2 max-w-[190px]">
+                <div class="flex items-center gap-2 max-w-[200px]">
                     ${coverImg}
                     <div class="min-w-0 flex-1">
                         <div class="font-bold text-xs text-text truncate" title="${act.title}">${act.title || 'Đang nghe nhạc'}</div>
@@ -4644,7 +4661,7 @@ function renderUsersTable(users) {
                 </div>
             `;
         } else if (isOnline) {
-            liveActivityCell = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface text-text-secondary text-[11px] border border-hairline"><i class="fa-solid fa-compass text-[10px] text-primary"></i> Đang duyệt kho nhạc</span>`;
+            liveActivityCell = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface text-text-secondary text-[11px] border border-hairline"><i class="fa-solid fa-compass text-[10px] text-primary"></i> Đang duyệt kho nhạc</span>`;
         }
 
         // 6. Trạng thái Duyệt & Nút thao tác
@@ -4654,25 +4671,25 @@ function renderUsersTable(users) {
         const safeTitle = (mainTitle || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
         const statusBadge = isActive
-            ? `<div class="inline-flex flex-col items-center gap-1">
-                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+            ? `<div class="inline-flex flex-col items-center gap-0.5">
+                   <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
                        <i class="fa-solid fa-circle-check text-[9px]"></i> Đã Duyệt
                    </span>
-                   <button onclick="toggleUserStatus('${u._id}')" class="text-[10px] text-text-secondary hover:text-amber-400 underline transition" title="Khóa tài khoản này">
+                   <button onclick="toggleUserStatus('${u._id}')" class="text-[10px] text-text-secondary hover:text-amber-400 hover:underline transition mt-0.5" title="Khóa tài khoản này">
                        Khóa
                    </button>
                </div>`
-            : `<div class="inline-flex flex-col items-center gap-1">
-                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold animate-pulse">
+            : `<div class="inline-flex flex-col items-center gap-0.5">
+                   <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold animate-pulse">
                        <i class="fa-solid fa-clock text-[9px]"></i> Chờ Duyệt
                    </span>
-                   <button onclick="toggleUserStatus('${u._id}')" class="text-[10px] text-emerald-400 hover:underline transition" title="Mở khóa tài khoản">
+                   <button onclick="toggleUserStatus('${u._id}')" class="text-[10px] text-emerald-400 hover:underline transition mt-0.5" title="Mở khóa tài khoản">
                        Mở khóa
                    </button>
                </div>`;
 
         const approveBtn = !isActive
-            ? `<button onclick="approveMusicUser('${u._id}', '${safeTitle}')" class="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-xs inline-flex items-center gap-1 shadow-md shadow-emerald-500/20 transition hover:scale-105" title="Phê duyệt tài khoản cho phép sử dụng">
+            ? `<button onclick="approveMusicUser('${u._id}', '${safeTitle}')" class="px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-xs inline-flex items-center gap-1 shadow-md shadow-emerald-500/20 transition hover:scale-105" title="Phê duyệt tài khoản cho phép sử dụng">
                     <i class="fa-solid fa-check"></i> Duyệt
                </button>`
             : '';
@@ -4690,11 +4707,11 @@ function renderUsersTable(users) {
                 </div>
             </td>
             <td class="py-3.5 px-4">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-bold text-text">${mainTitle}</span>
                     ${typeBadge}
                 </div>
-                <div class="text-[10px] text-text-secondary font-mono">${userSubtitle}</div>
+                <div class="text-[10px] text-text-secondary font-mono mt-0.5">${userSubtitle}</div>
             </td>
             <td class="py-3.5 px-4 text-center">
                 ${onlineBadge}
@@ -4709,7 +4726,7 @@ function renderUsersTable(users) {
                 ${liveActivityCell}
             </td>
             <td class="py-3.5 px-4 text-center">
-                <div class="inline-flex items-center gap-1.5 text-xs">
+                <div class="inline-flex items-center justify-center gap-1.5 text-xs">
                     <span class="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-bold border border-primary/20" title="Số Playlists">
                         <i class="fa-solid fa-list mr-0.5 text-[10px]"></i> ${u.playlists_count || 0}
                     </span>
@@ -4721,8 +4738,8 @@ function renderUsersTable(users) {
             <td class="py-3.5 px-4 text-center">
                 ${statusBadge}
             </td>
-            <td class="py-3.5 px-4 text-right">
-                <div class="inline-flex items-center gap-1.5">
+            <td class="py-3.5 px-4 text-right pr-4">
+                <div class="inline-flex items-center justify-end gap-1.5">
                     ${approveBtn}
                     <button onclick="openUserDetailsModal('${u._id}')" class="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white inline-flex items-center justify-center transition" title="Xem chi tiết kết nối, IP, thiết bị, playlists">
                         <i class="fa-solid fa-eye text-xs"></i>
