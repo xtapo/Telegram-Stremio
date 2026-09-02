@@ -472,7 +472,7 @@
         <div class="modal-card" style="max-width: 820px; padding: 0; overflow: hidden; max-height: 88vh; display: flex; flex-direction: column;">
             
             <!-- View 1: Danh Sách Tất Cả Ca Sĩ (Artist List View) -->
-            <div id="artistListView" style="display: flex; flex-direction: column; height: 100%; padding: 24px;">
+            <div id="artistListView" style="display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; padding: 24px;">
                 <div class="modal-header" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span style="font-size: 1.4rem;">🎙️</span>
@@ -495,7 +495,7 @@
                            style="width: 100%; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
                 </div>
 
-                <div class="artist-grid" id="artistGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; overflow-y: auto; flex: 1; padding-right: 4px;">
+                <div class="artist-grid" id="artistGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; overflow-y: auto; flex: 1; min-height: 0; padding-right: 4px;">
                     <!-- Populated dynamically -->
                 </div>
             </div>
@@ -1786,6 +1786,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script src="/music/app.js?v=4.8"></script>
+    <script src="/music/app.js?v=4.9"></script>
 </body>
 </html>

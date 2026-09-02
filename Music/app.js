@@ -5136,7 +5136,8 @@ class XTAPOMusicApp {
         const total = sortedArtists.length;
         let renderedCount = 0;
 
-        const renderBatch = (count) => {
+        this._artistRenderNextBatch = (count = BATCH_SIZE) => {
+            if (renderedCount >= total) return;
             const frag = document.createDocumentFragment();
             const limit = Math.min(renderedCount + count, total);
             for (let i = renderedCount; i < limit; i++) {
@@ -5156,12 +5157,13 @@ class XTAPOMusicApp {
                 frag.appendChild(card);
             }
             renderedCount = limit;
+
+            const existingLoadMore = document.getElementById('artistLoadMoreBtn');
+            if (existingLoadMore) existingLoadMore.remove();
+
             this.artistGrid.appendChild(frag);
 
             if (renderedCount < total) {
-                const existingLoadMore = document.getElementById('artistLoadMoreBtn');
-                if (existingLoadMore) existingLoadMore.remove();
-
                 const loadMoreContainer = document.createElement('div');
                 loadMoreContainer.id = 'artistLoadMoreBtn';
                 loadMoreContainer.style.cssText = 'grid-column: 1/-1; text-align: center; padding: 20px 0;';
@@ -5171,14 +5173,26 @@ class XTAPOMusicApp {
                     </button>
                 `;
                 loadMoreContainer.querySelector('button').onclick = () => {
-                    loadMoreContainer.remove();
-                    renderBatch(BATCH_SIZE * 2);
+                    this._artistRenderNextBatch(BATCH_SIZE * 2);
                 };
                 this.artistGrid.appendChild(loadMoreContainer);
             }
         };
 
-        renderBatch(BATCH_SIZE);
+        this._artistRenderNextBatch(BATCH_SIZE);
+
+        // Bind auto infinite scroll listener on artistGrid
+        if (!this._artistGridScrollBound && this.artistGrid) {
+            this._artistGridScrollBound = true;
+            this.artistGrid.addEventListener('scroll', () => {
+                const el = this.artistGrid;
+                if (el.scrollTop + el.clientHeight >= el.scrollHeight - 350) {
+                    if (this._artistRenderNextBatch) {
+                        this._artistRenderNextBatch(BATCH_SIZE);
+                    }
+                }
+            }, { passive: true });
+        }
     }
 
     openArtistSpotlight(art) {
