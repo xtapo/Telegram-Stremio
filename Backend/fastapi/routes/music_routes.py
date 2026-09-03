@@ -18,8 +18,8 @@ from fastapi.responses import Response as PlainResponse
 from fastapi.responses import StreamingResponse
 
 from Backend import db
-from pyrogram.errors import FloodWait
-from Backend.helper.custom_dl import ByteStreamer
+from pyrogram.errors import AuthBytesInvalid, FloodWait
+from Backend.helper.custom_dl import ByteStreamer, get_client_dc_lock
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, Userbot, USERBOT_CLIENT_INDEX, multi_clients, work_loads, client_dc_map, client_failures
@@ -2783,7 +2783,7 @@ try:
 except Exception:
     pass
 
-_COVER_SEMAPHORE = asyncio.Semaphore(10)
+_COVER_SEMAPHORE = asyncio.Semaphore(2)
 
 
 # ── 5. Lấy Ảnh Cover / Thumbnail từ Telegram Message ──────────────────────────
@@ -2812,7 +2812,11 @@ async def get_music_cover(chat_id: int, msg_id: int):
                 return FileResponse(local_cover_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800, immutable"})
 
             clients_to_try = []
-            if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+            active_userbots = botmod.get_all_active_userbots()
+            for ub in active_userbots:
+                if ub and getattr(ub, "is_connected", False) and ub not in clients_to_try:
+                    clients_to_try.append(ub)
+            if botmod.Userbot and getattr(botmod.Userbot, "is_connected", False) and botmod.Userbot not in clients_to_try:
                 clients_to_try.append(botmod.Userbot)
             if multi_clients:
                 for c in multi_clients.values():
@@ -2830,7 +2834,9 @@ async def get_music_cover(chat_id: int, msg_id: int):
                         media = getattr(msg, "audio", None) or getattr(msg, "document", None) or getattr(msg, "video", None)
                         thumbs = getattr(media, "thumbs", None) if media else None
                         if thumbs and len(thumbs) > 0:
-                            buf = await cl.download_media(thumbs[-1], in_memory=True)
+                            dc_lock = get_client_dc_lock(cl)
+                            async with dc_lock:
+                                buf = await cl.download_media(thumbs[-1], in_memory=True)
                             if buf and hasattr(buf, "getvalue"):
                                 return buf.getvalue()
                         return None
@@ -2844,6 +2850,9 @@ async def get_music_cover(chat_id: int, msg_id: int):
                         except Exception:
                             pass
                         break
+                except AuthBytesInvalid:
+                    LOGGER.debug(f"[COVER] Client {getattr(cl, 'name', 'client')} gặp AuthBytesInvalid cho {chat_id}/{msg_id}, thử client khác...")
+                    continue
                 except Exception:
                     continue
     except Exception:

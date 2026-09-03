@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from Backend import db
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.analytics import client_ip_from, record_stream_start
-from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
+from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer, get_client_dc_lock
 from Backend.helper.encrypt import decode_string
 from Backend.helper.utils import track_usage
 from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
@@ -198,7 +198,9 @@ async def thumb_handler(id: str):
             thumbs = getattr(media, "thumbs", None) if media else None
             if not thumbs:
                 raise HTTPException(status_code=404, detail="No thumbnail")
-            buf = await client.download_media(thumbs[-1].file_id, in_memory=True)
+            dc_lock = get_client_dc_lock(client)
+            async with dc_lock:
+                buf = await client.download_media(thumbs[-1].file_id, in_memory=True)
             data = buf.getvalue()
         except HTTPException:
             raise
@@ -239,7 +241,9 @@ async def subtitle_handler(token: str, id: str, name: str, token_data: dict = De
     client = multi_clients[select_best_client(0)]
     try:
         message = await client.get_messages(chat_id, msg_id)
-        buf = await client.download_media(message, in_memory=True)
+        dc_lock = get_client_dc_lock(client)
+        async with dc_lock:
+            buf = await client.download_media(message, in_memory=True)
         data = buf.getvalue()
     except Exception as e:
         LOGGER.warning(f"[SUBTITLE] fetch failed for {id}: {e}")

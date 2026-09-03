@@ -23,6 +23,16 @@ ACTIVE_STREAMS: Dict[str, Dict] = {}
 RECENT_STREAMS = deque(maxlen=20)
 
 
+_CLIENT_DC_LOCKS: Dict[int, asyncio.Lock] = {}
+
+
+def get_client_dc_lock(client: Client) -> asyncio.Lock:
+    cid = id(client)
+    if cid not in _CLIENT_DC_LOCKS:
+        _CLIENT_DC_LOCKS[cid] = asyncio.Lock()
+    return _CLIENT_DC_LOCKS[cid]
+
+
 #----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
 class ByteStreamer:
     CHUNK_SIZE = 1024 * 1024
@@ -33,45 +43,48 @@ class ByteStreamer:
         self.client = client
         self.client_index = client_index
         self._file_id_cache: Dict[Tuple[int, int], FileId] = {}
-        self._session_lock = asyncio.Lock()
         if client_index >= 0:
             ByteStreamer._instances[client_index] = self
-            asyncio.create_task(self._prewarm_sessions())
+        asyncio.create_task(self._prewarm_sessions())
         asyncio.create_task(self._clean_cache())
 
     async def _prewarm_sessions(self):
         common_dcs = [1, 2, 4, 5]
         test_mode = await self.client.storage.test_mode()
         current_dc = await self.client.storage.dc_id()
+        lock = get_client_dc_lock(self.client)
         for dc in common_dcs:
             if dc in self.client.media_sessions or dc == current_dc:
                 continue
-            try:
-                auth_key = await Auth(self.client, dc, test_mode).create()
-                session = Session(self.client, dc, auth_key, test_mode, is_media=True)
-                session.no_updates = True
-                session.timeout = 30
-                session.sleep_threshold = 60
-                await session.start()
-                imported = False
-                for _ in range(6):
-                    try:
-                        exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
-                        await session.send(raw.functions.auth.ImportAuthorization(id=exported.id,bytes=exported.bytes,))
-                        imported = True
-                        break
-                    except AuthBytesInvalid:
-                        await asyncio.sleep(0.5)
-                    except OSError:
-                        await asyncio.sleep(1)
-                    except Exception:
-                        break
-                if imported:
-                    self.client.media_sessions[dc] = session
-                else:
-                    await session.stop()
-            except Exception:
-                continue
+            async with lock:
+                if dc in self.client.media_sessions or dc == current_dc:
+                    continue
+                try:
+                    auth_key = await Auth(self.client, dc, test_mode).create()
+                    session = Session(self.client, dc, auth_key, test_mode, is_media=True)
+                    session.no_updates = True
+                    session.timeout = 30
+                    session.sleep_threshold = 60
+                    await session.start()
+                    imported = False
+                    for _ in range(6):
+                        try:
+                            exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
+                            await session.send(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
+                            imported = True
+                            break
+                        except AuthBytesInvalid:
+                            await asyncio.sleep(0.5)
+                        except OSError:
+                            await asyncio.sleep(1)
+                        except Exception:
+                            break
+                    if imported:
+                        self.client.media_sessions[dc] = session
+                    else:
+                        await session.stop()
+                except Exception:
+                    continue
 
     #----- Fetch (and cache) Telegram FileId properties for a message
     async def get_file_properties(self, chat_id: int, message_id: int) -> FileId:
@@ -460,7 +473,8 @@ class ByteStreamer:
         if media_session:
             return media_session
 
-        async with self._session_lock:
+        lock = get_client_dc_lock(self.client)
+        async with lock:
             media_session = self.client.media_sessions.get(dc)
             if media_session:
                 return media_session
@@ -481,15 +495,25 @@ class ByteStreamer:
             await session.start()
 
             if dc != current_dc:
+                imported = False
                 for _ in range(6):
                     try:
                         exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
                         await session.send(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
+                        imported = True
                         break
                     except AuthBytesInvalid:
                         await asyncio.sleep(0.5)
                     except OSError:
                         await asyncio.sleep(1)
+                    except Exception:
+                        break
+                if not imported:
+                    try:
+                        await session.stop()
+                    except Exception:
+                        pass
+                    raise AuthBytesInvalid(f"Failed to import authorization to DC {dc}")
 
             self.client.media_sessions[dc] = session
             return session
