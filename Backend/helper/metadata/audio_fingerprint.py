@@ -165,15 +165,18 @@ def extract_embedded_audio_tags(data: bytes) -> dict:
     return res
 
 
-async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1") -> dict:
+async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", log_callback=None) -> dict:
     """Gửi tệp âm thanh thực tế tới máy chủ Shazam để trích xuất dấu vân tay âm thanh chuẩn xác."""
     if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
         return None
     try:
-        if hasattr(_SHAZAM, "recognize"):
-            out = await _SHAZAM.recognize(file_path)
+        # Khởi tạo instance Shazam mới trong đúng event loop hiện tại
+        shz = Shazam()
+        if hasattr(shz, "recognize"):
+            out = await shz.recognize(file_path)
         else:
-            out = await _SHAZAM.recognize_song(file_path)
+            out = await shz.recognize_song(file_path)
+
         track = out.get("track", {})
         if not track:
             return None
@@ -205,7 +208,10 @@ async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1") ->
             "source": "Shazam Fingerprint"
         }
     except Exception as e:
-        LOGGER.warning(f"[SHAZAM] Lỗi nhận diện tại [{segment_name}]: {e}")
+        err_msg = f"{type(e).__name__}: {e}"
+        LOGGER.warning(f"[SHAZAM] Lỗi nhận diện tại [{segment_name}]: {err_msg}")
+        if log_callback:
+            log_callback(f"Lỗi Shazam [{segment_name}]: {err_msg}", "warn")
         return None
 
 
@@ -390,7 +396,9 @@ async def recognize_audio_from_telegram(
 
         # Tiến hành quét qua các cửa sổ âm thanh
         for seg_idx, (seg_name, start_ms, end_ms) in enumerate(scan_windows, start=1):
-            sample_w_path = f"{main_temp_path}_seg_{seg_idx}.wav"
+            tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            sample_w_path = tmp_wav.name
+            tmp_wav.close()
             try:
                 audio_seg[start_ms:end_ms].export(sample_w_path, format="wav")
                 t_from = int(start_ms / 1000)
@@ -402,7 +410,7 @@ async def recognize_audio_from_telegram(
                         log_callback(f"Chưa khớp -> Quét tiếp Shazam [{seg_name}] ({t_from}s - {t_to}s)...", "info")
                 LOGGER.info(f"[SHAZAM] Quét vân tay tại [{seg_name}] ({t_from}s - {t_to}s) cho: {file_name}")
 
-                res = await _query_shazam_file(sample_w_path, segment_name=seg_name)
+                res = await _query_shazam_file(sample_w_path, segment_name=seg_name, log_callback=log_callback)
                 if res:
                     return res
             finally:
