@@ -440,6 +440,7 @@ class XTAPOMusicApp {
         this.artistListView = document.getElementById('artistListView');
         this.artistProfileView = document.getElementById('artistProfileView');
         this.btnBackToArtistList = document.getElementById('btnBackToArtistList');
+        this.artistSearchForm = document.getElementById('artistSearchForm');
         this.artistSearchInput = document.getElementById('artistSearchInput');
         this.btnClearArtistSearch = document.getElementById('btnClearArtistSearch');
         this.btnSubmitArtistSearch = document.getElementById('btnSubmitArtistSearch');
@@ -3634,13 +3635,23 @@ class XTAPOMusicApp {
                 _artistSearchTimer = setTimeout(executeArtistSearch, 250);
             });
             this.artistSearchInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' || e.keyCode === 13) {
                     e.preventDefault();
                     e.stopPropagation();
                     clearTimeout(_artistSearchTimer);
                     executeArtistSearch();
                     this.artistSearchInput.blur();
                 }
+            });
+        }
+
+        if (this.artistSearchForm) {
+            this.artistSearchForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                clearTimeout(_artistSearchTimer);
+                executeArtistSearch();
+                if (this.artistSearchInput) this.artistSearchInput.blur();
             });
         }
 
@@ -5022,8 +5033,8 @@ class XTAPOMusicApp {
                 }
             }
 
-            // OK / Enter trên Remote TV
-            if (e.key === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13 || e.keyCode === 23) {
+            // OK / Enter trên Remote TV (Chỉ áp dụng khi ở TV Mode)
+            if (this.isTvMode && (e.key === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13 || e.keyCode === 23)) {
                 const activeModal = document.querySelector('.modal-overlay.open, .drawer.open, .modal.open');
                 if (activeModal) {
                     if (!isTyping && document.activeElement && activeModal.contains(document.activeElement) && document.activeElement !== document.body) {
