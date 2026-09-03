@@ -791,14 +791,16 @@ async def _db_update_channel_progress(chat_id: str, last_scanned_id: int, last_s
 
 
 _IN_MEMORY_LIBRARY_CACHE = None
+_LIBRARY_LOAD_LOCK = None
+_LAST_LIBRARY_FAIL_TIME = 0.0
 
 async def _db_load_library(force_reload: bool = False) -> list:
-    global _IN_MEMORY_LIBRARY_CACHE
+    global _IN_MEMORY_LIBRARY_CACHE, _LIBRARY_LOAD_LOCK, _LAST_LIBRARY_FAIL_TIME
     if not force_reload and _IN_MEMORY_LIBRARY_CACHE is not None:
         return _IN_MEMORY_LIBRARY_CACHE
 
     # Đọc từ file cache cục bộ trước để phản hồi tức thì
-    if os.path.exists(LIBRARY_CACHE_FILE):
+    if not force_reload and os.path.exists(LIBRARY_CACHE_FILE):
         try:
             with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -808,32 +810,69 @@ async def _db_load_library(force_reload: bool = False) -> list:
         except Exception as e:
             LOGGER.error(f"[MUSIC] Failed to load library cache file: {e}")
 
-    try:
-        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
-            doc = await asyncio.wait_for(
-                db.dbs["tracking"]["music_library"].find_one({"_id": "telegram_music_library"}),
-                timeout=15.0
-            )
-            if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
-                _IN_MEMORY_LIBRARY_CACHE = doc["albums"]
-                try:
-                    os.makedirs(MUSIC_DIR, exist_ok=True)
-                    with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                        json.dump(doc["albums"], f, ensure_ascii=False)
-                except Exception:
-                    pass
-                return doc["albums"]
-    except asyncio.TimeoutError:
-        LOGGER.warning("[MUSIC DB] MongoDB load library query timed out (15s). Using fallback.")
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
+    # Nếu vừa bị lỗi / timeout cách đây chưa tới 30s và không force_reload, dùng fallback cache hiện tại để không làm nghẽn server
+    now = time.time()
+    if not force_reload and (now - _LAST_LIBRARY_FAIL_TIME) < 30.0:
+        return _IN_MEMORY_LIBRARY_CACHE or []
 
-    return []
+    if _LIBRARY_LOAD_LOCK is None:
+        _LIBRARY_LOAD_LOCK = asyncio.Lock()
+
+    async with _LIBRARY_LOAD_LOCK:
+        # Double-check sau khi nhận lock
+        if not force_reload and _IN_MEMORY_LIBRARY_CACHE is not None:
+            return _IN_MEMORY_LIBRARY_CACHE
+
+        if not force_reload and os.path.exists(LIBRARY_CACHE_FILE):
+            try:
+                with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > 0:
+                        _IN_MEMORY_LIBRARY_CACHE = data
+                        return data
+            except Exception:
+                pass
+
+        try:
+            if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+                doc = await asyncio.wait_for(
+                    db.dbs["tracking"]["music_library"].find_one(
+                        {"_id": "telegram_music_library"},
+                        {"albums": 1}  # Chỉ lấy field albums, loại bỏ dữ liệu thừa giảm băng thông
+                    ),
+                    timeout=8.0
+                )
+                if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
+                    _IN_MEMORY_LIBRARY_CACHE = doc["albums"]
+                    _LAST_LIBRARY_FAIL_TIME = 0.0
+                    try:
+                        os.makedirs(MUSIC_DIR, exist_ok=True)
+                        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+                            json.dump(doc["albums"], f, ensure_ascii=False)
+                    except Exception:
+                        pass
+                    return doc["albums"]
+                else:
+                    _IN_MEMORY_LIBRARY_CACHE = []
+                    _LAST_LIBRARY_FAIL_TIME = time.time()
+                    return []
+        except asyncio.TimeoutError:
+            _LAST_LIBRARY_FAIL_TIME = time.time()
+            LOGGER.warning("[MUSIC DB] MongoDB load library query timed out (8s). Using fallback.")
+        except Exception as e:
+            _LAST_LIBRARY_FAIL_TIME = time.time()
+            LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
+
+        if _IN_MEMORY_LIBRARY_CACHE is None:
+            _IN_MEMORY_LIBRARY_CACHE = []
+
+        return _IN_MEMORY_LIBRARY_CACHE
 
 
 async def _db_save_library(albums: list):
-    global _IN_MEMORY_LIBRARY_CACHE
+    global _IN_MEMORY_LIBRARY_CACHE, _LAST_LIBRARY_FAIL_TIME
     _IN_MEMORY_LIBRARY_CACHE = albums
+    _LAST_LIBRARY_FAIL_TIME = 0.0
     try:
         os.makedirs(MUSIC_DIR, exist_ok=True)
         with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
@@ -843,15 +882,18 @@ async def _db_save_library(albums: list):
 
     try:
         if db and hasattr(db, "dbs") and "tracking" in db.dbs:
-            await db.dbs["tracking"]["music_library"].update_one(
-                {"_id": "telegram_music_library"},
-                {"$set": {
-                    "_id": "telegram_music_library",
-                    "albums": albums,
-                    "count": sum(len(a.get("tracks", [])) for a in albums),
-                    "updated_at": time.time()
-                }},
-                upsert=True
+            await asyncio.wait_for(
+                db.dbs["tracking"]["music_library"].update_one(
+                    {"_id": "telegram_music_library"},
+                    {"$set": {
+                        "_id": "telegram_music_library",
+                        "albums": albums,
+                        "count": sum(len(a.get("tracks", [])) for a in albums),
+                        "updated_at": time.time()
+                    }},
+                    upsert=True
+                ),
+                timeout=12.0
             )
             LOGGER.info(f"[MUSIC DB] Đã lưu và đồng bộ {len(albums)} albums lên MongoDB.")
     except Exception as e:
