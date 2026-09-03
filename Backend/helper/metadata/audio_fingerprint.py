@@ -7,6 +7,7 @@ import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, multi_clients, client_failures, work_loads, USERBOT_CLIENT_INDEX
 
 import os
+import tempfile
 
 _SHAZAM = Shazam()
 _client_rr_counter = 0
@@ -164,15 +165,15 @@ def extract_embedded_audio_tags(data: bytes) -> dict:
     return res
 
 
-async def _query_shazam_bytes(file_bytes_data: bytes, segment_name: str = "Đoạn 1") -> dict:
-    """Gửi mẫu âm thanh tới máy chủ Shazam để trích xuất dấu vân tay âm thanh."""
-    if not file_bytes_data or len(file_bytes_data) < 10240:
+async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1") -> dict:
+    """Gửi tệp âm thanh thực tế tới máy chủ Shazam để trích xuất dấu vân tay âm thanh chuẩn xác."""
+    if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
         return None
     try:
         if hasattr(_SHAZAM, "recognize"):
-            out = await _SHAZAM.recognize(file_bytes_data)
+            out = await _SHAZAM.recognize(file_path)
         else:
-            out = await _SHAZAM.recognize_song(file_bytes_data)
+            out = await _SHAZAM.recognize_song(file_path)
         track = out.get("track", {})
         if not track:
             return None
@@ -218,8 +219,8 @@ async def recognize_audio_from_telegram(
 ) -> dict:
     """
     Nhận diện âm thanh đa phân đoạn (Multi-Segment Audio Fingerprinting):
-    - Lớp 1A: Shazam mẫu đoạn đầu bài (0s - 30s)
-    - Lớp 1B: Shazam mẫu đoạn điệp khúc / giữa bài (~35% thời lượng) nếu đoạn 1 không khớp
+    - Lớp 1A: Shazam mẫu đoạn đầu bài (0s - 20s chuẩn WAV)
+    - Lớp 1B: Shazam mẫu đoạn điệp khúc chính (Chorus 35% - 50% thời lượng chuẩn WAV)
     - Lớp 2: Trích xuất trực tiếp thẻ metadata nhúng (ID3v2 / Vorbis Tags) từ file gốc
     Tự động đọc từ Local Cache hoặc xoay vòng Bot Pool Telegram để tải audio mượt mà.
     """
@@ -244,7 +245,7 @@ async def recognize_audio_from_telegram(
                 p = os.path.join(cache_dir, k)
                 if os.path.exists(p) and os.path.getsize(p) > 1024:
                     detected_file_size = os.path.getsize(p)
-                    # Tính dung lượng nửa bài hát (50% dung lượng tệp, tối thiểu 8MB, tối đa 35MB)
+                    # Đọc dữ liệu (15MB - 35MB) để có đủ 60s - 90s bài hát
                     if detected_file_size <= 16 * 1024 * 1024:
                         read_limit = max(int(detected_file_size * 0.50), min(detected_file_size, 10 * 1024 * 1024))
                     else:
@@ -254,7 +255,7 @@ async def recognize_audio_from_telegram(
                         half_bytes_data = cf.read(read_limit)
 
                     if half_bytes_data:
-                        LOGGER.info(f"[SHAZAM] Đọc thành công nửa bài ({round(len(half_bytes_data)/1024/1024, 1)}MB / 50%) từ Cache cục bộ cho #{target_msg_id}.")
+                        LOGGER.info(f"[SHAZAM] Đọc thành công nửa bài ({round(len(half_bytes_data)/1024/1024, 1)}MB) từ Cache cục bộ cho #{target_msg_id}.")
                     break
         except Exception as e:
             LOGGER.warning(f"[SHAZAM] Lỗi kiểm tra cache: {e}")
@@ -286,7 +287,7 @@ async def recognize_audio_from_telegram(
                 file_name = getattr(media, "file_name", "Unknown")
                 detected_file_size = getattr(media, "file_size", 0) or 0
 
-                # Tính dung lượng tải nửa bài hát (50% dung lượng tệp)
+                # Tính dung lượng tải (đủ để chứa cả Intro lẫn Điệp khúc)
                 if detected_file_size > 0:
                     if detected_file_size <= 16 * 1024 * 1024:
                         half_limit = max(int(detected_file_size * 0.50), min(detected_file_size, 10 * 1024 * 1024))
@@ -296,9 +297,9 @@ async def recognize_audio_from_telegram(
                     half_limit = 15 * 1024 * 1024
 
                 limit_mb_str = f"{round(half_limit/1024/1024, 1)}MB"
-                LOGGER.info(f"[SHAZAM] Đang tải nửa bài hát '{file_name}' ({limit_mb_str} ~ 50% tệp) bằng client [{cl_name}]...")
+                LOGGER.info(f"[SHAZAM] Đang tải mẫu bài hát '{file_name}' ({limit_mb_str}) bằng client [{cl_name}]...")
                 if log_callback:
-                    log_callback(f"Đang tải nửa bài hát ({limit_mb_str} ~ 50% thời lượng)...", "info")
+                    log_callback(f"Đang tải mẫu âm thanh ({limit_mb_str})...", "info")
 
                 buf = io.BytesIO()
                 downloaded = 0
@@ -332,54 +333,105 @@ async def recognize_audio_from_telegram(
         LOGGER.error(f"[SHAZAM] Tất cả client đều thất bại khi tải: {file_name}")
         return None
 
-    # ── LỚP 1A: Shazam Dấu Vân Tay Trên Toàn Bộ Nửa Bài Hát (0s - 50%) ──
-    half_mb_display = round(len(half_bytes_data) / 1024 / 1024, 1)
-    if log_callback:
-        log_callback(f"Lớp 1A: Quét dấu vân tay Shazam trên nửa bài hát ({half_mb_display}MB)...", "info")
-    res1 = await _query_shazam_bytes(half_bytes_data, segment_name="Nửa Bài Hát (50%)")
-    if res1:
-        return res1
+    # ── XỬ LÝ ÂM THANH QUA FILE TẠM & PYDUB (Chuẩn hóa WAV như mic thu âm iPhone) ──
+    ext = os.path.splitext(file_name)[1].lower() if file_name else ""
+    if ext not in [".mp3", ".flac", ".m4a", ".wav", ".aac", ".ogg"]:
+        if half_bytes_data.startswith(b"fLaC"):
+            ext = ".flac"
+        elif half_bytes_data.startswith(b"RIFF"):
+            ext = ".wav"
+        elif b"ftyp" in half_bytes_data[:32]:
+            ext = ".m4a"
+        else:
+            ext = ".mp3"
 
-    # ── LỚP 1B: Shazam Lát Cắt Điệp Khúc (Nếu nửa bài có intro lạ hoặc nhiễu) ──
-    # Giữ lại 8KB header đầu tệp để bảo toàn định dạng (FLAC/WAV/MP3/M4A), ghép với lát cắt điệp khúc
-    if len(half_bytes_data) > 6 * 1024 * 1024:
-        header_len = min(8192, len(half_bytes_data))
-        file_hdr = half_bytes_data[:header_len]
-        chorus_offset = int(len(half_bytes_data) * 0.35)
-        chorus_slice = file_hdr + half_bytes_data[chorus_offset:]
+    main_temp_path = None
+    sample1_path = None
+    sample2_path = None
 
-        if len(chorus_slice) >= 102400:
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tf:
+            tf.write(half_bytes_data)
+            main_temp_path = tf.name
+
+        # Dùng pydub giải mã và cắt các phân đoạn âm thanh chuẩn WAV 18s
+        audio_seg = None
+        total_ms = 0
+        try:
+            from pydub import AudioSegment
+            audio_seg = AudioSegment.from_file(main_temp_path)
+            total_ms = len(audio_seg)
+        except Exception as pe:
+            LOGGER.warning(f"[SHAZAM] Không thể mở qua pydub: {pe}. Sẽ thử trực tiếp file gốc.")
+
+        # ── LỚP 1A: Shazam Phân Đoạn Đầu (0s - 20s chuẩn WAV) ──
+        if audio_seg and total_ms > 5000:
+            sample1_path = main_temp_path + "_seg1.wav"
+            dur1 = min(20000, total_ms)
+            audio_seg[:dur1].export(sample1_path, format="wav")
+            target_query_path = sample1_path
+        else:
+            target_query_path = main_temp_path
+
+        if log_callback:
+            log_callback("Lớp 1A: Quét dấu vân tay Shazam phân đoạn 1 (0s - 20s)...", "info")
+        res1 = await _query_shazam_file(target_query_path, segment_name="Đoạn 1")
+        if res1:
+            return res1
+
+        # ── LỚP 1B: Shazam Phân Đoạn Điệp Khúc (Chorus ~35% - 50% thời lượng chuẩn WAV) ──
+        if audio_seg and total_ms > 25000:
+            chorus_start = int(total_ms * 0.40)
+            chorus_end = min(chorus_start + 20000, total_ms)
+            sample2_path = main_temp_path + "_chorus.wav"
+            audio_seg[chorus_start:chorus_end].export(sample2_path, format="wav")
+
             if log_callback:
-                log_callback("Đoạn đầu chưa khớp -> Lớp 1B: Quét tập trung phân đoạn Điệp khúc...", "info")
-            LOGGER.info(f"[SHAZAM] Thử quét lát cắt điệp khúc ({round(len(chorus_slice)/1024/1024, 1)}MB) cho: {file_name}")
-            res2 = await _query_shazam_bytes(chorus_slice, segment_name="Điệp khúc")
+                log_callback(f"Đoạn đầu chưa khớp -> Lớp 1B: Quét tập trung Điệp khúc ({int(chorus_start/1000)}s - {int(chorus_end/1000)}s)...", "info")
+            LOGGER.info(f"[SHAZAM] Thử quét phân đoạn Điệp khúc ({int(chorus_start/1000)}s - {int(chorus_end/1000)}s) cho: {file_name}")
+            res2 = await _query_shazam_file(sample2_path, segment_name="Điệp khúc")
             if res2:
                 return res2
 
-    # ── LỚP 2: Trích xuất Thẻ Metadata Gốc (ID3v2 / FLAC Vorbis Comments) từ tệp ──
-    if log_callback:
-        log_callback("Shazam chưa khớp -> Lớp 2: Đang đọc Thẻ Tag ID3 gốc nhúng trong tệp...", "info")
-    embedded_tags = extract_embedded_audio_tags(half_bytes_data)
-    if embedded_tags.get("title") and (embedded_tags.get("artist") or embedded_tags.get("album")):
-        t_tit = embedded_tags["title"].strip()
-        t_art = embedded_tags.get("artist", "").strip()
-        t_alb = embedded_tags.get("album", "").strip()
-        t_gen = embedded_tags.get("genre", "").strip()
+        # ── LỚP 1C: Dự phòng quét tệp gốc ──
+        if target_query_path != main_temp_path:
+            res_full = await _query_shazam_file(main_temp_path, segment_name="Toàn Đoạn")
+            if res_full:
+                return res_full
 
-        # Kiểm tra tính hợp lệ của tag (không phải tag rác quảng cáo)
-        if len(t_tit) >= 2 and not any(k in t_tit.lower() for k in ["http", "t.me", "@"]):
-            LOGGER.info(f"[EMBEDDED TAGS] Trích xuất thành công tag gốc: {t_art} - {t_tit}")
-            return {
-                "title": t_tit,
-                "artist": t_art or "Unknown Artist",
-                "album": t_alb or f"{t_tit} - Single",
-                "cover_url": "",
-                "genre": t_gen,
-                "layer": "Thẻ ID3 Tệp Gốc",
-                "source": "Embedded File Tags"
-            }
+        # ── LỚP 2: Trích xuất Thẻ Metadata Gốc (ID3v2 / FLAC Vorbis Comments) từ tệp ──
+        if log_callback:
+            log_callback("Shazam chưa khớp -> Lớp 2: Đang đọc Thẻ Tag ID3 gốc nhúng trong tệp...", "info")
+        embedded_tags = extract_embedded_audio_tags(half_bytes_data)
+        if embedded_tags.get("title") and (embedded_tags.get("artist") or embedded_tags.get("album")):
+            t_tit = embedded_tags["title"].strip()
+            t_art = embedded_tags.get("artist", "").strip()
+            t_alb = embedded_tags.get("album", "").strip()
+            t_gen = embedded_tags.get("genre", "").strip()
 
-    LOGGER.info(f"[SHAZAM] Không nhận diện được qua Audio Fingerprint nửa bài & Thẻ gốc cho: {file_name}")
-    return None
+            # Kiểm tra tính hợp lệ của tag (không phải tag rác quảng cáo)
+            if len(t_tit) >= 2 and not any(k in t_tit.lower() for k in ["http", "t.me", "@"]):
+                LOGGER.info(f"[EMBEDDED TAGS] Trích xuất thành công tag gốc: {t_art} - {t_tit}")
+                return {
+                    "title": t_tit,
+                    "artist": t_art or "Unknown Artist",
+                    "album": t_alb or f"{t_tit} - Single",
+                    "cover_url": "",
+                    "genre": t_gen,
+                    "layer": "Thẻ ID3 Tệp Gốc",
+                    "source": "Embedded File Tags"
+                }
+
+        LOGGER.info(f"[SHAZAM] Không nhận diện được qua Audio Fingerprint & Thẻ gốc cho: {file_name}")
+        return None
+
+    finally:
+        # Luôn dọn dẹp các tệp âm thanh tạm để giải phóng ổ cứng
+        for tp in [main_temp_path, sample1_path, sample2_path]:
+            if tp and os.path.exists(tp):
+                try:
+                    os.remove(tp)
+                except Exception:
+                    pass
 
 

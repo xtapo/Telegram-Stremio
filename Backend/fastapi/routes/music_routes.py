@@ -3292,35 +3292,49 @@ class MusicShazamManager:
 
                 # Lớp 3: Fallback Online Metadata Scraper (Apple Music + Deezer + Fuzzy)
                 if not fg_res and curr_track:
-                    _track_log("Chuyển tiếp Lớp 3: Đối sánh trực tuyến Apple Music & Deezer...", "info")
                     raw_name = curr_track.get("name", "")
                     raw_artist = curr_track.get("artist", "")
                     if raw_artist.lower() in ["unknown artist", "unknown", "va", "various artists"]:
                         raw_artist = ""
-                    scraped = await fetch_music_metadata(
-                        raw_title=raw_name,
-                        raw_artist=raw_artist,
-                        file_name=raw_name
+
+                    # Chỉ gọi Lớp 3 nếu tiêu đề có độ tin cậy tối thiểu (không phải chuỗi ký tự lạ/rác)
+                    is_unreliable_name = (
+                        not raw_artist and (
+                            len(raw_name.strip()) < 4 or
+                            any(k in raw_name.lower() for k in ["track", "audio", "bai hat", "unknown"]) or
+                            any(c in raw_name for c in ["Ζ", "ζ", "Ω", "ω"])
+                        )
                     )
-                    if scraped and scraped.get("title") and scraped.get("artist") and scraped.get("artist").lower() not in ["unknown artist", "unknown"]:
-                        LOGGER.info(f"[MULTI-TIER] Khớp qua Lớp 3 [{scraped.get('layer', 'Online')}]: {scraped.get('artist')} - {scraped.get('title')}")
-                        fg_res = {
-                            "title": scraped.get("title"),
-                            "artist": scraped.get("artist"),
-                            "album": scraped.get("album"),
-                            "cover_url": scraped.get("cover_url"),
-                            "genre": scraped.get("genre"),
-                            "layer": scraped.get("layer", "Apple Music / Deezer")
-                        }
+
+                    if not is_unreliable_name:
+                        _track_log("Chuyển tiếp Lớp 3: Đối sánh trực tuyến Apple Music & Deezer...", "info")
+                        scraped = await fetch_music_metadata(
+                            raw_title=raw_name,
+                            raw_artist=raw_artist,
+                            file_name=raw_name
+                        )
+                        if scraped and scraped.get("title") and scraped.get("artist") and scraped.get("artist").lower() not in ["unknown artist", "unknown"]:
+                            LOGGER.info(f"[MULTI-TIER] Khớp qua Lớp 3 [{scraped.get('layer', 'Online')}]: {scraped.get('artist')} - {scraped.get('title')}")
+                            fg_res = {
+                                "title": scraped.get("title"),
+                                "artist": scraped.get("artist"),
+                                "album": scraped.get("album"),
+                                "cover_url": scraped.get("cover_url"),
+                                "genre": scraped.get("genre"),
+                                "layer": scraped.get("layer", "Apple Music / Deezer")
+                            }
+                    else:
+                        _track_log("Tiêu đề tệp không có dấu hiệu nghệ sĩ rõ ràng, bỏ qua Lớp 3 để tránh nhận diện sai sang bài nước ngoài.", "warn")
 
                 if fg_res:
                     matched_layer = fg_res.get("layer", "Đa Lớp")
+                    is_audio_shazam = matched_layer.startswith("Shazam")
                     update_fields = {}
                     if fg_res.get("title"): update_fields["name"] = fg_res["title"]
                     if fg_res.get("artist"): update_fields["artist"] = fg_res["artist"]
                     if fg_res.get("album"): update_fields["album"] = fg_res["album"]
                     if fg_res.get("cover_url"): update_fields["coverUrl"] = fg_res["cover_url"]
-                    update_fields["isShazam"] = True
+                    update_fields["isShazam"] = is_audio_shazam
 
                     if update_fields:
                         updated = False
