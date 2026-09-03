@@ -2524,6 +2524,7 @@ class XTAPOMusicApp {
         li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}${(!this.isPlaying && idx === this.currentTrackIndex) ? ' paused' : ''}`;
         li.setAttribute('data-index', idx);
         const trackName = track.name || 'Không có tên';
+        const trackArtist = (track.artist || (this.currentAlbum && this.currentAlbum.artist) || '').trim();
         const isCustomPlaylist = Boolean(this.activePlaylistId || (this.currentAlbum && String(this.currentAlbum.id).startsWith('pl-')));
         const isFavQueue = Boolean(this.currentAlbum && this.currentAlbum.id === 'favorites-queue');
 
@@ -2555,7 +2556,10 @@ class XTAPOMusicApp {
                     <div class="eq-bar"></div>
                     <div class="eq-bar"></div>
                 </div>
-                <span class="track-name" title="${this.escapeHtml(trackName)}">${this.escapeHtml(trackName)}</span>
+                <div class="track-info-col">
+                    <span class="track-name" title="${this.escapeHtml(trackName)}">${this.escapeHtml(trackName)}</span>
+                    ${trackArtist ? `<span class="track-artist" title="${this.escapeHtml(trackArtist)}">${this.escapeHtml(trackArtist)}</span>` : ''}
+                </div>
             </div>
             <div class="track-item-right" style="display: flex; align-items: center; gap: 8px;">
                 ${actionBtnHtml}
