@@ -3449,12 +3449,28 @@ class XTAPOMusicApp {
             this.closeTracklistModal.addEventListener('click', () => this.closeModal(this.tracklistModal));
         }
         if (this.tracklistModalSearchInput) {
+            let _isTracklistComposing = false;
+            this.tracklistModalSearchInput.addEventListener('compositionstart', () => { _isTracklistComposing = true; });
+            this.tracklistModalSearchInput.addEventListener('compositionend', (e) => {
+                _isTracklistComposing = false;
+                clearTimeout(this._modalSearchDebounceTimer);
+                this.renderTracklist(e.target.value);
+            });
             this.tracklistModalSearchInput.addEventListener('input', (e) => {
+                if (_isTracklistComposing || e.isComposing) return;
                 clearTimeout(this._modalSearchDebounceTimer);
                 const val = e.target.value;
                 this._modalSearchDebounceTimer = setTimeout(() => {
                     this.renderTracklist(val);
                 }, 150);
+            });
+            this.tracklistModalSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    if (_isTracklistComposing || e.isComposing || e.keyCode === 229) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.tracklistModalSearchInput.blur();
+                }
             });
         }
 
@@ -3481,6 +3497,11 @@ class XTAPOMusicApp {
                 this._searchDebounceTimer = setTimeout(() => {
                     this.handleSearch(val);
                 }, 200);
+            });
+            this.searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (isSearchComposing || e.isComposing || e.keyCode === 229)) {
+                    return;
+                }
             });
         }
 
@@ -3636,6 +3657,7 @@ class XTAPOMusicApp {
             });
             this.artistSearchInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.keyCode === 13) {
+                    if (_isArtistComposing || e.isComposing || e.keyCode === 229) return;
                     e.preventDefault();
                     e.stopPropagation();
                     clearTimeout(_artistSearchTimer);
@@ -3649,6 +3671,7 @@ class XTAPOMusicApp {
             this.artistSearchForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (_isArtistComposing) return;
                 clearTimeout(_artistSearchTimer);
                 executeArtistSearch();
                 if (this.artistSearchInput) this.artistSearchInput.blur();
@@ -3707,6 +3730,7 @@ class XTAPOMusicApp {
             });
             this.genreSearchInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
+                    if (_isGenreComposing || e.isComposing || e.keyCode === 229) return;
                     e.preventDefault();
                     e.stopPropagation();
                     this.genreSearchInput.blur();
@@ -3763,6 +3787,7 @@ class XTAPOMusicApp {
             });
             this.countryArtistSearchInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
+                    if (_isCArtistComposing || e.isComposing || e.keyCode === 229) return;
                     e.preventDefault();
                     e.stopPropagation();
                     this.countryArtistSearchInput.blur();
@@ -3791,6 +3816,7 @@ class XTAPOMusicApp {
             });
             this.countryTrackSearchInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
+                    if (_isCTrackComposing || e.isComposing || e.keyCode === 229) return;
                     e.preventDefault();
                     e.stopPropagation();
                     this.countryTrackSearchInput.blur();
@@ -3852,8 +3878,29 @@ class XTAPOMusicApp {
             });
         }
         if (this.favSearchInput) {
-            this.favSearchInput.addEventListener('input', (e) => {
+            let _isFavComposing = false;
+            let _favSearchTimer = null;
+            this.favSearchInput.addEventListener('compositionstart', () => { _isFavComposing = true; });
+            this.favSearchInput.addEventListener('compositionend', (e) => {
+                _isFavComposing = false;
+                clearTimeout(_favSearchTimer);
                 this.renderFavoritesList(e.target.value.trim());
+            });
+            this.favSearchInput.addEventListener('input', (e) => {
+                if (_isFavComposing || e.isComposing) return;
+                clearTimeout(_favSearchTimer);
+                const val = e.target.value.trim();
+                _favSearchTimer = setTimeout(() => {
+                    this.renderFavoritesList(val);
+                }, 200);
+            });
+            this.favSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    if (_isFavComposing || e.isComposing || e.keyCode === 229) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.favSearchInput.blur();
+                }
             });
         }
 
@@ -3902,7 +3949,10 @@ class XTAPOMusicApp {
         if (this.createPlaylistBtn && this.newPlaylistName) {
             this.createPlaylistBtn.addEventListener('click', () => this.handleCreatePlaylist());
             this.newPlaylistName.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') this.handleCreatePlaylist();
+                if (e.key === 'Enter') {
+                    if (e.isComposing || e.keyCode === 229) return;
+                    this.handleCreatePlaylist();
+                }
             });
         }
 
@@ -3934,6 +3984,7 @@ class XTAPOMusicApp {
         if (this.inputNewPlaylistInline) {
             this.inputNewPlaylistInline.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
+                    if (e.isComposing || e.keyCode === 229) return;
                     const name = this.inputNewPlaylistInline.value.trim();
                     this.createNewPlaylistWithTracks(name, this.selectedTracksForPlaylist);
                 }
@@ -7628,13 +7679,25 @@ class XTAPOMusicApp {
             this.btnLyricsOnlineSearch.addEventListener('click', () => this.handleManualOnlineLyricsSearch());
         }
         if (this.lyricsSearchTrackInput) {
+            let _isLyricsTrackComposing = false;
+            this.lyricsSearchTrackInput.addEventListener('compositionstart', () => { _isLyricsTrackComposing = true; });
+            this.lyricsSearchTrackInput.addEventListener('compositionend', () => { _isLyricsTrackComposing = false; });
             this.lyricsSearchTrackInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') this.handleManualOnlineLyricsSearch();
+                if (e.key === 'Enter') {
+                    if (_isLyricsTrackComposing || e.isComposing || e.keyCode === 229) return;
+                    this.handleManualOnlineLyricsSearch();
+                }
             });
         }
         if (this.lyricsSearchArtistInput) {
+            let _isLyricsArtistComposing = false;
+            this.lyricsSearchArtistInput.addEventListener('compositionstart', () => { _isLyricsArtistComposing = true; });
+            this.lyricsSearchArtistInput.addEventListener('compositionend', () => { _isLyricsArtistComposing = false; });
             this.lyricsSearchArtistInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') this.handleManualOnlineLyricsSearch();
+                if (e.key === 'Enter') {
+                    if (_isLyricsArtistComposing || e.isComposing || e.keyCode === 229) return;
+                    this.handleManualOnlineLyricsSearch();
+                }
             });
         }
 

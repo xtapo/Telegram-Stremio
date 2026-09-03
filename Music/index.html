@@ -391,7 +391,7 @@
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="text" id="tracklistModalSearchInput" placeholder="Tìm nhanh bài hát trong danh sách..." autocomplete="off">
+                <input type="search" id="tracklistModalSearchInput" placeholder="Tìm nhanh bài hát trong danh sách..." autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search">
             </div>
             <div class="tracklist-modal-body">
                 <ul class="tracklist" id="modalTracklistEl">
@@ -422,7 +422,7 @@
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="text" id="searchInput" placeholder="Tìm kiếm bài hát, nghệ sĩ, album..." autocomplete="off">
+                <input type="search" id="searchInput" placeholder="Tìm kiếm bài hát, nghệ sĩ, album..." autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search">
                 <button class="search-esc" id="closeSearchModal">ESC</button>
             </div>
             <div class="search-results" id="searchResults">
@@ -1145,7 +1145,7 @@
                         Tải Zip
                     </button>
                 </div>
-                <input type="text" id="favSearchInput" placeholder="Tìm kiếm bài hát..." style="max-width: 180px; padding: 7px 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; font-size: 0.8rem; outline: none;">
+                <input type="search" id="favSearchInput" placeholder="Tìm kiếm bài hát..." autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search" style="max-width: 180px; padding: 7px 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; font-size: 0.8rem; outline: none;">
             </div>
 
             <!-- List Container -->
@@ -1470,8 +1470,8 @@
                 <!-- Search on Multiple Online Providers -->
                 <div class="lyrics-editor-search-box" style="flex-direction: column; gap: 8px;">
                     <div style="display: flex; gap: 8px; width: 100%;">
-                        <input type="text" id="lyricsSearchTrackInput" placeholder="Tên bài hát (vd: Chúng Ta Của Hiện Tại, Blank Space...)" style="flex: 2; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
-                        <input type="text" id="lyricsSearchArtistInput" placeholder="Ca sĩ (không bắt buộc)..." style="flex: 1.2; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
+                        <input type="search" id="lyricsSearchTrackInput" placeholder="Tên bài hát (vd: Chúng Ta Của Hiện Tại, Blank Space...)" autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search" style="flex: 2; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
+                        <input type="search" id="lyricsSearchArtistInput" placeholder="Ca sĩ (không bắt buộc)..." autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search" style="flex: 1.2; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: #fff; font-size: 0.85rem; outline: none;">
                         <select id="lyricsSearchProviderSelect" style="padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: #fff; font-size: 0.8rem; outline: none; cursor: pointer;">
                             <option value="all" style="background: #181b22; color: #fff;">🌐 Tất Cả Nguồn (LRCLIB + Netease)</option>
                             <option value="netease" style="background: #181b22; color: #fff;">🇻🇳 Netease 163 (V-Pop & Châu Á)</option>
