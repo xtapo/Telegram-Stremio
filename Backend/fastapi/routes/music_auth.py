@@ -1,7 +1,7 @@
 import re
 import time
 import secrets
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse, Response as PlainResponse
 from Backend import db
 from Backend.helper.passwords import hash_password, verify_password
@@ -321,8 +321,45 @@ async def logout_music_user(request: Request):
     return {"status": "success", "message": "Đã đăng xuất."}
 
 
+async def _bg_verify_channel_membership(user_id: str):
+    """Xác thực quyền tham gia channel Telegram của user trong nền (không làm chậm lần load đầu)"""
+    try:
+        coll = db.dbs["tracking"]["music_users"]
+        user = await coll.find_one({"_id": user_id})
+        if not user or not user.get("telegram_session"):
+            return
+
+        from Backend.fastapi.routes.telegram_qr_auth import get_user_tg_client
+        from Backend.fastapi.routes.music_routes import _db_load_library
+        user_cl = await get_user_tg_client(user_id)
+        if user_cl:
+            albums_data = await _db_load_library()
+            sample_chat_ids = set()
+            for alb in (albums_data or []):
+                for trk in alb.get("tracks", []):
+                    cid = trk.get("chat_id") or trk.get("chatId") or trk.get("telegram_chat_id")
+                    if cid:
+                        sample_chat_ids.add(int(cid))
+                    if len(sample_chat_ids) >= 3:
+                        break
+                if len(sample_chat_ids) >= 3:
+                    break
+            if sample_chat_ids:
+                has_access = False
+                for cid in sample_chat_ids:
+                    try:
+                        await user_cl.get_chat(cid)
+                        has_access = True
+                        break
+                    except Exception:
+                        pass
+                await coll.update_one({"_id": user_id}, {"$set": {"is_channel_member": has_access}})
+    except Exception:
+        pass
+
+
 @auth_router.get("/api/music/auth/profile")
-async def get_music_profile(request: Request):
+async def get_music_profile(request: Request, background_tasks: BackgroundTasks):
     user_id = request.session.get("music_user_id")
     if not user_id:
         return {"status": "guest", "user": None}
@@ -353,38 +390,10 @@ async def get_music_profile(request: Request):
             
         is_member = user.get("is_channel_member")
         if is_member is None:
+            # Tạm thời mặc định True để phản hồi ngay lập tức trong vài mili-giây
+            is_member = True
             if user.get("telegram_session"):
-                try:
-                    from Backend.fastapi.routes.telegram_qr_auth import get_user_tg_client
-                    from Backend.fastapi.routes.music_routes import _db_load_library
-                    user_cl = await get_user_tg_client(user_id)
-                    if user_cl:
-                        albums_data = await _db_load_library()
-                        sample_chat_ids = set()
-                        for alb in (albums_data or []):
-                            for trk in alb.get("tracks", []):
-                                cid = trk.get("chat_id") or trk.get("chatId") or trk.get("telegram_chat_id")
-                                if cid:
-                                    sample_chat_ids.add(int(cid))
-                                if len(sample_chat_ids) >= 3:
-                                    break
-                            if len(sample_chat_ids) >= 3:
-                                break
-                        if sample_chat_ids:
-                            has_access = False
-                            for cid in sample_chat_ids:
-                                try:
-                                    await user_cl.get_chat(cid)
-                                    has_access = True
-                                    break
-                                except Exception:
-                                    pass
-                            is_member = has_access
-                            await coll.update_one({"_id": user_id}, {"$set": {"is_channel_member": is_member}})
-                except Exception:
-                    pass
-            if is_member is None:
-                is_member = True
+                background_tasks.add_task(_bg_verify_channel_membership, user_id)
 
         channel_warning = None if is_member else "Tài khoản của bạn chưa tham gia thành viên vui lòng liên hệ Admin"
 

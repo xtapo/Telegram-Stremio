@@ -304,15 +304,17 @@ class XTAPOMusicApp {
 
         // Elements
         this.audio = document.getElementById('mainAudio');
+        const isMobileInit = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
         if (this.audio) {
-            this.audio.preload = 'auto';
+            this.audio.preload = isMobileInit ? 'none' : 'metadata';
             this.audio.playsInline = true;
             this.audio.setAttribute('playsinline', '');
             this.audio.setAttribute('webkit-playsinline', '');
         }
         this.preloaderAudio = new Audio();
-        this.preloaderAudio.preload = 'auto';
+        this.preloaderAudio.preload = isMobileInit ? 'none' : 'metadata';
         this._preloadedTrackUrl = null;
+        this._pendingAudioSrc = null;
         this.albumTitle = document.getElementById('albumTitle');
         this.artistName = document.getElementById('artistName');
         this.albumYearTag = document.getElementById('albumYearTag');
@@ -812,7 +814,12 @@ class XTAPOMusicApp {
         this.setupDeviceSyncEvents();
         this.initMusicSync();
         this.sendSyncHeartbeat();
-        setInterval(() => this.sendSyncHeartbeat(), 2200);
+        const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+        const heartbeatInterval = isMobileDevice ? 8000 : 2200;
+        setInterval(() => {
+            if (document.hidden && isMobileDevice) return;
+            this.sendSyncHeartbeat();
+        }, heartbeatInterval);
         this.setupAuthEvents();
         this.setupMediaSession();
         this.setupTvMode();
@@ -941,14 +948,33 @@ class XTAPOMusicApp {
 
     async fetchUserProfile() {
         try {
+            // Khôi phục nhanh thông tin user từ local cache để giao diện hiển thị ngay lập tức (0ms)
+            if (!this.currentUser) {
+                try {
+                    const cachedUserRaw = localStorage.getItem('xtapo_cached_user');
+                    if (cachedUserRaw) {
+                        const cachedUser = JSON.parse(cachedUserRaw);
+                        if (cachedUser && cachedUser.id) {
+                            this.currentUser = cachedUser;
+                            this.updateAuthUI(true);
+                        }
+                    }
+                } catch (e) {}
+            }
+
             const res = await fetch('/api/music/auth/profile');
             const data = await res.json();
             if (data.status === 'authenticated' && data.user) {
                 this.currentUser = data.user;
+                try { localStorage.setItem('xtapo_cached_user', JSON.stringify(data.user)); } catch (e) {}
                 this.updateAuthUI(true);
                 this.startHeartbeat();
-                await this.fetchUserFavorites();
-                await this.loadPlaylists(); // Will now fetch user playlists
+
+                // Tải song song Favorites & Playlists thay vì chờ tuần tự waterfall
+                await Promise.all([
+                    this.fetchUserFavorites(),
+                    this.loadPlaylists()
+                ]);
 
                 // Kiểm tra và hiển thị cảnh báo nếu chưa tham gia Channel
                 if (data.user.is_channel_member === false || data.user.channel_warning) {
@@ -966,6 +992,10 @@ class XTAPOMusicApp {
                 this.showChannelWarningBanner(pendingMsg);
             } else {
                 this.currentUser = null;
+                try {
+                    localStorage.removeItem('xtapo_cached_user');
+                    localStorage.removeItem('xtapo_cached_favs');
+                } catch (e) {}
                 this.stopHeartbeat();
                 this.updateAuthUI(false);
                 const existingBanner = document.getElementById('channelWarningBanner');
@@ -1699,6 +1729,8 @@ class XTAPOMusicApp {
             if (this.playlistGrid) this.playlistGrid.innerHTML = '';
             localStorage.removeItem('xtapo_music_player_state');
             localStorage.removeItem('xtapo_music_active_view');
+            localStorage.removeItem('xtapo_cached_user');
+            localStorage.removeItem('xtapo_cached_favs');
             this.loadAlbum(0, 0, false);
             this.renderAlbumGrid();
         } catch (e) { }
@@ -1706,10 +1738,20 @@ class XTAPOMusicApp {
 
     async fetchUserFavorites() {
         try {
+            if (!this.favoriteTracks || this.favoriteTracks.length === 0) {
+                try {
+                    const cachedFavs = localStorage.getItem('xtapo_cached_favs');
+                    if (cachedFavs) {
+                        this.favoriteTracks = JSON.parse(cachedFavs);
+                        this.updateFavoriteBtnState();
+                    }
+                } catch (e) {}
+            }
             const res = await fetch('/api/music/user/favorites');
             const data = await res.json();
             if (data.status === 'success') {
-                this.favoriteTracks = data.favorites;
+                this.favoriteTracks = data.favorites || [];
+                try { localStorage.setItem('xtapo_cached_favs', JSON.stringify(this.favoriteTracks)); } catch (e) {}
                 this.updateFavoriteBtnState();
             }
         } catch (e) {}
@@ -2637,10 +2679,24 @@ class XTAPOMusicApp {
         }
 
         if (track.previewUrl) {
-            this.audio.src = track.previewUrl;
+            const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+            if (isMobileDevice && !autoPlay) {
+                // Trên thiết bị di động, khi chỉ khôi phục thông tin bài hát lúc mới vào (autoPlay = false),
+                // lưu tạm vào _pendingAudioSrc mà không gán ngay vào audio.src để tránh kích hoạt stream FLAC ngầm
+                this._pendingAudioSrc = track.previewUrl;
+            } else {
+                if (this.audio && (this.audio.src !== track.previewUrl && !this.audio.src.endsWith(track.previewUrl))) {
+                    this.audio.src = track.previewUrl;
+                }
+                this._pendingAudioSrc = null;
+            }
         }
 
         if (autoPlay) {
+            if (this._pendingAudioSrc && this.audio) {
+                this.audio.src = this._pendingAudioSrc;
+                this._pendingAudioSrc = null;
+            }
             this.play();
         } else {
             this.pauseVisuals();
@@ -2943,6 +2999,11 @@ class XTAPOMusicApp {
         this.updatePlayStateVisuals(true);
         this.updateMediaSession();
         this.startLyricsSyncLoop();
+
+        if (this._pendingAudioSrc && this.audio) {
+            this.audio.src = this._pendingAudioSrc;
+            this._pendingAudioSrc = null;
+        }
 
         const playPromise = this.audio.play();
         if (playPromise !== undefined) {
