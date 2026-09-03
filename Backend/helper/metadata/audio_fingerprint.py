@@ -354,7 +354,7 @@ async def recognize_audio_from_telegram(
             tf.write(half_bytes_data)
             main_temp_path = tf.name
 
-        # Dùng pydub giải mã và cắt các phân đoạn âm thanh chuẩn WAV 18s
+        # Dùng pydub giải mã và cắt các phân đoạn âm thanh chuẩn WAV 18s (giống Microphone iPhone)
         audio_seg = None
         total_ms = 0
         try:
@@ -364,40 +364,53 @@ async def recognize_audio_from_telegram(
         except Exception as pe:
             LOGGER.warning(f"[SHAZAM] Không thể mở qua pydub: {pe}. Sẽ thử trực tiếp file gốc.")
 
-        # ── LỚP 1A: Shazam Phân Đoạn Đầu (0s - 20s chuẩn WAV) ──
-        if audio_seg and total_ms > 5000:
-            sample1_path = main_temp_path + "_seg1.wav"
-            dur1 = min(20000, total_ms)
-            audio_seg[:dur1].export(sample1_path, format="wav")
-            target_query_path = sample1_path
-        else:
-            target_query_path = main_temp_path
+        # Định nghĩa các cửa sổ âm thanh vàng để quét Shazam (ưu tiên đoạn có giọng hát rõ nhất)
+        scan_windows = []
+        if audio_seg and total_ms > 10000:
+            # 1. Điệp khúc chính (Chorus 1: ~75s - 95s): Tỉ lệ nhận diện cao nhất của mọi bài hát
+            if total_ms >= 85000:
+                c_start = min(78000, total_ms - 20000)
+                scan_windows.append(("Điệp khúc chính", c_start, c_start + 20000))
+            elif total_ms >= 45000:
+                c_start = int(total_ms * 0.60)
+                scan_windows.append(("Điệp khúc", c_start, min(c_start + 20000, total_ms)))
 
-        if log_callback:
-            log_callback("Lớp 1A: Quét dấu vân tay Shazam phân đoạn 1 (0s - 20s)...", "info")
-        res1 = await _query_shazam_file(target_query_path, segment_name="Đoạn 1")
-        if res1:
-            return res1
+            # 2. Đoạn hát mở đầu (Verse 1: ~25s - 45s): Bỏ qua nhạc dạo đầu không lời (0s-20s)
+            if total_ms >= 35000:
+                v_start = 22000
+                scan_windows.append(("Đoạn hát Verse 1", v_start, min(v_start + 20000, total_ms)))
 
-        # ── LỚP 1B: Shazam Phân Đoạn Điệp Khúc (Chorus ~35% - 50% thời lượng chuẩn WAV) ──
-        if audio_seg and total_ms > 25000:
-            chorus_start = int(total_ms * 0.40)
-            chorus_end = min(chorus_start + 20000, total_ms)
-            sample2_path = main_temp_path + "_chorus.wav"
-            audio_seg[chorus_start:chorus_end].export(sample2_path, format="wav")
+            # 3. Tiền điệp khúc (Pre-Chorus: ~50s - 70s)
+            if total_ms >= 65000:
+                p_start = 50000
+                scan_windows.append(("Tiền Điệp khúc", p_start, min(p_start + 20000, total_ms)))
 
-            if log_callback:
-                log_callback(f"Đoạn đầu chưa khớp -> Lớp 1B: Quét tập trung Điệp khúc ({int(chorus_start/1000)}s - {int(chorus_end/1000)}s)...", "info")
-            LOGGER.info(f"[SHAZAM] Thử quét phân đoạn Điệp khúc ({int(chorus_start/1000)}s - {int(chorus_end/1000)}s) cho: {file_name}")
-            res2 = await _query_shazam_file(sample2_path, segment_name="Điệp khúc")
-            if res2:
-                return res2
+            # 4. Đầu bài (0s - 20s)
+            scan_windows.append(("Đầu bài", 0, min(20000, total_ms)))
 
-        # ── LỚP 1C: Dự phòng quét tệp gốc ──
-        if target_query_path != main_temp_path:
-            res_full = await _query_shazam_file(main_temp_path, segment_name="Toàn Đoạn")
-            if res_full:
-                return res_full
+        # Tiến hành quét qua các cửa sổ âm thanh
+        for seg_idx, (seg_name, start_ms, end_ms) in enumerate(scan_windows, start=1):
+            sample_w_path = f"{main_temp_path}_seg_{seg_idx}.wav"
+            try:
+                audio_seg[start_ms:end_ms].export(sample_w_path, format="wav")
+                t_from = int(start_ms / 1000)
+                t_to = int(end_ms / 1000)
+                if log_callback:
+                    if seg_idx == 1:
+                        log_callback(f"Lớp 1: Quét vân tay Shazam [{seg_name}] ({t_from}s - {t_to}s)...", "info")
+                    else:
+                        log_callback(f"Chưa khớp -> Quét tiếp Shazam [{seg_name}] ({t_from}s - {t_to}s)...", "info")
+                LOGGER.info(f"[SHAZAM] Quét vân tay tại [{seg_name}] ({t_from}s - {t_to}s) cho: {file_name}")
+
+                res = await _query_shazam_file(sample_w_path, segment_name=seg_name)
+                if res:
+                    return res
+            finally:
+                if os.path.exists(sample_w_path):
+                    try:
+                        os.remove(sample_w_path)
+                    except Exception:
+                        pass
 
         # ── LỚP 2: Trích xuất Thẻ Metadata Gốc (ID3v2 / FLAC Vorbis Comments) từ tệp ──
         if log_callback:
