@@ -70,10 +70,7 @@ class ByteStreamer:
                     for _ in range(6):
                         try:
                             exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
-                            try:
-                                await session.invoke(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
-                            except AttributeError:
-                                await session.send(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
+                            await session.send(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
                             imported = True
                             break
                         except AuthBytesInvalid:
@@ -82,7 +79,10 @@ class ByteStreamer:
                             await asyncio.sleep(1)
                         except Exception:
                             break
-                    self.client.media_sessions[dc] = session
+                    if imported:
+                        self.client.media_sessions[dc] = session
+                    else:
+                        await session.stop()
                 except Exception:
                     continue
 
@@ -499,21 +499,21 @@ class ByteStreamer:
                 for _ in range(6):
                     try:
                         exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
-                        try:
-                            await session.invoke(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
-                        except AttributeError:
-                            await session.send(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
+                        await session.send(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
                         imported = True
                         break
                     except AuthBytesInvalid:
                         await asyncio.sleep(0.5)
                     except OSError:
                         await asyncio.sleep(1)
-                    except Exception as e:
-                        LOGGER.debug(f"[DC AUTH] Không thể import auth cho DC {dc}: {e}")
+                    except Exception:
                         break
                 if not imported:
-                    LOGGER.warning(f"[DC AUTH] Chưa import được auth cho DC {dc}, tiếp tục thử truy cập file...")
+                    try:
+                        await session.stop()
+                    except Exception:
+                        pass
+                    raise AuthBytesInvalid(f"Failed to import authorization to DC {dc}")
 
             self.client.media_sessions[dc] = session
             return session

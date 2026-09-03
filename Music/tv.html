@@ -2544,6 +2544,7 @@
                 item.dataset.idx = idx;
 
                 const name = tr.name || tr.title || 'Bài hát';
+                const dur = tr.duration || formatTime(tr.duration_sec) || '0:00';
                 const trackArt = tr.artist || tr.performer || (typeof currentActiveGroup !== 'undefined' && currentActiveGroup?.artist) || '';
                 const art = trackArt ? ` • ${trackArt}` : '';
                 const favIcon = isFav ? '<span style="color: #ef4444; margin-left: 8px; font-size: 13px;">❤️</span>' : '';
@@ -2748,33 +2749,30 @@
         });
 
         audio.addEventListener('error', (e) => {
-            const err = audio.error;
-            const errCode = err ? err.code : 'unknown';
-            const errMsg = err ? (err.message || '') : '';
-            console.warn(`[TV Audio] Lỗi luồng nhạc (Code ${errCode}): ${errMsg} | URL: ${audio.src}`);
+            if (!audio.src || audio.src === window.location.href || audio.src.endsWith('/tv') || audio.src.endsWith('/tv.html')) return;
+            console.warn('[TV Audio] Lỗi luồng nhạc:', e);
 
-            // Kiểm tra chi tiết HTTP response từ máy chủ để hiển thị thông báo chính xác
+            // Kiểm tra HTTP status nếu có lỗi từ server để báo đúng nguyên nhân
             if (audio.src) {
                 fetch(audio.src, { headers: { 'Range': 'bytes=0-1' } })
                     .then(async (res) => {
                         if (!res.ok) {
-                            const detailText = await res.text();
-                            console.warn(`[TV Audio] Máy chủ phản hồi mã ${res.status}:`, detailText);
-                            if (res.status === 429) {
-                                showToast(`⏳ Telegram giới hạn tải bài này (FloodWait). Đang chuyển bài...`, 3000);
+                            console.warn(`[TV Audio] Máy chủ phản hồi mã ${res.status}`);
+                            if (res.status === 401 || res.status === 403) {
+                                showToast('⚠️ Phiên đăng nhập đã hết hạn hoặc cần phê duyệt.', 4000);
+                            } else if (res.status === 429) {
+                                showToast('⏳ Telegram giới hạn tải bài này (FloodWait). Đang chuyển bài...', 3000);
                             } else if (res.status === 404) {
-                                showToast(`⚠️ Không tìm thấy bài hát trên Telegram Cloud (404).`, 3000);
+                                showToast('⚠️ Không tìm thấy bài hát trên Telegram Cloud (404).', 3000);
                             }
                         }
                     })
-                    .catch((fetchErr) => {
-                        console.warn('[TV Audio] Lỗi kết nối mạng tới server:', fetchErr);
-                    });
+                    .catch(() => {});
             }
 
             streamRetryCount++;
             if (streamRetryCount <= 2) {
-                showToast('🔄 Đang thử tải lại luồng nhạc...');
+                showToast('🔄 Đang đổi bot Telegram dự phòng & thử tải lại...');
                 setTimeout(() => {
                     if (audio.src) {
                         const curUrl = audio.src.split('?')[0] + '?r=' + Date.now();
@@ -2784,7 +2782,7 @@
                     }
                 }, 1500);
             } else {
-                showToast('⚠️ Luồng nhạc tạm thời gián đoạn. Tự động chuyển bài tiếp theo...');
+                showToast('⚠️ Bot Telegram tạm thời bận. Tự động chuyển bài tiếp theo...');
                 setTimeout(() => {
                     nextTrack();
                 }, 2000);
@@ -2848,21 +2846,36 @@
 
         // ─── AUTH & QR CODE LOCK SCREEN LOGIC ───
         async function checkUserProfile() {
+            // 1. Khôi phục nhanh từ localStorage nếu đã từng đăng nhập trước đó (0ms)
+            try {
+                const cached = localStorage.getItem('xtapo_cached_user');
+                if (cached) {
+                    const cu = JSON.parse(cached);
+                    if (cu && (cu.id || cu.username)) {
+                        currentUser = cu;
+                        await showAuthenticatedApp();
+                    }
+                }
+            } catch (e) {}
+
             try {
                 const res = await fetch('/api/music/auth/profile');
                 if (res.ok) {
                     const data = await res.json();
-                    if (data && data.status === 'authenticated' && data.user) {
+                    if (data && (data.status === 'authenticated' || data.status === 'pending_approval') && data.user) {
                         currentUser = data.user;
+                        try { localStorage.setItem('xtapo_cached_user', JSON.stringify(data.user)); } catch (e) {}
                         await showAuthenticatedApp();
                         return;
                     }
                 }
             } catch (e) {}
 
-            // Chưa đăng nhập: Hiển thị màn hình QR Code khóa TV
-            currentUser = null;
-            showLoginLockScreen();
+            // Chưa đăng nhập: Chỉ hiển thị màn hình QR Code khóa TV nếu chưa có currentUser
+            if (!currentUser) {
+                currentUser = null;
+                showLoginLockScreen();
+            }
         }
 
         function showLoginLockScreen() {
@@ -2942,6 +2955,7 @@
                         clearInterval(qrPollInterval);
                         qrPollInterval = null;
                         currentUser = data.user;
+                        try { localStorage.setItem('xtapo_cached_user', JSON.stringify(data.user)); } catch (e) {}
                         showToast(`🎉 Đăng nhập thành công: ${currentUser?.display_name || currentUser?.username}!`);
                         await showAuthenticatedApp();
                     } else if (data.status === 'expired') {
@@ -2956,6 +2970,7 @@
             try {
                 await fetch('/api/music/auth/logout', { method: 'POST' });
                 currentUser = null;
+                try { localStorage.removeItem('xtapo_cached_user'); } catch (e) {}
                 showToast('👋 Đã đăng xuất khỏi TV');
                 showLoginLockScreen();
             } catch (e) {}
