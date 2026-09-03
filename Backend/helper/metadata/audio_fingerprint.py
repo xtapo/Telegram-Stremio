@@ -226,12 +226,9 @@ async def recognize_audio_from_telegram(
     target_chat_id = chat_id or getattr(getattr(message, "chat", None), "id", None)
     target_msg_id = msg_id or getattr(message, "id", None)
 
-    seg1_limit = 6 * 1024 * 1024   # 6MB đoạn đầu (Đoạn 1)
-    seg2_limit = 6 * 1024 * 1024   # 6MB đoạn điệp khúc (Đoạn 2)
-
-    seg1_bytes = None
-    seg2_bytes = None
+    half_bytes_data = None
     file_name = "Unknown"
+    detected_file_size = 0
 
     # 1. Kiểm tra xem file đã được lưu trong local cache của server chưa
     if target_chat_id and target_msg_id:
@@ -246,21 +243,24 @@ async def recognize_audio_from_telegram(
             for k in [f"{abs(target_chat_id)}_{target_msg_id}.dat", f"{target_chat_id}_{target_msg_id}.dat"]:
                 p = os.path.join(cache_dir, k)
                 if os.path.exists(p) and os.path.getsize(p) > 1024:
-                    file_size = os.path.getsize(p)
+                    detected_file_size = os.path.getsize(p)
+                    # Tính dung lượng nửa bài hát (50% dung lượng tệp, tối thiểu 8MB, tối đa 35MB)
+                    if detected_file_size <= 16 * 1024 * 1024:
+                        read_limit = max(int(detected_file_size * 0.50), min(detected_file_size, 10 * 1024 * 1024))
+                    else:
+                        read_limit = min(int(detected_file_size * 0.50), 35 * 1024 * 1024)
+
                     with open(p, "rb") as cf:
-                        seg1_bytes = cf.read(seg1_limit)
-                        # Nếu file đủ dài (>8MB), chuẩn bị sẵn phân đoạn điệp khúc (~35% file)
-                        if file_size > 8 * 1024 * 1024:
-                            mid_offset = int(file_size * 0.35)
-                            cf.seek(mid_offset)
-                            seg2_bytes = cf.read(seg2_limit)
-                    LOGGER.info(f"[SHAZAM] Đọc thành công từ Cache cục bộ cho #{target_msg_id} (Dung lượng cache: {round(file_size/1024/1024, 1)}MB).")
+                        half_bytes_data = cf.read(read_limit)
+
+                    if half_bytes_data:
+                        LOGGER.info(f"[SHAZAM] Đọc thành công nửa bài ({round(len(half_bytes_data)/1024/1024, 1)}MB / 50%) từ Cache cục bộ cho #{target_msg_id}.")
                     break
         except Exception as e:
             LOGGER.warning(f"[SHAZAM] Lỗi kiểm tra cache: {e}")
 
     # 2. Nếu chưa có cache, tải qua Telegram với cơ chế Round-Robin bot pool
-    if not seg1_bytes:
+    if not half_bytes_data:
         candidates = _get_candidate_clients(client)
         if not candidates:
             LOGGER.error("[SHAZAM] Không có client Telegram nào khả dụng để tải audio.")
@@ -284,29 +284,33 @@ async def recognize_audio_from_telegram(
                     continue
 
                 file_name = getattr(media, "file_name", "Unknown")
-                total_media_size = getattr(media, "file_size", 0) or 0
-                LOGGER.info(f"[SHAZAM] Đang stream mẫu bài '{file_name}' bằng client [{cl_name}]...")
+                detected_file_size = getattr(media, "file_size", 0) or 0
 
-                buf1 = io.BytesIO()
-                buf2 = io.BytesIO()
-                downloaded = 0
-                max_download = seg1_limit + (seg2_limit if total_media_size > 10 * 1024 * 1024 else 0)
-
-                async for chunk in current_cl.stream_media(target_msg, limit=0):
-                    if downloaded < seg1_limit:
-                        buf1.write(chunk)
+                # Tính dung lượng tải nửa bài hát (50% dung lượng tệp)
+                if detected_file_size > 0:
+                    if detected_file_size <= 16 * 1024 * 1024:
+                        half_limit = max(int(detected_file_size * 0.50), min(detected_file_size, 10 * 1024 * 1024))
                     else:
-                        buf2.write(chunk)
+                        half_limit = min(int(detected_file_size * 0.50), 35 * 1024 * 1024)
+                else:
+                    half_limit = 15 * 1024 * 1024
+
+                limit_mb_str = f"{round(half_limit/1024/1024, 1)}MB"
+                LOGGER.info(f"[SHAZAM] Đang tải nửa bài hát '{file_name}' ({limit_mb_str} ~ 50% tệp) bằng client [{cl_name}]...")
+                if log_callback:
+                    log_callback(f"Đang tải nửa bài hát ({limit_mb_str} ~ 50% thời lượng)...", "info")
+
+                buf = io.BytesIO()
+                downloaded = 0
+                async for chunk in current_cl.stream_media(target_msg, limit=0):
+                    buf.write(chunk)
                     downloaded += len(chunk)
-                    if downloaded >= max_download:
+                    if downloaded >= half_limit:
                         break
 
-                if buf1.tell() > 0:
-                    buf1.seek(0)
-                    seg1_bytes = buf1.read()
-                if buf2.tell() > 0:
-                    buf2.seek(0)
-                    seg2_bytes = buf2.read()
+                if buf.tell() > 0:
+                    buf.seek(0)
+                    half_bytes_data = buf.read()
                 break  # Tải thành công
             except FloodWait as fw:
                 LOGGER.warning(f"[SHAZAM] Client [{cl_name}] gặp FloodWait ({fw.value}s). Đang đổi bot khác trong pool...")
@@ -324,30 +328,34 @@ async def recognize_audio_from_telegram(
                 await asyncio.sleep(0.3)
                 continue
 
-    if not seg1_bytes:
+    if not half_bytes_data:
         LOGGER.error(f"[SHAZAM] Tất cả client đều thất bại khi tải: {file_name}")
         return None
 
-    # ── LỚP 1A: Shazam Phân Đoạn 1 (Đầu bài 0s - 30s) ──
+    # ── LỚP 1A: Shazam Dấu Vân Tay Trên Toàn Bộ Nửa Bài Hát (0s - 50%) ──
+    half_mb_display = round(len(half_bytes_data) / 1024 / 1024, 1)
     if log_callback:
-        log_callback("Lớp 1A: Đang quét vân tay âm thanh (Đoạn 1)...", "info")
-    res1 = await _query_shazam_bytes(seg1_bytes, segment_name="Đoạn 1")
+        log_callback(f"Lớp 1A: Quét dấu vân tay Shazam trên nửa bài hát ({half_mb_display}MB)...", "info")
+    res1 = await _query_shazam_bytes(half_bytes_data, segment_name="Nửa Bài Hát (50%)")
     if res1:
         return res1
 
-    # ── LỚP 1B: Shazam Phân Đoạn 2 (Điệp khúc / Giữa bài 35% - 50%) ──
-    if seg2_bytes and len(seg2_bytes) > 102400:
-        if log_callback:
-            log_callback("Đoạn 1 chưa khớp -> Lớp 1B: Đang quét phân đoạn Điệp khúc...", "info")
-        LOGGER.info(f"[SHAZAM] Đoạn 1 không khớp, thử phân đoạn 2 (Điệp khúc) cho: {file_name}")
-        res2 = await _query_shazam_bytes(seg2_bytes, segment_name="Điệp khúc")
-        if res2:
-            return res2
+    # ── LỚP 1B: Shazam Lát Cắt Điệp Khúc (Nếu nửa bài có intro lạ hoặc nhiễu) ──
+    if len(half_bytes_data) > 6 * 1024 * 1024:
+        chorus_offset = int(len(half_bytes_data) * 0.35)
+        chorus_slice = half_bytes_data[chorus_offset:]
+        if len(chorus_slice) >= 102400:
+            if log_callback:
+                log_callback("Đoạn đầu chưa khớp -> Lớp 1B: Quét tập trung phân đoạn Điệp khúc...", "info")
+            LOGGER.info(f"[SHAZAM] Thử quét lát cắt điệp khúc từ nửa bài hát cho: {file_name}")
+            res2 = await _query_shazam_bytes(chorus_slice, segment_name="Điệp khúc")
+            if res2:
+                return res2
 
     # ── LỚP 2: Trích xuất Thẻ Metadata Gốc (ID3v2 / FLAC Vorbis Comments) từ tệp ──
     if log_callback:
         log_callback("Shazam chưa khớp -> Lớp 2: Đang đọc Thẻ Tag ID3 gốc nhúng trong tệp...", "info")
-    embedded_tags = extract_embedded_audio_tags(seg1_bytes)
+    embedded_tags = extract_embedded_audio_tags(half_bytes_data)
     if embedded_tags.get("title") and (embedded_tags.get("artist") or embedded_tags.get("album")):
         t_tit = embedded_tags["title"].strip()
         t_art = embedded_tags.get("artist", "").strip()
@@ -367,7 +375,7 @@ async def recognize_audio_from_telegram(
                 "source": "Embedded File Tags"
             }
 
-    LOGGER.info(f"[SHAZAM] Không nhận diện được qua Audio Fingerprint & Thẻ gốc cho: {file_name}")
+    LOGGER.info(f"[SHAZAM] Không nhận diện được qua Audio Fingerprint nửa bài & Thẻ gốc cho: {file_name}")
     return None
 
 
