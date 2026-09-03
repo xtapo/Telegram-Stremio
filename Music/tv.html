@@ -285,6 +285,116 @@
             text-transform: uppercase;
         }
 
+        /* ─── TV CATEGORY SEARCH BOX ─── */
+        .tv-search-box {
+            display: flex;
+            align-items: center;
+            background: #111722;
+            border: 1.5px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 4px 8px;
+            margin-bottom: 8px;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .tv-search-box:focus-within {
+            border-color: #f59e0b;
+            background: #151e2c;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+        }
+
+        .tv-search-icon {
+            font-size: 12px;
+            opacity: 0.75;
+            flex-shrink: 0;
+        }
+
+        .tv-search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #f8fafc;
+            font-size: 11.5px;
+            font-weight: 600;
+            font-family: inherit;
+            width: 100%;
+            min-width: 0;
+        }
+
+        .tv-search-input::placeholder {
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .tv-search-clear {
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            color: #94a3b8;
+            font-size: 10px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            outline: none;
+            flex-shrink: 0;
+            transition: all 0.1s ease;
+        }
+
+        .tv-search-clear:hover,
+        .tv-search-clear:focus {
+            background: #ef4444;
+            color: #ffffff;
+        }
+
+        .tv-empty-search {
+            padding: 24px 12px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+        }
+
+        /* ─── TV TRACKLIST SEARCH BOX ─── */
+        .tv-track-search-box {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #111722;
+            border: 1.5px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 2px 8px;
+            transition: all 0.15s ease;
+        }
+
+        .tv-track-search-box:focus-within {
+            border-color: #f59e0b;
+            background: #151e2c;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+        }
+
+        .tv-track-search-input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #f8fafc;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: inherit;
+            width: 130px;
+        }
+
+        .tv-track-search-input::placeholder {
+            color: #64748b;
+        }
+
         /* Pagination Controls */
         .tv-pagination {
             display: flex;
@@ -854,6 +964,34 @@
             box-shadow: 0 0 14px rgba(0, 229, 255, 0.6) !important;
         }
 
+        .tv-search-input.focusable:focus,
+        .tv-search-input.focusable.focused {
+            outline: 2.5px solid #00e5ff !important;
+            outline-offset: 1px !important;
+            background: rgba(0, 229, 255, 0.12) !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 14px rgba(0, 229, 255, 0.5) !important;
+            border-radius: 6px;
+        }
+
+        .tv-track-search-input.focusable:focus,
+        .tv-track-search-input.focusable.focused {
+            outline: 2px solid #00e5ff !important;
+            outline-offset: 1px !important;
+            background: rgba(0, 229, 255, 0.12) !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 12px rgba(0, 229, 255, 0.5) !important;
+            border-radius: 6px;
+        }
+
+        .tv-search-clear.focusable:focus,
+        .tv-search-clear.focusable.focused {
+            outline: 2px solid #00e5ff !important;
+            box-shadow: 0 0 12px rgba(0, 229, 255, 0.7) !important;
+            background: #ef4444 !important;
+            color: #ffffff !important;
+        }
+
         .tv-toast {
             position: fixed;
             top: 24px;
@@ -1024,6 +1162,10 @@
             <!-- PANEL 1: Navigation Menu (Như Desktop) -->
             <nav class="tv-col-nav" id="navMenuCol">
                 <div class="tv-nav-title">DANH MỤC NHẠC</div>
+                <div class="tv-nav-item focusable" data-tab="search" tabindex="0">
+                    <span class="nav-icon">🔍</span>
+                    <span>TÌM KIẾM</span>
+                </div>
                 <div class="tv-nav-item focusable active" data-tab="favorites" tabindex="0">
                     <span class="nav-icon">❤️</span>
                     <span>YÊU THÍCH</span>
@@ -1062,6 +1204,13 @@
             <section class="tv-col-items" id="itemsCol">
                 <div class="tv-items-header">
                     <div class="tv-items-title" id="itemsCategoryTitle">ALBUMS (0)</div>
+                </div>
+
+                <!-- Thanh tìm kiếm danh mục TV -->
+                <div class="tv-search-box" id="itemsSearchBox">
+                    <span class="tv-search-icon">🔍</span>
+                    <input type="search" id="itemsSearchInput" class="tv-search-input focusable" placeholder="Tìm kiếm mục..." tabindex="0" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+                    <button class="tv-search-clear focusable" id="btnItemsClearSearch" tabindex="0" title="Xóa tìm kiếm" style="display: none;">✕</button>
                 </div>
 
                 <!-- Phân trang -->
@@ -1104,13 +1253,21 @@
                     <!-- Genre Subfilter Pills (Cho tab Quốc Gia / Thể Loại con) -->
                     <div class="tv-genre-subfilter-bar" id="tvGenreSubfilterBar" style="display: none;"></div>
 
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; flex-wrap: wrap;">
                         <div class="tv-section-title" id="currentTracklistHeader" style="margin-bottom: 0;">DANH SÁCH BÀI HÁT</div>
-                        <!-- Phân trang bài hát (Hiện khi > 50 bài) -->
-                        <div class="tv-pagination" id="trackPaginationBar" style="display: none; margin-bottom: 0; padding: 2px 8px;">
-                            <button class="tv-page-btn focusable" id="btnPrevTrackPage" tabindex="0">❮ Trước</button>
-                            <span class="tv-page-info" id="trackPageInfoText" style="font-size: 11px;">Trang 1 / 1</span>
-                            <button class="tv-page-btn focusable" id="btnNextTrackPage" tabindex="0">Sau ❯</button>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <!-- Lọc nhanh bài hát trong tracklist -->
+                            <div class="tv-track-search-box" id="trackSearchBox">
+                                <span style="font-size: 11px; opacity: 0.75;">🔍</span>
+                                <input type="search" id="trackSearchInput" class="tv-track-search-input focusable" placeholder="Lọc bài hát..." tabindex="0" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+                                <button class="tv-search-clear focusable" id="btnTrackClearSearch" tabindex="0" title="Xóa lọc" style="display: none;">✕</button>
+                            </div>
+                            <!-- Phân trang bài hát (Hiện khi > 50 bài) -->
+                            <div class="tv-pagination" id="trackPaginationBar" style="display: none; margin-bottom: 0; padding: 2px 8px;">
+                                <button class="tv-page-btn focusable" id="btnPrevTrackPage" tabindex="0">❮ Trước</button>
+                                <span class="tv-page-info" id="trackPageInfoText" style="font-size: 11px;">Trang 1 / 1</span>
+                                <button class="tv-page-btn focusable" id="btnNextTrackPage" tabindex="0">Sau ❯</button>
+                            </div>
                         </div>
                     </div>
                     <div id="trackContainer">
@@ -1202,6 +1359,7 @@
                         <div>• <b>Phát / Tạm dừng:</b> Phím <code>⏯</code> / Phím số <code>0</code>, <code>5</code></div>
                         <div>• <b>Chuyển bài tiếp:</b> Phím <code>⏭</code> / <code>CH+</code> / Số <code>6</code>, <code>9</code></div>
                         <div>• <b>Lùi bài trước:</b> Phím <code>⏮</code> / <code>CH-</code> / Số <code>4</code>, <code>7</code></div>
+                        <div>• <b>Tìm kiếm nhanh mục:</b> Phím <code>S</code> hoặc <code>/</code></div>
                         <div>• <b>Yêu thích bài:</b> Phím <code>F</code></div>
                         <div>• <b>Tua 10s:</b> Phím <code>⏩</code> / <code>⏪</code> (hoặc <code>L</code> / <code>J</code>)</div>
                     </div>
@@ -1256,6 +1414,11 @@
         let qrPollInterval = null;
         let currentQrToken = null;
 
+        // Search State
+        let itemSearchQuery = '';
+        let trackSearchQuery = '';
+        let isSearchComposing = false;
+
         // Elements
         const audio = document.getElementById('audioPlayer');
         const activeCategoryBadge = document.getElementById('activeCategoryBadge');
@@ -1264,6 +1427,9 @@
         const tvPlayerBar = document.getElementById('tvPlayerBar');
 
         const itemsCategoryTitle = document.getElementById('itemsCategoryTitle');
+        const itemsSearchBox = document.getElementById('itemsSearchBox');
+        const itemsSearchInput = document.getElementById('itemsSearchInput');
+        const btnItemsClearSearch = document.getElementById('btnItemsClearSearch');
         const itemsContainer = document.getElementById('itemsContainer');
         const pageInfoText = document.getElementById('pageInfoText');
         const btnPrevPage = document.getElementById('btnPrevPage');
@@ -1281,6 +1447,9 @@
         const btnShowcasePlaylist = document.getElementById('btnShowcasePlaylist');
         const btnShowcaseDeletePl = document.getElementById('btnShowcaseDeletePl');
         const currentTracklistHeader = document.getElementById('currentTracklistHeader');
+        const trackSearchBox = document.getElementById('trackSearchBox');
+        const trackSearchInput = document.getElementById('trackSearchInput');
+        const btnTrackClearSearch = document.getElementById('btnTrackClearSearch');
         const tvGenreSubfilterBar = document.getElementById('tvGenreSubfilterBar');
         let selectedTvSubgenre = 'all';
         const trackPaginationBar = document.getElementById('trackPaginationBar');
@@ -1337,6 +1506,66 @@
             tvToast.textContent = msg;
             tvToast.style.display = 'block';
             setTimeout(() => { tvToast.style.display = 'none'; }, 3000);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function removeVietnameseTones(str) {
+            if (!str) return '';
+            str = String(str);
+            str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, 'a');
+            str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, 'e');
+            str = str.replace(/ì|í|ị|ỉ|ĩ/g, 'i');
+            str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, 'o');
+            str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, 'u');
+            str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, 'y');
+            str = str.replace(/đ/g, 'd');
+            str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, 'A');
+            str = str.replace(/È|É|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, 'E');
+            str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, 'I');
+            str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, 'O');
+            str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, 'U');
+            str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, 'Y');
+            str = str.replace(/Đ/g, 'D');
+            try {
+                str = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            } catch (e) {}
+            return str;
+        }
+
+        function matchVietnamese(text, query) {
+            if (!query) return true;
+            if (!text) return false;
+            const t = String(text).toLowerCase();
+            const q = String(query).toLowerCase().trim();
+            if (t.includes(q)) return true;
+            const tNorm = removeVietnameseTones(t);
+            const qNorm = removeVietnameseTones(q);
+            return tNorm.includes(qNorm);
+        }
+
+        function updateSearchPlaceholder() {
+            if (!itemsSearchInput) return;
+            const phMap = {
+                'favorites': 'Tìm bài hát yêu thích...',
+                'albums': 'Tìm album, ca sĩ, bài hát...',
+                'hires': 'Tìm album Hi-Res...',
+                'artists': 'Tìm tên ca sĩ, nghệ sĩ...',
+                'genres': 'Tìm thể loại...',
+                'countries': 'Tìm quốc gia...',
+                'playlists': 'Tìm playlist...',
+                'all-musics': 'Tìm bài hát, ca sĩ...',
+                'search': 'Tìm kiếm bài hát, album, ca sĩ...'
+            };
+            itemsSearchInput.placeholder = phMap[currentTab] || 'Tìm kiếm mục...';
         }
 
         function formatTime(sec) {
@@ -1824,18 +2053,152 @@
                     badge: 'ALL MUSICS',
                     tracks: allT
                 }];
+            } else if (currentTab === 'search') {
+                const q = (itemSearchQuery || '').trim();
+                const matchedItems = [];
+
+                if (q) {
+                    // 1. Tìm Albums khớp
+                    rawAlbums.forEach(alb => {
+                        const albMatch = matchVietnamese(alb.title, q) || matchVietnamese(alb.artist, q);
+                        const trMatch = alb.tracks && alb.tracks.some(tr => matchVietnamese(tr.name || tr.title, q) || matchVietnamese(tr.artist, q));
+                        if (albMatch || trMatch) {
+                            matchedItems.push({
+                                type: 'album',
+                                id: alb.id,
+                                title: alb.title || 'Unknown Album',
+                                sub: `Album • ${alb.artist || 'Nhiều nghệ sĩ'} • ${alb.tracks ? alb.tracks.length : 0} bài`,
+                                cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
+                                year: alb.year || '2026',
+                                badge: 'ALBUM',
+                                tracks: alb.tracks || []
+                            });
+                        }
+                    });
+
+                    // 2. Tìm Nghệ sĩ khớp
+                    const artistMap = {};
+                    rawAlbums.forEach(alb => {
+                        const art = (alb.artist || '').trim();
+                        if (art && matchVietnamese(art, q) && !artistMap[art]) {
+                            artistMap[art] = {
+                                type: 'artist',
+                                id: art,
+                                title: art,
+                                sub: `Nghệ Sĩ • ${alb.tracks ? alb.tracks.length : 0} bài`,
+                                cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
+                                isAvatar: true,
+                                year: 'Nghệ Sĩ',
+                                badge: 'ARTIST',
+                                tracks: alb.tracks || []
+                            };
+                        }
+                    });
+                    Object.values(artistMap).forEach(a => matchedItems.push(a));
+
+                    // 3. Tìm Bài Hát đơn lẻ khớp từ khóa
+                    const allTracksMatching = [];
+                    const seenTrackKeys = new Set();
+                    rawAlbums.forEach(alb => {
+                        (alb.tracks || []).forEach(tr => {
+                            const tKey = String(tr.msg_id || tr.msgId || tr.id || tr.name);
+                            if (!seenTrackKeys.has(tKey) && (matchVietnamese(tr.name || tr.title, q) || matchVietnamese(tr.artist, q))) {
+                                seenTrackKeys.add(tKey);
+                                allTracksMatching.push(tr);
+                            }
+                        });
+                    });
+
+                    if (allTracksMatching.length > 0) {
+                        matchedItems.unshift({
+                            type: 'tracks_group',
+                            id: '__search_tracks__',
+                            title: `Bài hát: "${q}"`,
+                            sub: `Tổng hợp ${allTracksMatching.length} bài hát tìm thấy`,
+                            cover: allTracksMatching[0]?.coverUrl || allTracksMatching[0]?.cover || '/music/icon-192.png',
+                            year: 'Kết Quả',
+                            badge: 'BÀI HÁT',
+                            tracks: allTracksMatching
+                        });
+                    }
+
+                    // 4. Tìm Playlists
+                    (userPlaylists || []).forEach(pl => {
+                        if (matchVietnamese(pl.name, q)) {
+                            matchedItems.push({
+                                type: 'playlist',
+                                id: pl.id || pl._id,
+                                title: pl.name,
+                                sub: `Playlist • ${pl.tracks ? pl.tracks.length : 0} bài`,
+                                cover: (pl.tracks && pl.tracks[0]?.cover_url) || (pl.tracks && pl.tracks[0]?.coverUrl) || '/music/icon-192.png',
+                                year: 'Playlist',
+                                badge: 'PLAYLIST',
+                                tracks: pl.tracks || []
+                            });
+                        }
+                    });
+
+                    currentItems = matchedItems;
+                } else {
+                    currentItems = [{
+                        type: 'search_prompt',
+                        id: '__search_prompt__',
+                        title: 'Nhập từ khóa tìm kiếm',
+                        sub: 'Bấm vào ô tìm kiếm để tìm bài hát, album, ca sĩ...',
+                        cover: '/music/icon-192.png',
+                        year: 'Tìm Kiếm',
+                        badge: 'SEARCH',
+                        tracks: []
+                    }];
+                }
             }
         }
 
-        // ─── RENDER PANEL 2: ITEMS LIST WITH PAGINATION ───
+        // ─── LỌC CÁC MỤC THEO TỪ KHÓA TÌM KIẾM ───
+        function getFilteredItems() {
+            if (currentTab === 'search') {
+                return currentItems;
+            }
+            const q = (itemSearchQuery || '').trim();
+            if (!q) return currentItems;
+
+            return currentItems.filter(item => {
+                if (matchVietnamese(item.title, q)) return true;
+                if (matchVietnamese(item.sub, q)) return true;
+                if (item.artist && matchVietnamese(item.artist, q)) return true;
+                if (Array.isArray(item.tracks) && item.tracks.length > 0) {
+                    const hasTrack = item.tracks.some(tr => 
+                        matchVietnamese(tr.name || tr.title, q) || 
+                        matchVietnamese(tr.artist, q)
+                    );
+                    if (hasTrack) return true;
+                }
+                return false;
+            });
+        }
+
+        // ─── LỌC BÀI HÁT TRONG TRACKLIST HIỆN TẠI ───
+        function getFilteredTracks() {
+            const q = (trackSearchQuery || '').trim();
+            if (!q) return currentTracklist;
+            return currentTracklist.filter(tr => 
+                matchVietnamese(tr.name || tr.title, q) ||
+                matchVietnamese(tr.artist, q)
+            );
+        }
+
+        // ─── RENDER PANEL 2: ITEMS LIST WITH PAGINATION & SEARCH ───
         function renderItems() {
             itemsContainer.innerHTML = '';
-            const total = currentItems.length;
+            const displayed = getFilteredItems();
+            const total = displayed.length;
+            const totalOriginal = currentItems.length;
             const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
             if (currentPage > totalPages) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
 
             const tabNames = {
+                'search': 'TÌM KIẾM',
                 'favorites': 'YÊU THÍCH',
                 'albums': 'ALBUMS',
                 'hires': 'HI-RES AUDIO',
@@ -1845,16 +2208,40 @@
                 'playlists': 'PLAYLISTS',
                 'all-musics': 'TẤT CẢ BÀI'
             };
-            const currentTabName = tabNames[currentTab] || 'YÊU THÍCH';
+            const currentTabName = tabNames[currentTab] || 'DANH MỤC';
             activeCategoryBadge.textContent = currentTabName;
-            itemsCategoryTitle.textContent = `${currentTabName} (${total})`;
+
+            if (itemSearchQuery.trim() && currentTab !== 'search') {
+                itemsCategoryTitle.textContent = `${currentTabName} (${total}/${totalOriginal})`;
+            } else {
+                itemsCategoryTitle.textContent = `${currentTabName} (${total})`;
+            }
             pageInfoText.textContent = `Trang ${currentPage} / ${totalPages}`;
 
             btnPrevPage.disabled = (currentPage <= 1);
             btnNextPage.disabled = (currentPage >= totalPages);
 
+            if (displayed.length === 0) {
+                const emptyMsg = itemSearchQuery.trim() 
+                    ? `
+                        <div class="tv-empty-search">
+                            <div style="font-size: 26px; margin-bottom: 8px;">🔍</div>
+                            <div style="font-weight: 800; color: #f8fafc; font-size: 13px; margin-bottom: 4px;">Không tìm thấy mục nào</div>
+                            <div style="font-size: 11px; color: #94a3b8; margin-bottom: 12px;">Không có kết quả khớp với "${escapeHtml(itemSearchQuery.trim())}"</div>
+                            <button class="tv-btn focusable" id="btnTvResetSearch" tabindex="0" style="padding: 4px 12px; font-size: 11px;">✕ Xóa Tìm Kiếm</button>
+                        </div>
+                    `
+                    : `<div style="padding: 24px; text-align: center; color: #64748b; font-size: 12.5px;">Chưa có mục nào trong danh mục này.</div>`;
+                itemsContainer.innerHTML = emptyMsg;
+                const resetBtn = document.getElementById('btnTvResetSearch');
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', clearItemSearch);
+                }
+                return;
+            }
+
             const startIdx = (currentPage - 1) * PAGE_SIZE;
-            const pageItems = currentItems.slice(startIdx, startIdx + PAGE_SIZE);
+            const pageItems = displayed.slice(startIdx, startIdx + PAGE_SIZE);
 
             pageItems.forEach((item, idx) => {
                 const absoluteIdx = startIdx + idx;
@@ -1871,8 +2258,8 @@
                 card.innerHTML = `
                     ${avatarHtml}
                     <div class="tv-card-info">
-                        <div class="tv-card-title">${item.title}</div>
-                        <div class="tv-card-sub">${item.sub}</div>
+                        <div class="tv-card-title">${escapeHtml(item.title)}</div>
+                        <div class="tv-card-sub">${escapeHtml(item.sub)}</div>
                     </div>
                 `;
 
@@ -1881,7 +2268,7 @@
                 });
 
                 card.addEventListener('click', () => {
-                    selectItem(absoluteIdx);
+                    selectItem(absoluteIdx, false, displayed);
                 });
 
                 itemsContainer.appendChild(card);
@@ -1889,9 +2276,9 @@
 
             if (pageItems.length > 0) {
                 if (selectedItemIdx < startIdx || selectedItemIdx >= startIdx + pageItems.length) {
-                    selectItem(startIdx);
+                    selectItem(startIdx, false, displayed);
                 } else {
-                    selectItem(selectedItemIdx);
+                    selectItem(selectedItemIdx, false, displayed);
                 }
             }
         }
@@ -1957,8 +2344,9 @@
         }
 
         // ─── CHỌN ITEM VÀ HIỂN THỊ DANH SÁCH BÀI HÁT (PANEL 3) ───
-        function selectItem(idx, keepSubgenre = false) {
-            const item = currentItems[idx];
+        function selectItem(idx, keepSubgenre = false, sourceList = null) {
+            const list = sourceList || getFilteredItems();
+            const item = list[idx] || currentItems[idx];
             if (!item) return;
 
             selectedItemIdx = idx;
@@ -1982,6 +2370,11 @@
             if (btnShowcaseCreatePl) {
                 btnShowcaseCreatePl.style.display = (currentTab === 'playlists') ? 'inline-flex' : 'inline-flex';
             }
+
+            // Xóa lọc bài hát khi đổi mục
+            trackSearchQuery = '';
+            if (trackSearchInput) trackSearchInput.value = '';
+            if (btnTrackClearSearch) btnTrackClearSearch.style.display = 'none';
 
             renderTvGenreSubfilters(item);
             saveTvState();
@@ -2093,15 +2486,35 @@
             trackContainer.innerHTML = '';
             const grpTitle = currentActiveGroup?.title || 'DANH SÁCH BÀI HÁT';
             const subTitle = (currentTab === 'countries' && selectedTvSubgenre !== 'all') ? ` • ${selectedTvSubgenre}` : '';
-            currentTracklistHeader.textContent = `${grpTitle.toUpperCase()}${subTitle.toUpperCase()} (${currentTracklist.length} BÀI)`;
 
-            if (currentTracklist.length === 0) {
+            const displayedTracks = getFilteredTracks();
+
+            if (trackSearchQuery.trim()) {
+                currentTracklistHeader.textContent = `${grpTitle.toUpperCase()}${subTitle.toUpperCase()} (${displayedTracks.length}/${currentTracklist.length} BÀI)`;
+            } else {
+                currentTracklistHeader.textContent = `${grpTitle.toUpperCase()}${subTitle.toUpperCase()} (${currentTracklist.length} BÀI)`;
+            }
+
+            if (displayedTracks.length === 0) {
                 if (trackPaginationBar) trackPaginationBar.style.display = 'none';
-                trackContainer.innerHTML = '<div style="padding: 20px; color: #64748b; font-size: 15px;">Chưa có bài hát nào trong mục này. Bấm "➕ Playlist" để thêm bài hát vào đây.</div>';
+                if (trackSearchQuery.trim()) {
+                    trackContainer.innerHTML = `
+                        <div style="padding: 24px 12px; text-align: center; color: #94a3b8;">
+                            <div style="font-size: 22px; margin-bottom: 6px;">🔍</div>
+                            <div style="font-weight: 700; color: #f8fafc; font-size: 13px; margin-bottom: 4px;">Không tìm thấy bài hát</div>
+                            <div style="font-size: 11px; margin-bottom: 10px;">Không có bài nào khớp với "${escapeHtml(trackSearchQuery.trim())}"</div>
+                            <button class="tv-btn focusable" id="btnTvResetTrackSearch" tabindex="0" style="padding: 4px 12px; font-size: 11px;">✕ Xóa Lọc</button>
+                        </div>
+                    `;
+                    const resetTrBtn = document.getElementById('btnTvResetTrackSearch');
+                    if (resetTrBtn) resetTrBtn.addEventListener('click', clearTrackSearch);
+                } else {
+                    trackContainer.innerHTML = '<div style="padding: 20px; color: #64748b; font-size: 15px;">Chưa có bài hát nào trong mục này. Bấm "➕ Playlist" để thêm bài hát vào đây.</div>';
+                }
                 return;
             }
 
-            const totalTrackPages = Math.ceil(currentTracklist.length / TRACKS_PAGE_SIZE) || 1;
+            const totalTrackPages = Math.ceil(displayedTracks.length / TRACKS_PAGE_SIZE) || 1;
             currentTrackPage = Math.max(1, Math.min(totalTrackPages, currentTrackPage));
 
             if (trackPaginationBar && trackPageInfoText && btnPrevTrackPage && btnNextTrackPage) {
@@ -2116,13 +2529,14 @@
             }
 
             const startIdx = (currentTrackPage - 1) * TRACKS_PAGE_SIZE;
-            const endIdx = Math.min(currentTracklist.length, startIdx + TRACKS_PAGE_SIZE);
-            const pageTracks = currentTracklist.slice(startIdx, endIdx);
+            const endIdx = Math.min(displayedTracks.length, startIdx + TRACKS_PAGE_SIZE);
+            const pageTracks = displayedTracks.slice(startIdx, endIdx);
 
             const frag = document.createDocumentFragment();
             pageTracks.forEach((tr, pageOffset) => {
                 const idx = startIdx + pageOffset;
-                const isCur = (isPlaying && idx === currentPlayingTrackIdx);
+                const origIdx = currentTracklist.indexOf(tr);
+                const isCur = (isPlaying && ((origIdx >= 0 && origIdx === currentPlayingTrackIdx) || idx === currentPlayingTrackIdx));
                 const isFav = isTrackInFavorites(tr);
                 const item = document.createElement('div');
                 item.className = `tv-track-item focusable ${isCur ? 'playing' : ''}`;
@@ -2140,9 +2554,9 @@
                 item.innerHTML = `
                     <div class="tv-track-left">
                         <span class="tv-track-num">${numOrEq}</span>
-                        <span class="tv-track-title">${name}<span style="font-size: 13px; color: #94a3b8; font-weight: 500; margin-left: 6px;">${art}</span>${favIcon}</span>
+                        <span class="tv-track-title">${escapeHtml(name)}<span style="font-size: 13px; color: #94a3b8; font-weight: 500; margin-left: 6px;">${escapeHtml(art)}</span>${favIcon}</span>
                     </div>
-                    <span class="tv-track-dur">${dur}</span>
+                    <span class="tv-track-dur">${escapeHtml(dur)}</span>
                 `;
 
                 item.addEventListener('focus', () => {
@@ -2150,10 +2564,11 @@
                 });
 
                 item.addEventListener('click', () => {
-                    if (idx === currentPlayingTrackIdx && audio.src) {
+                    const playIdx = origIdx >= 0 ? origIdx : idx;
+                    if (playIdx === currentPlayingTrackIdx && audio.src) {
                         togglePlay();
                     } else {
-                        playTrack(idx);
+                        playTrack(playIdx);
                     }
                 });
 
@@ -2373,6 +2788,20 @@
                 selectedItemIdx = targetIdx || 0;
             }
 
+            // Xóa tìm kiếm khi chuyển sang danh mục khác
+            if (tabKey !== 'search') {
+                itemSearchQuery = '';
+                if (itemsSearchInput) itemsSearchInput.value = '';
+                if (btnItemsClearSearch) btnItemsClearSearch.style.display = 'none';
+            }
+
+            // Luôn xóa lọc bài hát khi đổi tab
+            trackSearchQuery = '';
+            if (trackSearchInput) trackSearchInput.value = '';
+            if (btnTrackClearSearch) btnTrackClearSearch.style.display = 'none';
+
+            updateSearchPlaceholder();
+
             document.querySelectorAll('.tv-nav-item').forEach(nav => {
                 nav.classList.toggle('active', nav.dataset.tab === tabKey);
             });
@@ -2386,6 +2815,12 @@
             buildCategoryData();
             renderItems();
             saveTvState();
+
+            if (tabKey === 'search' && itemsSearchInput) {
+                setTimeout(() => {
+                    itemsSearchInput.focus();
+                }, 100);
+            }
         }
 
         // ─── AUTH & QR CODE LOCK SCREEN LOGIC ───
@@ -2541,6 +2976,7 @@
             const initTab = saved?.tab || 'favorites';
             currentTab = initTab;
             if (saved?.page) currentPage = saved.page;
+            updateSearchPlaceholder();
 
             document.querySelectorAll('.tv-nav-item').forEach(nav => {
                 nav.classList.toggle('active', nav.dataset.tab === initTab);
@@ -2721,6 +3157,191 @@
             });
         }
 
+        // ─── TÌM KIẾM THEO THỜI GIAN THỰC & BỘ LẮNG NGHE SỰ KIỆN ───
+        function onItemSearchInput() {
+            itemSearchQuery = itemsSearchInput ? itemsSearchInput.value : '';
+            if (btnItemsClearSearch) {
+                btnItemsClearSearch.style.display = itemSearchQuery ? 'inline-flex' : 'none';
+            }
+            currentPage = 1;
+            selectedItemIdx = 0;
+            if (currentTab === 'search') {
+                buildCategoryData();
+            }
+            renderItems();
+        }
+
+        function clearItemSearch() {
+            if (itemsSearchInput) {
+                itemsSearchInput.value = '';
+                itemsSearchInput.focus();
+            }
+            itemSearchQuery = '';
+            if (btnItemsClearSearch) {
+                btnItemsClearSearch.style.display = 'none';
+            }
+            currentPage = 1;
+            selectedItemIdx = 0;
+            if (currentTab === 'search') {
+                buildCategoryData();
+            }
+            renderItems();
+        }
+
+        function onTrackSearchInput() {
+            trackSearchQuery = trackSearchInput ? trackSearchInput.value : '';
+            if (btnTrackClearSearch) {
+                btnTrackClearSearch.style.display = trackSearchQuery ? 'inline-flex' : 'none';
+            }
+            currentTrackPage = 1;
+            renderTracklist();
+        }
+
+        function clearTrackSearch() {
+            if (trackSearchInput) {
+                trackSearchInput.value = '';
+                trackSearchInput.focus();
+            }
+            trackSearchQuery = '';
+            if (btnTrackClearSearch) {
+                btnTrackClearSearch.style.display = 'none';
+            }
+            currentTrackPage = 1;
+            renderTracklist();
+        }
+
+        function initSearchListeners() {
+            if (itemsSearchInput) {
+                itemsSearchInput.addEventListener('compositionstart', () => { isSearchComposing = true; });
+                itemsSearchInput.addEventListener('compositionend', () => {
+                    isSearchComposing = false;
+                    onItemSearchInput();
+                });
+                itemsSearchInput.addEventListener('input', () => {
+                    if (isSearchComposing) return;
+                    onItemSearchInput();
+                });
+                itemsSearchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const firstCard = document.querySelector('.tv-card-item');
+                        if (firstCard) setFocus(firstCard);
+                        else if (!btnPrevPage.disabled) setFocus(btnPrevPage);
+                        else if (!btnNextPage.disabled) setFocus(btnNextPage);
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setFocus(document.getElementById('btnReload') || document.getElementById('btnTvHelp'));
+                    } else if (e.key === 'ArrowLeft') {
+                        if (itemsSearchInput.selectionStart === 0 && itemsSearchInput.selectionEnd === 0) {
+                            e.preventDefault();
+                            const activeNav = document.querySelector('.tv-nav-item.active') || document.querySelector('.tv-nav-item');
+                            if (activeNav) setFocus(activeNav);
+                        }
+                    } else if (e.key === 'ArrowRight') {
+                        if (btnItemsClearSearch && btnItemsClearSearch.style.display !== 'none') {
+                            e.preventDefault();
+                            setFocus(btnItemsClearSearch);
+                        } else {
+                            e.preventDefault();
+                            const targetRight = document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item') || document.getElementById('btnPlayAll');
+                            if (targetRight) setFocus(targetRight);
+                        }
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        itemsSearchInput.blur();
+                        const firstCard = document.querySelector('.tv-card-item');
+                        if (firstCard) setFocus(firstCard);
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        if (itemsSearchInput.value) {
+                            clearItemSearch();
+                        } else {
+                            itemsSearchInput.blur();
+                            const firstCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
+                            if (firstCard) setFocus(firstCard);
+                        }
+                    }
+                });
+            }
+
+            if (btnItemsClearSearch) {
+                btnItemsClearSearch.addEventListener('click', clearItemSearch);
+                btnItemsClearSearch.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        setFocus(itemsSearchInput);
+                    } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const firstCard = document.querySelector('.tv-card-item');
+                        if (firstCard) setFocus(firstCard);
+                    } else if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        const targetRight = document.querySelector('.tv-track-item.playing') || document.querySelector('.tv-track-item') || document.getElementById('btnPlayAll');
+                        if (targetRight) setFocus(targetRight);
+                    }
+                });
+            }
+
+            if (trackSearchInput) {
+                trackSearchInput.addEventListener('compositionstart', () => { isSearchComposing = true; });
+                trackSearchInput.addEventListener('compositionend', () => {
+                    isSearchComposing = false;
+                    onTrackSearchInput();
+                });
+                trackSearchInput.addEventListener('input', () => {
+                    if (isSearchComposing) return;
+                    onTrackSearchInput();
+                });
+                trackSearchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const firstTr = document.querySelector('.tv-track-item');
+                        if (firstTr) setFocus(firstTr);
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setFocus(btnPlayAll || document.getElementById('btnReload'));
+                    } else if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || itemsSearchInput;
+                        if (targetCard) setFocus(targetCard);
+                    } else if (e.key === 'ArrowRight') {
+                        if (btnTrackClearSearch && btnTrackClearSearch.style.display !== 'none') {
+                            e.preventDefault();
+                            setFocus(btnTrackClearSearch);
+                        }
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        trackSearchInput.blur();
+                        const firstTr = document.querySelector('.tv-track-item');
+                        if (firstTr) setFocus(firstTr);
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        if (trackSearchInput.value) {
+                            clearTrackSearch();
+                        } else {
+                            trackSearchInput.blur();
+                            const firstTr = document.querySelector('.tv-track-item');
+                            if (firstTr) setFocus(firstTr);
+                        }
+                    }
+                });
+            }
+
+            if (btnTrackClearSearch) {
+                btnTrackClearSearch.addEventListener('click', clearTrackSearch);
+                btnTrackClearSearch.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        setFocus(trackSearchInput);
+                    } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const firstTr = document.querySelector('.tv-track-item');
+                        if (firstTr) setFocus(firstTr);
+                    }
+                });
+            }
+        }
+
         // ─── D-PAD REMOTE SMART SPATIAL NAVIGATION ENGINE (ZERO JANK / ZERO LATENCY) ───
         let lastMainFocusElement = null; // Ghi nhớ phần tử nội dung gần nhất trước khi xuống player bar
 
@@ -2789,9 +3410,11 @@
                     return;
                 }
                 if (dir === 'right') {
-                    const targetCard = document.querySelector('.tv-card-item.active') || 
+                    const targetCard = (currentTab === 'search' ? itemsSearchInput : null) ||
+                                       document.querySelector('.tv-card-item.active') || 
                                        document.querySelector(`.tv-card-item[data-idx="${lastFocusedCardIdx}"]`) || 
                                        document.querySelector('.tv-card-item') || 
+                                       itemsSearchInput ||
                                        document.getElementById('btnPrevPage');
                     if (targetCard) setFocus(targetCard);
                     return;
@@ -2799,7 +3422,7 @@
                 return;
             }
 
-            // --- 2. ĐIỀU HƯỚNG TRONG CỘT GIỮA (ITEMS & PHÂN TRANG) ---
+            // --- 2. ĐIỀU HƯỚNG TRONG CỘT GIỮA (ITEMS, TÌM KIẾM & PHÂN TRANG) ---
             if (isItemsCol) {
                 if (dir === 'left') {
                     const activeNav = document.querySelector('.tv-nav-item.active') || document.querySelector('.tv-nav-item');
@@ -2807,13 +3430,43 @@
                     return;
                 }
                 if (dir === 'right') {
-                    // Ưu tiên nhảy vào bài đang phát hoặc bài vừa focus gần nhất, KHÔNG nhảy vào khung banner showcase
+                    if (cur === itemsSearchInput && btnItemsClearSearch && btnItemsClearSearch.style.display !== 'none') {
+                        setFocus(btnItemsClearSearch);
+                        return;
+                    }
                     const targetRight = document.querySelector('.tv-track-item.playing') || 
                                         document.querySelector(`.tv-track-item[data-idx="${lastFocusedTrackIdx}"]`) || 
                                         document.querySelector('.tv-track-item') || 
                                         document.getElementById('btnPlayAll');
                     if (targetRight) setFocus(targetRight);
                     return;
+                }
+
+                if (cur === itemsSearchInput || cur === btnItemsClearSearch) {
+                    if (dir === 'down') {
+                        const cards = Array.from(document.querySelectorAll('.tv-col-items .tv-card-item'));
+                        if (cards.length > 0) setFocus(cards[0]);
+                        else if (btnPrevPage && !btnPrevPage.disabled) setFocus(btnPrevPage);
+                        else if (btnNextPage && !btnNextPage.disabled) setFocus(btnNextPage);
+                        else {
+                            const playerPlayBtn = document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable');
+                            if (playerPlayBtn) setFocus(playerPlayBtn);
+                        }
+                        return;
+                    }
+                    if (dir === 'up') {
+                        setFocus(document.getElementById('btnReload') || document.getElementById('btnTvHelp') || document.getElementById('btnSwitchDesktop'));
+                        return;
+                    }
+                    if (dir === 'left') {
+                        if (cur === btnItemsClearSearch) {
+                            setFocus(itemsSearchInput);
+                        } else {
+                            const activeNav = document.querySelector('.tv-nav-item.active') || document.querySelector('.tv-nav-item');
+                            if (activeNav) setFocus(activeNav);
+                        }
+                        return;
+                    }
                 }
 
                 const cards = Array.from(document.querySelectorAll('.tv-col-items .tv-card-item'));
@@ -2848,7 +3501,8 @@
                         return;
                     }
                     if (dir === 'up') {
-                        setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
+                        if (itemsSearchInput) setFocus(itemsSearchInput);
+                        else setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
                         return;
                     }
                 }
@@ -2871,8 +3525,12 @@
                             setFocus(cards[curCardIdx - 1]);
                         } else if (!btnPrevPage.disabled) {
                             btnPrevPage.click();
-                        } else {
+                        } else if (!btnPrevPage.disabled || !btnNextPage.disabled) {
                             setFocus(btnPrevPage.disabled ? btnNextPage : btnPrevPage);
+                        } else if (itemsSearchInput) {
+                            setFocus(itemsSearchInput);
+                        } else {
+                            setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
                         }
                         return;
                     }
@@ -2880,12 +3538,17 @@
                 return;
             }
 
-            // --- 3. ĐIỀU HƯỚNG TRONG CỘT PHẢI (SHOWCASE BANNER & TRACKLIST) ---
+            // --- 3. ĐIỀU HƯỚNG TRONG CỘT PHẢI (SHOWCASE BANNER, TÌM BÀI HÁT & TRACKLIST) ---
             if (isRightCol) {
                 if (dir === 'left') {
+                    if (cur === btnTrackClearSearch) {
+                        setFocus(trackSearchInput);
+                        return;
+                    }
                     const targetCard = document.querySelector('.tv-card-item.active') || 
                                        document.querySelector(`.tv-card-item[data-idx="${lastFocusedCardIdx}"]`) || 
-                                       document.querySelector('.tv-card-item');
+                                       document.querySelector('.tv-card-item') ||
+                                       itemsSearchInput;
                     if (targetCard) setFocus(targetCard);
                     return;
                 }
@@ -2896,6 +3559,38 @@
                 const curBtnIdx = showcaseBtns.indexOf(cur);
                 const curPillIdx = genrePills.indexOf(cur);
                 const curTrackIdx = tracks.indexOf(cur);
+
+                if (cur === trackSearchInput || cur === btnTrackClearSearch) {
+                    if (dir === 'up') {
+                        if (genrePills.length > 0 && tvGenreSubfilterBar && tvGenreSubfilterBar.style.display !== 'none') {
+                            const activePill = document.querySelector('.tv-genre-pill.active') || genrePills[0];
+                            setFocus(activePill);
+                        } else if (showcaseBtns.length > 0) {
+                            setFocus(showcaseBtns[0]);
+                        } else {
+                            setFocus(document.getElementById('btnReload') || document.getElementById('btnSwitchDesktop'));
+                        }
+                        return;
+                    }
+                    if (dir === 'down') {
+                        if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
+                            setFocus(btnPrevTrackPage.disabled ? btnNextTrackPage : btnPrevTrackPage);
+                        } else if (tracks.length > 0) {
+                            setFocus(tracks[0]);
+                        } else {
+                            setFocus(document.getElementById('btnPlay') || document.querySelector('.tv-player-bar .focusable'));
+                        }
+                        return;
+                    }
+                    if (dir === 'right') {
+                        if (cur === trackSearchInput && btnTrackClearSearch && btnTrackClearSearch.style.display !== 'none') {
+                            setFocus(btnTrackClearSearch);
+                        } else if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
+                            setFocus(btnPrevTrackPage.disabled ? btnNextTrackPage : btnPrevTrackPage);
+                        }
+                        return;
+                    }
+                }
 
                 // --- Khi đang focus ở Subgenre Pills ---
                 if (curPillIdx !== -1) {
@@ -2920,7 +3615,9 @@
                         return;
                     }
                     if (dir === 'down') {
-                        if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
+                        if (trackSearchInput) {
+                            setFocus(trackSearchInput);
+                        } else if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
                             setFocus(btnPrevTrackPage.disabled ? btnNextTrackPage : btnPrevTrackPage);
                         } else if (tracks.length > 0) {
                             setFocus(tracks[0]);
@@ -2941,7 +3638,9 @@
                         return;
                     }
                     if (dir === 'up') {
-                        if (genrePills.length > 0 && tvGenreSubfilterBar && tvGenreSubfilterBar.style.display !== 'none') {
+                        if (trackSearchInput) {
+                            setFocus(trackSearchInput);
+                        } else if (genrePills.length > 0 && tvGenreSubfilterBar && tvGenreSubfilterBar.style.display !== 'none') {
                             const activePill = document.querySelector('.tv-genre-pill.active') || genrePills[0];
                             setFocus(activePill);
                         } else if (showcaseBtns.length > 0) {
@@ -2953,6 +3652,7 @@
                     }
                     if (dir === 'left') {
                         if (cur === btnNextTrackPage && !btnPrevTrackPage.disabled) setFocus(btnPrevTrackPage);
+                        else if (trackSearchInput) setFocus(trackSearchInput);
                         else {
                             const targetCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item');
                             if (targetCard) setFocus(targetCard);
@@ -2982,6 +3682,8 @@
                         if (genrePills.length > 0 && tvGenreSubfilterBar && tvGenreSubfilterBar.style.display !== 'none') {
                             const activePill = document.querySelector('.tv-genre-pill.active') || genrePills[0];
                             setFocus(activePill);
+                        } else if (trackSearchInput) {
+                            setFocus(trackSearchInput);
                         } else if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
                             setFocus(btnPrevTrackPage.disabled ? btnNextTrackPage : btnPrevTrackPage);
                         } else if (tracks.length > 0) {
@@ -3010,6 +3712,8 @@
                             setFocus(tracks[curTrackIdx - 1]);
                         } else if (trackPaginationBar && trackPaginationBar.style.display !== 'none') {
                             setFocus(btnPrevTrackPage.disabled ? btnNextTrackPage : btnPrevTrackPage);
+                        } else if (trackSearchInput) {
+                            setFocus(trackSearchInput);
                         } else if (genrePills.length > 0 && tvGenreSubfilterBar && tvGenreSubfilterBar.style.display !== 'none') {
                             const activePill = document.querySelector('.tv-genre-pill.active') || genrePills[0];
                             setFocus(activePill);
@@ -3133,6 +3837,17 @@
                 e.preventDefault();
                 toggleFavorite();
                 return;
+            }
+
+            // 4.1. Phím Tìm Kiếm Nhanh: Phím S hoặc /
+            if (!isTyping && (e.key === 's' || e.key === 'S' || e.key === '/')) {
+                if (itemsSearchInput) {
+                    e.preventDefault();
+                    itemsSearchInput.focus();
+                    itemsSearchInput.select?.();
+                    showToast('🔍 Nhập từ khóa để tìm kiếm');
+                    return;
+                }
             }
 
             // 5. Phím Bật/Đóng Hướng Dẫn Nhanh (Help Toggle): Phím H hoặc ?
@@ -3443,7 +4158,8 @@
             get audio() { return audio; }
         };
 
-        // Initialize: Kiểm tra trạng thái đăng nhập & Khởi tạo REST Heartbeat
+        // Initialize: Khởi tạo tìm kiếm, kiểm tra trạng thái đăng nhập & REST Heartbeat
+        initSearchListeners();
         checkUserProfile();
         sendTvHeartbeat();
         setInterval(sendTvHeartbeat, 1800);
