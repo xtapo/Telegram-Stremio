@@ -2818,13 +2818,25 @@ class XTAPOMusicApp {
         album = album || this.currentAlbum;
 
         const fallback = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
-        let cover = (track && (track.coverUrl || track.cover_url || track.cover || track.albumCover || track.thumb)) ||
-                    (album && (album.coverUrl || album.cover_url || album.cover || album.thumb || (album.tracks && album.tracks[0] && (album.tracks[0].coverUrl || album.tracks[0].cover_url || album.tracks[0].cover)))) ||
-                    (this.currentUser && this.currentUser.avatar_url) ||
+        const isCustomPlaylist = Boolean(this.activePlaylistId || (album && String(album.id).startsWith('pl-')) || (album && album.id === 'favorites-queue'));
+
+        let cover = '';
+
+        if (isCustomPlaylist) {
+            // Trong danh sách phát tùy biến / hàng đợi yêu thích: ưu tiên ảnh riêng của từng bài hát
+            cover = (track && (track.coverUrl || track.cover_url || track.cover || track.albumCover || track.thumb)) ||
+                    (album && (album.coverUrl || album.cover_url || album.cover || album.thumb)) ||
                     fallback;
+        } else {
+            // Trong Album thông thường: ưu tiên ảnh bìa Album đã nạp sẵn trong cache để hiển thị tức thì (0ms)
+            cover = (album && (album.coverUrl || album.cover_url || album.cover || album.thumb)) ||
+                    (track && (track.coverUrl || track.cover_url || track.cover || track.albumCover || track.thumb)) ||
+                    (album && album.tracks && album.tracks[0] && (album.tracks[0].coverUrl || album.tracks[0].cover_url || album.tracks[0].cover)) ||
+                    fallback;
+        }
 
         if (!cover || typeof cover !== 'string' || cover.trim() === '') {
-            cover = fallback;
+            cover = (this.currentUser && this.currentUser.avatar_url) || fallback;
         }
         return cover;
     }
@@ -2856,6 +2868,19 @@ class XTAPOMusicApp {
         }
 
         this.updateDynamicBackdrop(resolvedCover);
+
+        // Nếu bài hát có ảnh bìa riêng khác với bìa album, tải ngầm và cập nhật mượt mà vào đĩa than
+        const track = this.currentTrack;
+        const trackSpecificCover = track && (track.coverUrl || track.cover_url || track.cover);
+        if (trackSpecificCover && trackSpecificCover !== resolvedCover && typeof trackSpecificCover === 'string' && !trackSpecificCover.startsWith('data:')) {
+            const preImg = new Image();
+            preImg.onload = () => {
+                if (this.currentTrack === track && this.vinylCenterImg) {
+                    this.vinylCenterImg.src = trackSpecificCover;
+                }
+            };
+            preImg.src = trackSpecificCover;
+        }
     }
 
     // --- Dynamic Album Art Backdrop (Apple Music Style Cross-fade) ---
@@ -2934,6 +2959,8 @@ class XTAPOMusicApp {
             sizes: `${s}x${s}`,
             type: fullCoverUrl.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'
         }));
+
+        const albumTitle = album.title || (track && track.album) || 'XTAPO Music';
 
         try {
             navigator.mediaSession.metadata = new MediaMetadata({
