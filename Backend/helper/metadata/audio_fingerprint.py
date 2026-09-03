@@ -341,13 +341,17 @@ async def recognize_audio_from_telegram(
         return res1
 
     # ── LỚP 1B: Shazam Lát Cắt Điệp Khúc (Nếu nửa bài có intro lạ hoặc nhiễu) ──
+    # Giữ lại 8KB header đầu tệp để bảo toàn định dạng (FLAC/WAV/MP3/M4A), ghép với lát cắt điệp khúc
     if len(half_bytes_data) > 6 * 1024 * 1024:
+        header_len = min(8192, len(half_bytes_data))
+        file_hdr = half_bytes_data[:header_len]
         chorus_offset = int(len(half_bytes_data) * 0.35)
-        chorus_slice = half_bytes_data[chorus_offset:]
+        chorus_slice = file_hdr + half_bytes_data[chorus_offset:]
+
         if len(chorus_slice) >= 102400:
             if log_callback:
                 log_callback("Đoạn đầu chưa khớp -> Lớp 1B: Quét tập trung phân đoạn Điệp khúc...", "info")
-            LOGGER.info(f"[SHAZAM] Thử quét lát cắt điệp khúc từ nửa bài hát cho: {file_name}")
+            LOGGER.info(f"[SHAZAM] Thử quét lát cắt điệp khúc ({round(len(chorus_slice)/1024/1024, 1)}MB) cho: {file_name}")
             res2 = await _query_shazam_bytes(chorus_slice, segment_name="Điệp khúc")
             if res2:
                 return res2
