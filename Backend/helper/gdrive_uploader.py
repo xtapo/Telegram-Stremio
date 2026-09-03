@@ -667,30 +667,70 @@ class GoogleDriveUploadManager:
                         self._log(err_msg, "error")
                         return None
 
-                    # Tìm token xác nhận tải file lớn
-                    confirm_match = (
-                        re.search(r'confirm=([0-9A-Za-z_-]+)', html_body) or 
-                        re.search(r'name="confirm"\s+value="([^"]+)"', html_body) or
-                        re.search(r'id="uc-download-link"\s+href="([^"]+)"', html_body) or
-                        re.search(r'href="(/uc\?export=download[^"]+)"', html_body)
-                    )
+                    # Trích xuất form và parameters xác nhận tải file lớn (bao gồm cả uuid mới của Google)
                     download_url = None
-                    if confirm_match:
-                        match_val = confirm_match.group(1).replace("&amp;", "&")
-                        if match_val.startswith("http"):
-                            download_url = match_val
-                        elif match_val.startswith("/"):
-                            download_url = f"https://drive.google.com{match_val}"
-                        else:
-                            download_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm={match_val}"
-                        self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
+                    try:
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(html_body, "html.parser")
+                        form = soup.find("form")
+                        if form:
+                            action_url = form.get("action") or "https://drive.usercontent.google.com/download"
+                            form_params = {
+                                inp.get("name"): inp.get("value")
+                                for inp in form.find_all("input")
+                                if inp.get("name") and inp.get("value")
+                            }
+                            if form_params:
+                                download_url = f"{action_url}?{urllib.parse.urlencode(form_params)}"
+                    except Exception:
+                        pass
+
+                    if not download_url:
+                        confirm_match = (
+                            re.search(r'confirm=([0-9A-Za-z_-]+)', html_body) or 
+                            re.search(r'name="confirm"\s+value="([^"]+)"', html_body) or
+                            re.search(r'id="uc-download-link"\s+href="([^"]+)"', html_body) or
+                            re.search(r'href="(/uc\?export=download[^"]+)"', html_body)
+                        )
+                        if confirm_match:
+                            match_val = confirm_match.group(1).replace("&amp;", "&")
+                            if match_val.startswith("http"):
+                                download_url = match_val
+                            elif match_val.startswith("/"):
+                                download_url = f"https://drive.google.com{match_val}"
+                            else:
+                                download_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm={match_val}"
 
                     final_dl_url = download_url or f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+                    self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
                     final_stream_ctx = client.stream("GET", final_dl_url, headers=headers)
                     final_stream_resp = await final_stream_ctx.__aenter__()
 
                     if final_stream_resp.status_code != 200:
                         self._log(f"Lỗi HTTP {final_stream_resp.status_code} khi tải nội dung file '{target_filename}'", "error")
+                        return None
+
+                    # Kiểm tra xem Google Drive có tiếp tục trả về trang HTML cảnh báo (Quota Exceeded / Access Denied) hay không
+                    final_ct = (final_stream_resp.headers.get("content-type") or "").lower()
+                    if "text/html" in final_ct:
+                        html_chunks = []
+                        async for chunk in final_stream_resp.aiter_bytes(chunk_size=16384):
+                            html_chunks.append(chunk)
+                            if len(html_chunks) >= 8:
+                                break
+                        err_body = b"".join(html_chunks).decode("utf-8", errors="ignore").lower()
+                        await final_stream_ctx.__aexit__(None, None, None)
+                        final_stream_ctx = None
+
+                        if any(q in err_body for q in ["quota exceeded", "vượt quá", "too many users", "can't view or download", "hạn ngạch", "không thể xem hoặc tải"]):
+                            err_msg = (
+                                f"⚠️ File '{target_filename}' bị giới hạn lượt tải trong ngày của Google Drive (Quota Exceeded).\n"
+                                f"👉 Cách tải ngay: Mở link trên trình duyệt -> Nhấp 'Tạo bản sao' (Make a copy) vào Drive của bạn -> Lấy link bản sao dán vào đây để tải!"
+                            )
+                        else:
+                            err_msg = f"⚠️ File tải về '{target_filename}' không hợp lệ (Google Drive từ chối cấp luồng tải trực tiếp)."
+                        self._error_message = err_msg
+                        self._log(err_msg, "error")
                         return None
 
                 # Trường hợp 2: Trả về trực tiếp nhị phân file (application/octet-stream, audio/..., zip/...)
@@ -744,13 +784,16 @@ class GoogleDriveUploadManager:
                                 self._speed_str = f"{mbps:.2f} MB/s"
 
                 downloaded_fsize = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
-                if downloaded_fsize < 4096:
+                if downloaded_fsize < 8192:
                     try:
                         with open(cache_path, "r", encoding="utf-8", errors="ignore") as f_chk:
-                            chk_head = f_chk.read(500)
-                            if "<!DOCTYPE" in chk_head or "<html" in chk_head:
-                                if "Quota exceeded" in chk_head or "vượt quá giới hạn" in chk_head:
-                                    err_msg = f"⚠️ File '{final_filename}' bị giới hạn lượt tải trong ngày (Google Drive Quota Exceeded)."
+                            chk_head = f_chk.read(4096).lower()
+                            if "<!doctype" in chk_head or "<html" in chk_head:
+                                if any(q in chk_head for q in ["quota exceeded", "vượt quá", "too many users", "can't view or download", "hạn ngạch", "không thể xem hoặc tải"]):
+                                    err_msg = (
+                                        f"⚠️ File '{final_filename}' bị giới hạn lượt tải trong ngày của Google Drive (Quota Exceeded).\n"
+                                        f"👉 Cách tải ngay: Mở link trên trình duyệt -> Nhấp 'Tạo bản sao' (Make a copy) vào Drive của bạn -> Lấy link bản sao dán vào đây để tải!"
+                                    )
                                 else:
                                     err_msg = f"⚠️ File tải về '{final_filename}' không hợp lệ (Google Drive trả về trang HTML thông báo)."
                                 self._error_message = err_msg
