@@ -818,9 +818,10 @@ class XTAPOMusicApp {
         this.initMusicSync();
         this.sendSyncHeartbeat();
         const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-        const heartbeatInterval = isMobileDevice ? 8000 : 2200;
+        // Tối ưu chu kỳ heartbeat: 6s trên Desktop, 10s trên Mobile (tạm dừng khi ẩn tab để chống nghẽn socket HTTP)
+        const heartbeatInterval = isMobileDevice ? 10000 : 6000;
         setInterval(() => {
-            if (document.hidden && isMobileDevice) return;
+            if (document.hidden) return;
             this.sendSyncHeartbeat();
         }, heartbeatInterval);
         this.setupAuthEvents();
@@ -912,6 +913,7 @@ class XTAPOMusicApp {
         if (this._heartbeatInterval) clearInterval(this._heartbeatInterval);
         this.sendHeartbeat();
         this._heartbeatInterval = setInterval(() => {
+            if (document.hidden) return;
             this.sendHeartbeat();
         }, 30000);
     }
@@ -925,6 +927,11 @@ class XTAPOMusicApp {
 
     async sendHeartbeat() {
         if (!this.currentUser) return;
+        if (this._isAuthHeartbeatPending) return;
+        this._isAuthHeartbeatPending = true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
         try {
             const track = this.currentTrack || (this.currentAlbum && this.currentAlbum.tracks && this.currentAlbum.tracks[this.currentTrackIndex]);
             const isAudioPlaying = this.audio && !this.audio.paused && !this.audio.ended && this.audio.currentTime > 0;
@@ -944,9 +951,14 @@ class XTAPOMusicApp {
             await fetch('/api/music/auth/heartbeat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: controller.signal
             });
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            clearTimeout(timeoutId);
+            this._isAuthHeartbeatPending = false;
+        }
     }
 
     async fetchUserProfile() {
@@ -4159,7 +4171,7 @@ class XTAPOMusicApp {
         }
 
         // Close on overlay click
-        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal, this.favoritesModal, this.lyricsModal, this.lyricsEditorModal, this.authModal, this.sleepTimerModal, this.equalizerModal].forEach(modal => {
+        [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.downloadProgressModal, this.m3u8Modal, this.favoritesModal, this.lyricsModal, this.lyricsEditorModal, this.authModal, this.sleepTimerModal, this.equalizerModal, this.devicesModal, this.userProfileModal, this.backupRestoreModal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -4710,28 +4722,80 @@ class XTAPOMusicApp {
             return;
         }
 
-        displayAlbums.forEach((album, idx) => {
-            const card = document.createElement('div');
-            card.className = `album-card ${idx === this.currentAlbumIndex ? 'active' : ''}`;
-            card.innerHTML = `
-                <img src="${album.coverUrl}" loading="lazy" class="album-card-img" alt="${album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
-                <div class="album-card-info">
-                    <span class="album-card-title">${album.title}</span>
-                    <span class="album-card-artist">${album.artist}</span>
-                    <span class="album-card-year">${album.year || '2026'} • ${(album.tracks || []).length} Tracks</span>
-                </div>
-            `;
+        // Tối ưu render theo từng Batch (BATCH_SIZE = 48) với DocumentFragment để chống đứng đơ UI
+        const BATCH_SIZE = 48;
+        const total = displayAlbums.length;
+        let renderedCount = 0;
 
-            card.addEventListener('click', () => {
-                const realIdx = this.albums.findIndex(a => a.id === album.id || a.title === album.title);
-                this.loadAlbum(realIdx !== -1 ? realIdx : idx, 0, true);
-                this.closeModal(this.albumModal);
-                this.showToast(`Đã chuyển sang album: ${album.title}`);
-                this.renderAlbumGrid();
-            });
+        this._albumRenderNextBatch = (count = BATCH_SIZE) => {
+            if (renderedCount >= total) return;
+            const frag = document.createDocumentFragment();
+            const limit = Math.min(renderedCount + count, total);
 
-            this.albumGrid.appendChild(card);
-        });
+            for (let idx = renderedCount; idx < limit; idx++) {
+                const album = displayAlbums[idx];
+                const card = document.createElement('div');
+                card.className = `album-card ${idx === this.currentAlbumIndex ? 'active' : ''}`;
+                card.innerHTML = `
+                    <img src="${album.coverUrl}" loading="lazy" class="album-card-img" alt="${this.escapeHtml ? this.escapeHtml(album.title) : album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
+                    <div class="album-card-info">
+                        <span class="album-card-title">${this.escapeHtml ? this.escapeHtml(album.title) : album.title}</span>
+                        <span class="album-card-artist">${this.escapeHtml ? this.escapeHtml(album.artist) : album.artist}</span>
+                        <span class="album-card-year">${album.year || '2026'} • ${(album.tracks || []).length} Tracks</span>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    const realIdx = this.albums.findIndex(a => a.id === album.id || a.title === album.title);
+                    this.loadAlbum(realIdx !== -1 ? realIdx : idx, 0, true);
+                    this.closeModal(this.albumModal);
+                    this.showToast(`Đã chuyển sang album: ${album.title}`);
+                    if (this.albumGrid) {
+                        this.albumGrid.querySelectorAll('.album-card').forEach(c => c.classList.remove('active'));
+                        card.classList.add('active');
+                    }
+                });
+
+                frag.appendChild(card);
+            }
+
+            renderedCount = limit;
+
+            const existingLoadMore = document.getElementById('albumLoadMoreBtn');
+            if (existingLoadMore) existingLoadMore.remove();
+
+            this.albumGrid.appendChild(frag);
+
+            if (renderedCount < total) {
+                const loadMoreContainer = document.createElement('div');
+                loadMoreContainer.id = 'albumLoadMoreBtn';
+                loadMoreContainer.style.cssText = 'grid-column: 1/-1; text-align: center; padding: 20px 0;';
+                loadMoreContainer.innerHTML = `
+                    <button class="nav-btn" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 10px 24px; border-radius: 20px; font-weight: 600; cursor: pointer;">
+                        Xem thêm album (${total - renderedCount} còn lại)
+                    </button>
+                `;
+                loadMoreContainer.querySelector('button').onclick = () => {
+                    this._albumRenderNextBatch(BATCH_SIZE * 2);
+                };
+                this.albumGrid.appendChild(loadMoreContainer);
+            }
+        };
+
+        this._albumRenderNextBatch(BATCH_SIZE);
+
+        // Tự động tải thêm khi cuộn xuống gần đáy modal album
+        if (!this._albumGridScrollBound && this.albumGrid) {
+            this._albumGridScrollBound = true;
+            const scrollContainer = this.albumGrid.closest('.modal-card') || this.albumGrid;
+            scrollContainer.addEventListener('scroll', () => {
+                if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 350) {
+                    if (this._albumRenderNextBatch) {
+                        this._albumRenderNextBatch(BATCH_SIZE);
+                    }
+                }
+            }, { passive: true });
+        }
     }
 
     updateDrawerInfo() {
@@ -5066,14 +5130,9 @@ class XTAPOMusicApp {
                 return;
             }
 
-            // D-Pad Arrows Navigation
+            // D-Pad Arrows Navigation (Chỉ can thiệp khi đang thực sự ở chế độ TV - this.isTvMode)
             const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
-            if (isArrowKey) {
-                // Tự động bật chế độ TV Lite nếu phát hiện thao tác D-Pad trên màn hình lớn
-                if (!this.isTvMode && window.innerWidth >= 900) {
-                    this.enableTvMode(true);
-                }
-
+            if (isArrowKey && this.isTvMode) {
                 if (!isTyping) {
                     e.preventDefault();
                     if (e.key === 'ArrowUp') navigateDirection('up');
@@ -9337,6 +9396,11 @@ class XTAPOMusicApp {
     }
 
     async sendSyncHeartbeat() {
+        if (this._isSyncHeartbeatPending) return;
+        this._isSyncHeartbeatPending = true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
         try {
             const track = this.currentTrack;
             const album = this.currentAlbum;
@@ -9369,7 +9433,8 @@ class XTAPOMusicApp {
             const res = await fetch('/api/music/sync/heartbeat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: controller.signal
             });
 
             if (res.ok) {
@@ -9393,7 +9458,10 @@ class XTAPOMusicApp {
                 }
             }
         } catch (e) {
-            // Im lặng bỏ qua khi mất mạng tạm thời
+            // Im lặng bỏ qua khi mất mạng tạm thời hoặc request bị hủy do timeout
+        } finally {
+            clearTimeout(timeoutId);
+            this._isSyncHeartbeatPending = false;
         }
     }
 
