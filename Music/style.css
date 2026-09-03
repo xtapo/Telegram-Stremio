@@ -2407,11 +2407,49 @@ html, body {
         box-sizing: border-box;
     }
 
-    .album-grid,
-    .artist-grid {
+    .album-grid {
         grid-template-columns: 1fr;
         grid-auto-rows: max-content;
         gap: 10px;
+    }
+
+    #artistModal .modal-card {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 92vh !important;
+        max-height: 92vh !important;
+        border-radius: 20px 20px 0 0 !important;
+        margin-top: auto !important;
+        margin-bottom: 0 !important;
+        padding: 0 !important;
+    }
+
+    #artistModal #artistListView {
+        padding: 14px 12px calc(18px + env(safe-area-inset-bottom, 0px)) 12px !important;
+    }
+
+    .artist-grid {
+        grid-template-columns: repeat(2, 1fr);
+        grid-auto-rows: max-content;
+        gap: 8px;
+    }
+
+    .artist-card-item {
+        padding: 8px 10px;
+        gap: 10px;
+    }
+
+    .artist-avatar-img {
+        width: 44px;
+        height: 44px;
+    }
+
+    .artist-card-info h4 {
+        font-size: 0.85rem;
+    }
+
+    .artist-card-info p {
+        font-size: 0.72rem;
     }
 
     .genre-grid {
@@ -2828,6 +2866,36 @@ html, body {
 }
 
 /* --- Artists & Genres Styling --- */
+.artist-search-bar-wrap {
+    position: relative;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.artist-search-bar-wrap input[type="search"]::-webkit-search-decoration,
+.artist-search-bar-wrap input[type="search"]::-webkit-search-cancel-button,
+.artist-search-bar-wrap input[type="search"]::-webkit-search-results-button,
+.artist-search-bar-wrap input[type="search"]::-webkit-search-results-decoration {
+    display: none;
+}
+
+#artistSearchInput:focus {
+    border-color: var(--color-primary) !important;
+    background: rgba(255, 255, 255, 0.09) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+#btnClearArtistSearch:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+}
+
+#btnSubmitArtistSearch:active {
+    transform: scale(0.96);
+}
+
 .artist-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

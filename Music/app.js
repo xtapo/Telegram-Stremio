@@ -441,6 +441,8 @@ class XTAPOMusicApp {
         this.artistProfileView = document.getElementById('artistProfileView');
         this.btnBackToArtistList = document.getElementById('btnBackToArtistList');
         this.artistSearchInput = document.getElementById('artistSearchInput');
+        this.btnClearArtistSearch = document.getElementById('btnClearArtistSearch');
+        this.btnSubmitArtistSearch = document.getElementById('btnSubmitArtistSearch');
         this.closeArtistModal = document.getElementById('closeArtistModal');
         this.artistGrid = document.getElementById('artistGrid');
         this.artistCacheMap = new Map();
@@ -3464,12 +3466,20 @@ class XTAPOMusicApp {
         }
         if (this.closeSearchModal) this.closeSearchModal.addEventListener('click', () => this.closeModal(this.searchModal));
         if (this.searchInput) {
+            let isSearchComposing = false;
+            this.searchInput.addEventListener('compositionstart', () => { isSearchComposing = true; });
+            this.searchInput.addEventListener('compositionend', (e) => {
+                isSearchComposing = false;
+                clearTimeout(this._searchDebounceTimer);
+                this.handleSearch(e.target.value);
+            });
             this.searchInput.addEventListener('input', (e) => {
+                if (isSearchComposing || e.isComposing) return;
                 clearTimeout(this._searchDebounceTimer);
                 const val = e.target.value;
                 this._searchDebounceTimer = setTimeout(() => {
                     this.handleSearch(val);
-                }, 150);
+                }, 200);
             });
         }
 
@@ -3594,18 +3604,67 @@ class XTAPOMusicApp {
         if (this.btnBackToArtistList) {
             this.btnBackToArtistList.addEventListener('click', () => this.showArtistListView());
         }
-        let _searchDebounceTimer = null;
-        const debounce = (fn, delay = 100) => {
-            return (...args) => {
-                clearTimeout(_searchDebounceTimer);
-                _searchDebounceTimer = setTimeout(() => fn(...args), delay);
-            };
+        // Artist Search Controls with IME Composition & Mobile Isolation
+        let _artistSearchTimer = null;
+        let _isArtistComposing = false;
+
+        const executeArtistSearch = () => {
+            const val = this.artistSearchInput ? this.artistSearchInput.value.trim() : '';
+            this.renderArtistGrid(val);
+            if (this.btnClearArtistSearch) {
+                this.btnClearArtistSearch.style.display = val ? 'flex' : 'none';
+            }
         };
 
         if (this.artistSearchInput) {
-            this.artistSearchInput.addEventListener('input', debounce((e) => {
-                this.renderArtistGrid(e.target.value.trim());
-            }));
+            this.artistSearchInput.addEventListener('compositionstart', () => {
+                _isArtistComposing = true;
+            });
+            this.artistSearchInput.addEventListener('compositionend', (e) => {
+                _isArtistComposing = false;
+                clearTimeout(_artistSearchTimer);
+                _artistSearchTimer = setTimeout(executeArtistSearch, 60);
+            });
+            this.artistSearchInput.addEventListener('input', (e) => {
+                if (this.btnClearArtistSearch) {
+                    this.btnClearArtistSearch.style.display = e.target.value ? 'flex' : 'none';
+                }
+                if (_isArtistComposing || e.isComposing) return;
+                clearTimeout(_artistSearchTimer);
+                _artistSearchTimer = setTimeout(executeArtistSearch, 250);
+            });
+            this.artistSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    clearTimeout(_artistSearchTimer);
+                    executeArtistSearch();
+                    this.artistSearchInput.blur();
+                }
+            });
+        }
+
+        if (this.btnSubmitArtistSearch) {
+            this.btnSubmitArtistSearch.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                clearTimeout(_artistSearchTimer);
+                executeArtistSearch();
+                if (this.artistSearchInput) this.artistSearchInput.blur();
+            });
+        }
+
+        if (this.btnClearArtistSearch) {
+            this.btnClearArtistSearch.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this.artistSearchInput) {
+                    this.artistSearchInput.value = '';
+                    this.artistSearchInput.focus();
+                }
+                this.btnClearArtistSearch.style.display = 'none';
+                this.renderArtistGrid('');
+            });
         }
 
         if (this.navGenres && this.genreModal) {
@@ -3620,9 +3679,28 @@ class XTAPOMusicApp {
             this.closeGenreModal.addEventListener('click', () => this.closeModal(this.genreModal));
         }
         if (this.genreSearchInput) {
-            this.genreSearchInput.addEventListener('input', debounce((e) => {
+            let _genreTimer = null;
+            let _isGenreComposing = false;
+            this.genreSearchInput.addEventListener('compositionstart', () => { _isGenreComposing = true; });
+            this.genreSearchInput.addEventListener('compositionend', (e) => {
+                _isGenreComposing = false;
+                clearTimeout(_genreTimer);
                 this.renderGenreGrid(null, e.target.value.trim());
-            }));
+            });
+            this.genreSearchInput.addEventListener('input', (e) => {
+                if (_isGenreComposing || e.isComposing) return;
+                clearTimeout(_genreTimer);
+                _genreTimer = setTimeout(() => {
+                    this.renderGenreGrid(null, e.target.value.trim());
+                }, 250);
+            });
+            this.genreSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.genreSearchInput.blur();
+                }
+            });
         }
 
         if (this.navCountries && this.countryModal) {
@@ -3653,18 +3731,60 @@ class XTAPOMusicApp {
             this.tabBtnCountryTracks.addEventListener('click', () => this.switchCountryDetailTab('tracks'));
         }
         if (this.countryArtistSearchInput) {
-            this.countryArtistSearchInput.addEventListener('input', debounce((e) => {
+            let _cArtistTimer = null;
+            let _isCArtistComposing = false;
+            this.countryArtistSearchInput.addEventListener('compositionstart', () => { _isCArtistComposing = true; });
+            this.countryArtistSearchInput.addEventListener('compositionend', (e) => {
+                _isCArtistComposing = false;
+                clearTimeout(_cArtistTimer);
                 if (this.currentDetailCountryObj) {
                     this.renderCountryArtists(this.currentDetailCountryObj, e.target.value.trim());
                 }
-            }));
+            });
+            this.countryArtistSearchInput.addEventListener('input', (e) => {
+                if (_isCArtistComposing || e.isComposing) return;
+                clearTimeout(_cArtistTimer);
+                _cArtistTimer = setTimeout(() => {
+                    if (this.currentDetailCountryObj) {
+                        this.renderCountryArtists(this.currentDetailCountryObj, e.target.value.trim());
+                    }
+                }, 250);
+            });
+            this.countryArtistSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.countryArtistSearchInput.blur();
+                }
+            });
         }
         if (this.countryTrackSearchInput) {
-            this.countryTrackSearchInput.addEventListener('input', debounce((e) => {
+            let _cTrackTimer = null;
+            let _isCTrackComposing = false;
+            this.countryTrackSearchInput.addEventListener('compositionstart', () => { _isCTrackComposing = true; });
+            this.countryTrackSearchInput.addEventListener('compositionend', (e) => {
+                _isCTrackComposing = false;
+                clearTimeout(_cTrackTimer);
                 if (this.currentDetailCountryObj) {
                     this.renderCountryTracks(this.currentDetailCountryObj, e.target.value.trim());
                 }
-            }));
+            });
+            this.countryTrackSearchInput.addEventListener('input', (e) => {
+                if (_isCTrackComposing || e.isComposing) return;
+                clearTimeout(_cTrackTimer);
+                _cTrackTimer = setTimeout(() => {
+                    if (this.currentDetailCountryObj) {
+                        this.renderCountryTracks(this.currentDetailCountryObj, e.target.value.trim());
+                    }
+                }, 250);
+            });
+            this.countryTrackSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.countryTrackSearchInput.blur();
+                }
+            });
         }
         if (this.btnCountryPlayAll) {
             this.btnCountryPlayAll.addEventListener('click', () => {
@@ -3981,6 +4101,8 @@ class XTAPOMusicApp {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
+                        e.preventDefault();
+                        e.stopPropagation();
                         if (modal === this.downloadProgressModal && this.activeDownloadAbortController) {
                             if (confirm('Quá trình tải đang diễn ra. Bạn có chắc muốn hủy không?')) {
                                 this.activeDownloadAbortController.abort();
@@ -4646,7 +4768,7 @@ class XTAPOMusicApp {
                 const track = tracks[trackIdx];
                 const trackNameLow = (track.name || '').toLowerCase();
                 const trackArtistLow = (track.artist || '').toLowerCase();
-                if (trackNameLow.includes(q) || trackArtistLow.includes(q) || artistLow.includes(q) || titleLow.includes(q)) {
+                if (this.matchVietnamese(trackNameLow, q) || this.matchVietnamese(trackArtistLow, q) || this.matchVietnamese(artistLow, q) || this.matchVietnamese(titleLow, q)) {
                     matches.push({ album, albumIdx, track, trackIdx });
                     if (matches.length >= 100) break;
                 }
@@ -4768,7 +4890,7 @@ class XTAPOMusicApp {
 
         const getVisibleElements = () => {
             // Nếu có Modal đang mở, chỉ điều hướng bên trong Modal đó
-            const openModal = document.querySelector('.modal.open, .full-modal.open, .drawer.open, .auth-modal-overlay.open, .search-modal.open, .album-modal.open, .artist-modal.open, .genre-modal.open, .country-modal.open, .playlist-modal.open, .lyrics-modal.open, .equalizer-modal-overlay.open, .sleep-timer-modal-overlay.open');
+            const openModal = document.querySelector('.modal-overlay.open, .modal.open, .full-modal.open, .drawer.open, .auth-modal-overlay.open, .search-modal.open, .album-modal.open, .artist-modal.open, .genre-modal.open, .country-modal.open, .playlist-modal.open, .lyrics-modal.open, .equalizer-modal-overlay.open, .sleep-timer-modal-overlay.open');
             const root = openModal || document.body;
 
             const all = Array.from(root.querySelectorAll(focusableSelector));
@@ -4902,6 +5024,14 @@ class XTAPOMusicApp {
 
             // OK / Enter trên Remote TV
             if (e.key === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13 || e.keyCode === 23) {
+                const activeModal = document.querySelector('.modal-overlay.open, .drawer.open, .modal.open');
+                if (activeModal) {
+                    if (!isTyping && document.activeElement && activeModal.contains(document.activeElement) && document.activeElement !== document.body) {
+                        e.preventDefault();
+                        document.activeElement.click();
+                    }
+                    return;
+                }
                 if (!isTyping && document.activeElement && document.activeElement !== document.body) {
                     e.preventDefault();
                     document.activeElement.click();
@@ -4920,6 +5050,10 @@ class XTAPOMusicApp {
             }
 
             if (e.code === 'Space') {
+                const activeModal = document.querySelector('.modal-overlay.open, .drawer.open');
+                if (activeModal) {
+                    return;
+                }
                 e.preventDefault();
                 this.togglePlay();
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -5500,6 +5634,40 @@ class XTAPOMusicApp {
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
+    removeVietnameseTones(str) {
+        if (!str) return '';
+        str = String(str);
+        str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, 'a');
+        str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, 'e');
+        str = str.replace(/ì|í|ị|ỉ|ĩ/g, 'i');
+        str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, 'o');
+        str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, 'u');
+        str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, 'y');
+        str = str.replace(/đ/g, 'd');
+        str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, 'A');
+        str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, 'E');
+        str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, 'I');
+        str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, 'O');
+        str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, 'U');
+        str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, 'Y');
+        str = str.replace(/Đ/g, 'D');
+        try {
+            str = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        } catch (e) {}
+        return str;
+    }
+
+    matchVietnamese(text, query) {
+        if (!query) return true;
+        if (!text) return false;
+        const t = String(text).toLowerCase();
+        const q = String(query).toLowerCase().trim();
+        if (t.includes(q)) return true;
+        const tNorm = this.removeVietnameseTones(t);
+        const qNorm = this.removeVietnameseTones(q);
+        return tNorm.includes(qNorm);
+    }
+
     // --- Artists & Genres Feature Methods ---
 
     filterHiresAlbums() {
@@ -5680,9 +5848,8 @@ class XTAPOMusicApp {
         const artistMap = this.getArtistMap();
         const countryArtistCounts = this._cachedCountryArtistCounts || {};
 
-        // Render country filter tabs in Artist Modal
+        // Render country filter tabs in Artist Modal (only initialize or update active state)
         if (this.artistCountryFilterTabs) {
-            this.artistCountryFilterTabs.innerHTML = '';
             const filterOptions = [
                 { id: 'all', label: 'Tất cả', icon: '🌐' },
                 { id: 'Việt Nam', label: 'Việt Nam', icon: '🇻🇳' },
@@ -5693,19 +5860,30 @@ class XTAPOMusicApp {
                 { id: 'Quốc Tế', label: 'Quốc Tế', icon: '🌍' }
             ];
 
-            const fragTabs = document.createDocumentFragment();
-            filterOptions.forEach(opt => {
-                const count = countryArtistCounts[opt.id] || 0;
-                const pill = document.createElement('button');
-                pill.className = `country-filter-pill ${this.selectedArtistCountryFilter === opt.id ? 'active' : ''}`;
-                pill.innerHTML = `<span>${opt.icon}</span> <span>${opt.label}</span> <span class="pill-count">${count}</span>`;
-                pill.onclick = () => {
-                    this.selectedArtistCountryFilter = opt.id;
-                    this.renderArtistGrid(this.artistSearchInput ? this.artistSearchInput.value.trim() : '', opt.id);
-                };
-                fragTabs.appendChild(pill);
-            });
-            this.artistCountryFilterTabs.appendChild(fragTabs);
+            if (this.artistCountryFilterTabs.children.length === 0) {
+                this.artistCountryFilterTabs.innerHTML = '';
+                const fragTabs = document.createDocumentFragment();
+                filterOptions.forEach(opt => {
+                    const count = countryArtistCounts[opt.id] || 0;
+                    const pill = document.createElement('button');
+                    pill.className = `country-filter-pill ${this.selectedArtistCountryFilter === opt.id ? 'active' : ''}`;
+                    pill.setAttribute('data-country-id', opt.id);
+                    pill.innerHTML = `<span>${opt.icon}</span> <span>${opt.label}</span> <span class="pill-count">${count}</span>`;
+                    pill.onclick = () => {
+                        this.selectedArtistCountryFilter = opt.id;
+                        this.artistCountryFilterTabs.querySelectorAll('.country-filter-pill').forEach(p => {
+                            p.classList.toggle('active', p.getAttribute('data-country-id') === opt.id);
+                        });
+                        this.renderArtistGrid(this.artistSearchInput ? this.artistSearchInput.value.trim() : '', opt.id);
+                    };
+                    fragTabs.appendChild(pill);
+                });
+                this.artistCountryFilterTabs.appendChild(fragTabs);
+            } else {
+                this.artistCountryFilterTabs.querySelectorAll('.country-filter-pill').forEach(p => {
+                    p.classList.toggle('active', p.getAttribute('data-country-id') === this.selectedArtistCountryFilter);
+                });
+            }
         }
 
         this.artistGrid.innerHTML = '';
@@ -5726,10 +5904,9 @@ class XTAPOMusicApp {
             }
         }
 
-        // Filter by search query
+        // Filter by search query with full Vietnamese accent tolerance
         if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            sortedArtists = sortedArtists.filter(a => a.name.toLowerCase().includes(q));
+            sortedArtists = sortedArtists.filter(a => this.matchVietnamese(a.name, searchQuery));
         }
 
         if (sortedArtists.length === 0) {
@@ -6634,8 +6811,7 @@ class XTAPOMusicApp {
         let sortedArtists = Array.from(artistMap.values()).sort((a, b) => b.tracks.length - a.tracks.length);
 
         if (query) {
-            const q = query.toLowerCase();
-            sortedArtists = sortedArtists.filter(a => a.name.toLowerCase().includes(q));
+            sortedArtists = sortedArtists.filter(a => this.matchVietnamese(a.name, query));
         }
 
         if (sortedArtists.length === 0) {
@@ -6673,8 +6849,7 @@ class XTAPOMusicApp {
 
         let tracks = cObj.tracks || [];
         if (query) {
-            const q = query.toLowerCase();
-            tracks = tracks.filter(t => (t.name && t.name.toLowerCase().includes(q)) || (t.artist && t.artist.toLowerCase().includes(q)));
+            tracks = tracks.filter(t => (t.name && this.matchVietnamese(t.name, query)) || (t.artist && this.matchVietnamese(t.artist, query)));
         }
 
         if (tracks.length === 0) {
