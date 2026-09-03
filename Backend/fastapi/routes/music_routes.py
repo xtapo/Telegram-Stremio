@@ -820,7 +820,7 @@ async def _migrate_legacy_to_per_album():
 
     coll_new = _get_albums_collection()
     coll_old = _get_legacy_collection()
-    if not coll_new or not coll_old:
+    if coll_new is None or coll_old is None:
         return
 
     # Kiểm tra xem collection mới đã có data chưa
@@ -891,7 +891,7 @@ async def _db_fetch_library_from_mongo(timeout: float = 30.0) -> list | None:
     Fallback sang legacy schema nếu collection mới trống.
     """
     coll = _get_albums_collection()
-    if not coll:
+    if coll is None:
         return None
 
     try:
@@ -1004,7 +1004,7 @@ async def _db_save_library(albums: list):
 
     # Lưu theo per-album schema mới
     coll = _get_albums_collection()
-    if coll:
+    if coll is not None:
         try:
             # Xóa tất cả documents cũ và insert mới (atomic replace)
             await coll.delete_many({})
@@ -1035,7 +1035,7 @@ async def _db_save_library(albums: list):
 
     # Đồng thời cập nhật legacy document để backward compatibility
     coll_old = _get_legacy_collection()
-    if coll_old:
+    if coll_old is not None:
         try:
             await coll_old.update_one(
                 {"_id": "telegram_music_library"},
