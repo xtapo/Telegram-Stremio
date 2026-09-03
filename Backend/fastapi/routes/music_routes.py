@@ -1,4 +1,5 @@
 import asyncio
+import gzip
 import json
 import math
 import mimetypes
@@ -29,7 +30,10 @@ from Backend.fastapi.routes.template_routes import _base_context, templates
 router = APIRouter(tags=["Music Player & Telegram Storage"])
 
 MUSIC_DIR = os.path.abspath("Music")
-LIBRARY_CACHE_FILE = os.path.join(MUSIC_DIR, "telegram_library.json")
+MUSIC_DATA_DIR = os.path.join(MUSIC_DIR, "data")
+os.makedirs(MUSIC_DATA_DIR, exist_ok=True)
+LIBRARY_CACHE_FILE = os.path.join(MUSIC_DATA_DIR, "telegram_library.json")
+LEGACY_LIBRARY_CACHE_FILE = os.path.join(MUSIC_DIR, "telegram_library.json")
 AUDIO_CACHE_DIR = os.path.join(MUSIC_DIR, "cache")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 MAX_AUDIO_CACHE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB cache giới hạn tự dọn dẹp
@@ -671,29 +675,32 @@ async def get_music_static_file(filename: str):
     return HTMLResponse("File not found", status_code=404)
 
 
-CHANNELS_FILE = os.path.join(MUSIC_DIR, "music_channels.json")
+CHANNELS_FILE = os.path.join(MUSIC_DATA_DIR, "music_channels.json")
+LEGACY_CHANNELS_FILE = os.path.join(MUSIC_DIR, "music_channels.json")
 
 
 # ── MongoDB & JSON Dual-Storage Helpers ──────────────────────────────────────
 def _load_channels_file() -> list:
-    if os.path.exists(CHANNELS_FILE):
-        try:
-            with open(CHANNELS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-        except Exception as e:
-            LOGGER.error(f"[MUSIC] Error reading channels file: {e}")
+    for path in [CHANNELS_FILE, LEGACY_CHANNELS_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        return data
+            except Exception as e:
+                LOGGER.error(f"[MUSIC] Error reading channels file {path}: {e}")
     return []
 
 
 def _save_channels_file(channels: list):
-    try:
-        os.makedirs(MUSIC_DIR, exist_ok=True)
-        with open(CHANNELS_FILE, "w", encoding="utf-8") as f:
-            json.dump(channels, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        LOGGER.error(f"[MUSIC] Error saving channels file: {e}")
+    for path in [CHANNELS_FILE, LEGACY_CHANNELS_FILE]:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(channels, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Error saving channels file to {path}: {e}")
 
 
 async def _db_load_channels() -> list:
@@ -808,6 +815,40 @@ def _get_legacy_collection():
         return db.dbs["tracking"]["music_library"]
     return None
 
+def _compress_albums(albums: list) -> bytes:
+    """Nén danh sách albums thành gzip binary để lưu trữ siêu nhẹ trên MongoDB."""
+    json_bytes = json.dumps(albums, ensure_ascii=False).encode("utf-8")
+    return gzip.compress(json_bytes, compresslevel=6)
+
+def _decompress_albums(compressed: bytes) -> list:
+    """Giải nén gzip binary thành danh sách albums gốc trong RAM."""
+    raw_bytes = gzip.decompress(compressed)
+    return json.loads(raw_bytes.decode("utf-8"))
+
+async def _save_compressed_mongo_library(albums: list):
+    """Lưu bản nén Gzip lên MongoDB (giảm 20MB xuống ~1.5MB, đọc trong 1 giây)."""
+    coll_lib = _get_legacy_collection()
+    if coll_lib is None or not albums:
+        return
+    try:
+        compressed_bytes = _compress_albums(albums)
+        total_tracks = sum(len(a.get("tracks", [])) for a in albums)
+        await coll_lib.update_one(
+            {"_id": "telegram_music_library_gz"},
+            {"$set": {
+                "_id": "telegram_music_library_gz",
+                "compressed_data": compressed_bytes,
+                "count": total_tracks,
+                "album_count": len(albums),
+                "compressed_size_kb": round(len(compressed_bytes) / 1024, 1),
+                "updated_at": time.time()
+            }},
+            upsert=True
+        )
+        LOGGER.info(f"[MUSIC DB] Đã lưu bản nén Gzip lên MongoDB: {len(albums)} albums, {total_tracks} bài ({len(compressed_bytes)/1024:.1f} KB).")
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Lỗi lưu bản nén Gzip lên MongoDB: {e}")
+
 async def _migrate_legacy_to_per_album() -> list | None:
     """
     One-time migration: đọc document cũ (telegram_music_library) 
@@ -840,7 +881,7 @@ async def _migrate_legacy_to_per_album() -> list | None:
                 {"_id": "telegram_music_library"},
                 projection={"albums": 1, "_id": 0}
             ),
-            timeout=180.0  # Cho phép 3 phút cho migration
+            timeout=180.0
         )
         if not doc or "albums" not in doc or not isinstance(doc["albums"], list):
             LOGGER.info("[MUSIC DB] Migration: no legacy data found.")
@@ -849,6 +890,9 @@ async def _migrate_legacy_to_per_album() -> list | None:
         albums = doc["albums"]
         if not albums:
             return None
+
+        # Tự động nén và lưu bản Gzip ngay
+        asyncio.create_task(_save_compressed_mongo_library(albums))
 
         # Insert từng album vào collection mới
         docs_to_insert = []
@@ -873,15 +917,16 @@ async def _migrate_legacy_to_per_album() -> list | None:
 
             LOGGER.info(f"[MUSIC DB] Migration completed: {len(docs_to_insert)} albums migrated to per-album schema.")
 
-        # Ghi thẳng vào cache luôn (không cần đọc lại MongoDB)
+        # Ghi thẳng vào cache luôn
         _IN_MEMORY_LIBRARY_CACHE = albums
-        try:
-            os.makedirs(MUSIC_DIR, exist_ok=True)
-            with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(albums, f, ensure_ascii=False)
-            LOGGER.info(f"[MUSIC DB] Migration: cached {len(albums)} albums to memory + file.")
-        except Exception as e:
-            LOGGER.warning(f"[MUSIC DB] Migration: failed to write file cache: {e}")
+        for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(albums, f, ensure_ascii=False)
+            except Exception:
+                pass
+        LOGGER.info(f"[MUSIC DB] Migration: cached {len(albums)} albums to memory + file.")
 
         return albums
     except asyncio.TimeoutError:
@@ -895,51 +940,64 @@ async def _migrate_legacy_to_per_album() -> list | None:
 
 async def _db_fetch_library_from_mongo() -> list | None:
     """
-    Fetch library từ MongoDB - thử per-album collection trước,
-    fallback sang legacy single-document.
-    Không có timeout - chạy trong background task nên không cần giới hạn.
+    Fetch library từ MongoDB theo thứ tự ưu tiên:
+    1. Bản nén Gzip (telegram_music_library_gz) ~1.5MB, tải chỉ 1-2s.
+    2. Per-album collection (music_albums).
+    3. Legacy single-document (telegram_music_library).
     """
-    # Thử 1: Đọc từ per-album collection (nếu đã migration)
+    coll_lib = _get_legacy_collection()
+
+    # ── Ưu tiên 1: Đọc bản nén Gzip (siêu nhanh, chỉ ~1.5MB) ──
+    if coll_lib is not None:
+        try:
+            doc_gz = await asyncio.wait_for(
+                coll_lib.find_one({"_id": "telegram_music_library_gz"}),
+                timeout=15.0
+            )
+            if doc_gz and "compressed_data" in doc_gz and doc_gz["compressed_data"]:
+                c_bytes = doc_gz["compressed_data"]
+                albums = _decompress_albums(c_bytes)
+                if albums and isinstance(albums, list):
+                    LOGGER.info(f"[MUSIC DB] ⚡ Tải thành công {len(albums)} albums từ bản nén Gzip trên MongoDB ({len(c_bytes)/1024:.1f} KB)!")
+                    return albums
+        except Exception as e:
+            LOGGER.info(f"[MUSIC DB] Gzip document chưa có hoặc đang tạo: {e}")
+
+    # ── Ưu tiên 2: Đọc từ per-album collection (music_albums) ──
     coll = _get_albums_collection()
     if coll is not None:
         try:
             count = await coll.count_documents({})
             if count > 0:
-                LOGGER.info(f"[MUSIC DB] Reading {count} albums from per-album collection...")
+                LOGGER.info(f"[MUSIC DB] Đang nạp {count} albums từ per-album collection...")
                 albums = []
-                cursor = coll.find({}, projection={"_id": 0}).batch_size(200)
+                cursor = coll.find({}, projection={"_id": 0}).batch_size(300)
                 async for doc in cursor:
                     albums.append(doc)
-                    if len(albums) % 500 == 0:
-                        LOGGER.info(f"[MUSIC DB] ...read {len(albums)}/{count} albums so far")
+                    if len(albums) % 1000 == 0:
+                        LOGGER.info(f"[MUSIC DB] ...đã đọc {len(albums)}/{count} albums")
                 if albums:
-                    LOGGER.info(f"[MUSIC DB] Loaded {len(albums)} albums from per-album schema.")
+                    LOGGER.info(f"[MUSIC DB] Đã nạp {len(albums)} albums. Tự động lưu bản nén Gzip lên MongoDB...")
+                    asyncio.create_task(_save_compressed_mongo_library(albums))
                     return albums
         except Exception as e:
             LOGGER.warning(f"[MUSIC DB] Per-album read failed: {e}")
 
-    # Thử 2: Đọc từ legacy single-document (đã chứng minh hoạt động trong migration)
-    coll_old = _get_legacy_collection()
-    if coll_old is not None:
+    # ── Ưu tiên 3: Đọc từ legacy single-document (telegram_music_library) ──
+    if coll_lib is not None:
         try:
-            LOGGER.info("[MUSIC DB] Reading from legacy single-document schema...")
-            doc = await coll_old.find_one(
-                {"_id": "telegram_music_library"},
-                projection={"albums": 1, "_id": 0}
+            LOGGER.info("[MUSIC DB] Đang đọc từ legacy single-document schema...")
+            doc = await asyncio.wait_for(
+                coll_lib.find_one(
+                    {"_id": "telegram_music_library"},
+                    projection={"albums": 1, "_id": 0}
+                ),
+                timeout=120.0
             )
             if doc and "albums" in doc and isinstance(doc["albums"], list) and doc["albums"]:
                 albums = doc["albums"]
-                LOGGER.info(f"[MUSIC DB] Loaded {len(albums)} albums from legacy schema.")
-
-                # Cũng migration sang per-album collection nếu chưa có
-                if coll is not None:
-                    try:
-                        existing = await coll.count_documents({})
-                        if existing == 0:
-                            asyncio.create_task(_migrate_legacy_to_per_album())
-                    except Exception:
-                        pass
-
+                LOGGER.info(f"[MUSIC DB] Đã nạp {len(albums)} albums từ legacy schema. Tự động lưu bản nén Gzip...")
+                asyncio.create_task(_save_compressed_mongo_library(albums))
                 return albums
         except Exception as e:
             LOGGER.warning(f"[MUSIC DB] Legacy read failed: {e}")
@@ -952,43 +1010,44 @@ _PRELOAD_STARTED = False
 async def _startup_preload_library():
     """
     Background task: preload library data khi server khởi động.
-    Chạy không giới hạn thời gian, user requests không bị block.
     """
     global _IN_MEMORY_LIBRARY_CACHE, _PRELOAD_STARTED
-    if _PRELOAD_STARTED:
+    if _PRELOAD_STARTED and _IN_MEMORY_LIBRARY_CACHE is not None:
         return
     _PRELOAD_STARTED = True
 
-    # Kiểm tra file cache trước
-    if os.path.exists(LIBRARY_CACHE_FILE):
-        try:
-            with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list) and len(data) > 0:
-                    _IN_MEMORY_LIBRARY_CACHE = data
-                    LOGGER.info(f"[MUSIC DB] Startup preload: loaded {len(data)} albums from file cache.")
-                    return
-        except Exception:
-            pass
+    # 1. Kiểm tra file cache trước
+    for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > 0:
+                        _IN_MEMORY_LIBRARY_CACHE = data
+                        LOGGER.info(f"[MUSIC DB] Startup preload: loaded {len(data)} albums from file cache ({path}).")
+                        return
+            except Exception:
+                pass
 
-    # Không có file cache → đọc từ MongoDB (background, không giới hạn thời gian)
-    LOGGER.info("[MUSIC DB] Startup preload: no file cache found. Loading from MongoDB in background...")
+    # 2. Không có file cache → tải từ MongoDB
+    LOGGER.info("[MUSIC DB] Startup preload: no file cache found. Loading from MongoDB...")
     try:
         albums = await _db_fetch_library_from_mongo()
         if albums:
             _IN_MEMORY_LIBRARY_CACHE = albums
-            try:
-                os.makedirs(MUSIC_DIR, exist_ok=True)
-                with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                    json.dump(albums, f, ensure_ascii=False)
-                LOGGER.info(f"[MUSIC DB] Startup preload: cached {len(albums)} albums to memory + file.")
-            except Exception as e:
-                LOGGER.warning(f"[MUSIC DB] Startup preload: failed to write file cache: {e}")
+            for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+                try:
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(albums, f, ensure_ascii=False)
+                except Exception:
+                    pass
+            LOGGER.info(f"[MUSIC DB] Startup preload: successfully cached {len(albums)} albums.")
         else:
             LOGGER.warning("[MUSIC DB] Startup preload: no data returned from MongoDB.")
     except Exception as e:
         LOGGER.error(f"[MUSIC DB] Startup preload failed: {e}")
-        _PRELOAD_STARTED = False  # Cho phép retry
+        _PRELOAD_STARTED = False
 
 
 async def _bg_refresh_library_from_mongo():
@@ -1002,13 +1061,14 @@ async def _bg_refresh_library_from_mongo():
             albums = await _db_fetch_library_from_mongo()
             if albums:
                 _IN_MEMORY_LIBRARY_CACHE = albums
-                try:
-                    os.makedirs(MUSIC_DIR, exist_ok=True)
-                    with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                        json.dump(albums, f, ensure_ascii=False)
-                    LOGGER.info(f"[MUSIC DB] Background refresh: updated cache with {len(albums)} albums.")
-                except Exception as e:
-                    LOGGER.warning(f"[MUSIC DB] Background refresh: failed to write cache file: {e}")
+                for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+                    try:
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        with open(path, "w", encoding="utf-8") as f:
+                            json.dump(albums, f, ensure_ascii=False)
+                    except Exception:
+                        pass
+                LOGGER.info(f"[MUSIC DB] Background refresh: updated cache with {len(albums)} albums.")
             else:
                 LOGGER.warning("[MUSIC DB] Background refresh: MongoDB returned no data.")
         except Exception as e:
@@ -1019,24 +1079,36 @@ async def _db_load_library(force_reload: bool = False) -> list:
     if not force_reload and _IN_MEMORY_LIBRARY_CACHE is not None:
         return _IN_MEMORY_LIBRARY_CACHE
 
-    # Đọc từ file cache cục bộ trước để phản hồi tức thì
-    file_cache_data = None
-    if os.path.exists(LIBRARY_CACHE_FILE):
-        try:
-            with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list) and len(data) > 0:
-                    file_cache_data = data
-        except Exception as e:
-            LOGGER.error(f"[MUSIC] Failed to load library cache file: {e}")
+    # 1. Đọc từ file cache cục bộ trước để phản hồi tức thì (< 5ms)
+    for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > 0:
+                        _IN_MEMORY_LIBRARY_CACHE = data
+                        asyncio.create_task(_bg_refresh_library_from_mongo())
+                        return data
+            except Exception as e:
+                LOGGER.error(f"[MUSIC] Failed to load library cache file from {path}: {e}")
 
-    # Nếu có file cache, dùng ngay và trigger background refresh từ MongoDB
-    if file_cache_data:
-        _IN_MEMORY_LIBRARY_CACHE = file_cache_data
-        asyncio.create_task(_bg_refresh_library_from_mongo())
-        return file_cache_data
+    # 2. Không có file cache: Thử fetch nhanh bản Gzip từ MongoDB (chỉ mất ~1s)
+    try:
+        albums = await asyncio.wait_for(_db_fetch_library_from_mongo(), timeout=15.0)
+        if albums:
+            _IN_MEMORY_LIBRARY_CACHE = albums
+            for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+                try:
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(albums, f, ensure_ascii=False)
+                except Exception:
+                    pass
+            return albums
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Fast MongoDB fetch not ready yet: {e}")
 
-    # Không có cache → trigger background preload, trả về [] ngay (không block user)
+    # 3. Fallback: Kích hoạt preload nền và tạm thời trả về []
     asyncio.create_task(_startup_preload_library())
     return []
 
@@ -1045,18 +1117,23 @@ async def _db_load_library(force_reload: bool = False) -> list:
 async def _db_save_library(albums: list):
     global _IN_MEMORY_LIBRARY_CACHE
     _IN_MEMORY_LIBRARY_CACHE = albums
-    try:
-        os.makedirs(MUSIC_DIR, exist_ok=True)
-        with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(albums, f, ensure_ascii=False)
-    except Exception as e:
-        LOGGER.error(f"[MUSIC] Failed to write library cache file: {e}")
 
-    # Lưu theo per-album schema mới
+    # 1. Ghi file cache cục bộ (cả thư mục data và legacy path)
+    for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(albums, f, ensure_ascii=False)
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Failed to write cache to {path}: {e}")
+
+    # 2. Lưu bản nén Gzip lên MongoDB (nhanh nhất & nhẹ nhất)
+    await _save_compressed_mongo_library(albums)
+
+    # 3. Lưu theo per-album schema mới
     coll = _get_albums_collection()
     if coll is not None:
         try:
-            # Xóa tất cả documents cũ và insert mới (atomic replace)
             await coll.delete_many({})
             if albums:
                 docs_to_insert = []
@@ -1070,7 +1147,6 @@ async def _db_save_library(albums: list):
                     album_doc = {**alb, "_id": album_id}
                     docs_to_insert.append(album_doc)
 
-                # Insert theo batch
                 for i in range(0, len(docs_to_insert), 100):
                     batch = docs_to_insert[i:i+100]
                     try:
@@ -1083,7 +1159,7 @@ async def _db_save_library(albums: list):
         except Exception as e:
             LOGGER.warning(f"[MUSIC DB] Could not save to per-album collection: {e}")
 
-    # Đồng thời cập nhật legacy document để backward compatibility
+    # 4. Đồng thời cập nhật legacy document để backward compatibility
     coll_old = _get_legacy_collection()
     if coll_old is not None:
         try:
@@ -1103,27 +1179,30 @@ async def _db_save_library(albums: list):
 
 
 
-PLAYLISTS_FILE = os.path.join(MUSIC_DIR, "telegram_playlists.json")
+PLAYLISTS_FILE = os.path.join(MUSIC_DATA_DIR, "telegram_playlists.json")
+LEGACY_PLAYLISTS_FILE = os.path.join(MUSIC_DIR, "telegram_playlists.json")
 
 def _load_playlists_file() -> list:
-    if os.path.exists(PLAYLISTS_FILE):
-        try:
-            with open(PLAYLISTS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-        except Exception:
-            pass
+    for path in [PLAYLISTS_FILE, LEGACY_PLAYLISTS_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        return data
+            except Exception:
+                pass
     return []
 
 
 def _save_playlists_file(playlists: list):
-    try:
-        os.makedirs(MUSIC_DIR, exist_ok=True)
-        with open(PLAYLISTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(playlists, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        LOGGER.error(f"[MUSIC] Failed to save playlists: {e}")
+    for path in [PLAYLISTS_FILE, LEGACY_PLAYLISTS_FILE]:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(playlists, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Failed to save playlists to {path}: {e}")
 
 
 # ── 2. Lấy danh sách Albums & Tracks từ MongoDB / Telegram Cache ───────────────

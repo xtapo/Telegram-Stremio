@@ -6,6 +6,9 @@ services:
       - "8000:8000"
     volumes:
       - ./config.env:/app/config.env
+      - ./Music/data:/app/Music/data
+      - ./Music/covers:/app/Music/covers
+      - ./Music/cache:/app/Music/cache
     restart: unless-stopped
     logging:
       driver: "json-file"

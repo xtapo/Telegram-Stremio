@@ -24,3 +24,11 @@ config.env
 **/ios/DerivedData/
 *.xcuserdata/
 
+# Music data, covers & caches
+Music/data/
+Music/cache/
+Music/covers/
+Music/telegram_library.json
+Music/telegram_playlists.json
+Music/music_channels.json
+
