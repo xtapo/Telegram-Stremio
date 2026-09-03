@@ -167,6 +167,12 @@ except Exception:
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(decay_client_failures())
+    # Preload music library từ MongoDB trong background
+    try:
+        from Backend.fastapi.routes.music_routes import _startup_preload_library
+        asyncio.create_task(_startup_preload_library())
+    except Exception:
+        pass
 
 
 #----- Streaming and Stremio routers

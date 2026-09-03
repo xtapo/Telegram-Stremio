@@ -893,50 +893,102 @@ async def _migrate_legacy_to_per_album() -> list | None:
         _LIBRARY_MIGRATED = False
         return None
 
-
-async def _db_fetch_library_from_mongo(timeout: float = 60.0) -> list | None:
+async def _db_fetch_library_from_mongo() -> list | None:
     """
-    Fetch library từ MongoDB theo per-album schema mới.
-    Mỗi album là 1 document nhỏ, đọc theo batch 500 documents.
-    Fallback sang legacy schema nếu collection mới trống.
+    Fetch library từ MongoDB - thử per-album collection trước,
+    fallback sang legacy single-document.
+    Không có timeout - chạy trong background task nên không cần giới hạn.
     """
+    # Thử 1: Đọc từ per-album collection (nếu đã migration)
     coll = _get_albums_collection()
-    if coll is None:
-        return None
+    if coll is not None:
+        try:
+            count = await coll.count_documents({})
+            if count > 0:
+                LOGGER.info(f"[MUSIC DB] Reading {count} albums from per-album collection...")
+                albums = []
+                cursor = coll.find({}, projection={"_id": 0}).batch_size(200)
+                async for doc in cursor:
+                    albums.append(doc)
+                    if len(albums) % 500 == 0:
+                        LOGGER.info(f"[MUSIC DB] ...read {len(albums)}/{count} albums so far")
+                if albums:
+                    LOGGER.info(f"[MUSIC DB] Loaded {len(albums)} albums from per-album schema.")
+                    return albums
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC DB] Per-album read failed: {e}")
 
+    # Thử 2: Đọc từ legacy single-document (đã chứng minh hoạt động trong migration)
+    coll_old = _get_legacy_collection()
+    if coll_old is not None:
+        try:
+            LOGGER.info("[MUSIC DB] Reading from legacy single-document schema...")
+            doc = await coll_old.find_one(
+                {"_id": "telegram_music_library"},
+                projection={"albums": 1, "_id": 0}
+            )
+            if doc and "albums" in doc and isinstance(doc["albums"], list) and doc["albums"]:
+                albums = doc["albums"]
+                LOGGER.info(f"[MUSIC DB] Loaded {len(albums)} albums from legacy schema.")
+
+                # Cũng migration sang per-album collection nếu chưa có
+                if coll is not None:
+                    try:
+                        existing = await coll.count_documents({})
+                        if existing == 0:
+                            asyncio.create_task(_migrate_legacy_to_per_album())
+                    except Exception:
+                        pass
+
+                return albums
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC DB] Legacy read failed: {e}")
+
+    return None
+
+
+_PRELOAD_STARTED = False
+
+async def _startup_preload_library():
+    """
+    Background task: preload library data khi server khởi động.
+    Chạy không giới hạn thời gian, user requests không bị block.
+    """
+    global _IN_MEMORY_LIBRARY_CACHE, _PRELOAD_STARTED
+    if _PRELOAD_STARTED:
+        return
+    _PRELOAD_STARTED = True
+
+    # Kiểm tra file cache trước
+    if os.path.exists(LIBRARY_CACHE_FILE):
+        try:
+            with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    _IN_MEMORY_LIBRARY_CACHE = data
+                    LOGGER.info(f"[MUSIC DB] Startup preload: loaded {len(data)} albums from file cache.")
+                    return
+        except Exception:
+            pass
+
+    # Không có file cache → đọc từ MongoDB (background, không giới hạn thời gian)
+    LOGGER.info("[MUSIC DB] Startup preload: no file cache found. Loading from MongoDB in background...")
     try:
-        # Đọc per-album documents theo batch để tránh timeout
-        albums = []
-        cursor = coll.find({}, projection={"_id": 0}).batch_size(500)
-        deadline = asyncio.get_event_loop().time() + timeout
-        async for doc in cursor:
-            albums.append(doc)
-            if asyncio.get_event_loop().time() > deadline:
-                LOGGER.warning(f"[MUSIC DB] Batch read timeout after {len(albums)} albums ({timeout}s)")
-                break
-
+        albums = await _db_fetch_library_from_mongo()
         if albums:
-            LOGGER.info(f"[MUSIC DB] Loaded {len(albums)} albums from per-album schema.")
-            return albums
-
-        # Fallback: collection mới trống → trigger migration từ legacy
-        LOGGER.info("[MUSIC DB] Per-album collection empty, attempting migration from legacy...")
-        migrated = await _migrate_legacy_to_per_album()
-        if migrated:
-            # Migration đã populate cache, trả về luôn
-            return migrated
-
-        return None
-    except Exception as e:
-        if "timeout" in str(e).lower() or isinstance(e, asyncio.TimeoutError):
-            LOGGER.warning(f"[MUSIC DB] MongoDB load library timeout ({timeout}s)")
+            _IN_MEMORY_LIBRARY_CACHE = albums
+            try:
+                os.makedirs(MUSIC_DIR, exist_ok=True)
+                with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(albums, f, ensure_ascii=False)
+                LOGGER.info(f"[MUSIC DB] Startup preload: cached {len(albums)} albums to memory + file.")
+            except Exception as e:
+                LOGGER.warning(f"[MUSIC DB] Startup preload: failed to write file cache: {e}")
         else:
-            LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
-        # Nếu đã đọc được 1 phần, vẫn trả về
-        if albums:
-            LOGGER.info(f"[MUSIC DB] Returning {len(albums)} partial albums despite error.")
-            return albums
-        return None
+            LOGGER.warning("[MUSIC DB] Startup preload: no data returned from MongoDB.")
+    except Exception as e:
+        LOGGER.error(f"[MUSIC DB] Startup preload failed: {e}")
+        _PRELOAD_STARTED = False  # Cho phép retry
 
 
 async def _bg_refresh_library_from_mongo():
@@ -947,7 +999,7 @@ async def _bg_refresh_library_from_mongo():
     async with _LIBRARY_BG_REFRESH_LOCK:
         try:
             LOGGER.info("[MUSIC DB] Background refresh: fetching library from MongoDB...")
-            albums = await _db_fetch_library_from_mongo(timeout=60.0)
+            albums = await _db_fetch_library_from_mongo()
             if albums:
                 _IN_MEMORY_LIBRARY_CACHE = albums
                 try:
@@ -981,23 +1033,13 @@ async def _db_load_library(force_reload: bool = False) -> list:
     # Nếu có file cache, dùng ngay và trigger background refresh từ MongoDB
     if file_cache_data:
         _IN_MEMORY_LIBRARY_CACHE = file_cache_data
-        # Trigger background refresh để cập nhật data mới nhất từ MongoDB
         asyncio.create_task(_bg_refresh_library_from_mongo())
         return file_cache_data
 
-    # Không có cache nào → phải query MongoDB trực tiếp
-    albums = await _db_fetch_library_from_mongo(timeout=30.0)
-    if albums:
-        _IN_MEMORY_LIBRARY_CACHE = albums
-        try:
-            os.makedirs(MUSIC_DIR, exist_ok=True)
-            with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(albums, f, ensure_ascii=False)
-        except Exception:
-            pass
-        return albums
-
+    # Không có cache → trigger background preload, trả về [] ngay (không block user)
+    asyncio.create_task(_startup_preload_library())
     return []
+
 
 
 async def _db_save_library(albums: list):
