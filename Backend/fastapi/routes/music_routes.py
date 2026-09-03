@@ -791,6 +791,60 @@ async def _db_update_channel_progress(chat_id: str, last_scanned_id: int, last_s
 
 
 _IN_MEMORY_LIBRARY_CACHE = None
+_LIBRARY_BG_REFRESH_LOCK = asyncio.Lock()
+
+async def _db_fetch_library_from_mongo(timeout: float = 45.0, max_retries: int = 3) -> list | None:
+    """Fetch library from MongoDB with retry logic and projection."""
+    if not (db and hasattr(db, "dbs") and "tracking" in db.dbs):
+        return None
+
+    coll = db.dbs["tracking"]["music_library"]
+    for attempt in range(1, max_retries + 1):
+        try:
+            doc = await asyncio.wait_for(
+                coll.find_one(
+                    {"_id": "telegram_music_library"},
+                    projection={"albums": 1, "_id": 0}
+                ),
+                timeout=timeout
+            )
+            if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
+                return doc["albums"]
+            return None
+        except asyncio.TimeoutError:
+            LOGGER.warning(f"[MUSIC DB] MongoDB load library timeout (attempt {attempt}/{max_retries}, {timeout}s)")
+            if attempt < max_retries:
+                wait_time = 2 ** attempt
+                LOGGER.info(f"[MUSIC DB] Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB (attempt {attempt}/{max_retries}): {e}")
+            if attempt < max_retries:
+                await asyncio.sleep(2)
+    return None
+
+async def _bg_refresh_library_from_mongo():
+    """Background task: fetch from MongoDB and update cache without blocking user requests."""
+    global _IN_MEMORY_LIBRARY_CACHE
+    if _LIBRARY_BG_REFRESH_LOCK.locked():
+        return
+    async with _LIBRARY_BG_REFRESH_LOCK:
+        try:
+            LOGGER.info("[MUSIC DB] Background refresh: fetching library from MongoDB...")
+            albums = await _db_fetch_library_from_mongo(timeout=90.0, max_retries=3)
+            if albums:
+                _IN_MEMORY_LIBRARY_CACHE = albums
+                try:
+                    os.makedirs(MUSIC_DIR, exist_ok=True)
+                    with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(albums, f, ensure_ascii=False)
+                    LOGGER.info(f"[MUSIC DB] Background refresh: updated cache with {len(albums)} albums.")
+                except Exception as e:
+                    LOGGER.warning(f"[MUSIC DB] Background refresh: failed to write cache file: {e}")
+            else:
+                LOGGER.warning("[MUSIC DB] Background refresh: MongoDB returned no data.")
+        except Exception as e:
+            LOGGER.error(f"[MUSIC DB] Background refresh failed: {e}")
 
 async def _db_load_library(force_reload: bool = False) -> list:
     global _IN_MEMORY_LIBRARY_CACHE
@@ -798,35 +852,34 @@ async def _db_load_library(force_reload: bool = False) -> list:
         return _IN_MEMORY_LIBRARY_CACHE
 
     # Đọc từ file cache cục bộ trước để phản hồi tức thì
+    file_cache_data = None
     if os.path.exists(LIBRARY_CACHE_FILE):
         try:
             with open(LIBRARY_CACHE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list) and len(data) > 0:
-                    _IN_MEMORY_LIBRARY_CACHE = data
-                    return data
+                    file_cache_data = data
         except Exception as e:
             LOGGER.error(f"[MUSIC] Failed to load library cache file: {e}")
 
-    try:
-        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
-            doc = await asyncio.wait_for(
-                db.dbs["tracking"]["music_library"].find_one({"_id": "telegram_music_library"}),
-                timeout=15.0
-            )
-            if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
-                _IN_MEMORY_LIBRARY_CACHE = doc["albums"]
-                try:
-                    os.makedirs(MUSIC_DIR, exist_ok=True)
-                    with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
-                        json.dump(doc["albums"], f, ensure_ascii=False)
-                except Exception:
-                    pass
-                return doc["albums"]
-    except asyncio.TimeoutError:
-        LOGGER.warning("[MUSIC DB] MongoDB load library query timed out (15s). Using fallback.")
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
+    # Nếu có file cache, dùng ngay và trigger background refresh từ MongoDB
+    if file_cache_data:
+        _IN_MEMORY_LIBRARY_CACHE = file_cache_data
+        # Trigger background refresh để cập nhật data mới nhất từ MongoDB
+        asyncio.create_task(_bg_refresh_library_from_mongo())
+        return file_cache_data
+
+    # Không có cache nào → phải query MongoDB trực tiếp
+    albums = await _db_fetch_library_from_mongo(timeout=45.0, max_retries=3)
+    if albums:
+        _IN_MEMORY_LIBRARY_CACHE = albums
+        try:
+            os.makedirs(MUSIC_DIR, exist_ok=True)
+            with open(LIBRARY_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(albums, f, ensure_ascii=False)
+        except Exception:
+            pass
+        return albums
 
     return []
 
