@@ -3068,7 +3068,9 @@
         }
 
         window.addEventListener('keydown', (e) => {
-            const isTyping = document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+            const isTyping = Boolean(document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) ||
+                             Boolean(e.target && ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) ||
+                             e.isComposing;
 
             // Đóng Modal khi bấm ESC hoặc phím Back trên TV Remote
             if (e.key === 'Escape' || e.keyCode === 27 || e.keyCode === 10009 || e.keyCode === 461) {
@@ -3078,6 +3080,11 @@
                     closeAllModals();
                     return;
                 }
+            }
+
+            // Nếu người dùng đang nhập liệu trong ô input/textarea, không can thiệp phím điều khiển / chuyển bài
+            if (isTyping) {
+                return;
             }
 
             // 1. Phím Phát / Dừng (Play / Pause) toàn cục trên mọi loại Remote TV

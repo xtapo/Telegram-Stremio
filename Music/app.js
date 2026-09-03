@@ -5111,20 +5111,28 @@ class XTAPOMusicApp {
 
         // Bắt các sự kiện điều hướng D-Pad
         window.addEventListener('keydown', (e) => {
-            const isTyping = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
+            const isTyping = ['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || 
+                             e.target?.isContentEditable || 
+                             e.isComposing || 
+                             (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName));
             
+            // Nếu người dùng đang gõ phím / nhập liệu ở bất kỳ ô input nào thì bỏ qua toàn bộ, không can thiệp
+            if (isTyping) {
+                return;
+            }
+
             // Xử lý Media Keys trên Remote TV
             if (e.code === 'MediaPlayPause' || e.code === 'MediaPlay' || e.code === 'MediaPause' || e.keyCode === 179 || e.keyCode === 126 || e.keyCode === 127) {
                 e.preventDefault();
                 this.togglePlay();
                 return;
             }
-            if (e.code === 'MediaTrackNext' || e.keyCode === 87) {
+            if (e.code === 'MediaTrackNext' || e.keyCode === 176 || (this.isTvMode && e.keyCode === 87)) {
                 e.preventDefault();
                 this.nextTrack();
                 return;
             }
-            if (e.code === 'MediaTrackPrevious' || e.keyCode === 88) {
+            if (e.code === 'MediaTrackPrevious' || e.keyCode === 177 || (this.isTvMode && e.keyCode === 88)) {
                 e.preventDefault();
                 this.prevTrack();
                 return;
@@ -5133,27 +5141,25 @@ class XTAPOMusicApp {
             // D-Pad Arrows Navigation (Chỉ can thiệp khi đang thực sự ở chế độ TV - this.isTvMode)
             const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
             if (isArrowKey && this.isTvMode) {
-                if (!isTyping) {
-                    e.preventDefault();
-                    if (e.key === 'ArrowUp') navigateDirection('up');
-                    else if (e.key === 'ArrowDown') navigateDirection('down');
-                    else if (e.key === 'ArrowLeft') navigateDirection('left');
-                    else if (e.key === 'ArrowRight') navigateDirection('right');
-                    return;
-                }
+                e.preventDefault();
+                if (e.key === 'ArrowUp') navigateDirection('up');
+                else if (e.key === 'ArrowDown') navigateDirection('down');
+                else if (e.key === 'ArrowLeft') navigateDirection('left');
+                else if (e.key === 'ArrowRight') navigateDirection('right');
+                return;
             }
 
             // OK / Enter trên Remote TV (Chỉ áp dụng khi ở TV Mode)
             if (this.isTvMode && (e.key === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13 || e.keyCode === 23)) {
                 const activeModal = document.querySelector('.modal-overlay.open, .drawer.open, .modal.open');
                 if (activeModal) {
-                    if (!isTyping && document.activeElement && activeModal.contains(document.activeElement) && document.activeElement !== document.body) {
+                    if (document.activeElement && activeModal.contains(document.activeElement) && document.activeElement !== document.body) {
                         e.preventDefault();
                         document.activeElement.click();
                     }
                     return;
                 }
-                if (!isTyping && document.activeElement && document.activeElement !== document.body) {
+                if (document.activeElement && document.activeElement !== document.body) {
                     e.preventDefault();
                     document.activeElement.click();
                 }
@@ -5164,8 +5170,13 @@ class XTAPOMusicApp {
     // --- Keyboard Shortcuts ---
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
+            const isTyping = ['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || 
+                             e.target?.isContentEditable || 
+                             e.isComposing || 
+                             (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName));
+
             // Ignore if typing in input
-            if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+            if (isTyping) {
                 if (e.key === 'Escape') this.closeModal(this.searchModal);
                 return;
             }
