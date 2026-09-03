@@ -667,8 +667,12 @@ async def fetch_music_metadata(
     # 1. Tìm kiếm trên Apple Music / iTunes API
     candidates: List[dict] = []
     queries_to_try = [search_query]
-    if artist and title and search_query != title:
-        queries_to_try.append(title)
+    if artist and title:
+        inverted = f"{title} {artist}".strip()
+        if inverted not in queries_to_try:
+            queries_to_try.append(inverted)
+        if title not in queries_to_try:
+            queries_to_try.append(title)
 
     for q in queries_to_try:
         try:
@@ -734,7 +738,8 @@ async def fetch_music_metadata(
                             "country": cls_meta["country"],
                             "era": cls_meta["era"],
                             "publisher": f"{cand_artist} / Apple Music",
-                            "source": "Apple Music / iTunes"
+                            "source": "Apple Music / iTunes",
+                            "layer": "Apple Music"
                         })
             if candidates:
                 break
@@ -764,6 +769,7 @@ async def fetch_music_metadata(
         deezer_res["genre"] = cls_meta["genre"]
         deezer_res["country"] = cls_meta["country"]
         deezer_res["era"] = cls_meta["era"]
+        deezer_res["layer"] = "Deezer API"
         _METADATA_CACHE[cache_key] = deezer_res
         LOGGER.info(f"[MUSIC SCRAPER] ✅ Khớp từ Deezer: {deezer_res['artist']} - {deezer_res['title']} [{deezer_res['genre']}]")
         return deezer_res
@@ -787,7 +793,8 @@ async def fetch_music_metadata(
         "country": cls_fallback["country"],
         "era": cls_fallback["era"],
         "publisher": "Telegram Cloud Archive",
-        "source": "Telegram Direct"
+        "source": "Telegram Direct",
+        "layer": "Tệp Gốc"
     }
     _METADATA_CACHE[cache_key] = fallback_res
     return fallback_res

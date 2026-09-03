@@ -3190,7 +3190,7 @@ class MusicShazamManager:
 
     async def start(self, tracks: list) -> dict:
         if self._status == "running" and self._task and not self._task.done():
-            return {"ok": False, "message": "Đang có tiến trình nhận diện Shazam đang chạy!"}
+            return {"ok": False, "message": "Đang có tiến trình nhận diện Đa Lớp đang chạy!"}
 
         self._status = "running"
         self._total = len(tracks)
@@ -3203,7 +3203,7 @@ class MusicShazamManager:
         self._start_time = time.time()
         self._end_time = None
 
-        self._add_log(f"Bắt đầu nhận diện {self._total} bài hát qua Shazam...", "info")
+        self._add_log(f"Bắt đầu nhận diện Đa Lớp cho {self._total} bài hát (Shazam 2 đoạn + ID3 + Apple Music & Deezer)...", "info")
         self._task = asyncio.create_task(self._run_worker(tracks))
         return {"ok": True, "message": f"Đã bắt đầu nhận diện {self._total} bài hát."}
 
@@ -3257,19 +3257,42 @@ class MusicShazamManager:
                         break
 
                 self._current_track = orig_name
-                self._add_log(f"🔍 #{idx}/{self._total} Đang phân tích: {orig_name}...", "info")
+                self._add_log(f"🔍 #{idx}/{self._total} Phân tích đa lớp: {orig_name}...", "info")
 
+                def _track_log(msg_text: str, lvl: str = "info"):
+                    self._add_log(f"  ↳ #{idx} {msg_text}", lvl)
+
+                # Lớp 1 & Lớp 2: Vân tay âm thanh 2 phân đoạn & Thẻ ID3 gốc
                 fg_res = await recognize_audio_from_telegram(
                     client=None,
                     message=None,
                     is_manual=True,
                     chat_id=chat_id_int,
                     msg_id=msg_id_int,
+                    log_callback=_track_log,
                 )
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.15)
 
-                # Fallback online metadata scraper nếu audio fingerprint không khớp
+                # Nếu nhận diện qua ID3 tag mà chưa có cover HD, tìm bù cover từ Apple Music / Deezer
+                if fg_res and not fg_res.get("cover_url"):
+                    try:
+                        sc_cover = await fetch_music_metadata(
+                            raw_title=fg_res.get("title", ""),
+                            raw_artist=fg_res.get("artist", ""),
+                            file_name=orig_name
+                        )
+                        if sc_cover and sc_cover.get("cover_url"):
+                            fg_res["cover_url"] = sc_cover["cover_url"]
+                            if not fg_res.get("album") or "Single" in fg_res.get("album", ""):
+                                fg_res["album"] = sc_cover.get("album") or fg_res.get("album")
+                            if not fg_res.get("genre"):
+                                fg_res["genre"] = sc_cover.get("genre")
+                    except Exception:
+                        pass
+
+                # Lớp 3: Fallback Online Metadata Scraper (Apple Music + Deezer + Fuzzy)
                 if not fg_res and curr_track:
+                    _track_log("Chuyển tiếp Lớp 3: Đối sánh trực tuyến Apple Music & Deezer...", "info")
                     raw_name = curr_track.get("name", "")
                     raw_artist = curr_track.get("artist", "")
                     if raw_artist.lower() in ["unknown artist", "unknown", "va", "various artists"]:
@@ -3279,17 +3302,19 @@ class MusicShazamManager:
                         raw_artist=raw_artist,
                         file_name=raw_name
                     )
-                    if scraped and scraped.get("title") and scraped.get("artist"):
-                        LOGGER.info(f"[SHAZAM FALLBACK] Nhận diện thành công qua Metadata trực tuyến: {scraped.get('artist')} - {scraped.get('title')}")
+                    if scraped and scraped.get("title") and scraped.get("artist") and scraped.get("artist").lower() not in ["unknown artist", "unknown"]:
+                        LOGGER.info(f"[MULTI-TIER] Khớp qua Lớp 3 [{scraped.get('layer', 'Online')}]: {scraped.get('artist')} - {scraped.get('title')}")
                         fg_res = {
                             "title": scraped.get("title"),
                             "artist": scraped.get("artist"),
                             "album": scraped.get("album"),
                             "cover_url": scraped.get("cover_url"),
-                            "genre": scraped.get("genre")
+                            "genre": scraped.get("genre"),
+                            "layer": scraped.get("layer", "Apple Music / Deezer")
                         }
 
                 if fg_res:
+                    matched_layer = fg_res.get("layer", "Đa Lớp")
                     update_fields = {}
                     if fg_res.get("title"): update_fields["name"] = fg_res["title"]
                     if fg_res.get("artist"): update_fields["artist"] = fg_res["artist"]
@@ -3335,10 +3360,10 @@ class MusicShazamManager:
                         if updated:
                             self._success_count += 1
                             genre_str = f" [{fg_res.get('genre')}]" if fg_res.get('genre') else ""
-                            self._add_log(f"✅ #{idx} {fg_res.get('title')} - {fg_res.get('artist')}{genre_str}", "success")
+                            self._add_log(f"✅ #{idx} [{matched_layer}] {fg_res.get('title')} - {fg_res.get('artist')}{genre_str}", "success")
                 else:
                     self._failed_count += 1
-                    self._add_log(f"⚠️ #{idx} {orig_name}: Không tìm thấy dấu vân tay khớp", "warn")
+                    self._add_log(f"⚠️ #{idx} {orig_name}: Tất cả các lớp nhận diện đều không khớp", "warn")
 
                 # Lưu trung gian mỗi 5 bài
                 if idx % 5 == 0 and self._success_count > 0:
