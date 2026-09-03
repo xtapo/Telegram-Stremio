@@ -820,7 +820,7 @@ class XTAPOMusicApp {
         const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
         const heartbeatInterval = isMobileDevice ? 8000 : 2200;
         setInterval(() => {
-            if (document.hidden && isMobileDevice) return;
+            if (document.hidden) return;
             this.sendSyncHeartbeat();
         }, heartbeatInterval);
         this.setupAuthEvents();
@@ -3214,7 +3214,9 @@ class XTAPOMusicApp {
                     const percent = (this.audio.currentTime / this.audio.duration) * 100;
                     this.updateProgress(percent);
                     this.timeCurrent.textContent = this.formatTime(this.audio.currentTime);
-                    this.syncLyricsTime(this.audio.currentTime);
+                    if (!this._lyricsSyncRafId) {
+                        this.syncLyricsTime(this.audio.currentTime);
+                    }
 
                     if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
                         try {
@@ -4399,6 +4401,25 @@ class XTAPOMusicApp {
         } catch (e) {}
     }
 
+    closeAllModals() {
+        const allModals = [
+            this.albumModal, this.searchModal, this.tgModal, this.playlistModal,
+            this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal,
+            this.tracklistModal, this.downloadProgressModal, this.m3u8Modal,
+            this.favoritesModal, this.lyricsModal, this.lyricsEditorModal,
+            this.authModal, this.userProfileModal, this.sleepTimerModal,
+            this.equalizerModal, this.devicesModal
+        ];
+        allModals.forEach(m => {
+            if (m && m.classList.contains('open')) {
+                m.classList.remove('open');
+            }
+        });
+        if (this.mobileMenuDrawer && this.mobileMenuDrawer.classList.contains('open')) {
+            this.mobileMenuDrawer.classList.remove('open');
+        }
+    }
+
     restoreActiveView() {
         try {
             let view = null;
@@ -4418,8 +4439,11 @@ class XTAPOMusicApp {
             }
 
             if (!view || view.type === 'main') {
+                this.closeAllModals();
+                this.setActiveNavLink(this.navMusics);
                 return;
             }
+            this.closeAllModals();
 
             if (view.type === 'albums') {
                 this.setActiveNavLink(this.navAlbums);
@@ -8258,8 +8282,8 @@ class XTAPOMusicApp {
             }
         }
 
-        // 2. Karaoke Fullscreen Modal Auto-scroll
-        if (this.karaokeLyricsScroll && this.karaokeLinesList && (force || !this.isUserScrollingKaraokeLyrics)) {
+        // 2. Karaoke Fullscreen Modal Auto-scroll (Chỉ cuộn khi modal đang mở)
+        if (this.lyricsModal && this.lyricsModal.classList.contains('open') && this.karaokeLyricsScroll && this.karaokeLinesList && (force || !this.isUserScrollingKaraokeLyrics)) {
             const activeEl = this.karaokeLinesList.querySelector(`.karaoke-line[data-index="${this.currentLyricIndex}"]`);
             if (activeEl) {
                 const containerH = this.karaokeLyricsScroll.clientHeight;
@@ -9337,6 +9361,10 @@ class XTAPOMusicApp {
     }
 
     async sendSyncHeartbeat() {
+        if (this._isSendingSyncHeartbeat) return;
+        this._isSendingSyncHeartbeat = true;
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timeoutId = controller ? setTimeout(() => controller.abort(), 4000) : null;
         try {
             const track = this.currentTrack;
             const album = this.currentAlbum;
@@ -9369,7 +9397,8 @@ class XTAPOMusicApp {
             const res = await fetch('/api/music/sync/heartbeat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: controller ? controller.signal : undefined
             });
 
             if (res.ok) {
@@ -9393,7 +9422,10 @@ class XTAPOMusicApp {
                 }
             }
         } catch (e) {
-            // Im lặng bỏ qua khi mất mạng tạm thời
+            // Im lặng bỏ qua khi mất mạng tạm thời hoặc timeout
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+            this._isSendingSyncHeartbeat = false;
         }
     }
 

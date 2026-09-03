@@ -144,6 +144,7 @@ html, body {
 .backdrop-overlay {
     position: absolute;
     inset: 0;
+    pointer-events: none;
     background: radial-gradient(circle at 65% 35%, rgba(10, 12, 16, 0.35) 0%, rgba(7, 8, 11, 0.75) 65%, #050608 100%);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -1154,12 +1155,14 @@ html, body {
     padding: 20px;
     opacity: 0;
     visibility: hidden;
+    pointer-events: none;
     transition: opacity var(--transition-normal), visibility var(--transition-normal);
 }
 
 .modal-overlay.open {
     opacity: 1;
     visibility: visible;
+    pointer-events: auto;
 }
 
 .modal-card {
@@ -1358,11 +1361,13 @@ html, body {
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     opacity: 0;
+    pointer-events: none;
     transition: opacity var(--transition-normal);
 }
 
 .slide-drawer.open .drawer-backdrop {
     opacity: 1;
+    pointer-events: auto;
 }
 
 .drawer-panel {
@@ -1579,11 +1584,13 @@ html, body {
     inset: 0;
     background: rgba(0, 0, 0, 0.7);
     opacity: 0;
+    pointer-events: none;
     transition: opacity var(--transition-normal);
 }
 
 .mobile-menu-drawer.open .mobile-menu-backdrop {
     opacity: 1;
+    pointer-events: auto;
 }
 
 .mobile-menu-panel {
