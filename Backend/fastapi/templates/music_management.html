@@ -34,6 +34,11 @@
                         class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border bg-emerald-600/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-600/25">
                     <i class="fa-solid fa-users-gear text-emerald-300"></i> User Sessions
                 </button>
+                <button type="button" onclick="openBackupModal()"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border bg-purple-600/15 text-purple-300 border-purple-500/30 hover:bg-purple-600/25 shadow-lg shadow-purple-500/10"
+                        title="Sao lưu và khôi phục toàn bộ kho nhạc">
+                    <i class="fa-solid fa-database text-purple-400"></i> Sao Lưu / Khôi Phục
+                </button>
                 <a href="/music" target="_blank"
                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition border bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25">
                     <i class="fa-solid fa-record-vinyl"></i> Mở Vinyl Player
@@ -954,6 +959,139 @@
         <!-- Modal Footer -->
         <div class="flex items-center justify-end pt-4 border-t border-hairline mt-4 shrink-0">
             <button onclick="closeUserSessionsModal()" class="px-5 py-2 rounded-xl bg-surface hover:bg-surface-2 border border-hairline text-text text-xs font-bold transition">
+                Đóng
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 1.9: Sao Lưu & Khôi Phục Database (Backup & Restore) -->
+<div id="backup-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-200">
+    <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 sm:p-7 shadow-2xl border border-hairline transform scale-95 transition-all max-h-[92vh] flex flex-col">
+        
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-hairline mb-4 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg border border-purple-500/30">
+                    <i class="fa-solid fa-database"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-extrabold text-text">Sao Lưu & Khôi Phục Database</h3>
+                    <p class="text-xs text-text-secondary">Quản lý backup kho nhạc (Albums, Tracks, Ca sĩ, Kênh, Playlists)</p>
+                </div>
+            </div>
+            <button onclick="closeBackupModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Sub Tabs -->
+        <div class="flex items-center gap-2 p-1 bg-black/20 rounded-xl border border-hairline mb-4 shrink-0">
+            <button id="bk-tab-backup-btn" onclick="switchBackupSubTab('backup')" class="flex-1 py-2 rounded-lg text-xs font-bold transition bg-primary text-white shadow flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-download"></i> Tạo Bản Sao Lưu
+            </button>
+            <button id="bk-tab-restore-btn" onclick="switchBackupSubTab('restore')" class="flex-1 py-2 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-upload"></i> Khôi Phục Dữ Liệu
+            </button>
+        </div>
+
+        <!-- TAB 1: BACKUP -->
+        <div id="bk-view-backup" class="flex-1 overflow-y-auto pr-1 space-y-4">
+            <!-- Download Options Box -->
+            <div class="p-4 rounded-2xl bg-surface/50 border border-hairline space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold uppercase text-text tracking-wider">Tải File Về Máy Tính</h4>
+                        <p class="text-[11px] text-text-secondary">Lưu trữ bản sao dữ liệu an toàn trên máy tính cá nhân</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <a href="/api/music/backup/download?format=gz" class="flex items-center gap-3 p-3 rounded-xl bg-purple-600/15 hover:bg-purple-600/25 border border-purple-500/30 text-purple-300 transition group">
+                        <div class="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-110 transition shrink-0">
+                            <i class="fa-solid fa-file-zipper"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-xs font-bold text-text truncate">Tải File Nén (.json.gz)</div>
+                            <div class="text-[10px] text-text-secondary">Khuyên dùng • Siêu nhẹ ~1.5MB</div>
+                        </div>
+                    </a>
+                    <a href="/api/music/backup/download?format=json" class="flex items-center gap-3 p-3 rounded-xl bg-surface hover:bg-surface-2 border border-hairline text-text-secondary hover:text-text transition group">
+                        <div class="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-110 transition shrink-0">
+                            <i class="fa-solid fa-file-code"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-xs font-bold text-text truncate">Tải File Thô (.json)</div>
+                            <div class="text-[10px] text-text-secondary">Dạng văn bản đầy đủ</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Server Snapshots Box -->
+            <div class="p-4 rounded-2xl bg-surface/50 border border-hairline space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold uppercase text-text tracking-wider">Bản Sao Lưu Trên Máy Chủ (SSD)</h4>
+                        <p class="text-[11px] text-text-secondary">Lưu trữ trực tiếp trong thư mục data của máy chủ</p>
+                    </div>
+                    <button type="button" onclick="createBackupSnapshot()" id="btn-create-snapshot" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:brightness-110 shadow-md shadow-primary/25 transition">
+                        <i class="fa-solid fa-plus text-[10px]"></i> Tạo Snapshot Mới
+                    </button>
+                </div>
+
+                <!-- Snapshots List -->
+                <div id="snapshots-list" class="space-y-2 max-h-56 overflow-y-auto p-1 bg-black/20 rounded-2xl border border-hairline">
+                    <div class="py-6 text-center text-xs text-text-secondary">
+                        <i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Đang nạp danh sách bản sao lưu...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: RESTORE -->
+        <div id="bk-view-restore" class="flex-1 overflow-y-auto pr-1 space-y-4 hidden">
+            <!-- Warning Alert -->
+            <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-amber-300 text-xs">
+                <i class="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5 shrink-0 text-sm"></i>
+                <div class="space-y-1">
+                    <div class="font-bold">Lưu ý an toàn:</div>
+                    <div class="text-[11px] text-amber-200/80 leading-relaxed">
+                        Khôi phục sẽ cập nhật và đồng bộ lại toàn bộ Albums, Bài hát, Kênh quét và Ca sĩ vào MongoDB Atlas cùng bộ nhớ đệm SSD. Hệ thống sẽ tự động tạo thêm 1 bản snapshot lưu trữ trước khi ghi đè.
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Upload Dropzone -->
+            <div class="p-5 rounded-2xl bg-surface/50 border-2 border-dashed border-hairline hover:border-primary/50 transition flex flex-col items-center justify-center gap-3 text-center cursor-pointer relative" onclick="document.getElementById('backup-file-input').click()">
+                <input type="file" id="backup-file-input" accept=".json,.gz" class="hidden" onchange="handleBackupFileSelect(this)">
+                <div class="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-bold text-text" id="upload-file-label">Kéo thả hoặc bấm để chọn file sao lưu (.json hoặc .json.gz)</div>
+                    <div class="text-[11px] text-text-secondary mt-0.5">Dung lượng tối đa 50MB</div>
+                </div>
+            </div>
+
+            <!-- Upload Status / Progress -->
+            <div id="restore-progress-box" class="hidden p-3 rounded-2xl bg-surface/50 border border-hairline">
+                <div class="flex items-center gap-2 text-xs font-bold text-text mb-1.5" id="restore-status-text">
+                    <i class="fa-solid fa-spinner animate-spin text-primary"></i> Đang khôi phục dữ liệu...
+                </div>
+                <div class="w-full bg-black/30 rounded-full h-1.5 overflow-hidden">
+                    <div class="bg-primary h-1.5 rounded-full w-full animate-pulse"></div>
+                </div>
+            </div>
+
+            <button type="button" onclick="submitRestoreUpload()" id="btn-submit-restore" disabled class="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold opacity-50 cursor-not-allowed hover:brightness-110 shadow-lg shadow-purple-500/25 transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left"></i> Bắt Đầu Khôi Phục Dữ Liệu
+            </button>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="flex items-center justify-between pt-4 border-t border-hairline mt-4 shrink-0">
+            <div id="bk-modal-msg" class="text-xs font-bold hidden py-1 px-2.5 rounded-lg"></div>
+            <button onclick="closeBackupModal()" class="px-5 py-2 rounded-xl bg-surface hover:bg-surface-2 border border-hairline text-text text-xs font-bold transition ml-auto">
                 Đóng
             </button>
         </div>
@@ -5676,6 +5814,230 @@ async function msRemove(userId) {
         checkGDriveClientStatus();
     } catch (e) {
         alertToast('Lỗi: ' + e.message);
+    }
+}
+
+// ==============================================================================
+// BACKUP & RESTORE DATABASE MANAGER
+// ==============================================================================
+let selectedBackupFile = null;
+
+function openBackupModal() {
+    const modal = document.getElementById('backup-modal');
+    if (!modal) return;
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.remove('scale-95');
+    switchBackupSubTab('backup');
+    loadBackupSnapshots();
+}
+
+function closeBackupModal() {
+    const modal = document.getElementById('backup-modal');
+    if (!modal) return;
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    modal.querySelector('.transform').classList.add('scale-95');
+}
+
+function switchBackupSubTab(tab) {
+    const backupView = document.getElementById('bk-view-backup');
+    const restoreView = document.getElementById('bk-view-restore');
+    const backupBtn = document.getElementById('bk-tab-backup-btn');
+    const restoreBtn = document.getElementById('bk-tab-restore-btn');
+
+    if (tab === 'backup') {
+        backupView.classList.remove('hidden');
+        restoreView.classList.add('hidden');
+        backupBtn.className = 'flex-1 py-2 rounded-lg text-xs font-bold transition bg-primary text-white shadow flex items-center justify-center gap-1.5';
+        restoreBtn.className = 'flex-1 py-2 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text flex items-center justify-center gap-1.5';
+        loadBackupSnapshots();
+    } else {
+        backupView.classList.add('hidden');
+        restoreView.classList.remove('hidden');
+        restoreBtn.className = 'flex-1 py-2 rounded-lg text-xs font-bold transition bg-primary text-white shadow flex items-center justify-center gap-1.5';
+        backupBtn.className = 'flex-1 py-2 rounded-lg text-xs font-bold transition text-text-secondary hover:text-text flex items-center justify-center gap-1.5';
+    }
+}
+
+async function loadBackupSnapshots() {
+    const container = document.getElementById('snapshots-list');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/music/backup/snapshots');
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Lỗi tải danh sách');
+
+        const snapshots = data.snapshots || [];
+        if (snapshots.length === 0) {
+            container.innerHTML = `
+                <div class="py-6 text-center text-xs text-text-secondary">
+                    <i class="fa-solid fa-box-open text-base mb-1.5 block text-text-secondary/60"></i>
+                    Chưa có bản snapshot nào trên máy chủ. Hãy bấm "Tạo Snapshot Mới" ở trên!
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = snapshots.map(s => `
+            <div class="flex items-center justify-between p-2.5 rounded-xl bg-surface/60 hover:bg-surface border border-hairline transition">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center shrink-0 text-xs">
+                        <i class="fa-solid fa-file-zipper"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-xs font-bold text-text truncate">${s.filename}</div>
+                        <div class="text-[10px] text-text-secondary flex items-center gap-2">
+                            <span><i class="fa-solid fa-clock text-[9px] mr-1"></i>${s.created_at}</span>
+                            <span>•</span>
+                            <span><i class="fa-solid fa-hard-drive text-[9px] mr-1"></i>${s.size_kb} KB</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0 ml-2">
+                    <a href="/api/music/backup/snapshots/${encodeURIComponent(s.filename)}" download
+                       class="w-7 h-7 rounded-lg bg-surface-2 hover:bg-primary/20 hover:text-primary flex items-center justify-center text-text-secondary transition text-xs"
+                       title="Tải snapshot về máy tính">
+                        <i class="fa-solid fa-download"></i>
+                    </a>
+                    <button type="button" onclick="restoreSnapshot('${s.filename}')"
+                            class="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold transition flex items-center gap-1"
+                            title="Khôi phục lại dữ liệu này">
+                        <i class="fa-solid fa-rotate-left"></i> Khôi phục
+                    </button>
+                    <button type="button" onclick="deleteSnapshot('${s.filename}')"
+                            class="w-7 h-7 rounded-lg hover:bg-red-500/20 text-text-secondary hover:text-red-400 flex items-center justify-center transition text-xs"
+                            title="Xóa snapshot này">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        container.innerHTML = `
+            <div class="py-4 text-center text-xs text-red-400">
+                <i class="fa-solid fa-triangle-exclamation mr-1"></i> Không thể tải danh sách snapshot: ${e.message}
+            </div>
+        `;
+    }
+}
+
+async function createBackupSnapshot() {
+    const btn = document.getElementById('btn-create-snapshot');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-[10px]"></i> Đang sao lưu...';
+    }
+
+    try {
+        const res = await fetch('/api/music/backup/create-snapshot', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Lỗi tạo snapshot');
+
+        alertToast(`🎉 Đã tạo bản sao lưu '${data.filename}' (${data.size_kb} KB) thành công!`);
+        loadBackupSnapshots();
+    } catch (e) {
+        alertToast('Lỗi: ' + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-plus text-[10px]"></i> Tạo Snapshot Mới';
+        }
+    }
+}
+
+async function restoreSnapshot(filename) {
+    if (!confirm(`⚠️ BẠN CÓ CHẮC MUỐN KHÔI PHỤC DỮ LIỆU TỪ '${filename}'?\n\nToàn bộ Albums, Bài hát, Kênh và Ca sĩ hiện tại sẽ được cập nhật đồng bộ theo bản sao lưu này!`)) {
+        return;
+    }
+
+    alertToast('⏳ Đang tiến hành khôi phục dữ liệu từ máy chủ...');
+
+    try {
+        const res = await fetch('/api/music/backup/restore-snapshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename })
+        });
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Lỗi khôi phục');
+
+        alertToast(`✅ ${data.message}`);
+        closeBackupModal();
+        loadMusicData(true);
+    } catch (e) {
+        alertToast('❌ Lỗi khôi phục: ' + e.message);
+    }
+}
+
+async function deleteSnapshot(filename) {
+    if (!confirm(`Bạn có chắc muốn xóa bản sao lưu '${filename}' trên máy chủ?`)) return;
+
+    try {
+        const res = await fetch(`/api/music/backup/snapshots/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Lỗi xóa snapshot');
+
+        alertToast('Đã xóa bản sao lưu thành công.');
+        loadBackupSnapshots();
+    } catch (e) {
+        alertToast('Lỗi: ' + e.message);
+    }
+}
+
+function handleBackupFileSelect(input) {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    selectedBackupFile = file;
+
+    const label = document.getElementById('upload-file-label');
+    const submitBtn = document.getElementById('btn-submit-restore');
+
+    if (label) {
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+        label.innerHTML = `<span class="text-purple-400 font-extrabold"><i class="fa-solid fa-file mr-1"></i>${file.name}</span> (${sizeMb} MB)`;
+    }
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+async function submitRestoreUpload() {
+    if (!selectedBackupFile) {
+        alertToast('Vui lòng chọn file sao lưu (.json hoặc .json.gz)');
+        return;
+    }
+
+    if (!confirm(`⚠️ XÁC NHẬN KHÔI PHỤC TỪ FILE:\n'${selectedBackupFile.name}'?\n\nQuá trình này sẽ nạp lại toàn bộ kho nhạc, ca sĩ và kênh quét vào cơ sở dữ liệu!`)) {
+        return;
+    }
+
+    const submitBtn = document.getElementById('btn-submit-restore');
+    const progressBox = document.getElementById('restore-progress-box');
+
+    if (submitBtn) submitBtn.disabled = true;
+    if (progressBox) progressBox.classList.remove('hidden');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', selectedBackupFile);
+
+        const res = await fetch('/api/music/backup/restore-upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Lỗi khôi phục từ file tải lên');
+
+        alertToast(`✅ ${data.message}`);
+        closeBackupModal();
+        loadMusicData(true);
+    } catch (e) {
+        alertToast('❌ Lỗi: ' + e.message);
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+        if (progressBox) progressBox.classList.add('hidden');
     }
 }
 </script>
