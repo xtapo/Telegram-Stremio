@@ -1040,6 +1040,7 @@ async def _startup_preload_library():
                     if isinstance(data, list) and len(data) > 0:
                         _IN_MEMORY_LIBRARY_CACHE = data
                         LOGGER.info(f"[MUSIC DB] Startup preload: loaded {len(data)} albums from file cache ({path}).")
+                        asyncio.create_task(_preload_artists_cache_bg())
                         return
             except Exception:
                 pass
@@ -1058,11 +1059,21 @@ async def _startup_preload_library():
                 except Exception:
                     pass
             LOGGER.info(f"[MUSIC DB] Startup preload: successfully cached {len(albums)} albums.")
+            asyncio.create_task(_preload_artists_cache_bg())
         else:
             LOGGER.warning("[MUSIC DB] Startup preload: no data returned from MongoDB.")
     except Exception as e:
         LOGGER.error(f"[MUSIC DB] Startup preload failed: {e}")
         _PRELOAD_STARTED = False
+
+
+async def _preload_artists_cache_bg():
+    """Tải trước danh sách ca sĩ vào RAM & SSD ngay khi khởi động để phản hồi < 1ms."""
+    try:
+        await get_all_artists(force_refresh=False)
+        LOGGER.info("[MUSIC DB] Artists cache successfully preloaded.")
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Preload artists cache background failed: {e}")
 
 
 async def _bg_refresh_library_from_mongo():
@@ -3673,18 +3684,21 @@ async def get_all_artists(force_refresh: bool = False):
                 if t.get("genre"):
                     artist_map[t_artist]["genres"].add(t.get("genre").strip())
 
-        # 2. Lấy metadata đã cache từ MongoDB collection `music_artists`
+        # 2. Lấy metadata đã cache từ MongoDB collection `music_artists` (dùng projection để tải cực nhanh)
         cached_map = {}
         try:
             if db and hasattr(db, "dbs") and "tracking" in db.dbs:
                 coll = db.dbs["tracking"]["music_artists"]
-                cached_cursor = coll.find()
+                cached_cursor = coll.find(
+                    {},
+                    projection={"_id": 1, "avatar_url": 1, "banner_url": 1, "bio": 1, "country": 1, "genres": 1, "fans_count": 1}
+                )
                 async for doc in cached_cursor:
                     cached_map[doc["_id"]] = doc
         except Exception as e:
             LOGGER.warning(f"[GET ARTISTS] Could not read cached artists from MongoDB: {e}")
 
-        # 3. Tổng hợp kết quả
+        # 3. Tổng hợp kết quả (loại bỏ albums_list để giảm payload mạng từ 4MB xuống ~300KB)
         artists_list = []
         for name, data in artist_map.items():
             slug = name.lower().strip()
@@ -3706,8 +3720,7 @@ async def get_all_artists(force_refresh: bool = False):
                 "fans_count": cached.get("fans_count", 0) if cached else 0,
                 "has_custom_avatar": bool(cached and cached.get("avatar_url")),
                 "tracks_count": data["tracks_count"],
-                "albums_count": len(data["albums"]),
-                "albums_list": list(data["albums"])
+                "albums_count": len(data["albums"])
             })
 
         artists_list.sort(key=lambda x: x["tracks_count"], reverse=True)
