@@ -792,36 +792,144 @@ async def _db_update_channel_progress(chat_id: str, last_scanned_id: int, last_s
 
 _IN_MEMORY_LIBRARY_CACHE = None
 _LIBRARY_BG_REFRESH_LOCK = asyncio.Lock()
+_LIBRARY_MIGRATED = False  # Flag để chỉ migrate 1 lần
 
-async def _db_fetch_library_from_mongo(timeout: float = 45.0, max_retries: int = 3) -> list | None:
-    """Fetch library from MongoDB with retry logic and projection."""
-    if not (db and hasattr(db, "dbs") and "tracking" in db.dbs):
+# ── Collection mới: mỗi album = 1 document trong `music_albums` ──
+
+def _get_albums_collection():
+    """Lấy collection music_albums từ tracking DB."""
+    if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+        return db.dbs["tracking"]["music_albums"]
+    return None
+
+def _get_legacy_collection():
+    """Lấy collection cũ music_library (single-document schema)."""
+    if db and hasattr(db, "dbs") and "tracking" in db.dbs:
+        return db.dbs["tracking"]["music_library"]
+    return None
+
+async def _migrate_legacy_to_per_album():
+    """
+    One-time migration: đọc document cũ (telegram_music_library) 
+    và tách thành per-album documents trong music_albums collection.
+    """
+    global _LIBRARY_MIGRATED
+    if _LIBRARY_MIGRATED:
+        return
+    _LIBRARY_MIGRATED = True
+
+    coll_new = _get_albums_collection()
+    coll_old = _get_legacy_collection()
+    if not coll_new or not coll_old:
+        return
+
+    # Kiểm tra xem collection mới đã có data chưa
+    try:
+        existing_count = await asyncio.wait_for(coll_new.count_documents({}), timeout=10.0)
+        if existing_count > 0:
+            LOGGER.info(f"[MUSIC DB] Migration skipped: music_albums already has {existing_count} documents.")
+            return
+    except Exception:
+        return
+
+    # Đọc document cũ theo chunks nhỏ bằng aggregation
+    try:
+        LOGGER.info("[MUSIC DB] Starting migration from single-document to per-album schema...")
+        doc = await asyncio.wait_for(
+            coll_old.find_one(
+                {"_id": "telegram_music_library"},
+                projection={"albums": 1, "_id": 0}
+            ),
+            timeout=120.0  # Cho phép 2 phút cho migration
+        )
+        if not doc or "albums" not in doc or not isinstance(doc["albums"], list):
+            LOGGER.info("[MUSIC DB] Migration: no legacy data found.")
+            return
+
+        albums = doc["albums"]
+        if not albums:
+            return
+
+        # Insert từng album vào collection mới
+        docs_to_insert = []
+        for alb in albums:
+            album_id = alb.get("id", "")
+            if not album_id:
+                # Generate ID từ title + artist
+                title = alb.get("title", "unknown")
+                artist = alb.get("artist", "unknown")
+                album_id = f"{title}-{artist}".lower().replace(" ", "-")
+                alb["id"] = album_id
+
+            album_doc = {**alb, "_id": album_id}
+            docs_to_insert.append(album_doc)
+
+        if docs_to_insert:
+            # Insert theo batch 50 documents
+            for i in range(0, len(docs_to_insert), 50):
+                batch = docs_to_insert[i:i+50]
+                try:
+                    await coll_new.insert_many(batch, ordered=False)
+                except Exception as e:
+                    # Bỏ qua duplicate key errors
+                    if "duplicate" not in str(e).lower() and "E11000" not in str(e):
+                        LOGGER.warning(f"[MUSIC DB] Migration batch insert warning: {e}")
+
+            LOGGER.info(f"[MUSIC DB] Migration completed: {len(docs_to_insert)} albums migrated to per-album schema.")
+    except asyncio.TimeoutError:
+        LOGGER.warning("[MUSIC DB] Migration: timeout reading legacy document (120s). Will retry next restart.")
+        _LIBRARY_MIGRATED = False
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Migration error: {e}")
+        _LIBRARY_MIGRATED = False
+
+
+async def _db_fetch_library_from_mongo(timeout: float = 30.0) -> list | None:
+    """
+    Fetch library từ MongoDB theo per-album schema mới.
+    Mỗi album là 1 document nhỏ → cursor stream nhanh, không bị timeout.
+    Fallback sang legacy schema nếu collection mới trống.
+    """
+    coll = _get_albums_collection()
+    if not coll:
         return None
 
-    coll = db.dbs["tracking"]["music_library"]
-    for attempt in range(1, max_retries + 1):
-        try:
-            doc = await asyncio.wait_for(
-                coll.find_one(
-                    {"_id": "telegram_music_library"},
-                    projection={"albums": 1, "_id": 0}
-                ),
-                timeout=timeout
-            )
-            if doc and "albums" in doc and isinstance(doc["albums"], list) and len(doc["albums"]) > 0:
-                return doc["albums"]
-            return None
-        except asyncio.TimeoutError:
-            LOGGER.warning(f"[MUSIC DB] MongoDB load library timeout (attempt {attempt}/{max_retries}, {timeout}s)")
-            if attempt < max_retries:
-                wait_time = 2 ** attempt
-                LOGGER.info(f"[MUSIC DB] Retrying in {wait_time}s...")
-                await asyncio.sleep(wait_time)
-        except Exception as e:
-            LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB (attempt {attempt}/{max_retries}): {e}")
-            if attempt < max_retries:
-                await asyncio.sleep(2)
-    return None
+    try:
+        # Đọc per-album documents bằng to_list (motor sẽ stream từ cursor)
+        cursor = coll.find({}, projection={"_id": 0})
+        albums = await asyncio.wait_for(cursor.to_list(length=None), timeout=timeout)
+
+        if albums:
+            LOGGER.info(f"[MUSIC DB] Loaded {len(albums)} albums from per-album schema.")
+            return albums
+
+        # Fallback: collection mới trống → trigger migration từ legacy
+        LOGGER.info("[MUSIC DB] Per-album collection empty, attempting migration from legacy...")
+        await _migrate_legacy_to_per_album()
+
+        # Retry sau migration
+        cursor2 = coll.find({}, projection={"_id": 0})
+        albums = await asyncio.wait_for(cursor2.to_list(length=None), timeout=timeout)
+        if albums:
+            LOGGER.info(f"[MUSIC DB] Post-migration: loaded {len(albums)} albums.")
+            return albums
+
+        return None
+    except asyncio.TimeoutError:
+        LOGGER.warning(f"[MUSIC DB] MongoDB load library timeout ({timeout}s)")
+        return None
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] Could not read library from MongoDB: {e}")
+        return None
+
+
+async def _cursor_to_list(cursor):
+    """Helper: async iterate cursor."""
+    results = []
+    async for doc in cursor:
+        results.append(doc)
+    return results
+
 
 async def _bg_refresh_library_from_mongo():
     """Background task: fetch from MongoDB and update cache without blocking user requests."""
@@ -831,7 +939,7 @@ async def _bg_refresh_library_from_mongo():
     async with _LIBRARY_BG_REFRESH_LOCK:
         try:
             LOGGER.info("[MUSIC DB] Background refresh: fetching library from MongoDB...")
-            albums = await _db_fetch_library_from_mongo(timeout=90.0, max_retries=3)
+            albums = await _db_fetch_library_from_mongo(timeout=60.0)
             if albums:
                 _IN_MEMORY_LIBRARY_CACHE = albums
                 try:
@@ -870,7 +978,7 @@ async def _db_load_library(force_reload: bool = False) -> list:
         return file_cache_data
 
     # Không có cache nào → phải query MongoDB trực tiếp
-    albums = await _db_fetch_library_from_mongo(timeout=45.0, max_retries=3)
+    albums = await _db_fetch_library_from_mongo(timeout=30.0)
     if albums:
         _IN_MEMORY_LIBRARY_CACHE = albums
         try:
@@ -894,9 +1002,42 @@ async def _db_save_library(albums: list):
     except Exception as e:
         LOGGER.error(f"[MUSIC] Failed to write library cache file: {e}")
 
-    try:
-        if db and hasattr(db, "dbs") and "tracking" in db.dbs:
-            await db.dbs["tracking"]["music_library"].update_one(
+    # Lưu theo per-album schema mới
+    coll = _get_albums_collection()
+    if coll:
+        try:
+            # Xóa tất cả documents cũ và insert mới (atomic replace)
+            await coll.delete_many({})
+            if albums:
+                docs_to_insert = []
+                for alb in albums:
+                    album_id = alb.get("id", "")
+                    if not album_id:
+                        title = alb.get("title", "unknown")
+                        artist = alb.get("artist", "unknown")
+                        album_id = f"{title}-{artist}".lower().replace(" ", "-")
+                        alb["id"] = album_id
+                    album_doc = {**alb, "_id": album_id}
+                    docs_to_insert.append(album_doc)
+
+                # Insert theo batch
+                for i in range(0, len(docs_to_insert), 100):
+                    batch = docs_to_insert[i:i+100]
+                    try:
+                        await coll.insert_many(batch, ordered=False)
+                    except Exception as e:
+                        if "duplicate" not in str(e).lower() and "E11000" not in str(e):
+                            LOGGER.warning(f"[MUSIC DB] Save batch warning: {e}")
+
+            LOGGER.info(f"[MUSIC DB] Đã lưu {len(albums)} albums (per-album schema).")
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC DB] Could not save to per-album collection: {e}")
+
+    # Đồng thời cập nhật legacy document để backward compatibility
+    coll_old = _get_legacy_collection()
+    if coll_old:
+        try:
+            await coll_old.update_one(
                 {"_id": "telegram_music_library"},
                 {"$set": {
                     "_id": "telegram_music_library",
@@ -906,9 +1047,10 @@ async def _db_save_library(albums: list):
                 }},
                 upsert=True
             )
-            LOGGER.info(f"[MUSIC DB] Đã lưu và đồng bộ {len(albums)} albums lên MongoDB.")
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC DB] Could not sync library to MongoDB: {e}")
+        except Exception as e:
+            LOGGER.warning(f"[MUSIC DB] Could not sync to legacy collection: {e}")
+
+
 
 
 PLAYLISTS_FILE = os.path.join(MUSIC_DIR, "telegram_playlists.json")
