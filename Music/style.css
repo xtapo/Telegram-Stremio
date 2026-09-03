@@ -3185,8 +3185,10 @@ html, body {
 .album-quick-export-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 10px;
+    min-height: 28px;
     border-radius: var(--radius-full);
     background: rgba(252, 191, 71, 0.12);
     border: 1px solid rgba(252, 191, 71, 0.35);
