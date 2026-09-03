@@ -703,7 +703,24 @@ def _save_channels_file(channels: list):
             LOGGER.error(f"[MUSIC] Error saving channels file to {path}: {e}")
 
 
+_IN_MEMORY_CHANNELS_CACHE = None
+
 async def _db_load_channels() -> list:
+    global _IN_MEMORY_CHANNELS_CACHE
+    if _IN_MEMORY_CHANNELS_CACHE is not None:
+        return _IN_MEMORY_CHANNELS_CACHE
+
+    # 1. Đọc từ file cache cục bộ trước để phản hồi tức thì (< 1ms)
+    local_channels = _load_channels_file()
+    if local_channels:
+        for item in local_channels:
+            item["last_scanned_id"] = int(item.get("last_scanned_id", 0) or 0)
+            item["last_scanned_at"] = str(item.get("last_scanned_at", "") or "")
+            item["total_tracks"] = int(item.get("total_tracks", 0) or 0)
+        _IN_MEMORY_CHANNELS_CACHE = local_channels
+        return local_channels
+
+    # 2. Nếu chưa có file cache: đọc từ MongoDB
     try:
         if db and hasattr(db, "dbs") and "tracking" in db.dbs:
             cursor = db.dbs["tracking"]["music_channels"].find()
@@ -720,19 +737,17 @@ async def _db_load_channels() -> list:
                     }
                     for d in docs
                 ]
+                _IN_MEMORY_CHANNELS_CACHE = channels
                 _save_channels_file(channels)
                 return channels
     except Exception as e:
         LOGGER.warning(f"[MUSIC DB] Could not read channels from MongoDB: {e}")
-    raw_list = _load_channels_file()
-    for item in raw_list:
-        item["last_scanned_id"] = int(item.get("last_scanned_id", 0) or 0)
-        item["last_scanned_at"] = str(item.get("last_scanned_at", "") or "")
-        item["total_tracks"] = int(item.get("total_tracks", 0) or 0)
-    return raw_list
+    return []
 
 
 async def _db_save_channels(channels: list):
+    global _IN_MEMORY_CHANNELS_CACHE
+    _IN_MEMORY_CHANNELS_CACHE = channels
     _save_channels_file(channels)
     try:
         if db and hasattr(db, "dbs") and "tracking" in db.dbs:
@@ -1117,6 +1132,11 @@ async def _db_load_library(force_reload: bool = False) -> list:
 async def _db_save_library(albums: list):
     global _IN_MEMORY_LIBRARY_CACHE
     _IN_MEMORY_LIBRARY_CACHE = albums
+    _invalidate_artists_cache()
+    try:
+        _M3U8_MEM_CACHE.clear()
+    except Exception:
+        pass
 
     # 1. Ghi file cache cục bộ (cả thư mục data và legacy path)
     for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
@@ -1500,11 +1520,30 @@ async def stream_album_m3u8(request: Request, album_id: str):
     )
 
 
+_M3U8_MEM_CACHE: Dict[str, tuple[str, float]] = {}
+_M3U8_MEM_CACHE_TTL = 300.0  # 5 phút
+
 @router.get("/api/music/playlist/all.m3u8")
 @router.get("/api/music/playlist/all")
 async def stream_all_music_m3u8(request: Request):
-    """Trả về file playlist .m3u8 toàn bộ kho nhạc thư viện"""
+    """Trả về file playlist .m3u8 toàn bộ kho nhạc thư viện (tự động cache RAM)"""
     base_url = _get_request_base_url(request)
+    cache_key = f"all_{base_url}"
+    now = time.time()
+
+    if cache_key in _M3U8_MEM_CACHE:
+        cached_text, cached_at = _M3U8_MEM_CACHE[cache_key]
+        if now - cached_at < _M3U8_MEM_CACHE_TTL:
+            return PlainResponse(
+                content=cached_text,
+                media_type="audio/x-mpegurl; charset=utf-8",
+                headers={
+                    "Content-Disposition": _safe_content_disposition("XTAPO_All_Music_Library", ".m3u8"),
+                    "Cache-Control": "public, max-age=300",
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+
     data = await _db_load_library() or []
     all_albums = list(data) if data else DEMO_ALBUMS_FALLBACK
 
@@ -1516,6 +1555,8 @@ async def stream_all_music_m3u8(request: Request):
             all_tracks.append(t)
 
     m3u8_text = _build_m3u8_content("XTAPO_All_Music_Library", all_tracks, base_url)
+    _M3U8_MEM_CACHE[cache_key] = (m3u8_text, now)
+
     return PlainResponse(
         content=m3u8_text,
         media_type="audio/x-mpegurl; charset=utf-8",
@@ -3545,11 +3586,67 @@ async def _search_artist_online_helper(name: str):
     return results
 
 
+_IN_MEMORY_ARTISTS_CACHE: Optional[list] = None
+_IN_MEMORY_ARTISTS_CACHE_TIME: float = 0.0
+ARTISTS_CACHE_TTL = 3600  # 1 giờ (tự động invalidate khi có cập nhật)
+ARTISTS_CACHE_FILE = os.path.join(MUSIC_DATA_DIR, "artists_cache.json")
+LEGACY_ARTISTS_CACHE_FILE = os.path.join(MUSIC_DIR, "artists_cache.json")
+
+def _invalidate_artists_cache():
+    global _IN_MEMORY_ARTISTS_CACHE, _IN_MEMORY_ARTISTS_CACHE_TIME
+    _IN_MEMORY_ARTISTS_CACHE = None
+    _IN_MEMORY_ARTISTS_CACHE_TIME = 0.0
+    for p in [ARTISTS_CACHE_FILE, LEGACY_ARTISTS_CACHE_FILE]:
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+
+def _load_artists_file_cache() -> list | None:
+    for p in [ARTISTS_CACHE_FILE, LEGACY_ARTISTS_CACHE_FILE]:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > 0:
+                        return data
+            except Exception:
+                pass
+    return None
+
+def _save_artists_file_cache(artists: list):
+    for p in [ARTISTS_CACHE_FILE, LEGACY_ARTISTS_CACHE_FILE]:
+        try:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(artists, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+
 @router.get("/api/music/artists")
-async def get_all_artists():
+async def get_all_artists(force_refresh: bool = False):
     """
     Lấy danh sách tất cả ca sĩ được trích xuất từ thư viện nhạc kèm ảnh, quốc gia và metadata
+    (Tự động cache RAM + SSD để phản hồi tức thì < 1ms)
     """
+    global _IN_MEMORY_ARTISTS_CACHE, _IN_MEMORY_ARTISTS_CACHE_TIME
+    now = time.time()
+
+    # 1. Kiểm tra cache RAM (< 0.1ms)
+    if not force_refresh and _IN_MEMORY_ARTISTS_CACHE is not None:
+        if now - _IN_MEMORY_ARTISTS_CACHE_TIME < ARTISTS_CACHE_TTL:
+            return JSONResponse(content={"status": "success", "count": len(_IN_MEMORY_ARTISTS_CACHE), "artists": _IN_MEMORY_ARTISTS_CACHE})
+
+    # 2. Kiểm tra file cache SSD (< 2ms)
+    if not force_refresh:
+        file_cached = _load_artists_file_cache()
+        if file_cached:
+            _IN_MEMORY_ARTISTS_CACHE = file_cached
+            _IN_MEMORY_ARTISTS_CACHE_TIME = now
+            return JSONResponse(content={"status": "success", "count": len(file_cached), "artists": file_cached})
+
     try:
         albums = await _db_load_library()
         artist_map = {}
@@ -3614,6 +3711,12 @@ async def get_all_artists():
             })
 
         artists_list.sort(key=lambda x: x["tracks_count"], reverse=True)
+
+        # 4. Cập nhật cache RAM & file cache SSD
+        _IN_MEMORY_ARTISTS_CACHE = artists_list
+        _IN_MEMORY_ARTISTS_CACHE_TIME = now
+        _save_artists_file_cache(artists_list)
+
         return JSONResponse(content={"status": "success", "count": len(artists_list), "artists": artists_list})
     except Exception as e:
         LOGGER.error(f"[GET ARTISTS] Lỗi: {e}")
@@ -3663,6 +3766,7 @@ async def update_artist_metadata(payload: dict, _: bool = Depends(require_auth))
         }
         
         await coll.update_one({"_id": slug}, {"$set": update_data}, upsert=True)
+        _invalidate_artists_cache()
         return JSONResponse(content={"status": "success", "message": f"Đã cập nhật thông tin ca sĩ '{name}' thành công."})
     except Exception as e:
         LOGGER.error(f"[UPDATE ARTIST] Lỗi: {e}")
@@ -3748,6 +3852,9 @@ async def auto_fetch_artists_metadata(_: bool = Depends(require_auth)):
             # Nghỉ nhẹ 100ms tránh rate-limit
             import asyncio
             await asyncio.sleep(0.1)
+
+        if updated_count > 0:
+            _invalidate_artists_cache()
 
         return JSONResponse(content={
             "status": "success", 
