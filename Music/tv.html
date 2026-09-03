@@ -2748,10 +2748,33 @@
         });
 
         audio.addEventListener('error', (e) => {
-            console.warn('[TV Audio] Lỗi luồng nhạc:', e);
+            const err = audio.error;
+            const errCode = err ? err.code : 'unknown';
+            const errMsg = err ? (err.message || '') : '';
+            console.warn(`[TV Audio] Lỗi luồng nhạc (Code ${errCode}): ${errMsg} | URL: ${audio.src}`);
+
+            // Kiểm tra chi tiết HTTP response từ máy chủ để hiển thị thông báo chính xác
+            if (audio.src) {
+                fetch(audio.src, { headers: { 'Range': 'bytes=0-1' } })
+                    .then(async (res) => {
+                        if (!res.ok) {
+                            const detailText = await res.text();
+                            console.warn(`[TV Audio] Máy chủ phản hồi mã ${res.status}:`, detailText);
+                            if (res.status === 429) {
+                                showToast(`⏳ Telegram giới hạn tải bài này (FloodWait). Đang chuyển bài...`, 3000);
+                            } else if (res.status === 404) {
+                                showToast(`⚠️ Không tìm thấy bài hát trên Telegram Cloud (404).`, 3000);
+                            }
+                        }
+                    })
+                    .catch((fetchErr) => {
+                        console.warn('[TV Audio] Lỗi kết nối mạng tới server:', fetchErr);
+                    });
+            }
+
             streamRetryCount++;
             if (streamRetryCount <= 2) {
-                showToast('🔄 Đang đổi bot Telegram dự phòng & thử tải lại...');
+                showToast('🔄 Đang thử tải lại luồng nhạc...');
                 setTimeout(() => {
                     if (audio.src) {
                         const curUrl = audio.src.split('?')[0] + '?r=' + Date.now();
@@ -2761,7 +2784,7 @@
                     }
                 }, 1500);
             } else {
-                showToast('⚠️ Bot Telegram tạm thời bận. Tự động chuyển bài tiếp theo...');
+                showToast('⚠️ Luồng nhạc tạm thời gián đoạn. Tự động chuyển bài tiếp theo...');
                 setTimeout(() => {
                     nextTrack();
                 }, 2000);
