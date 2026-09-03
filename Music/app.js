@@ -2524,7 +2524,19 @@ class XTAPOMusicApp {
         li.className = `track-item ${idx === this.currentTrackIndex ? 'active' : ''}${(!this.isPlaying && idx === this.currentTrackIndex) ? ' paused' : ''}`;
         li.setAttribute('data-index', idx);
         const trackName = track.name || 'Không có tên';
-        const trackArtist = (track.artist || (this.currentAlbum && this.currentAlbum.artist) || '').trim();
+        let trackArtist = (
+            track.artist ||
+            track.performer ||
+            track.singer ||
+            track.albumArtist ||
+            track.album_artist ||
+            (this.currentAlbum && (this.currentAlbum.artist || this.currentAlbum.album_artist)) ||
+            (this.artistName && this.artistName.textContent && !this.artistName.textContent.includes('Xin chào') && !this.artistName.textContent.includes('Trình phát nhạc') ? this.artistName.textContent : '') ||
+            ''
+        ).trim();
+        if (trackArtist === 'Trình phát nhạc Lossless & Hi-Res' || trackArtist === 'XTAPO Music') {
+            trackArtist = '';
+        }
         const isCustomPlaylist = Boolean(this.activePlaylistId || (this.currentAlbum && String(this.currentAlbum.id).startsWith('pl-')));
         const isFavQueue = Boolean(this.currentAlbum && this.currentAlbum.id === 'favorites-queue');
 

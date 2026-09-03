@@ -2544,8 +2544,8 @@
                 item.dataset.idx = idx;
 
                 const name = tr.name || tr.title || 'Bài hát';
-                const dur = tr.duration || formatTime(tr.duration_sec) || '0:00';
-                const art = tr.artist ? ` • ${tr.artist}` : '';
+                const trackArt = tr.artist || tr.performer || (typeof currentActiveGroup !== 'undefined' && currentActiveGroup?.artist) || '';
+                const art = trackArt ? ` • ${trackArt}` : '';
                 const favIcon = isFav ? '<span style="color: #ef4444; margin-left: 8px; font-size: 13px;">❤️</span>' : '';
                 const numOrEq = isCur 
                     ? '<div class="tv-eq-anim"><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span><span class="tv-eq-bar"></span></div>' 
