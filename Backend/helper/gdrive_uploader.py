@@ -569,20 +569,29 @@ class GoogleDriveUploadManager:
 
         # Kiểm tra trong Bộ nhớ đệm (Download Cache)
         try:
-            for fname in os.listdir(CACHE_DOWNLOAD_DIR):
-                if fname.startswith(f"{file_id}_") or (target_filename and fname.endswith(target_filename)):
-                    c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
-                    if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
-                        cached_sz = os.path.getsize(c_path)
-                        cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
-                        self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua bước tải Google Drive!", "success")
-                        self._download_percent = 100
-                        out_path = os.path.join(work_dir, cached_fn)
-                        try:
-                            shutil.copy2(c_path, out_path)
-                            return out_path
-                        except Exception:
-                            return c_path
+            if os.path.exists(CACHE_DOWNLOAD_DIR):
+                for fname in os.listdir(CACHE_DOWNLOAD_DIR):
+                    if fname.startswith(f"{file_id}_") or (target_filename and fname.endswith(target_filename)):
+                        c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                        if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
+                            cached_sz = os.path.getsize(c_path)
+                            cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
+                            self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua bước tải Google Drive!", "success")
+                            self._download_percent = 100
+                            out_path = os.path.join(work_dir, cached_fn)
+                            try:
+                                if hasattr(os, "link"):
+                                    try:
+                                        if os.path.exists(out_path):
+                                            os.remove(out_path)
+                                        os.link(c_path, out_path)
+                                        return out_path
+                                    except (OSError, NotImplementedError):
+                                        pass
+                                shutil.copy2(c_path, out_path)
+                                return out_path
+                            except Exception:
+                                return c_path
         except Exception as ex:
             LOGGER.debug(f"Cache check error: {ex}")
 
@@ -598,60 +607,100 @@ class GoogleDriveUploadManager:
             f"https://drive.google.com/uc?export=download&id={file_id}",
         ]
 
-        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-            resp = None
-            download_url = None
+        # Sử dụng httpx streaming với connect/read timeouts tối ưu cho file lớn
+        custom_timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+        async with httpx.AsyncClient(timeout=custom_timeout, follow_redirects=True) as client:
+            active_stream = None
+            candidate_stream_resp = None
 
             for u in url_candidates:
                 try:
-                    resp = await client.get(u, headers=headers)
+                    stream_ctx = client.stream("GET", u, headers=headers)
+                    resp = await stream_ctx.__aenter__()
                     if resp.status_code == 200:
-                        download_url = u
+                        candidate_stream_resp = resp
+                        active_stream = stream_ctx
                         break
+                    else:
+                        await stream_ctx.__aexit__(None, None, None)
                 except Exception as e:
-                    LOGGER.debug(f"Candidate {u} failed: {e}")
+                    LOGGER.debug(f"Candidate {u} stream probe failed: {e}")
 
-            if not resp or resp.status_code != 200:
+            if not candidate_stream_resp:
                 self._log(f"Không thể kết nối đến máy chủ Google Drive cho file '{target_filename}' (ID: {file_id})", "error")
                 return None
 
-            content_type = (resp.headers.get("content-type") or "").lower()
+            final_stream_ctx = None
+            final_stream_resp = None
 
-            if "text/html" in content_type or resp.text.startswith("<!DOCTYPE") or resp.text.startswith("<html"):
-                html_body = resp.text
-                if any(q in html_body for q in ["Quota exceeded", "vượt quá giới hạn", "Too many users", "can't view or download", "Sorry, you can"]):
-                    err_msg = f"⚠️ File '{target_filename}' đã bị giới hạn tải trong ngày của Google Drive (Quota Exceeded)."
-                    self._error_message = err_msg
-                    self._log(err_msg, "error")
-                    return None
+            try:
+                content_type = (candidate_stream_resp.headers.get("content-type") or "").lower()
 
-                confirm_match = (
-                    re.search(r'confirm=([0-9A-Za-z_-]+)', html_body) or 
-                    re.search(r'name="confirm"\s+value="([^"]+)"', html_body) or
-                    re.search(r'id="uc-download-link"\s+href="([^"]+)"', html_body)
-                )
-                if confirm_match:
-                    match_val = confirm_match.group(1)
-                    if match_val.startswith("http"):
-                        download_url = match_val
-                    else:
-                        download_url = f"https://docs.google.com/uc?export=download&confirm={match_val}&id={file_id}"
-                    self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
-                else:
-                    if "accounts.google.com" in str(resp.url) or "ServiceLogin" in html_body or "Access denied" in html_body:
+                # Trường hợp 1: Google Drive trả về trang HTML (trang xác nhận virus cho file lớn hoặc thông báo lỗi)
+                if "text/html" in content_type:
+                    # Chỉ đọc tối đa 256KB HTML vào bộ nhớ, tuyệt đối KHÔNG đọc toàn bộ file tránh tràn RAM
+                    html_chunks = []
+                    total_html_read = 0
+                    async for chunk in candidate_stream_resp.aiter_bytes(chunk_size=16384):
+                        html_chunks.append(chunk)
+                        total_html_read += len(chunk)
+                        if total_html_read >= 256 * 1024:
+                            break
+                    html_body = b"".join(html_chunks).decode("utf-8", errors="ignore")
+                    
+                    # Đóng stream trang HTML thăm dò
+                    await active_stream.__aexit__(None, None, None)
+                    active_stream = None
+                    candidate_stream_resp = None
+
+                    # Kiểm tra Quota Exceeded
+                    if any(q in html_body for q in ["Quota exceeded", "vượt quá giới hạn", "Too many users", "can't view or download", "Sorry, you can"]):
+                        err_msg = f"⚠️ File '{target_filename}' đã bị giới hạn tải trong ngày của Google Drive (Quota Exceeded)."
+                        self._error_message = err_msg
+                        self._log(err_msg, "error")
+                        return None
+
+                    # Kiểm tra quyền truy cập công khai
+                    if "accounts.google.com" in html_body or "ServiceLogin" in html_body or "Access denied" in html_body:
                         err_msg = f"⚠️ File '{target_filename}' chưa được chia sẻ công khai. Vui lòng đặt quyền chia sẻ Google Drive là 'Bất kỳ ai có liên kết (Anyone with the link)'."
                         self._error_message = err_msg
                         self._log(err_msg, "error")
                         return None
 
-            final_dl_url = download_url or f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
-            
-            async with client.stream("GET", final_dl_url, headers=headers) as stream_resp:
-                if stream_resp.status_code != 200:
-                    self._log(f"Lỗi HTTP {stream_resp.status_code} khi tải nội dung file '{target_filename}'", "error")
-                    return None
+                    # Tìm token xác nhận tải file lớn
+                    confirm_match = (
+                        re.search(r'confirm=([0-9A-Za-z_-]+)', html_body) or 
+                        re.search(r'name="confirm"\s+value="([^"]+)"', html_body) or
+                        re.search(r'id="uc-download-link"\s+href="([^"]+)"', html_body) or
+                        re.search(r'href="(/uc\?export=download[^"]+)"', html_body)
+                    )
+                    download_url = None
+                    if confirm_match:
+                        match_val = confirm_match.group(1).replace("&amp;", "&")
+                        if match_val.startswith("http"):
+                            download_url = match_val
+                        elif match_val.startswith("/"):
+                            download_url = f"https://drive.google.com{match_val}"
+                        else:
+                            download_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm={match_val}"
+                        self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
 
-                header_fn = _extract_filename_from_headers(stream_resp.headers, "")
+                    final_dl_url = download_url or f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+                    final_stream_ctx = client.stream("GET", final_dl_url, headers=headers)
+                    final_stream_resp = await final_stream_ctx.__aenter__()
+
+                    if final_stream_resp.status_code != 200:
+                        self._log(f"Lỗi HTTP {final_stream_resp.status_code} khi tải nội dung file '{target_filename}'", "error")
+                        return None
+
+                # Trường hợp 2: Trả về trực tiếp nhị phân file (application/octet-stream, audio/..., zip/...)
+                else:
+                    final_stream_ctx = active_stream
+                    final_stream_resp = candidate_stream_resp
+                    # Chuyển giao quyền sở hữu stream để không bị đóng ở khối dọn dẹp
+                    active_stream = None
+
+                header_fn = _extract_filename_from_headers(final_stream_resp.headers, "")
                 if header_fn and header_fn != f"gdrive_{file_id}" and "." in header_fn:
                     final_filename = header_fn
                 elif target_filename and "." in target_filename:
@@ -659,14 +708,14 @@ class GoogleDriveUploadManager:
                 else:
                     final_filename = header_fn or target_filename or f"gdrive_{file_id}.flac"
 
-                content_len = stream_resp.headers.get("content-length")
+                content_len = final_stream_resp.headers.get("content-length")
                 total_bytes = int(content_len) if content_len and content_len.isdigit() else 0
 
                 self._download_total = total_bytes
                 self._download_bytes = 0
                 self._current_file = final_filename
                 self._stage = f"Đang tải về từ Google Drive: {final_filename}"
-                self._log(f"Bắt đầu tải: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
+                self._log(f"Bắt đầu tải (Pure Stream): {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
 
                 cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{file_id}_{final_filename}")
                 out_path = os.path.join(work_dir, final_filename)
@@ -674,8 +723,9 @@ class GoogleDriveUploadManager:
                 last_update = 0
                 last_dl_bytes = 0
 
+                # Ghi trực tiếp từng chunk 1MB vào đĩa - RAM luôn duy trì mức cực thấp < 10MB
                 with open(cache_path, "wb") as f_out:
-                    async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
+                    async for chunk in final_stream_resp.aiter_bytes(chunk_size=1024 * 1024):
                         if self._cancel_requested:
                             return None
                         f_out.write(chunk)
@@ -713,11 +763,33 @@ class GoogleDriveUploadManager:
 
                 self._download_percent = 100
                 self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize / (1024 * 1024), 2)} MB)", "success")
+
+                # Tối ưu ổ đĩa: Dùng hardlink để không nhân đôi dung lượng file trên đĩa
                 try:
+                    if hasattr(os, "link"):
+                        try:
+                            if os.path.exists(out_path):
+                                os.remove(out_path)
+                            os.link(cache_path, out_path)
+                            return out_path
+                        except (OSError, NotImplementedError):
+                            pass
                     shutil.copy2(cache_path, out_path)
                     return out_path
                 except Exception:
                     return cache_path
+
+            finally:
+                if final_stream_ctx:
+                    try:
+                        await final_stream_ctx.__aexit__(None, None, None)
+                    except Exception:
+                        pass
+                if active_stream:
+                    try:
+                        await active_stream.__aexit__(None, None, None)
+                    except Exception:
+                        pass
 
     async def _download_direct_url(self, url: str, work_dir: str) -> Optional[str]:
         """Tải file từ link HTTP/HTTPS trực tiếp với bộ nhớ đệm"""
@@ -791,6 +863,14 @@ class GoogleDriveUploadManager:
                     dl_sz = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
                     self._log(f"✅ Tải thành công: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)", "success")
                     try:
+                        if hasattr(os, "link"):
+                            try:
+                                if os.path.exists(out_path):
+                                    os.remove(out_path)
+                                os.link(cache_path, out_path)
+                                return out_path
+                            except (OSError, NotImplementedError):
+                                pass
                         shutil.copy2(cache_path, out_path)
                         return out_path
                     except Exception:
@@ -944,6 +1024,15 @@ class GoogleDriveUploadManager:
                     clean_title = clean_audio_filename(raw_filename)
                     fsize = os.path.getsize(file_path)
                     fsize_mb = round(fsize / (1024 * 1024), 2)
+
+                    # Kiểm tra giới hạn kích thước file của Telegram
+                    if fsize > 2000 * 1024 * 1024 and client_type == "bot":
+                        self._log(
+                            f"⚠️ Bỏ qua bài '{raw_filename}' ({fsize_mb} MB) do vượt quá giới hạn 2000MB của Telegram Bot. "
+                            f"Vui lòng kết nối Telegram User Session (hoặc tài khoản Premium) để upload các file lớn hơn.",
+                            "warn"
+                        )
+                        continue
 
                     self._current_file = raw_filename
                     self._stage = f"[{q_idx}/{total_queue_items}] Đang upload bài [{track_idx}/{len(files_to_upload)}]: {raw_filename} ({fsize_mb} MB)"
@@ -1114,9 +1203,10 @@ class GoogleDriveUploadManager:
             # 2. Nếu đã hoàn tất upload thành công 100%, xóa file nén gốc trong Cache để giải phóng dung lượng
             if self._status == "completed":
                 try:
-                    if os.path.exists(CACHE_DOWNLOAD_DIR):
+                    if os.path.exists(CACHE_DOWNLOAD_DIR) and parsed_links:
+                        target_prefixes = tuple(f"{p_id}_" for _, p_id, _ in parsed_links)
                         for fname in os.listdir(CACHE_DOWNLOAD_DIR):
-                            if fname.startswith(f"{resource_id}_"):
+                            if fname.startswith(target_prefixes):
                                 c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
                                 if os.path.isfile(c_file):
                                     os.remove(c_file)
