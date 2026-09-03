@@ -186,52 +186,105 @@
 
     <!-- Content Area: Artists Management -->
     <div id="artists-view-container" class="space-y-4 mb-8 hidden">
-        <!-- Stats Cards Grid -->
+        <!-- Stats Cards Grid (Click to filter) -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+            <div id="card-artist-filter-all" onclick="setArtistFilter('all')" 
+                 class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-primary/50 ring-2 ring-primary/20 cursor-pointer hover:border-primary transition group"
+                 title="Bấm để xem tất cả ca sĩ">
                 <div>
-                    <span class="text-xs font-bold uppercase text-text-secondary">Tổng Ca Sĩ</span>
+                    <span class="text-xs font-bold uppercase text-text-secondary group-hover:text-primary transition">Tổng Ca Sĩ</span>
                     <h3 id="artists-stat-total" class="text-2xl font-black text-text mt-0.5">0</h3>
                 </div>
-                <div class="w-11 h-11 rounded-xl bg-primary/15 text-primary flex items-center justify-center text-lg">
+                <div class="w-11 h-11 rounded-xl bg-primary/15 text-primary flex items-center justify-center text-lg group-hover:scale-110 transition">
                     <i class="fa-solid fa-microphone-lines"></i>
                 </div>
             </div>
-            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+            <div id="card-artist-filter-custom" onclick="setArtistFilter('custom')" 
+                 class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline cursor-pointer hover:border-emerald-500/50 transition group"
+                 title="Bấm để lọc chỉ ca sĩ đã có ảnh chân dung HD">
                 <div>
-                    <span class="text-xs font-bold uppercase text-emerald-400">Đã Có Ảnh Chân Dung HD</span>
+                    <span class="text-xs font-bold uppercase text-emerald-400 group-hover:text-emerald-300 transition">Đã Có Ảnh Chân Dung HD</span>
                     <h3 id="artists-stat-custom" class="text-2xl font-black text-emerald-400 mt-0.5">0</h3>
                 </div>
-                <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg">
+                <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg group-hover:scale-110 transition">
                     <i class="fa-solid fa-circle-check"></i>
                 </div>
             </div>
-            <div class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline">
+            <div id="card-artist-filter-default" onclick="setArtistFilter('default')" 
+                 class="glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline cursor-pointer hover:border-amber-500/50 transition group"
+                 title="Bấm để lọc ca sĩ đang dùng ảnh mặc định / album">
                 <div>
-                    <span class="text-xs font-bold uppercase text-amber-400">Dùng Ảnh Mặc Định / Album</span>
+                    <span class="text-xs font-bold uppercase text-amber-400 group-hover:text-amber-300 transition">Dùng Ảnh Mặc Định / Album</span>
                     <h3 id="artists-stat-default" class="text-2xl font-black text-amber-400 mt-0.5">0</h3>
                 </div>
-                <div class="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-lg">
+                <div class="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-lg group-hover:scale-110 transition">
                     <i class="fa-solid fa-image"></i>
                 </div>
             </div>
         </div>
 
-        <!-- Artists Toolbar -->
-        <div class="glass-panel rounded-2xl p-3.5 border border-hairline flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div class="relative w-full sm:w-80">
-                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary text-xs"></i>
-                <input type="text" id="artists-search-input" oninput="filterArtistsList(this.value)"
-                       placeholder="Tìm kiếm ca sĩ, nghệ sĩ..." 
-                       class="w-full pl-9 pr-4 py-2 rounded-xl bg-surface border border-hairline text-text placeholder-text-secondary text-xs focus:outline-none focus:border-primary transition">
+        <!-- Artists Toolbar & Top Pagination -->
+        <div class="glass-panel rounded-2xl p-3.5 border border-hairline flex flex-col gap-3">
+            <div class="flex flex-col lg:flex-row items-center justify-between gap-3">
+                <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto flex-1 flex-wrap">
+                    <!-- Search Input -->
+                    <div class="relative w-full sm:w-72">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary text-xs"></i>
+                        <input type="text" id="artists-search-input" oninput="handleArtistSearch(this.value)"
+                               placeholder="Tìm kiếm ca sĩ, nghệ sĩ..." 
+                               class="w-full pl-9 pr-4 py-2 rounded-xl bg-surface border border-hairline text-text placeholder-text-secondary text-xs focus:outline-none focus:border-primary transition">
+                    </div>
+                    <!-- Sort Dropdown -->
+                    <div class="flex items-center gap-1.5 w-full sm:w-auto">
+                        <span class="text-text-secondary whitespace-nowrap text-xs font-medium"><i class="fa-solid fa-arrow-down-wide-short text-primary mr-1"></i>Sắp xếp:</span>
+                        <select id="artists-sort-select" onchange="handleArtistSortChange(this.value)" class="bg-surface border border-hairline text-text rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-primary text-xs font-semibold cursor-pointer w-full sm:w-auto">
+                            <option value="tracks_desc" selected>Nhiều bài hát nhất</option>
+                            <option value="tracks_asc">Ít bài hát nhất</option>
+                            <option value="name_asc">Tên ca sĩ (A - Z)</option>
+                            <option value="name_desc">Tên ca sĩ (Z - A)</option>
+                            <option value="albums_desc">Nhiều album nhất</option>
+                            <option value="custom_first">Đã có ảnh HD trước</option>
+                            <option value="default_first">Dùng ảnh mặc định trước</option>
+                        </select>
+                    </div>
+                    <!-- Filter Dropdown -->
+                    <div class="flex items-center gap-1.5 w-full sm:w-auto">
+                        <span class="text-text-secondary whitespace-nowrap text-xs font-medium"><i class="fa-solid fa-filter text-primary mr-1"></i>Lọc:</span>
+                        <select id="artists-filter-select" onchange="setArtistFilter(this.value)" class="bg-surface border border-hairline text-text rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-primary text-xs font-semibold cursor-pointer w-full sm:w-auto">
+                            <option value="all" selected>Tất cả ca sĩ</option>
+                            <option value="custom">Đã có ảnh chân dung HD</option>
+                            <option value="default">Dùng ảnh mặc định / album</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2 w-full lg:w-auto justify-end">
+                    <button onclick="fetchArtistsData(true)" class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap" title="Làm mới">
+                        <i class="fa-solid fa-rotate-right"></i> Làm Mới
+                    </button>
+                    <button id="btn-bulk-fetch-artists" onclick="bulkAutoFetchArtists()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-black shadow-lg shadow-amber-500/20 hover:brightness-110 transition flex items-center gap-1.5 whitespace-nowrap">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Tự Động Tải Ảnh Toàn Bộ Ca Sĩ
+                    </button>
+                </div>
             </div>
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button onclick="fetchArtistsData()" class="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 text-text text-xs font-bold transition flex items-center gap-1.5" title="Làm mới">
-                    <i class="fa-solid fa-rotate-right"></i> Làm Mới
-                </button>
-                <button id="btn-bulk-fetch-artists" onclick="bulkAutoFetchArtists()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-black shadow-lg shadow-amber-500/20 hover:brightness-110 transition flex items-center gap-1.5">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Tự Động Tải Ảnh Toàn Bộ Ca Sĩ
-                </button>
+
+            <!-- Top Pagination Bar -->
+            <div id="artists-top-pagination" class="pt-2.5 border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                    <span id="artists-top-pagination-info" class="text-text-secondary font-medium"></span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-text-secondary whitespace-nowrap">Mỗi trang:</span>
+                        <select id="artists-top-page-size-select" onchange="changeArtistsPageSize(this.value)" class="bg-surface border border-hairline text-text rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-primary text-xs font-semibold cursor-pointer">
+                            <option value="25" selected>25 / trang</option>
+                            <option value="50">50 / trang</option>
+                            <option value="100">100 / trang</option>
+                            <option value="200">200 / trang</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 flex-wrap justify-center overflow-x-auto max-w-full py-0.5" id="artists-top-pagination-pages">
+                    <!-- Dynamic compact page controls injected by JS -->
+                </div>
             </div>
         </div>
 
@@ -256,7 +309,7 @@
             </div>
         </div>
 
-        <!-- Pagination Controls for Artists -->
+        <!-- Pagination Controls for Artists (Bottom) -->
         <div id="artists-pagination" class="glass-panel rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 text-xs hidden">
             <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
                 <span id="artists-pagination-info" class="text-text-secondary font-medium"></span>
@@ -266,6 +319,7 @@
                         <option value="25" selected>25 / trang</option>
                         <option value="50">50 / trang</option>
                         <option value="100">100 / trang</option>
+                        <option value="200">200 / trang</option>
                     </select>
                 </div>
             </div>
@@ -4160,13 +4214,16 @@ let globalArtists = [];
 let currentFilteredArtists = [];
 let currentArtistsPage = 1;
 let artistsPerPage = 25;
+let currentArtistFilter = 'all'; // 'all', 'custom', 'default'
+let currentArtistSort = 'tracks_desc';
 let currentPickingArtistName = '';
+let artistSearchDebounceTimer = null;
 
 async function fetchArtistsData(force = false) {
     const tbody = document.getElementById('artists-table-body');
     // Nếu đã có dữ liệu trong RAM và không phải cưỡng chế làm mới: hiển thị ngay lập tức (0ms!)
     if (!force && globalArtists && globalArtists.length > 0) {
-        filterArtistsList(document.getElementById('artists-search-input')?.value || '');
+        filterArtistsList();
         return;
     }
 
@@ -4193,9 +4250,8 @@ async function fetchArtistsData(force = false) {
             if (statCustom) statCustom.textContent = custom.toLocaleString();
             if (statDefault) statDefault.textContent = defCount.toLocaleString();
 
-            const searchInput = document.getElementById('artists-search-input');
-            const query = searchInput ? searchInput.value.trim() : '';
-            filterArtistsList(query);
+            filterArtistsList();
+            if (force) alertToast('Đã làm mới danh sách ca sĩ thành công!');
         } else {
             alertToast(data.message || 'Lỗi tải danh sách ca sĩ');
         }
@@ -4205,18 +4261,108 @@ async function fetchArtistsData(force = false) {
     }
 }
 
-function filterArtistsList(query) {
-    if (!query) {
-        currentFilteredArtists = [...globalArtists];
+function setArtistFilter(filterType) {
+    currentArtistFilter = filterType || 'all';
+
+    // Cập nhật dropdown Lọc
+    const filterSelect = document.getElementById('artists-filter-select');
+    if (filterSelect) filterSelect.value = currentArtistFilter;
+
+    // Cập nhật visual active state trên 3 thẻ stats
+    const cardAll = document.getElementById('card-artist-filter-all');
+    const cardCustom = document.getElementById('card-artist-filter-custom');
+    const cardDefault = document.getElementById('card-artist-filter-default');
+
+    if (cardAll) {
+        if (currentArtistFilter === 'all') {
+            cardAll.className = 'glass-panel rounded-2xl p-4 flex items-center justify-between border border-primary/50 ring-2 ring-primary/20 cursor-pointer hover:border-primary transition group';
+        } else {
+            cardAll.className = 'glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline cursor-pointer hover:border-primary/40 transition group opacity-75';
+        }
+    }
+    if (cardCustom) {
+        if (currentArtistFilter === 'custom') {
+            cardCustom.className = 'glass-panel rounded-2xl p-4 flex items-center justify-between border border-emerald-500/60 ring-2 ring-emerald-500/20 cursor-pointer hover:border-emerald-500 transition group';
+        } else {
+            cardCustom.className = 'glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline cursor-pointer hover:border-emerald-500/40 transition group opacity-75';
+        }
+    }
+    if (cardDefault) {
+        if (currentArtistFilter === 'default') {
+            cardDefault.className = 'glass-panel rounded-2xl p-4 flex items-center justify-between border border-amber-500/60 ring-2 ring-amber-500/20 cursor-pointer hover:border-amber-500 transition group';
+        } else {
+            cardDefault.className = 'glass-panel rounded-2xl p-4 flex items-center justify-between border border-hairline cursor-pointer hover:border-amber-500/40 transition group opacity-75';
+        }
+    }
+
+    currentArtistsPage = 1;
+    filterArtistsList();
+}
+
+function handleArtistSearch(val) {
+    clearTimeout(artistSearchDebounceTimer);
+    artistSearchDebounceTimer = setTimeout(() => {
+        currentArtistsPage = 1;
+        filterArtistsList();
+    }, 150);
+}
+
+function handleArtistSortChange(sortType) {
+    currentArtistSort = sortType || 'tracks_desc';
+    const sortSelect = document.getElementById('artists-sort-select');
+    if (sortSelect) sortSelect.value = currentArtistSort;
+    currentArtistsPage = 1;
+    sortAndRenderArtists();
+}
+
+function filterArtistsList(queryParam) {
+    let query = queryParam;
+    if (typeof query !== 'string') {
+        const searchInput = document.getElementById('artists-search-input');
+        query = searchInput ? searchInput.value.trim().toLowerCase() : '';
     } else {
-        const q = query.toLowerCase();
-        currentFilteredArtists = globalArtists.filter(a => 
-            (a.name && a.name.toLowerCase().includes(q)) ||
-            (a.genres && a.genres.some(g => g.toLowerCase().includes(q))) ||
-            (a.country && a.country.toLowerCase().includes(q))
+        query = query.trim().toLowerCase();
+    }
+
+    let list = [...globalArtists];
+
+    // 1. Lọc theo trạng thái ảnh chân dung
+    if (currentArtistFilter === 'custom') {
+        list = list.filter(a => a.has_custom_avatar);
+    } else if (currentArtistFilter === 'default') {
+        list = list.filter(a => !a.has_custom_avatar);
+    }
+
+    // 2. Lọc theo từ khóa tìm kiếm
+    if (query) {
+        list = list.filter(a => 
+            (a.name && a.name.toLowerCase().includes(query)) ||
+            (a.genres && a.genres.some(g => g.toLowerCase().includes(query))) ||
+            (a.country && a.country.toLowerCase().includes(query))
         );
     }
-    currentArtistsPage = 1;
+
+    currentFilteredArtists = list;
+    sortAndRenderArtists();
+}
+
+function sortAndRenderArtists() {
+    if (currentArtistSort === 'tracks_desc') {
+        currentFilteredArtists.sort((a, b) => ((b.tracks_count || 0) - (a.tracks_count || 0)) || ((b.albums_count || 0) - (a.albums_count || 0)));
+    } else if (currentArtistSort === 'tracks_asc') {
+        currentFilteredArtists.sort((a, b) => ((a.tracks_count || 0) - (b.tracks_count || 0)) || ((a.albums_count || 0) - (b.albums_count || 0)));
+    } else if (currentArtistSort === 'name_asc') {
+        currentFilteredArtists.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi', { sensitivity: 'base' }));
+    } else if (currentArtistSort === 'name_desc') {
+        currentFilteredArtists.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'vi', { sensitivity: 'base' }));
+    } else if (currentArtistSort === 'albums_desc') {
+        currentFilteredArtists.sort((a, b) => ((b.albums_count || 0) - (a.albums_count || 0)) || ((b.tracks_count || 0) - (a.tracks_count || 0)));
+    } else if (currentArtistSort === 'custom_first') {
+        currentFilteredArtists.sort((a, b) => (b.has_custom_avatar ? 1 : 0) - (a.has_custom_avatar ? 1 : 0) || ((b.tracks_count || 0) - (a.tracks_count || 0)));
+    } else if (currentArtistSort === 'default_first') {
+        currentFilteredArtists.sort((a, b) => (a.has_custom_avatar ? 1 : 0) - (b.has_custom_avatar ? 1 : 0) || ((b.tracks_count || 0) - (a.tracks_count || 0)));
+    }
+
     renderArtistsView();
 }
 
@@ -4224,6 +4370,13 @@ function changeArtistsPageSize(size) {
     const s = parseInt(size);
     if (isNaN(s) || s <= 0) return;
     artistsPerPage = s;
+
+    // Đồng bộ cả 2 select trên và dưới
+    const topSelect = document.getElementById('artists-top-page-size-select');
+    const botSelect = document.getElementById('artists-page-size-select');
+    if (topSelect) topSelect.value = s;
+    if (botSelect) botSelect.value = s;
+
     currentArtistsPage = 1;
     renderArtistsView();
 }
@@ -4245,6 +4398,18 @@ function renderArtistsView() {
 
     renderArtistsTable(pageArtists);
     renderArtistsPagination(currentArtistsPage, totalPages, totalItems, artistsPerPage);
+
+    // Cập nhật indicator ở header trên cùng
+    const headerIndicator = document.getElementById('items-count-indicator');
+    if (headerIndicator && currentActiveTab === 'artists') {
+        if (totalItems === 0) {
+            headerIndicator.textContent = '0 Ca Sĩ';
+        } else {
+            const startItem = (currentArtistsPage - 1) * artistsPerPage + 1;
+            const endItem = Math.min(currentArtistsPage * artistsPerPage, totalItems);
+            headerIndicator.innerHTML = `Hiển thị <span class="text-text font-bold">${startItem.toLocaleString()} - ${endItem.toLocaleString()}</span> / <span class="text-primary font-bold">${totalItems.toLocaleString()}</span> Ca Sĩ (Trang ${currentArtistsPage}/${totalPages})`;
+        }
+    }
 }
 
 function renderArtistsTable(artists) {
@@ -4253,7 +4418,7 @@ function renderArtistsTable(artists) {
     tbody.innerHTML = '';
 
     if (artists.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-text-secondary text-xs"><i class="fa-solid fa-microphone-slash text-2xl mb-2 block opacity-40"></i>Không tìm thấy ca sĩ nào</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-text-secondary text-xs"><i class="fa-solid fa-microphone-slash text-3xl mb-2.5 block opacity-40"></i>Không tìm thấy ca sĩ nào phù hợp với bộ lọc</td></tr>';
         return;
     }
 
@@ -4275,9 +4440,11 @@ function renderArtistsTable(artists) {
             ? `<span class="px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-400 border border-sky-500/25 text-[10px] font-bold inline-flex items-center gap-1">${art.country}</span>`
             : '';
 
+        const safeRawName = (art.name || '').split('\\').join('\\\\').split("'").join("\\'");
+
         tr.innerHTML = `
             <td class="py-3.5 px-4 text-center">
-                <div class="relative w-11 h-11 mx-auto group/avatar cursor-pointer" onclick="openArtistImagePicker('${art.name.replace(/'/g, "\\'")}')">
+                <div class="relative w-11 h-11 mx-auto group/avatar cursor-pointer" onclick="openArtistImagePicker('${safeRawName}')" title="Bấm để đổi ảnh ca sĩ">
                     <img src="${art.avatar_url}" loading="lazy" class="w-11 h-11 rounded-full object-cover border border-hairline bg-black/20 shadow" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
                     <div class="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover/avatar:opacity-100 transition flex items-center justify-center text-white text-[10px]">
                         <i class="fa-solid fa-magnifying-glass"></i>
@@ -4309,10 +4476,10 @@ function renderArtistsTable(artists) {
             </td>
             <td class="py-3.5 px-4 text-right">
                 <div class="inline-flex items-center gap-1">
-                    <button onclick="openArtistImagePicker('${art.name.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center gap-1" title="Tìm ảnh chân dung online">
+                    <button onclick="openArtistImagePicker('${safeRawName}')" class="px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold transition flex items-center gap-1" title="Tìm ảnh chân dung online">
                         <i class="fa-solid fa-magnifying-glass text-[10px]"></i> Tìm Ảnh
                     </button>
-                    <button onclick="openEditArtistModal('${art.name.replace(/'/g, "\\'")}')" class="w-8 h-8 rounded-lg bg-surface hover:bg-surface-2 text-text inline-flex items-center justify-center transition" title="Sửa thông tin">
+                    <button onclick="openEditArtistModal('${safeRawName}')" class="w-8 h-8 rounded-lg bg-surface hover:bg-surface-2 text-text inline-flex items-center justify-center transition" title="Sửa thông tin">
                         <i class="fa-solid fa-pen-to-square text-xs"></i>
                     </button>
                 </div>
@@ -4324,9 +4491,76 @@ function renderArtistsTable(artists) {
 }
 
 function renderArtistsPagination(currentPage, totalPages, totalItems, pageSize) {
+    const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+
+    // 1. Đồng bộ thanh phân trang phía trên (Top Pagination)
+    const topInfoEl = document.getElementById('artists-top-pagination-info');
+    const topPagesEl = document.getElementById('artists-top-pagination-pages');
+    const topSelectEl = document.getElementById('artists-top-page-size-select');
+
+    if (topSelectEl && parseInt(topSelectEl.value) !== pageSize) {
+        topSelectEl.value = pageSize;
+    }
+
+    if (topInfoEl) {
+        if (totalItems === 0) {
+            topInfoEl.innerHTML = `Không có ca sĩ nào`;
+        } else {
+            topInfoEl.innerHTML = `Hiển thị <span class="text-text font-bold">${startItem.toLocaleString()} - ${endItem.toLocaleString()}</span> / <span class="text-primary font-bold">${totalItems.toLocaleString()}</span> Ca Sĩ`;
+        }
+    }
+
+    if (topPagesEl) {
+        if (totalPages <= 1) {
+            topPagesEl.innerHTML = '';
+        } else {
+            const isFirstDisabled = currentPage <= 1;
+            const isLastDisabled = currentPage >= totalPages;
+            topPagesEl.innerHTML = `
+                <button onclick="goToArtistsPage(1)" ${isFirstDisabled ? 'disabled' : ''}
+                        class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs transition border ${isFirstDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang đầu">
+                    <i class="fa-solid fa-angles-left text-[9px]"></i>
+                </button>
+                <button onclick="goToArtistsPage(${currentPage - 1})" ${isFirstDisabled ? 'disabled' : ''}
+                        class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs transition border ${isFirstDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang trước">
+                    <i class="fa-solid fa-chevron-left text-[9px]"></i>
+                </button>
+                <span class="px-2 py-1 rounded-lg bg-surface border border-hairline font-semibold text-xs whitespace-nowrap">
+                    Trang <span class="text-primary font-bold">${currentPage}</span> / ${totalPages}
+                </span>
+                <button onclick="goToArtistsPage(${currentPage + 1})" ${isLastDisabled ? 'disabled' : ''}
+                        class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs transition border ${isLastDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang sau">
+                    <i class="fa-solid fa-chevron-right text-[9px]"></i>
+                </button>
+                <button onclick="goToArtistsPage(${totalPages})" ${isLastDisabled ? 'disabled' : ''}
+                        class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs transition border ${isLastDisabled ? 'opacity-30 cursor-not-allowed border-hairline text-text-secondary' : 'glass-panel hover:bg-surface-2 text-text border-hairline'}" title="Trang cuối">
+                    <i class="fa-solid fa-angles-right text-[9px]"></i>
+                </button>
+                ${totalPages > 5 ? `
+                    <div class="flex items-center gap-1 ml-1.5 pl-1.5 border-l border-hairline">
+                        <input type="number" min="1" max="${totalPages}" placeholder="${currentPage}" id="jump-to-artist-top-input"
+                               onkeydown="if(event.key==='Enter'){const p=parseInt(this.value);if(p>=1&&p<=${totalPages}){goToArtistsPage(p);}}"
+                               class="w-11 h-7 rounded-lg bg-surface border border-hairline text-center text-xs text-text focus:outline-none focus:border-primary">
+                        <button onclick="const el=document.getElementById('jump-to-artist-top-input');const p=parseInt(el.value);if(p>=1&&p<=${totalPages}){goToArtistsPage(p);}"
+                                class="h-7 px-2 rounded-lg bg-surface hover:bg-surface-2 text-text text-xs font-semibold border border-hairline transition">
+                            Đến
+                        </button>
+                    </div>
+                ` : ''}
+            `;
+        }
+    }
+
+    // 2. Đồng bộ thanh phân trang phía dưới (Bottom Pagination)
     const pagEl = document.getElementById('artists-pagination');
     const infoEl = document.getElementById('artists-pagination-info');
     const pagesEl = document.getElementById('artists-pagination-pages');
+    const botSelectEl = document.getElementById('artists-page-size-select');
+
+    if (botSelectEl && parseInt(botSelectEl.value) !== pageSize) {
+        botSelectEl.value = pageSize;
+    }
 
     if (!pagEl) return;
     if (totalItems === 0) {
@@ -4334,9 +4568,6 @@ function renderArtistsPagination(currentPage, totalPages, totalItems, pageSize) 
         return;
     }
     pagEl.classList.remove('hidden');
-
-    const startItem = (currentPage - 1) * pageSize + 1;
-    const endItem = Math.min(currentPage * pageSize, totalItems);
 
     if (infoEl) {
         infoEl.innerHTML = `Hiển thị <span class="text-text font-bold">${startItem.toLocaleString()} - ${endItem.toLocaleString()}</span> trong tổng số <span class="text-primary font-bold">${totalItems.toLocaleString()}</span> Ca Sĩ`;
