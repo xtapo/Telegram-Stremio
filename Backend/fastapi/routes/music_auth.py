@@ -726,21 +726,45 @@ async def stream_user_favorites_m3u8(request: Request, user_id: str = None, user
 async def get_all_music_users(_: bool = Depends(require_auth)):
     """Lấy danh sách tất cả music users kèm trạng thái online, thiết bị, IP, bài hát đang nghe và dữ liệu cá nhân"""
     try:
-        users = []
         user_coll = db.dbs["tracking"]["music_users"]
         data_coll = db.dbs["tracking"]["music_user_data"]
         now = time.time()
         online_count = 0
         
-        cursor = user_coll.find().sort("created_at", -1)
-        async for doc in cursor:
-            doc.pop("password_hash", None)
+        # 1. Lấy danh sách users (loại bỏ hash mật khẩu và session nhị phân để giảm payload)
+        cursor = user_coll.find(
+            {},
+            projection={"password_hash": 0, "telegram_session": 0}
+        ).sort("created_at", -1)
+        raw_users = [d async for d in cursor]
+
+        if not raw_users:
+            return JSONResponse(status_code=200, content={
+                "status": "success",
+                "users": [],
+                "stats": {"total": 0, "online": 0, "active": 0, "pending": 0, "banned": 0}
+            })
+
+        # 2. Batch fetch toàn bộ user_data trong 1 query duy nhất bằng $in (thay vì N+1 queries tuần tự)
+        u_ids = [u["_id"] for u in raw_users]
+        data_cursor = data_coll.find(
+            {"_id": {"$in": u_ids}},
+            projection={"favorites": 1, "playlists": 1}
+        )
+        user_data_map = {}
+        async for ud in data_cursor:
+            user_data_map[ud["_id"]] = {
+                "fav_count": len(ud.get("favorites", [])),
+                "pl_count": len(ud.get("playlists", []))
+            }
+
+        # 3. Ghép dữ liệu và tính trạng thái online
+        users = []
+        for doc in raw_users:
             u_id = doc["_id"]
-            
-            # Lấy data thống kê
-            u_data = await data_coll.find_one({"_id": u_id})
-            fav_count = len(u_data.get("favorites", [])) if u_data else 0
-            pl_count = len(u_data.get("playlists", [])) if u_data else 0
+            stats = user_data_map.get(u_id, {})
+            fav_count = stats.get("fav_count", 0)
+            pl_count = stats.get("pl_count", 0)
             
             # Tính toán trạng thái Online (trong vòng 90 giây gần nhất)
             last_seen = doc.get("last_seen", 0)
@@ -931,30 +955,35 @@ async def admin_get_user_details(user_id: str, _: bool = Depends(require_auth)):
         user_data = await data_coll.find_one({"_id": user_id})
         
         favorites = user_data.get("favorites", []) if user_data else []
-        try:
-            from Backend.fastapi.routes.music_routes import _db_load_library
-            albums = await _db_load_library()
-            if albums:
-                track_lookup = {}
-                for alb in albums:
-                    for trk in alb.get("tracks", []):
-                        cid = str(trk.get("chat_id") or trk.get("chatId") or "")
-                        mid = str(trk.get("msg_id") or trk.get("msgId") or "")
-                        if cid and mid:
-                            track_lookup[f"{cid}_{mid}"] = trk
-                
-                for f in favorites:
-                    key = f"{f.get('chat_id')}_{f.get('msg_id')}"
-                    if key in track_lookup:
-                        matched = track_lookup[key]
-                        if not f.get("title") and not f.get("name"):
-                            f["title"] = matched.get("name") or matched.get("title") or f"Bài #{f.get('msg_id')}"
-                        if not f.get("artist"):
-                            f["artist"] = matched.get("artist") or ""
-                        if not f.get("cover_url"):
-                            f["cover_url"] = matched.get("coverUrl") or matched.get("cover_url") or ""
-        except Exception:
-            pass
+        needs_enrichment = any(
+            not (f.get("title") or f.get("name")) or not f.get("artist") or not f.get("cover_url")
+            for f in favorites
+        )
+        if needs_enrichment:
+            try:
+                from Backend.fastapi.routes.music_routes import _db_load_library
+                albums = await _db_load_library()
+                if albums:
+                    track_lookup = {}
+                    for alb in albums:
+                        for trk in alb.get("tracks", []):
+                            cid = str(trk.get("chat_id") or trk.get("chatId") or "")
+                            mid = str(trk.get("msg_id") or trk.get("msgId") or "")
+                            if cid and mid:
+                                track_lookup[f"{cid}_{mid}"] = trk
+                    
+                    for f in favorites:
+                        key = f"{f.get('chat_id')}_{f.get('msg_id')}"
+                        if key in track_lookup:
+                            matched = track_lookup[key]
+                            if not f.get("title") and not f.get("name"):
+                                f["title"] = matched.get("name") or matched.get("title") or f"Bài #{f.get('msg_id')}"
+                            if not f.get("artist"):
+                                f["artist"] = matched.get("artist") or ""
+                            if not f.get("cover_url"):
+                                f["cover_url"] = matched.get("coverUrl") or matched.get("cover_url") or ""
+            except Exception:
+                pass
 
         # Lọc và gộp các phiên trùng lặp liên tiếp
         raw_sessions = user.get("recent_sessions", [])
