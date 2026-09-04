@@ -1,5 +1,6 @@
 import asyncio
 import gzip
+import hashlib
 import json
 import math
 import mimetypes
@@ -840,29 +841,80 @@ def _decompress_albums(compressed: bytes) -> list:
     raw_bytes = gzip.decompress(compressed)
     return json.loads(raw_bytes.decode("utf-8"))
 
-async def _save_compressed_mongo_library(albums: list):
-    """Lưu bản nén Gzip lên MongoDB (giảm 20MB xuống ~1.5MB, đọc trong 1 giây)."""
+def generate_album_id(title: str, artist: str = "", year: str = "") -> str:
+    """Tạo ID album duy nhất, không trùng lặp, hỗ trợ đầy đủ tiếng Việt và ký tự đặc biệt."""
+    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '-', (title or 'album').lower().strip())
+    clean_title = re.sub(r'-+', '-', clean_title).strip('-')[:35]
+    clean_artist = re.sub(r'[^a-zA-Z0-9_-]', '-', (artist or 'artist').lower().strip())[:15]
+    h = hashlib.md5(f"{title}::{artist}::{year}".encode("utf-8")).hexdigest()[:8]
+    return f"tg-{clean_title or 'album'}-{clean_artist or 'artist'}-{h}"
+
+
+async def _save_compressed_mongo_library(albums: list, force: bool = False):
+    """Lưu bản nén Gzip lên MongoDB (giảm 20MB xuống ~1.5MB, đọc trong 1 giây) có cơ chế bảo vệ dữ liệu."""
     coll_lib = _get_legacy_collection()
     if coll_lib is None or not albums:
         return
     try:
+        # Kiểm tra an toàn: Tuyệt đối không tự động ghi đè thư viện lớn bằng thư viện nhỏ (chống race condition mất dữ liệu)
+        if not force:
+            try:
+                existing = await asyncio.wait_for(
+                    coll_lib.find_one({"_id": "telegram_music_library_gz"}, projection={"album_count": 1, "count": 1}),
+                    timeout=8.0
+                )
+                if existing:
+                    existing_count = existing.get("album_count", 0)
+                    if existing_count > 0 and len(albums) < existing_count * 0.7:
+                        LOGGER.error(
+                            f"[MUSIC DB] ⛔ CHẶN GHI ĐÈ GZIP: Số album mới ({len(albums)}) < 70% số album hiện có trên MongoDB ({existing_count}). "
+                            f"Hủy tự động ghi đè để ngăn chặn mất dữ liệu!"
+                        )
+                        return
+            except Exception as e:
+                LOGGER.warning(f"[MUSIC DB] Không thể kiểm tra album_count hiện tại: {e}")
+
         compressed_bytes = _compress_albums(albums)
         total_tracks = sum(len(a.get("tracks", [])) for a in albums)
+        doc_payload = {
+            "_id": "telegram_music_library_gz",
+            "compressed_data": compressed_bytes,
+            "count": total_tracks,
+            "album_count": len(albums),
+            "compressed_size_kb": round(len(compressed_bytes) / 1024, 1),
+            "updated_at": time.time()
+        }
         await coll_lib.update_one(
             {"_id": "telegram_music_library_gz"},
-            {"$set": {
-                "_id": "telegram_music_library_gz",
-                "compressed_data": compressed_bytes,
-                "count": total_tracks,
-                "album_count": len(albums),
-                "compressed_size_kb": round(len(compressed_bytes) / 1024, 1),
-                "updated_at": time.time()
-            }},
+            {"$set": doc_payload},
             upsert=True
         )
         LOGGER.info(f"[MUSIC DB] Đã lưu bản nén Gzip lên MongoDB: {len(albums)} albums, {total_tracks} bài ({len(compressed_bytes)/1024:.1f} KB).")
+
+        # Lưu thêm bản backup dự phòng nếu thư viện >= 100 albums
+        if len(albums) >= 100:
+            bak_payload = dict(doc_payload)
+            bak_payload["_id"] = "telegram_music_library_gz_backup"
+            await coll_lib.update_one(
+                {"_id": "telegram_music_library_gz_backup"},
+                {"$set": bak_payload},
+                upsert=True
+            )
     except Exception as e:
         LOGGER.warning(f"[MUSIC DB] Lỗi lưu bản nén Gzip lên MongoDB: {e}")
+
+
+async def _ensure_gz_if_missing(albums: list):
+    """Chỉ lưu bản nén Gzip nếu trên MongoDB hoàn toàn chưa có hoặc số album mới nhiều hơn."""
+    coll_lib = _get_legacy_collection()
+    if coll_lib is None or not albums:
+        return
+    try:
+        existing = await coll_lib.find_one({"_id": "telegram_music_library_gz"}, projection={"album_count": 1})
+        if not existing or existing.get("album_count", 0) < len(albums):
+            await _save_compressed_mongo_library(albums, force=False)
+    except Exception as e:
+        LOGGER.warning(f"[MUSIC DB] _ensure_gz_if_missing failed: {e}")
 
 async def _migrate_legacy_to_per_album() -> list | None:
     """
@@ -956,33 +1008,56 @@ async def _migrate_legacy_to_per_album() -> list | None:
 async def _db_fetch_library_from_mongo() -> list | None:
     """
     Fetch library từ MongoDB theo thứ tự ưu tiên:
-    1. Bản nén Gzip (telegram_music_library_gz) ~1.5MB, tải chỉ 1-2s.
+    1. Bản nén Gzip (telegram_music_library_gz) ~1.5MB, tải chỉ 1-2s (có retry khi container cold boot).
+    1b. Bản dự phòng Gzip (telegram_music_library_gz_backup).
     2. Per-album collection (music_albums).
     3. Legacy single-document (telegram_music_library).
     """
     coll_lib = _get_legacy_collection()
 
-    # ── Ưu tiên 1: Đọc bản nén Gzip (siêu nhanh, chỉ ~1.5MB) ──
+    # ── Ưu tiên 1: Đọc bản nén Gzip chính (thử 2 lần để xử lý độ trễ cold start của Docker) ──
     if coll_lib is not None:
+        for attempt in range(2):
+            try:
+                doc_gz = await asyncio.wait_for(
+                    coll_lib.find_one({"_id": "telegram_music_library_gz"}),
+                    timeout=35.0 if attempt == 0 else 45.0
+                )
+                if doc_gz and "compressed_data" in doc_gz and doc_gz["compressed_data"]:
+                    c_bytes = doc_gz["compressed_data"]
+                    albums = _decompress_albums(c_bytes)
+                    if albums and isinstance(albums, list) and len(albums) > 0:
+                        LOGGER.info(f"[MUSIC DB] ⚡ Tải thành công {len(albums)} albums từ bản nén Gzip trên MongoDB ({len(c_bytes)/1024:.1f} KB)!")
+                        return albums
+                break
+            except asyncio.TimeoutError:
+                LOGGER.warning(f"[MUSIC DB] Gzip đọc timeout (thử {attempt+1}/2). Đang chờ kết nối MongoDB hoàn tất...")
+                await asyncio.sleep(2.0)
+            except Exception as e:
+                LOGGER.info(f"[MUSIC DB] Gzip document chưa sẵn sàng: {e}")
+                break
+
+        # ── Ưu tiên 1b: Đọc bản dự phòng Gzip nếu bản chính gặp sự cố ──
         try:
-            doc_gz = await asyncio.wait_for(
-                coll_lib.find_one({"_id": "telegram_music_library_gz"}),
-                timeout=15.0
+            doc_bak = await asyncio.wait_for(
+                coll_lib.find_one({"_id": "telegram_music_library_gz_backup"}),
+                timeout=25.0
             )
-            if doc_gz and "compressed_data" in doc_gz and doc_gz["compressed_data"]:
-                c_bytes = doc_gz["compressed_data"]
+            if doc_bak and "compressed_data" in doc_bak and doc_bak["compressed_data"]:
+                c_bytes = doc_bak["compressed_data"]
                 albums = _decompress_albums(c_bytes)
-                if albums and isinstance(albums, list):
-                    LOGGER.info(f"[MUSIC DB] ⚡ Tải thành công {len(albums)} albums từ bản nén Gzip trên MongoDB ({len(c_bytes)/1024:.1f} KB)!")
+                if albums and isinstance(albums, list) and len(albums) > 0:
+                    LOGGER.info(f"[MUSIC DB] ⚡ Phục hồi thành công {len(albums)} albums từ bản dự phòng Gzip trên MongoDB ({len(c_bytes)/1024:.1f} KB)!")
+                    asyncio.create_task(_save_compressed_mongo_library(albums, force=True))
                     return albums
-        except Exception as e:
-            LOGGER.info(f"[MUSIC DB] Gzip document chưa có hoặc đang tạo: {e}")
+        except Exception:
+            pass
 
     # ── Ưu tiên 2: Đọc từ per-album collection (music_albums) ──
     coll = _get_albums_collection()
     if coll is not None:
         try:
-            count = await coll.count_documents({})
+            count = await asyncio.wait_for(coll.count_documents({}), timeout=30.0)
             if count > 0:
                 LOGGER.info(f"[MUSIC DB] Đang nạp {count} albums từ per-album collection...")
                 albums = []
@@ -992,8 +1067,8 @@ async def _db_fetch_library_from_mongo() -> list | None:
                     if len(albums) % 1000 == 0:
                         LOGGER.info(f"[MUSIC DB] ...đã đọc {len(albums)}/{count} albums")
                 if albums:
-                    LOGGER.info(f"[MUSIC DB] Đã nạp {len(albums)} albums. Tự động lưu bản nén Gzip lên MongoDB...")
-                    asyncio.create_task(_save_compressed_mongo_library(albums))
+                    LOGGER.info(f"[MUSIC DB] Đã nạp {len(albums)} albums từ per-album collection.")
+                    asyncio.create_task(_ensure_gz_if_missing(albums))
                     return albums
         except Exception as e:
             LOGGER.warning(f"[MUSIC DB] Per-album read failed: {e}")
@@ -1007,12 +1082,12 @@ async def _db_fetch_library_from_mongo() -> list | None:
                     {"_id": "telegram_music_library"},
                     projection={"albums": 1, "_id": 0}
                 ),
-                timeout=120.0
+                timeout=60.0
             )
             if doc and "albums" in doc and isinstance(doc["albums"], list) and doc["albums"]:
                 albums = doc["albums"]
-                LOGGER.info(f"[MUSIC DB] Đã nạp {len(albums)} albums từ legacy schema. Tự động lưu bản nén Gzip...")
-                asyncio.create_task(_save_compressed_mongo_library(albums))
+                LOGGER.info(f"[MUSIC DB] Đã nạp {len(albums)} albums từ legacy schema.")
+                asyncio.create_task(_ensure_gz_if_missing(albums))
                 return albums
         except Exception as e:
             LOGGER.warning(f"[MUSIC DB] Legacy read failed: {e}")
@@ -1086,6 +1161,12 @@ async def _bg_refresh_library_from_mongo():
             LOGGER.info("[MUSIC DB] Background refresh: fetching library from MongoDB...")
             albums = await _db_fetch_library_from_mongo()
             if albums:
+                # Bảo vệ an toàn: Không ghi đè bộ nhớ nếu số album mới nạp ít hơn đáng kể so với cache hiện tại
+                if _IN_MEMORY_LIBRARY_CACHE and len(_IN_MEMORY_LIBRARY_CACHE) > 0 and len(albums) < len(_IN_MEMORY_LIBRARY_CACHE) * 0.7:
+                    LOGGER.warning(
+                        f"[MUSIC DB] Background refresh: Bỏ qua ghi đè vì số album trả về ({len(albums)}) < 70% số album đang có trong cache RAM ({len(_IN_MEMORY_LIBRARY_CACHE)})."
+                    )
+                    return
                 _IN_MEMORY_LIBRARY_CACHE = albums
                 for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
                     try:
@@ -1099,6 +1180,7 @@ async def _bg_refresh_library_from_mongo():
                 LOGGER.warning("[MUSIC DB] Background refresh: MongoDB returned no data.")
         except Exception as e:
             LOGGER.error(f"[MUSIC DB] Background refresh failed: {e}")
+
 
 async def _db_load_library(force_reload: bool = False) -> list:
     global _IN_MEMORY_LIBRARY_CACHE
@@ -1120,7 +1202,7 @@ async def _db_load_library(force_reload: bool = False) -> list:
 
     # 2. Không có file cache: Thử fetch nhanh bản Gzip từ MongoDB (chỉ mất ~1s)
     try:
-        albums = await asyncio.wait_for(_db_fetch_library_from_mongo(), timeout=15.0)
+        albums = await asyncio.wait_for(_db_fetch_library_from_mongo(), timeout=45.0)
         if albums:
             _IN_MEMORY_LIBRARY_CACHE = albums
             for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
@@ -1137,7 +1219,6 @@ async def _db_load_library(force_reload: bool = False) -> list:
     # 3. Fallback: Kích hoạt preload nền và tạm thời trả về []
     asyncio.create_task(_startup_preload_library())
     return []
-
 
 
 async def _db_save_library(albums: list):
@@ -1159,7 +1240,7 @@ async def _db_save_library(albums: list):
             LOGGER.error(f"[MUSIC] Failed to write cache to {path}: {e}")
 
     # 2. Lưu bản nén Gzip lên MongoDB (nhanh nhất & nhẹ nhất)
-    await _save_compressed_mongo_library(albums)
+    await _save_compressed_mongo_library(albums, force=True)
 
     # 3. Lưu theo per-album schema mới
     coll = _get_albums_collection()
@@ -1167,14 +1248,22 @@ async def _db_save_library(albums: list):
         try:
             await coll.delete_many({})
             if albums:
+                seen_ids = set()
                 docs_to_insert = []
-                for alb in albums:
-                    album_id = alb.get("id", "")
+                for idx, alb in enumerate(albums):
+                    album_id = (alb.get("id") or "").strip()
                     if not album_id:
                         title = alb.get("title", "unknown")
                         artist = alb.get("artist", "unknown")
-                        album_id = f"{title}-{artist}".lower().replace(" ", "-")
+                        album_id = generate_album_id(title, artist)
                         alb["id"] = album_id
+
+                    # Bảo đảm 100% _id không bị trùng lặp trong MongoDB để không bao giờ bị mất album
+                    if album_id in seen_ids:
+                        album_id = f"{album_id}-{hashlib.md5(f'{album_id}_{idx}'.encode('utf-8')).hexdigest()[:6]}"
+                        alb["id"] = album_id
+                    seen_ids.add(album_id)
+
                     album_doc = {**alb, "_id": album_id}
                     docs_to_insert.append(album_doc)
 
@@ -2268,7 +2357,7 @@ class MusicScanManager:
                 if alb_name not in albums_dict:
                     color_preset = GLOW_PRESETS[len(albums_dict) % len(GLOW_PRESETS)]
                     albums_dict[alb_name] = {
-                        "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', alb_name.lower())[:30]}",
+                        "id": generate_album_id(alb_name, tr["artist"], tr.get("year") or ""),
                         "title": alb_name.upper(),
                         "artist": tr["artist"].upper(),
                         "year": tr.get("year") or time.strftime("%Y"),
@@ -2946,7 +3035,7 @@ async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
             if not dest_album:
                 color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
                 dest_album = {
-                    "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', new_album.lower())[:30]}",
+                    "id": generate_album_id(new_album, new_artist or target_track.get("artist", "Unknown")),
                     "title": new_album.upper(),
                     "artist": (new_artist or target_track.get("artist", "Unknown")).upper(),
                     "year": time.strftime("%Y"),
@@ -3044,7 +3133,7 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
             if not dest_album:
                 color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
                 dest_album = {
-                    "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', new_album.lower())[:30]}",
+                    "id": generate_album_id(new_album, new_artist or matched_tracks[0].get("artist", "Unknown"), new_year or ""),
                     "title": new_album.upper(),
                     "artist": (new_artist or matched_tracks[0].get("artist", "Unknown")).upper(),
                     "year": new_year or time.strftime("%Y"),

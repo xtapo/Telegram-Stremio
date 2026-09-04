@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 import re
 import shutil
@@ -1549,8 +1550,12 @@ class GoogleDriveUploadManager:
                 target_album = next((a for a in albums if a.get("title", "").upper() == final_album), None)
                 if not target_album:
                     color_preset = GLOW_PRESETS[len(albums) % len(GLOW_PRESETS)]
+                    alb_clean = re.sub(r'[^a-zA-Z0-9_-]', '-', final_album.lower().strip())
+                    alb_clean = re.sub(r'-+', '-', alb_clean).strip('-')[:35]
+                    art_clean = re.sub(r'[^a-zA-Z0-9_-]', '-', final_artist.lower().strip())[:15]
+                    h = hashlib.md5(f"{final_album}::{final_artist}".encode("utf-8")).hexdigest()[:8]
                     target_album = {
-                        "id": f"tg-album-{re.sub(r'[^a-zA-Z0-9_-]', '-', final_album.lower())[:30]}",
+                        "id": f"tg-{alb_clean or 'album'}-{art_clean or 'artist'}-{h}",
                         "title": final_album,
                         "artist": final_artist.upper(),
                         "year": time.strftime("%Y"),
