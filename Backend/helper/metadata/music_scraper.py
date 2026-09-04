@@ -456,31 +456,52 @@ def clean_audio_filename(fn: str) -> str:
     if not fn:
         return ""
     
+    orig_base = re.sub(r'\.(mp3|flac|m4a|wav|aac|ogg|opus|alac|dsf|dff|dsd|ape|wma)$', '', fn, flags=re.IGNORECASE).strip()
+    
     # 1. Bỏ phần mở rộng audio
-    fn = re.sub(r'\.(mp3|flac|m4a|wav|aac|ogg|opus|alac|dsf|dff|dsd|ape|wma)$', '', fn, flags=re.IGNORECASE)
+    res = orig_base
     
     # 2. Bỏ @channel username
-    fn = re.sub(r'@[^\s_.-]+[_\s.-]*', ' ', fn)
+    res = re.sub(r'@[^\s_.-]+[_\s.-]*', ' ', res)
     
     # 3. Bỏ nội dung trong ngoặc vuông
-    fn = re.sub(r'\[.*?\]', ' ', fn)
+    res = re.sub(r'\[.*?\]', ' ', res)
     
     # 4. Bỏ các tag trong ngoặc tròn rác
-    fn = re.sub(r'\((Official|Lyric|Audio|Visualizer|Remastered|Album Version|Explicit|Video|Bonus|Deluxe|Live|MV|Full MV).*?\)', ' ', fn, flags=re.IGNORECASE)
+    res = re.sub(r'\((Official|Lyric|Audio|Visualizer|Remastered|Album Version|Explicit|Video|Bonus|Deluxe|Live|MV|Full MV).*?\)', ' ', res, flags=re.IGNORECASE)
     
     # 5. Bỏ các từ khóa chất lượng
-    fn = re.sub(r'\b(320kbps|128kbps|256kbps|FLAC|MP3|WAV|DFF|DSF|DSD|24bit|16bit|96kHz|44\.1kHz|Hi-Res|Lossless|Kbps|HQ|HD|4K|1080p)\b', ' ', fn, flags=re.IGNORECASE)
+    res = re.sub(r'\b(320kbps|128kbps|256kbps|FLAC|MP3|WAV|DFF|DSF|DSD|24bit|16bit|96kHz|44\.1kHz|Hi-Res|Lossless|Kbps|HQ|HD|4K|1080p)\b', ' ', res, flags=re.IGNORECASE)
     
     # 6. Chuẩn hóa khoảng trắng, dấu chấm, gạch dưới
-    fn = fn.replace('_', ' ')
-    fn = re.sub(r'\.+', ' ', fn)
-    fn = re.sub(r'\s*-\s*', ' - ', fn)
+    res = res.replace('_', ' ')
+    res = re.sub(r'\.+', ' ', res)
+    res = re.sub(r'\s*-\s*', ' - ', res)
     
-    # 7. Bỏ số thứ tự bài hát ở đầu
-    fn = re.sub(r'^\s*(\d{1,3}[\.\-_\s]+|\bTrack\s*\d+\b\s*[\.\-_\s]*|[A-D]\d+[\.\-_\s]+)', '', fn)
+    # Nếu bản thân tên file chỉ là số thứ tự thuần túy (ví dụ 01, 12, 1)
+    if re.match(r'^\s*\d{1,3}\s*$', res):
+        return f"Track {int(res):02d}"
+
+    # 7. Bỏ số thứ tự bài hát ở đầu CHỈ KHI sau đó còn tên bài hát thực sự
+    sub_res = re.sub(r'^\s*(\d{1,3}[\.\-_\s]+|\bTrack\s*\d+\b\s*[\.\-_\s]*|[A-D]\d+[\.\-_\s]+)', '', res).strip()
     
-    fn = re.sub(r'\s+', ' ', fn).strip()
-    return fn
+    if sub_res and len(sub_res) >= 2 and not re.match(r'^\d+$', sub_res):
+        res = sub_res
+    else:
+        # Nếu sau khi bỏ số thứ tự mà chuỗi trống rỗng (ví dụ tên file chỉ là "Track01", "01"),
+        # giữ lại số thứ tự chuẩn để không bị biến thành chuỗi rác "Track"
+        m_tr = re.search(r'\bTrack\s*(\d+)\b', res, re.IGNORECASE)
+        if m_tr:
+            res = f"Track {int(m_tr.group(1)):02d}"
+        else:
+            m_num = re.search(r'^\s*(\d{1,3})\s*$', orig_base) or re.search(r'^\s*(\d{1,3})\b', res)
+            if m_num:
+                res = f"Track {int(m_num.group(1)):02d}"
+            else:
+                res = orig_base or "Track"
+    
+    res = re.sub(r'\s+', ' ', res).strip()
+    return res
 
 
 _GARBAGE_KEYWORDS = {
@@ -602,32 +623,89 @@ def parse_artist_and_title(raw_title: str = "", raw_artist: str = "", raw_album:
     return artist, title, raw_album or ""
 
 
-async def _search_deezer(query: str) -> Optional[dict]:
-    """Tìm kiếm metadata dự phòng từ Deezer API khi iTunes không có kết quả"""
+def is_generic_music_query(title: str, artist: str = "") -> bool:
+    """Kiểm tra xem tên bài hát / nghệ sĩ có phải là chuỗi chung chung không có giá trị tìm kiếm trực tuyến hay không."""
+    if not title:
+        return True
+    t = title.strip().lower()
+    a = (artist or "").strip().lower()
+    
+    # Nếu có nghệ sĩ rõ ràng và hợp lệ (không phải unknown/va)
+    has_valid_artist = bool(a and a not in [
+        "unknown artist", "unknown", "va", "various artists", "various", "ca sĩ", "telegram", "lossless", "admin"
+    ])
+    
+    # Các mẫu tên file chỉ là số thứ tự hoặc từ khóa chung chung
+    generic_patterns = [
+        r'^(track|audio|bai|bai hat|cd|disc|soundtrack|song)?\s*\d*$',
+        r'^\d+$',
+        r'^[a-d]\d+$'
+    ]
+    is_pattern_generic = any(re.match(p, t) for p in generic_patterns)
+    
+    # Nếu chỉ là dạng "Track 01", "01" thì luôn là generic
+    if is_pattern_generic:
+        return True
+        
+    if not has_valid_artist:
+        if t in ["track", "audio", "unknown", "untitled", "music", "song", "audio track", "cd track", "noname", "soundtrack"]:
+            return True
+        if len(t) < 3:
+            return True
+
+    return False
+
+
+async def _search_deezer(query: str, orig_title: str = "", orig_artist: str = "") -> Optional[dict]:
+    """Tìm kiếm metadata dự phòng từ Deezer API khi iTunes không có kết quả với kiểm tra độ tương đồng nghiêm ngặt"""
+    if not query:
+        return None
     try:
-        url = f"https://api.deezer.com/search?q={urllib.parse.quote(query)}&limit=3"
+        url = f"https://api.deezer.com/search?q={urllib.parse.quote(query)}&limit=5"
         async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
             if resp.status_code == 200:
                 data = resp.json()
                 tracks = data.get("data", [])
-                if tracks:
-                    item = tracks[0]
+                best_cand = None
+                best_score = 0.0
+
+                for item in tracks:
                     cand_title = item.get("title", "")
                     cand_artist = item.get("artist", {}).get("name", "")
                     cand_album = item.get("album", {}).get("title", "")
                     cand_cover = item.get("album", {}).get("cover_xl") or item.get("album", {}).get("cover_big", "")
                     
-                    return {
-                        "title": cand_title,
-                        "artist": cand_artist,
-                        "album": cand_album or f"{cand_title} - Single",
-                        "cover_url": cand_cover,
-                        "year": time.strftime("%Y") if "time" in globals() else "2026",
-                        "genre": "Pop / Ballad",
-                        "publisher": f"{cand_artist} / Deezer",
-                        "source": "Deezer API"
-                    }
+                    score_full = token_similarity(query, f"{cand_artist} {cand_title}")
+                    score_title = token_similarity(orig_title or query, cand_title)
+                    
+                    if orig_artist:
+                        score_art = token_similarity(orig_artist, cand_artist)
+                        if score_art < 0.35 and orig_artist.lower() not in cand_artist.lower() and cand_artist.lower() not in orig_artist.lower():
+                            continue
+                        cur_score = max(score_full, (score_title * 0.6 + score_art * 0.4))
+                    else:
+                        cur_score = max(score_full, score_title)
+
+                    if cur_score > best_score:
+                        best_score = cur_score
+                        best_cand = {
+                            "title": cand_title,
+                            "artist": cand_artist,
+                            "album": cand_album or f"{cand_title} - Single",
+                            "cover_url": cand_cover,
+                            "year": time.strftime("%Y") if "time" in globals() else "2026",
+                            "genre": "Pop / Ballad",
+                            "publisher": f"{cand_artist} / Deezer",
+                            "source": "Deezer API",
+                            "score": cur_score
+                        }
+
+                # Chỉ chấp nhận nếu độ tương đồng tối thiểu >= 0.45
+                if best_cand and best_score >= 0.45:
+                    return best_cand
+                elif best_cand:
+                    LOGGER.debug(f"[DEEZER] Bỏ qua kết quả '{best_cand['artist']} - {best_cand['title']}' do tương đồng thấp ({best_score:.2f} < 0.45)")
     except Exception as e:
         LOGGER.debug(f"[MUSIC SCRAPER] Deezer fallback query failed for '{query}': {e}")
     return None
@@ -656,6 +734,11 @@ async def fetch_music_metadata(
 
     if default_album and (not album_hint or album_hint.lower() in ["telegram music collection"]):
         album_hint = default_album
+
+    # Bỏ qua tìm kiếm trực tuyến nếu tên bài hát là chuỗi chung chung vô danh (Track 01, Audio, v.v.)
+    if is_generic_music_query(title, artist):
+        LOGGER.info(f"[MUSIC SCRAPER] Tiêu đề '{title}' (Artist: '{artist or 'None'}') là tên tệp chung chung/vô danh, bỏ qua tìm kiếm trực tuyến để tránh nhận diện sai.")
+        return None
 
     search_query = f"{artist} {title}".strip() if artist else title
     cache_key = search_query.lower()
@@ -756,7 +839,7 @@ async def fetch_music_metadata(
             return best
 
     # 3. Fallback Deezer API
-    deezer_res = await _search_deezer(search_query)
+    deezer_res = await _search_deezer(search_query, orig_title=title, orig_artist=artist)
     if deezer_res:
         cls_meta = classify_genre_and_country(
             title=deezer_res["title"],

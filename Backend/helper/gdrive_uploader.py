@@ -7,6 +7,8 @@ import time
 import urllib.parse
 import zipfile
 import tarfile
+import json
+import subprocess
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -20,7 +22,9 @@ from Backend.helper.metadata.music_scraper import (
     extract_context_from_text,
     fetch_music_metadata,
     parse_artist_and_title,
+    is_generic_music_query,
 )
+from Backend.helper.metadata.audio_fingerprint import extract_embedded_audio_tags
 
 AUDIO_EXTENSIONS = (
     ".mp3", ".flac", ".m4a", ".wav", ".aac", 
@@ -358,6 +362,120 @@ def _extract_filename_from_headers(headers: httpx.Headers, default_name: str = "
         if fn_match:
             return fn_match.group(1).strip('"\' ')
     return default_name
+
+
+def read_audio_metadata_from_file(file_path: str) -> dict:
+    """Đọc thẻ metadata gốc (ID3v2, RIFF INFO, Vorbis) trực tiếp từ file âm thanh trên đĩa."""
+    if not file_path or not os.path.exists(file_path):
+        return {}
+    tags = {}
+    # Thử qua ffprobe trước (chính xác và hỗ trợ tất cả định dạng WAV, FLAC, MP3, M4A, DSF)
+    try:
+        cmd = [
+            "ffprobe", "-v", "quiet",
+            "-print_format", "json",
+            "-show_format",
+            file_path
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=6)
+        if res.returncode == 0 and res.stdout:
+            data = json.loads(res.stdout)
+            fmt_tags = data.get("format", {}).get("tags", {})
+            low_tags = {k.lower(): v for k, v in fmt_tags.items()}
+            
+            title = low_tags.get("title") or low_tags.get("track_title") or low_tags.get("tit2")
+            artist = low_tags.get("artist") or low_tags.get("performer") or low_tags.get("tpe1") or low_tags.get("album_artist")
+            album = low_tags.get("album") or low_tags.get("talb")
+            genre = low_tags.get("genre") or low_tags.get("tcon")
+            track_no = low_tags.get("track") or low_tags.get("trck")
+            date = low_tags.get("date") or low_tags.get("year") or low_tags.get("tdor") or low_tags.get("tyer")
+            
+            if title: tags["title"] = str(title).strip()
+            if artist: tags["artist"] = str(artist).strip()
+            if album: tags["album"] = str(album).strip()
+            if genre: tags["genre"] = str(genre).strip()
+            if track_no: tags["track"] = str(track_no).strip()
+            if date: tags["year"] = str(date).strip()[:4]
+    except Exception as e:
+        LOGGER.debug(f"[LOCAL TAGS] ffprobe error on {file_path}: {e}")
+        
+    # Thử fallback extract_embedded_audio_tags nếu thiếu title/artist
+    if not tags.get("title") or not tags.get("artist"):
+        try:
+            with open(file_path, "rb") as f:
+                header_bytes = f.read(131072)
+            emb = extract_embedded_audio_tags(header_bytes)
+            if emb.get("title") and "title" not in tags: tags["title"] = emb["title"]
+            if emb.get("artist") and "artist" not in tags: tags["artist"] = emb["artist"]
+            if emb.get("album") and "album" not in tags: tags["album"] = emb["album"]
+            if emb.get("genre") and "genre" not in tags: tags["genre"] = emb["genre"]
+        except Exception:
+            pass
+
+    return tags
+
+
+def parse_cue_file(cue_path: str) -> dict:
+    """Trích xuất danh sách bài hát từ file CUE sheet nếu có trong thư mục giải nén."""
+    tracks_info = {}
+    if not cue_path or not os.path.exists(cue_path):
+        return tracks_info
+    try:
+        content = ""
+        for enc in ['utf-8', 'utf-8-sig', 'cp1258', 'windows-1252', 'latin1']:
+            try:
+                with open(cue_path, 'r', encoding=enc) as f:
+                    content = f.read()
+                if content:
+                    break
+            except Exception:
+                continue
+        if not content:
+            return tracks_info
+
+        album_artist = ""
+        album_title = ""
+        cur_file = ""
+        cur_track_num = 0
+
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            m_alb_art = re.match(r'^PERFORMER\s+"([^"]+)"', line, re.I)
+            if m_alb_art and not album_artist:
+                album_artist = m_alb_art.group(1).strip()
+                continue
+            m_alb_tit = re.match(r'^TITLE\s+"([^"]+)"', line, re.I)
+            if m_alb_tit and not album_title:
+                album_title = m_alb_tit.group(1).strip()
+                continue
+            m_file = re.match(r'^FILE\s+"([^"]+)"', line, re.I)
+            if m_file:
+                cur_file = os.path.basename(m_file.group(1).strip())
+                continue
+            m_track = re.match(r'^TRACK\s+(\d+)\s+AUDIO', line, re.I)
+            if m_track:
+                cur_track_num = int(m_track.group(1))
+                if cur_track_num not in tracks_info:
+                    tracks_info[cur_track_num] = {
+                        "track_num": cur_track_num,
+                        "album": album_title,
+                        "artist": album_artist,
+                        "file_name": cur_file
+                    }
+                continue
+            m_tr_tit = re.match(r'^\s*TITLE\s+"([^"]+)"', line, re.I)
+            if m_tr_tit and cur_track_num in tracks_info:
+                tracks_info[cur_track_num]["title"] = m_tr_tit.group(1).strip()
+                continue
+            m_tr_art = re.match(r'^\s*PERFORMER\s+"([^"]+)"', line, re.I)
+            if m_tr_art and cur_track_num in tracks_info:
+                tracks_info[cur_track_num]["artist"] = m_tr_art.group(1).strip()
+                continue
+    except Exception as e:
+        LOGGER.debug(f"[CUE PARSER] Lỗi đọc CUE: {e}")
+    return tracks_info
 
 
 _UPLOAD_USERBOT_INDEX = 0
@@ -1039,6 +1157,10 @@ class GoogleDriveUploadManager:
                 ext = os.path.splitext(dl_path)[1].lower()
                 sub_extract_dir = os.path.join(work_dir, f"item_{q_idx}_extracted")
 
+                item_default_artist = default_artist
+                item_default_album = default_album
+                cue_track_map = {}
+
                 if ext in ARCHIVE_EXTENSIONS:
                     self._stage = f"[{q_idx}/{total_queue_items}] Đang giải nén tập tin album: {os.path.basename(dl_path)}..."
                     self._log(f"Phát hiện file nén ({ext}), đang giải nén trích xuất danh sách bài hát...", "info")
@@ -1046,6 +1168,26 @@ class GoogleDriveUploadManager:
                     if success:
                         self._log(f"✅ {extract_msg}", "success")
                         files_to_upload = self._collect_audio_files(sub_extract_dir)
+
+                        # Trích xuất gợi ý Ca sĩ / Album từ tên file nén nếu người dùng chưa nhập
+                        archive_stem = os.path.splitext(os.path.basename(dl_path))[0]
+                        inf_art, inf_alb = extract_context_from_text(archive_stem)
+                        if not item_default_artist and inf_art:
+                            item_default_artist = inf_art
+                        if not item_default_album and inf_alb:
+                            item_default_album = inf_alb
+                        if not item_default_album and archive_stem and not re.match(r'^(gdrive_|item_|download|test_)', archive_stem, re.I):
+                            clean_arch_name = clean_audio_filename(archive_stem)
+                            if clean_arch_name and len(clean_arch_name) >= 3 and not is_generic_music_query(clean_arch_name):
+                                item_default_album = clean_arch_name
+
+                        # Tìm file .cue trong thư mục giải nén
+                        if os.path.exists(sub_extract_dir):
+                            cue_files = [os.path.join(root, f) for root, _, files in os.walk(sub_extract_dir) for f in files if f.lower().endswith('.cue')]
+                            if cue_files:
+                                cue_track_map = parse_cue_file(cue_files[0])
+                                if cue_track_map:
+                                    self._log(f"📑 Phát hiện CUE Sheet '{os.path.basename(cue_files[0])}' ({len(cue_track_map)} bài) — áp dụng danh sách tên bài gốc!", "success")
                     else:
                         self._log(f"⚠️ Lỗi giải nén {os.path.basename(dl_path)}: {extract_msg}", "warn")
                 elif ext in AUDIO_EXTENSIONS:
@@ -1083,31 +1225,70 @@ class GoogleDriveUploadManager:
                     self._upload_bytes = 0
                     self._upload_total = fsize
 
-                    parsed_artist, parsed_title, parsed_album = parse_artist_and_title(
-                        raw_title="",
-                        raw_artist=default_artist,
-                        raw_album=default_album,
-                        file_name=raw_filename
+                    # Đọc thẻ metadata cục bộ gốc từ file (ID3v2, RIFF INFO, Vorbis)
+                    local_meta = read_audio_metadata_from_file(file_path)
+
+                    # Khớp thông tin từ CUE Sheet (nếu có)
+                    cue_info = {}
+                    if cue_track_map:
+                        for c_idx, c_data in cue_track_map.items():
+                            if c_data.get("file_name") and c_data["file_name"].lower() == raw_filename.lower():
+                                cue_info = c_data
+                                break
+                        if not cue_info and track_idx in cue_track_map:
+                            cue_info = cue_track_map[track_idx]
+
+                    # Ưu tiên dữ liệu: CUE Sheet > Thẻ nhúng cục bộ > Parser tiêu đề > Tên sạch
+                    artist_candidate = (
+                        (cue_info.get("artist") if cue_info else "") or
+                        local_meta.get("artist", "") or
+                        item_default_artist or
+                        default_artist
                     )
-                    artist_candidate = parsed_artist or default_artist
-                    title_candidate = parsed_title or clean_title
-                    album_candidate = parsed_album or default_album
+                    title_candidate = (
+                        (cue_info.get("title") if cue_info else "") or
+                        local_meta.get("title", "") or
+                        clean_title
+                    )
+                    album_candidate = (
+                        (cue_info.get("album") if cue_info else "") or
+                        local_meta.get("album", "") or
+                        item_default_album or
+                        default_album
+                    )
+
+                    # Nếu chưa có thông tin rõ từ CUE/thẻ gốc, phân tích lại từ tên file
+                    if not (cue_info.get("title") or local_meta.get("title")):
+                        parsed_artist, parsed_title, parsed_album = parse_artist_and_title(
+                            raw_title="",
+                            raw_artist=artist_candidate,
+                            raw_album=album_candidate,
+                            file_name=raw_filename
+                        )
+                        if parsed_title and not is_generic_music_query(parsed_title, parsed_artist):
+                            title_candidate = parsed_title
+                        if parsed_artist and not artist_candidate:
+                            artist_candidate = parsed_artist
+                        if parsed_album and not album_candidate:
+                            album_candidate = parsed_album
 
                     cover_url = ""
-                    if auto_scrape:
+                    has_solid_cue = bool(cue_info.get("title") and cue_info.get("artist"))
+                    # Chỉ tra cứu trực tuyến nếu có tên bài hát cụ thể (không phải chuỗi generic như Track 01)
+                    if auto_scrape and not has_solid_cue and not is_generic_music_query(title_candidate, artist_candidate):
                         try:
                             scraped = await fetch_music_metadata(
                                 raw_title=title_candidate,
                                 raw_artist=artist_candidate,
                                 raw_album=album_candidate,
                                 file_name=raw_filename,
-                                default_artist=default_artist,
-                                default_album=default_album,
+                                default_artist=item_default_artist or default_artist,
+                                default_album=item_default_album or default_album,
                             )
                             if scraped:
                                 if scraped.get("title"): title_candidate = scraped["title"]
                                 if scraped.get("artist"): artist_candidate = scraped["artist"]
-                                if scraped.get("album") and not default_album: album_candidate = scraped["album"]
+                                if scraped.get("album") and not (item_default_album or default_album): album_candidate = scraped["album"]
                                 if scraped.get("cover_url"): cover_url = scraped["cover_url"]
                         except Exception as e:
                             LOGGER.debug(f"Metadata scrape note: {e}")
