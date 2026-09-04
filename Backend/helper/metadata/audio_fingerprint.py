@@ -7,6 +7,8 @@ import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, multi_clients, client_failures, work_loads, USERBOT_CLIENT_INDEX
 
 import os
+import subprocess
+import json
 import tempfile
 
 _SHAZAM = Shazam()
