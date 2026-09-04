@@ -488,17 +488,10 @@ def clean_audio_filename(fn: str) -> str:
     # 5. Bỏ các từ khóa chất lượng
     res = re.sub(r'\b(320kbps|128kbps|256kbps|FLAC|MP3|WAV|DFF|DSF|DSD|24bit|16bit|96kHz|44\.1kHz|Hi-Res|Lossless|Kbps|HQ|HD|4K|1080p)\b', ' ', res, flags=re.IGNORECASE)
     
-    # 6. Chuẩn hóa khoảng trắng, dấu chấm, gạch dưới
-    res = res.replace('_', ' ')
-    res = re.sub(r'\.+', ' ', res)
-    res = re.sub(r'\s*-\s*', ' - ', res)
-    
-    # Nếu bản thân tên file chỉ là số thứ tự thuần túy (ví dụ 01, 12, 1)
-    if re.match(r'^\s*\d{1,3}\s*$', res):
-        return f"Track {int(res):02d}"
-
-    # 7. Bỏ số thứ tự bài hát ở đầu CHỈ KHI sau đó còn tên bài hát thực sự
-    sub_res = re.sub(r'^\s*(\d{1,3}[\.\-_\s]+|\bTrack\s*\d+\b\s*[\.\-_\s]*|[A-D]\d+[\.\-_\s]+)', '', res).strip()
+    # 6. Bỏ số thứ tự bài hát ở đầu CHỈ KHI có phân cách rõ ràng (dấu chấm, gạch ngang, Track 01, hoặc số 2 chữ số có số 0 ở đầu)
+    # Tránh làm mất các số trong tên bài hát thực sự như "1 2 3 4 tí tách", "1 2 3 zô", "1975", "100 ngày bên em"
+    track_pattern = r'^\s*(?:Track\s*\d+|CD\s*\d+|[A-D]\d+)\s*[\.\-–_\s]*|^\s*\d{1,3}\s*[\.\-–_]\s*|^\s*0\d\s+'
+    sub_res = re.sub(track_pattern, '', res, flags=re.IGNORECASE).strip()
     
     if sub_res and len(sub_res) >= 2 and not re.match(r'^\d+$', sub_res):
         res = sub_res
@@ -515,6 +508,9 @@ def clean_audio_filename(fn: str) -> str:
             else:
                 res = orig_base or "Track"
     
+    # 7. Chuẩn hóa khoảng trắng, gạch dưới, gạch ngang
+    res = res.replace('_', ' ')
+    res = re.sub(r'\s*-\s*', ' - ', res)
     res = strip_copy_prefix(res)
     res = re.sub(r'\s+', ' ', res).strip()
     return res
