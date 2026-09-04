@@ -2117,8 +2117,17 @@ class MusicScanManager:
                             fingerprint_cover = None
                             fingerprint_genre = None
                             if final_artist == "Unknown Artist" or final_title.lower().startswith("track") or final_title.lower().startswith("audio") or "track" in f_name.lower():
-                                fg_res = await recognize_audio_from_telegram(client, msg, chat_id=resolved_chat_id, msg_id=msg.id)
+                                fg_res = await recognize_audio_from_telegram(
+                                    client=client,
+                                    message=msg,
+                                    chat_id=resolved_chat_id,
+                                    msg_id=msg.id,
+                                    hint_title=final_title if not final_title.lower().startswith("track") else None,
+                                    hint_artist=final_artist if final_artist != "Unknown Artist" else None,
+                                    hint_album=final_album if final_album != (chat_title or "Telegram Music Collection") else None
+                                )
                                 if fg_res:
+
                                     final_title = fg_res.get("title") or final_title
                                     final_artist = fg_res.get("artist") or final_artist
                                     final_album = fg_res.get("album") or final_album

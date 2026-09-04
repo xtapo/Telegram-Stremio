@@ -89,13 +89,26 @@ if UPSTREAM_REPO:
         if commit_check.returncode == 0:
             log_info(f"Latest commit ID: {commit_check.stdout.strip()}")
 
-        # Tự động cài đặt p7zip-full và unrar-free nếu đang chạy trên Linux/Docker
-        try:
-            if shutil.which("apt-get") and not (shutil.which("7z") or shutil.which("unrar")):
-                log_info("Installing p7zip-full and unrar-free for audio archive extraction...")
-                srun(["apt-get", "update", "-qq"])
-                srun(["apt-get", "install", "-y", "-qq", "--no-install-recommends", "p7zip-full", "unrar-free"])
-        except Exception as e:
-            log_error(f"Archiver installation note: {e}")
+        # Tự động cài đặt gói hệ thống nếu cần
+        _ensure_linux_packages()
     else:
         log_error("❌ Update failed! Retry or ask for support.")
+
+def _ensure_linux_packages():
+    """Tự động kiểm tra và cài đặt ffmpeg, p7zip, unrar nếu chạy trên môi trường Linux/Docker."""
+    try:
+        if shutil.which("apt-get"):
+            missing = []
+            if not (shutil.which("7z") or shutil.which("unrar")):
+                missing.extend(["p7zip-full", "unrar-free"])
+            if not (shutil.which("ffmpeg") or ospath.exists("/usr/bin/ffmpeg") or ospath.exists("/usr/local/bin/ffmpeg")):
+                missing.append("ffmpeg")
+            if missing:
+                log_info(f"Linux/Docker environment: Auto-installing missing packages ({' '.join(missing)})...")
+                srun(["apt-get", "update", "-qq"])
+                srun(["apt-get", "install", "-y", "-qq", "--no-install-recommends"] + missing)
+    except Exception as e:
+        log_error(f"Package auto-install notice: {e}")
+
+_ensure_linux_packages()
+

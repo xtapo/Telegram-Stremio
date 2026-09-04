@@ -802,7 +802,11 @@ async def fetch_music_metadata(
                         elif cand_artist.lower() in full_raw_text:
                             final_score = max(final_score, 0.85)
                         elif not artist:
-                            if cand_artist.lower() not in full_raw_text:
+                            # Khi không có ca sĩ đầu vào (chỉ có tiêu đề từ tên file/track):
+                            # Nếu tiêu đề khớp chính xác hoặc tương đồng cao (score_title >= 0.70), chấp nhận ứng viên
+                            if score_title >= 0.70:
+                                final_score = max(final_score, score_title * 0.85)
+                            else:
                                 continue
                         else:
                             artist_score_fwd = token_similarity(artist, cand_artist)
@@ -811,6 +815,11 @@ async def fetch_music_metadata(
                                 continue
 
                             final_score = min(1.0, final_score + 0.25)
+
+                        if album_hint and cand_album:
+                            if token_similarity(album_hint, cand_album) >= 0.5:
+                                final_score = min(1.0, final_score + 0.15)
+
 
                         raw_art = item.get("artworkUrl100", "")
                         hd_cover = raw_art.replace("100x100bb.jpg", "1200x1200bb.webp").replace("100x100bb.png", "1200x1200bb.webp")

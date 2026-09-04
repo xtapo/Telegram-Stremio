@@ -15,44 +15,139 @@ from Backend.pyrofork.bot import StreamBot, multi_clients, client_failures, work
 _client_rr_counter = 0
 
 
-def _find_ffmpeg() -> str:
-    """Xác định đường dẫn nhị phân ffmpeg chính xác trên hệ thống (WinGet, Chocolatey, System PATH)."""
+def _find_ffmpeg() -> Optional[str]:
+    """Xác định đường dẫn nhị phân ffmpeg chính xác trên Linux/Docker/Windows. Trả về None nếu không tìm thấy."""
     p = shutil.which("ffmpeg")
     if p and os.path.exists(p):
         return p
     user = os.environ.get("USERNAME") or os.environ.get("USER") or "quang"
     candidates = [
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/bin/ffmpeg",
+        "/app/.venv/bin/ffmpeg",
         f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffmpeg.exe",
         f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffmpeg.exe",
         "C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe",
         "C:\\ffmpeg\\bin\\ffmpeg.exe",
-        "/usr/bin/ffmpeg",
-        "/usr/local/bin/ffmpeg"
     ]
     for c in candidates:
         if os.path.exists(c):
             return c
-    return "ffmpeg"
+    return None
 
 
-def _find_ffprobe() -> str:
-    """Xác định đường dẫn nhị phân ffprobe chính xác trên hệ thống."""
+def _find_ffprobe() -> Optional[str]:
+    """Xác định đường dẫn nhị phân ffprobe chính xác trên Linux/Docker/Windows. Trả về None nếu không tìm thấy."""
     p = shutil.which("ffprobe")
     if p and os.path.exists(p):
         return p
     user = os.environ.get("USERNAME") or os.environ.get("USER") or "quang"
     candidates = [
+        "/usr/bin/ffprobe",
+        "/usr/local/bin/ffprobe",
+        "/bin/ffprobe",
+        "/app/.venv/bin/ffprobe",
         f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffprobe.exe",
         f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffprobe.exe",
         "C:\\ProgramData\\chocolatey\\bin\\ffprobe.exe",
         "C:\\ffmpeg\\bin\\ffprobe.exe",
-        "/usr/bin/ffprobe",
-        "/usr/local/bin/ffprobe"
     ]
     for c in candidates:
         if os.path.exists(c):
             return c
-    return "ffprobe"
+    return None
+
+
+def _slice_wav_pure_python(
+    input_wav_path: str,
+    output_wav_path: str,
+    start_sec: float,
+    duration_sec: float,
+    target_rate: int = 16000
+) -> bool:
+    """
+    Trích xuất và chuẩn hóa phân đoạn WAV thành Mono 16kHz 16-bit PCM thuần Python
+    (Hoạt động 100% độc lập không cần ffmpeg hay binary ngoài, tốc độ cực nhanh ~8ms).
+    """
+    try:
+        import wave
+        with wave.open(input_wav_path, "rb") as wf:
+            n_ch = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate()
+            n_frames = wf.getnframes()
+            
+            if sampwidth != 2:
+                # Nếu không phải 16-bit PCM, để pydub xử lý
+                return False
+                
+            start_frame = int(max(0.0, start_sec) * framerate)
+            if start_frame >= n_frames:
+                return False
+            frames_to_read = min(int(duration_sec * framerate), n_frames - start_frame)
+            if frames_to_read <= 0:
+                return False
+                
+            wf.setpos(start_frame)
+            raw_data = wf.readframes(frames_to_read)
+            
+        if not raw_data:
+            return False
+            
+        # 1. Downmix về Mono nếu nhiều channel
+        if n_ch == 2:
+            try:
+                import audioop
+                mono_data = audioop.tomono(raw_data, sampwidth, 0.5, 0.5)
+            except Exception:
+                import struct
+                count = len(raw_data) // 4
+                shorts = struct.unpack(f"<{count * 2}h", raw_data)
+                mono_shorts = [(shorts[i*2] + shorts[i*2 + 1]) // 2 for i in range(count)]
+                mono_data = struct.pack(f"<{count}h", *mono_shorts)
+        elif n_ch == 1:
+            mono_data = raw_data
+        else:
+            return False
+            
+        # 2. Resample về target_rate (16000Hz)
+        if framerate != target_rate:
+            try:
+                import audioop
+                resampled_data, _ = audioop.ratecv(mono_data, sampwidth, 1, framerate, target_rate, None)
+            except Exception:
+                import struct
+                count_in = len(mono_data) // 2
+                samples_in = struct.unpack(f"<{count_in}h", mono_data)
+                count_out = int(count_in * target_rate / framerate)
+                samples_out = []
+                for i in range(count_out):
+                    orig_pos = i * framerate / target_rate
+                    idx = int(orig_pos)
+                    frac = orig_pos - idx
+                    if idx + 1 < count_in:
+                        s = int(samples_in[idx] * (1.0 - frac) + samples_in[idx + 1] * frac)
+                    elif idx < count_in:
+                        s = samples_in[idx]
+                    else:
+                        s = 0
+                    samples_out.append(max(-32768, min(32767, s)))
+                resampled_data = struct.pack(f"<{len(samples_out)}h", *samples_out)
+        else:
+            resampled_data = mono_data
+            
+        with wave.open(output_wav_path, "wb") as out_wf:
+            out_wf.setnchannels(1)
+            out_wf.setsampwidth(2)
+            out_wf.setframerate(target_rate)
+            out_wf.writeframes(resampled_data)
+            
+        return os.path.exists(output_wav_path) and os.path.getsize(output_wav_path) > 4096
+    except Exception as e:
+        LOGGER.debug(f"[PURE WAV SLICER] Lỗi trích xuất: {e}")
+        return False
+
 
 
 
@@ -205,6 +300,45 @@ def extract_embedded_audio_tags(data: bytes) -> dict:
         except Exception as e:
             LOGGER.debug(f"[FLAC PARSER] Lỗi phân tích FLAC Vorbis: {e}")
 
+    # 3. Trích xuất RIFF INFO (File WAV)
+    if data[:4] == b'RIFF' and len(data) >= 12 and data[8:12] == b'WAVE':
+        try:
+            pos = 12
+            max_len = len(data)
+            info_map = {
+                b'INAM': 'title',
+                b'IART': 'artist',
+                b'IPRD': 'album',
+                b'IGNR': 'genre',
+                b'ICRD': 'year',
+                b'ITRK': 'track'
+            }
+            while pos + 8 <= max_len:
+                chunk_id = data[pos:pos+4]
+                chunk_size = int.from_bytes(data[pos+4:pos+8], byteorder='little')
+                pos += 8
+                if chunk_size < 0 or pos + chunk_size > max_len:
+                    break
+                if chunk_id == b'LIST' and chunk_size >= 4:
+                    list_type = data[pos:pos+4]
+                    if list_type == b'INFO':
+                        sub_pos = pos + 4
+                        sub_end = pos + chunk_size
+                        while sub_pos + 8 <= sub_end:
+                            sub_id = data[sub_pos:sub_pos+4]
+                            sub_sz = int.from_bytes(data[sub_pos+4:sub_pos+8], byteorder='little')
+                            sub_pos += 8
+                            if sub_sz < 0 or sub_pos + sub_sz > sub_end:
+                                break
+                            if sub_id in info_map:
+                                val = data[sub_pos:sub_pos+sub_sz].decode('utf-8', errors='ignore').strip('\x00').strip()
+                                if val and info_map[sub_id] not in res:
+                                    res[info_map[sub_id]] = val
+                            sub_pos += sub_sz + (sub_sz % 2)
+                pos += chunk_size + (chunk_size % 2)
+        except Exception as e:
+            LOGGER.debug(f"[RIFF PARSER] Lỗi đọc RIFF INFO: {e}")
+
     return res
 
 
@@ -219,29 +353,45 @@ def _extract_normalized_segment(
     Trích xuất và chuẩn hóa phân đoạn âm thanh thành WAV 16-bit 16000Hz Mono
     (Chuẩn tuyệt đối cho Landmark Fingerprint của Shazam & SignatureGenerator).
     """
+    # 1. Thử qua FFmpeg CLI nếu nhị phân khả dụng trên hệ thống
     ffmpeg_bin = _find_ffmpeg()
-    # 1. Thử qua FFmpeg CLI trước (nhanh nhất, chuẩn xác nhất, không tốn RAM)
-    try:
-        cmd = [
-            ffmpeg_bin, "-y",
-            "-ss", str(max(0.0, round(start_sec, 2))),
-            "-t", str(round(duration_sec, 2)),
-            "-i", input_audio_path,
-            "-ac", "1",           # Downmix về Mono (1 channel)
-            "-ar", "16000",       # Resample về 16kHz chuẩn Shazam
-            "-c:a", "pcm_s16le",  # PCM 16-bit Little-Endian
-            output_wav_path
-        ]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
-        if res.returncode == 0 and os.path.exists(output_wav_path) and os.path.getsize(output_wav_path) > 4096:
-            return True
-        else:
-            err_snip = res.stderr.decode("utf-8", errors="ignore")[:250] if res.stderr else ""
-            LOGGER.debug(f"[SHAZAM EXTRACT] ffmpeg error code {res.returncode}: {err_snip}")
-    except Exception as e:
-        LOGGER.warning(f"[SHAZAM EXTRACT] ffmpeg extract failed ({e})")
+    if ffmpeg_bin:
+        try:
+            cmd = [
+                ffmpeg_bin, "-y",
+                "-ss", str(max(0.0, round(start_sec, 2))),
+                "-t", str(round(duration_sec, 2)),
+                "-i", input_audio_path,
+                "-ac", "1",           # Downmix về Mono (1 channel)
+                "-ar", "16000",       # Resample về 16kHz chuẩn Shazam
+                "-c:a", "pcm_s16le",  # PCM 16-bit Little-Endian
+                output_wav_path
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+            if res.returncode == 0 and os.path.exists(output_wav_path) and os.path.getsize(output_wav_path) > 4096:
+                return True
+        except Exception as e:
+            LOGGER.debug(f"[SHAZAM EXTRACT] ffmpeg error: {e}")
 
-    # 2. Fallback qua pydub AudioSegment
+    # 2. Pure Python WAV Slicer nếu là tệp WAV (cực nhanh ~8ms, zero dependency)
+    is_wav = False
+    if input_audio_path.lower().endswith(".wav"):
+        is_wav = True
+    else:
+        try:
+            with open(input_audio_path, "rb") as hf:
+                magic = hf.read(12)
+                if magic[:4] == b'RIFF' and magic[8:12] == b'WAVE':
+                    is_wav = True
+        except Exception:
+            pass
+
+    if is_wav:
+        ok = _slice_wav_pure_python(input_audio_path, output_wav_path, start_sec, duration_sec, target_rate=16000)
+        if ok:
+            return True
+
+    # 3. Fallback qua pydub AudioSegment (hỗ trợ đọc WAV không cần ffmpeg)
     if audio_seg_pydub is not None:
         try:
             start_ms = int(max(0.0, start_sec) * 1000)
@@ -264,34 +414,36 @@ def _read_embedded_metadata_file(file_path: str) -> dict:
         return {}
     tags = {}
     ffprobe_bin = _find_ffprobe()
-    try:
-        cmd = [
-            ffprobe_bin, "-v", "quiet",
-            "-print_format", "json",
-            "-show_format",
-            file_path
-        ]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=6)
-        if res.returncode == 0 and res.stdout:
-            data = json.loads(res.stdout)
-            fmt_tags = data.get("format", {}).get("tags", {})
-            low_tags = {k.lower(): v for k, v in fmt_tags.items()}
+    if ffprobe_bin:
+        try:
+            cmd = [
+                ffprobe_bin, "-v", "quiet",
+                "-print_format", "json",
+                "-show_format",
+                file_path
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=6)
+            if res.returncode == 0 and res.stdout:
+                data = json.loads(res.stdout)
+                fmt_tags = data.get("format", {}).get("tags", {})
+                low_tags = {k.lower(): v for k, v in fmt_tags.items()}
 
-            title = low_tags.get("title") or low_tags.get("track_title") or low_tags.get("tit2")
-            artist = low_tags.get("artist") or low_tags.get("performer") or low_tags.get("tpe1") or low_tags.get("album_artist")
-            album = low_tags.get("album") or low_tags.get("talb")
-            genre = low_tags.get("genre") or low_tags.get("tcon")
-            track_no = low_tags.get("track") or low_tags.get("trck")
-            date = low_tags.get("date") or low_tags.get("year") or low_tags.get("tdor") or low_tags.get("tyer")
+                title = low_tags.get("title") or low_tags.get("track_title") or low_tags.get("tit2")
+                artist = low_tags.get("artist") or low_tags.get("performer") or low_tags.get("tpe1") or low_tags.get("album_artist")
+                album = low_tags.get("album") or low_tags.get("talb")
+                genre = low_tags.get("genre") or low_tags.get("tcon")
+                track_no = low_tags.get("track") or low_tags.get("trck")
+                date = low_tags.get("date") or low_tags.get("year") or low_tags.get("tdor") or low_tags.get("tyer")
 
-            if title: tags["title"] = str(title).strip()
-            if artist: tags["artist"] = str(artist).strip()
-            if album: tags["album"] = str(album).strip()
-            if genre: tags["genre"] = str(genre).strip()
-            if track_no: tags["track"] = str(track_no).strip()
-            if date: tags["year"] = str(date).strip()[:4]
-    except Exception as e:
-        LOGGER.debug(f"[LOCAL TAGS] ffprobe error on {file_path}: {e}")
+                if title: tags["title"] = str(title).strip()
+                if artist: tags["artist"] = str(artist).strip()
+                if album: tags["album"] = str(album).strip()
+                if genre: tags["genre"] = str(genre).strip()
+                if track_no: tags["track"] = str(track_no).strip()
+                if date: tags["year"] = str(date).strip()[:4]
+        except Exception as e:
+            LOGGER.debug(f"[LOCAL TAGS] ffprobe error on {file_path}: {e}")
+
 
     # Fallback pure-python extract_embedded_audio_tags
     if not tags.get("title") or not tags.get("artist"):
@@ -430,7 +582,21 @@ async def recognize_audio_from_telegram(
         except Exception as e:
             LOGGER.warning(f"[SHAZAM] Lỗi kiểm tra cache: {e}")
 
+    # Nếu dùng cache mà file_name vẫn là Unknown, cố gắng lấy file_name từ message Telegram
+    if source_audio_path and file_name == "Unknown" and (message or (target_chat_id and target_msg_id)):
+        try:
+            m_obj = message
+            if not m_obj and client and target_chat_id and target_msg_id:
+                m_obj = await client.get_messages(target_chat_id, target_msg_id)
+            if m_obj:
+                med = getattr(m_obj, "audio", None) or getattr(m_obj, "document", None)
+                if med and getattr(med, "file_name", None):
+                    file_name = med.file_name
+        except Exception:
+            pass
+
     # 2. Nếu chưa có cache, tải qua Telegram với cơ chế Round-Robin bot pool
+
     if not source_audio_path:
         candidates = _get_candidate_clients(client)
         if not candidates:
@@ -508,16 +674,27 @@ async def recognize_audio_from_telegram(
         return None
 
     try:
-        # Xác định tổng thời lượng âm thanh bằng ffprobe
+        # Xác định tổng thời lượng âm thanh bằng ffprobe hoặc wave/pydub
         ffprobe_bin = _find_ffprobe()
         total_sec = 0.0
-        try:
-            cmd = [ffprobe_bin, "-v", "quiet", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", source_audio_path]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
-            if res.returncode == 0 and res.stdout.strip():
-                total_sec = float(res.stdout.strip())
-        except Exception:
-            pass
+        if ffprobe_bin:
+            try:
+                cmd = [ffprobe_bin, "-v", "quiet", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", source_audio_path]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+                if res.returncode == 0 and res.stdout.strip():
+                    total_sec = float(res.stdout.strip())
+            except Exception:
+                pass
+
+        if total_sec <= 0:
+            try:
+                import wave
+                with wave.open(source_audio_path, "rb") as wf:
+                    fr = wf.getframerate()
+                    if fr > 0:
+                        total_sec = wf.getnframes() / float(fr)
+            except Exception:
+                pass
 
         audio_seg = None
         if total_sec <= 0:
@@ -643,14 +820,22 @@ async def recognize_audio_from_telegram(
         # ── LỚP 3: Tra cứu Metadata trực tuyến (Apple Music & Deezer) từ Gợi ý & Tên Tệp ──
         cand_queries = []
         if hint_title and hint_title not in ["Unknown", "Track 01", "Track 1"] and not re.match(r"^track\s*\d+$", hint_title, re.I):
-            cand_queries.append((hint_title, hint_artist or "", hint_album or ""))
+            from Backend.helper.metadata.music_scraper import clean_audio_filename
+            c_ht = clean_audio_filename(hint_title)
+            c_ht = re.sub(r'^(track\s*\d+|\d+[\.\-\s_]+)', '', c_ht, flags=re.I).strip()
+            if len(c_ht) >= 2 and not c_ht.lower().startswith("track"):
+                cand_queries.append((c_ht, hint_artist or "", hint_album or ""))
+
         if file_name and file_name != "Unknown":
             from Backend.helper.metadata.music_scraper import strip_copy_prefix
             clean_fn = strip_copy_prefix(file_name)
             clean_fn = re.sub(r'\.(mp3|flac|wav|m4a|aac|ogg|dat)$', '', clean_fn, flags=re.I).strip()
-            clean_title = re.sub(r'^(track\s*\d+|\d+[\.\-\s]+)', '', clean_fn, flags=re.I).strip()
+            clean_title = re.sub(r'^(track\s*\d+|\d+[\.\-\s_]+)', '', clean_fn, flags=re.I).strip()
             if len(clean_title) >= 2 and not clean_title.lower().startswith("track"):
-                cand_queries.append((clean_title, hint_artist or "", hint_album or ""))
+                entry = (clean_title, hint_artist or "", hint_album or "")
+                if entry not in cand_queries:
+                    cand_queries.append(entry)
+
 
         for q_title, q_artist, q_album in cand_queries:
             from Backend.helper.metadata.music_scraper import is_generic_music_query, fetch_music_metadata
