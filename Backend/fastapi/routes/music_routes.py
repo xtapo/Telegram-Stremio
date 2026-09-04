@@ -2209,6 +2209,7 @@ class MusicScanManager:
                                 fg_res = await recognize_audio_from_telegram(
                                     client=client,
                                     message=msg,
+                                    is_manual=False,
                                     chat_id=resolved_chat_id,
                                     msg_id=msg.id,
                                     hint_title=final_title if not final_title.lower().startswith("track") else None,

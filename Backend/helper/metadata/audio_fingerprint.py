@@ -482,7 +482,7 @@ def _read_embedded_metadata_file(file_path: str) -> dict:
     return tags
 
 
-async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", log_callback=None) -> dict:
+async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", log_callback=None, timeout_sec: float = 12.0) -> dict:
     """Gửi tệp âm thanh thực tế tới máy chủ Shazam để trích xuất dấu vân tay âm thanh chuẩn xác."""
     if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
         return None
@@ -497,7 +497,7 @@ async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", lo
 
     for lang, country in endpoint_configs:
         try:
-            out = await query_shazam_isolated(file_path, language=lang, endpoint_country=country, timeout_sec=12.0)
+            out = await query_shazam_isolated(file_path, language=lang, endpoint_country=country, timeout_sec=timeout_sec)
             if not out:
                 continue
 
@@ -644,11 +644,17 @@ async def recognize_audio_from_telegram(
                 file_name = getattr(media, "file_name", "Unknown")
                 detected_file_size = getattr(media, "file_size", 0) or 0
 
-                # Tải mẫu từ 25MB - 35MB (đủ trích xuất cả Intro, Verse lẫn Điệp khúc)
-                if detected_file_size > 0:
-                    download_limit = min(detected_file_size, max(25 * 1024 * 1024, int(detected_file_size * 0.60)))
+                # Dung lượng tải mẫu âm thanh:
+                if not is_manual:
+                    # Chế độ quét kênh Telegram siêu tốc: Chỉ tải tối đa 2.5MB (~1-2 giây)
+                    # 2.5MB là quá đủ để chứa các frame âm thanh đầu bài và thẻ ID3v2/FLAC header
+                    download_limit = min(detected_file_size, 2500 * 1024) if detected_file_size > 0 else (2500 * 1024)
                 else:
-                    download_limit = 25 * 1024 * 1024
+                    # Chế độ thủ công sâu: Tải mẫu lớn 25MB - 35MB (đủ trích xuất cả Intro, Verse lẫn Điệp khúc)
+                    if detected_file_size > 0:
+                        download_limit = min(detected_file_size, max(25 * 1024 * 1024, int(detected_file_size * 0.60)))
+                    else:
+                        download_limit = 25 * 1024 * 1024
 
                 limit_mb_str = f"{round(download_limit/1024/1024, 1)}MB"
                 LOGGER.info(f"[SHAZAM] Đang tải mẫu bài hát '{file_name}' ({limit_mb_str}) bằng client [{cl_name}]...")
@@ -695,6 +701,59 @@ async def recognize_audio_from_telegram(
         return None
 
     try:
+        if not is_manual:
+            # ══════════════════════════════════════════════════════════════════
+            # CHẾ ĐỘ 1: QUÉT KÊNH TELEGRAM SIÊU TỐC (is_manual == False)
+            # Tốc độ ~1-2 giây / bài: 1 pass Shazam nhanh mẫu đầu bài + Thẻ ID3/FLAC gốc
+            # Tuyệt đối không lặp 5 cửa sổ và không gọi online scraper để tránh nghẽn kênh
+            # ══════════════════════════════════════════════════════════════════
+            tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            sample_w_path = tmp_wav.name
+            tmp_wav.close()
+            try:
+                ok = _extract_normalized_segment(
+                    input_audio_path=source_audio_path,
+                    output_wav_path=sample_w_path,
+                    start_sec=0.0,
+                    duration_sec=12.0
+                )
+                query_target = sample_w_path if (ok and os.path.exists(sample_w_path) and os.path.getsize(sample_w_path) > 4096) else source_audio_path
+                res = await _query_shazam_file(query_target, segment_name="Nhanh", log_callback=log_callback, timeout_sec=6.0)
+                if res:
+                    return res
+            finally:
+                if os.path.exists(sample_w_path):
+                    try:
+                        os.remove(sample_w_path)
+                    except Exception:
+                        pass
+
+            # Lớp 2: Kiểm tra thẻ ID3 / FLAC Vorbis / RIFF gốc nhúng trong tệp (~10ms)
+            embedded_tags = _read_embedded_metadata_file(source_audio_path)
+            if embedded_tags.get("title") and (embedded_tags.get("artist") or embedded_tags.get("album")):
+                t_tit = embedded_tags["title"].strip()
+                t_art = embedded_tags.get("artist", "").strip()
+                t_alb = embedded_tags.get("album", "").strip()
+                t_gen = embedded_tags.get("genre", "").strip()
+                if len(t_tit) >= 2 and not any(k in t_tit.lower() for k in ["http", "t.me", "@"]):
+                    LOGGER.info(f"[EMBEDDED TAGS] Trích xuất thành công tag gốc: {t_art} - {t_tit}")
+                    return {
+                        "title": t_tit,
+                        "artist": t_art or "Unknown Artist",
+                        "album": t_alb or f"{t_tit} - Single",
+                        "cover_url": "",
+                        "genre": t_gen,
+                        "layer": "Thẻ ID3 Tệp Gốc",
+                        "source": "Embedded File Tags"
+                    }
+
+            LOGGER.info(f"[SHAZAM] Quét kênh nhanh không khớp vân tay/tag cho: {file_name}")
+            return None
+
+        # ══════════════════════════════════════════════════════════════════
+        # CHẾ ĐỘ 2: QUÉT THỦ CÔNG ĐA LỚP CHÍNH XÁC CAO (is_manual == True)
+        # Nhận diện sâu đầy đủ: 5 cửa sổ vàng Shazam + Thẻ Tag + Apple Music & Deezer
+        # ══════════════════════════════════════════════════════════════════
         # Xác định tổng thời lượng âm thanh bằng ffprobe hoặc wave/pydub
         ffprobe_bin = _find_ffprobe()
         total_sec = 0.0
@@ -901,9 +960,10 @@ async def recognize_audio_from_local_file(
     hint_title: str = None,
     hint_artist: str = None,
     hint_album: str = None,
+    is_manual: bool = False,
 ) -> Optional[dict]:
     """
-    Nhận diện âm thanh Đa Lớp (Shazam 5 cửa sổ vàng 16kHz Mono + Thẻ Tag ID3/RIFF gốc + Apple Music & Deezer)
+    Nhận diện âm thanh Đa Lớp (Shazam 16kHz Mono + Thẻ Tag ID3/RIFF gốc + Apple Music & Deezer)
     trực tiếp từ file âm thanh cục bộ trên ổ đĩa. Tốc độ cực nhanh không cần qua mạng Telegram.
     """
     if not file_path or not os.path.exists(file_path):
@@ -914,6 +974,7 @@ async def recognize_audio_from_local_file(
         hint_title=hint_title,
         hint_artist=hint_artist,
         hint_album=hint_album,
+        is_manual=is_manual,
     )
 
 
