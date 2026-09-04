@@ -59,6 +59,27 @@ def _find_ffprobe() -> Optional[str]:
     return None
 
 
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, module=r".*pydub.*")
+
+# Tự động nạp các đường dẫn nhị phân hệ thống vào PATH nếu thiếu
+for _bin_d in ["/usr/bin", "/usr/local/bin", "/bin", "/usr/sbin", "/sbin"]:
+    if os.path.exists(_bin_d) and _bin_d not in os.environ.get("PATH", "").split(os.pathsep):
+        os.environ["PATH"] = f"{_bin_d}{os.pathsep}{os.environ.get('PATH', '')}"
+
+try:
+    import pydub
+    _ff_bin = _find_ffmpeg()
+    if _ff_bin:
+        pydub.AudioSegment.converter = _ff_bin
+    _fp_bin = _find_ffprobe()
+    if _fp_bin:
+        pydub.utils.get_prober_name = lambda: _fp_bin
+except Exception:
+    pass
+
+
+
 def _slice_wav_pure_python(
     input_wav_path: str,
     output_wav_path: str,

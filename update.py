@@ -97,18 +97,28 @@ if UPSTREAM_REPO:
 def _ensure_linux_packages():
     """Tự động kiểm tra và cài đặt ffmpeg, p7zip, unrar nếu chạy trên môi trường Linux/Docker."""
     try:
+        # Bổ sung các thư mục binary chuẩn vào PATH nếu thiếu
+        for p in ["/usr/bin", "/usr/local/bin", "/bin", "/usr/sbin", "/sbin"]:
+            if ospath.exists(p) and p not in environ.get("PATH", "").split(":"):
+                environ["PATH"] = f"{p}:{environ.get('PATH', '')}"
+
         if shutil.which("apt-get"):
             missing = []
-            if not (shutil.which("7z") or shutil.which("unrar")):
+            if not (shutil.which("7z") or shutil.which("unrar") or ospath.exists("/usr/bin/7z")):
                 missing.extend(["p7zip-full", "unrar-free"])
             if not (shutil.which("ffmpeg") or ospath.exists("/usr/bin/ffmpeg") or ospath.exists("/usr/local/bin/ffmpeg")):
                 missing.append("ffmpeg")
             if missing:
                 log_info(f"Linux/Docker environment: Auto-installing missing packages ({' '.join(missing)})...")
-                srun(["apt-get", "update", "-qq"])
-                srun(["apt-get", "install", "-y", "-qq", "--no-install-recommends"] + missing)
+                srun(["apt-get", "update", "-y"])
+                res = srun(["apt-get", "install", "-y"] + missing)
+                if res.returncode == 0:
+                    log_info(f"Linux/Docker environment: Successfully installed ({' '.join(missing)})!")
+                else:
+                    log_error(f"Linux/Docker environment: Failed to install packages (exit code {res.returncode})")
     except Exception as e:
         log_error(f"Package auto-install notice: {e}")
 
 _ensure_linux_packages()
+
 

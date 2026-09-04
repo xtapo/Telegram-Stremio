@@ -3,7 +3,25 @@ import os
 import json
 import asyncio
 import subprocess
+import warnings
 from typing import Optional, Dict, Any
+
+warnings.filterwarnings("ignore", category=RuntimeWarning, module=r".*pydub.*")
+
+# Bổ sung các thư mục chứa nhị phân chuẩn vào PATH môi trường
+for _bin_d in ["/usr/bin", "/usr/local/bin", "/bin", "/usr/sbin", "/sbin"]:
+    if os.path.exists(_bin_d) and _bin_d not in os.environ.get("PATH", "").split(os.pathsep):
+        os.environ["PATH"] = f"{_bin_d}{os.pathsep}{os.environ.get('PATH', '')}"
+
+try:
+    import pydub
+    from shutil import which
+    _ff = which("ffmpeg") or ("/usr/bin/ffmpeg" if os.path.exists("/usr/bin/ffmpeg") else None)
+    if _ff:
+        pydub.AudioSegment.converter = _ff
+except Exception:
+    pass
+
 
 def get_shazam_python() -> str:
     """Trả về trình thông dịch Python tương thích (Python 3.11/3.12) có cài shazamio để tránh crash trên 3.14."""
