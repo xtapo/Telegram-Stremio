@@ -1,19 +1,59 @@
 import io
+import os
+import re
+import json
+import shutil
 import asyncio
+import tempfile
+import subprocess
 from typing import Optional, Dict, Tuple, List
-from shazamio import Shazam
 from pyrogram.errors import FloodWait, RPCError
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, multi_clients, client_failures, work_loads, USERBOT_CLIENT_INDEX
 
-import os
-import subprocess
-import json
-import tempfile
-
-_SHAZAM = Shazam()
 _client_rr_counter = 0
+
+
+def _find_ffmpeg() -> str:
+    """Xác định đường dẫn nhị phân ffmpeg chính xác trên hệ thống (WinGet, Chocolatey, System PATH)."""
+    p = shutil.which("ffmpeg")
+    if p and os.path.exists(p):
+        return p
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or "quang"
+    candidates = [
+        f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffmpeg.exe",
+        f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffmpeg.exe",
+        "C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe",
+        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg"
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return "ffmpeg"
+
+
+def _find_ffprobe() -> str:
+    """Xác định đường dẫn nhị phân ffprobe chính xác trên hệ thống."""
+    p = shutil.which("ffprobe")
+    if p and os.path.exists(p):
+        return p
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or "quang"
+    candidates = [
+        f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffprobe.exe",
+        f"C:\\Users\\{user}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffprobe.exe",
+        "C:\\ProgramData\\chocolatey\\bin\\ffprobe.exe",
+        "C:\\ffmpeg\\bin\\ffprobe.exe",
+        "/usr/bin/ffprobe",
+        "/usr/local/bin/ffprobe"
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return "ffprobe"
+
 
 
 def _get_candidate_clients(preferred_client=None) -> list:
@@ -179,10 +219,11 @@ def _extract_normalized_segment(
     Trích xuất và chuẩn hóa phân đoạn âm thanh thành WAV 16-bit 16000Hz Mono
     (Chuẩn tuyệt đối cho Landmark Fingerprint của Shazam & SignatureGenerator).
     """
+    ffmpeg_bin = _find_ffmpeg()
     # 1. Thử qua FFmpeg CLI trước (nhanh nhất, chuẩn xác nhất, không tốn RAM)
     try:
         cmd = [
-            "ffmpeg", "-y",
+            ffmpeg_bin, "-y",
             "-ss", str(max(0.0, round(start_sec, 2))),
             "-t", str(round(duration_sec, 2)),
             "-i", input_audio_path,
@@ -194,8 +235,11 @@ def _extract_normalized_segment(
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
         if res.returncode == 0 and os.path.exists(output_wav_path) and os.path.getsize(output_wav_path) > 4096:
             return True
+        else:
+            err_snip = res.stderr.decode("utf-8", errors="ignore")[:250] if res.stderr else ""
+            LOGGER.debug(f"[SHAZAM EXTRACT] ffmpeg error code {res.returncode}: {err_snip}")
     except Exception as e:
-        LOGGER.debug(f"[SHAZAM EXTRACT] ffmpeg extract failed: {e}")
+        LOGGER.warning(f"[SHAZAM EXTRACT] ffmpeg extract failed ({e})")
 
     # 2. Fallback qua pydub AudioSegment
     if audio_seg_pydub is not None:
@@ -219,9 +263,10 @@ def _read_embedded_metadata_file(file_path: str) -> dict:
     if not file_path or not os.path.exists(file_path):
         return {}
     tags = {}
+    ffprobe_bin = _find_ffprobe()
     try:
         cmd = [
-            "ffprobe", "-v", "quiet",
+            ffprobe_bin, "-v", "quiet",
             "-print_format", "json",
             "-show_format",
             file_path
@@ -269,6 +314,8 @@ async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", lo
     if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
         return None
 
+    from Backend.helper.metadata.shazam_runner import query_shazam_isolated
+
     # Thử với endpoint VN trước (phù hợp kho nhạc Việt Nam), nếu không khớp thì fallback sang US
     endpoint_configs = [
         ("vi-VN", "VN"),
@@ -277,20 +324,7 @@ async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", lo
 
     for lang, country in endpoint_configs:
         try:
-            shz = Shazam(language=lang, endpoint_country=country)
-            out = None
-            if hasattr(shz, "recognize"):
-                try:
-                    out = await shz.recognize(file_path)
-                except Exception as ex_rec:
-                    LOGGER.debug(f"[SHAZAM] shz.recognize failed ({ex_rec}), trying fallback...")
-
-            if (not out or not out.get("track")) and hasattr(shz, "recognize_song"):
-                try:
-                    out = await shz.recognize_song(file_path)
-                except Exception:
-                    pass
-
+            out = await query_shazam_isolated(file_path, language=lang, endpoint_country=country, timeout_sec=12.0)
             if not out:
                 continue
 
@@ -344,11 +378,15 @@ async def recognize_audio_from_telegram(
     msg_id: int = None,
     log_callback=None,
     local_file_path: str = None,
+    hint_title: str = None,
+    hint_artist: str = None,
+    hint_album: str = None,
 ) -> dict:
     """
     Nhận diện âm thanh đa phân đoạn (Multi-Segment Audio Fingerprinting):
     - Lớp 1: Shazam qua các phân đoạn âm thanh vàng chuẩn hóa Mono 16kHz 16-bit (Điệp khúc, Verse, Pre-Chorus)
     - Lớp 2: Trích xuất trực tiếp thẻ metadata gốc nhúng (ID3v2, RIFF INFO, Vorbis) qua ffprobe và parser nhúng
+    - Lớp 3: Tra cứu trực tuyến thông minh Apple Music & Deezer từ gợi ý & tên tệp
     Tự động tận dụng tối đa Local File, Local Cache hoặc xoay vòng Bot Pool Telegram để tải mẫu audio đầy đủ.
     """
     target_chat_id = chat_id or getattr(getattr(message, "chat", None), "id", None)
@@ -471,9 +509,10 @@ async def recognize_audio_from_telegram(
 
     try:
         # Xác định tổng thời lượng âm thanh bằng ffprobe
+        ffprobe_bin = _find_ffprobe()
         total_sec = 0.0
         try:
-            cmd = ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", source_audio_path]
+            cmd = [ffprobe_bin, "-v", "quiet", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", source_audio_path]
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
             if res.returncode == 0 and res.stdout.strip():
                 total_sec = float(res.stdout.strip())
@@ -522,16 +561,6 @@ async def recognize_audio_from_telegram(
             sample_w_path = tmp_wav.name
             tmp_wav.close()
             try:
-                ok = _extract_normalized_segment(
-                    input_audio_path=source_audio_path,
-                    output_wav_path=sample_w_path,
-                    start_sec=start_s,
-                    duration_sec=dur_s,
-                    audio_seg_pydub=audio_seg
-                )
-                if not ok:
-                    continue
-
                 t_from = int(start_s)
                 t_to = int(start_s + dur_s)
                 if log_callback:
@@ -540,6 +569,17 @@ async def recognize_audio_from_telegram(
                     else:
                         log_callback(f"Chưa khớp -> Quét tiếp Shazam [{seg_name}] ({t_from}s - {t_to}s)...", "info")
                 LOGGER.info(f"[SHAZAM] Quét vân tay tại [{seg_name}] ({t_from}s - {t_to}s) cho: {file_name}")
+
+                ok = _extract_normalized_segment(
+                    input_audio_path=source_audio_path,
+                    output_wav_path=sample_w_path,
+                    start_sec=start_s,
+                    duration_sec=dur_s,
+                    audio_seg_pydub=audio_seg
+                )
+                if not ok:
+                    LOGGER.warning(f"[SHAZAM] Không thể trích xuất đoạn âm thanh [{seg_name}] ({t_from}s - {t_to}s)")
+                    continue
 
                 res = await _query_shazam_file(sample_w_path, segment_name=seg_name, log_callback=log_callback)
                 if res:
@@ -556,6 +596,8 @@ async def recognize_audio_from_telegram(
         final_sample_path = tmp_final_wav.name
         tmp_final_wav.close()
         try:
+            if log_callback:
+                log_callback("Quét mở rộng toàn dải âm thanh đầu bài (0s - 30s)...", "info")
             ok = _extract_normalized_segment(
                 input_audio_path=source_audio_path,
                 output_wav_path=final_sample_path,
@@ -564,8 +606,6 @@ async def recognize_audio_from_telegram(
                 audio_seg_pydub=audio_seg
             )
             if ok:
-                if log_callback:
-                    log_callback("Quét mở rộng toàn dải âm thanh đầu bài (0s - 30s)...", "info")
                 res = await _query_shazam_file(final_sample_path, segment_name="Toàn dải đầu", log_callback=log_callback)
                 if res:
                     return res
@@ -600,6 +640,44 @@ async def recognize_audio_from_telegram(
                     "source": "Embedded File Tags"
                 }
 
+        # ── LỚP 3: Tra cứu Metadata trực tuyến (Apple Music & Deezer) từ Gợi ý & Tên Tệp ──
+        cand_queries = []
+        if hint_title and hint_title not in ["Unknown", "Track 01", "Track 1"] and not re.match(r"^track\s*\d+$", hint_title, re.I):
+            cand_queries.append((hint_title, hint_artist or "", hint_album or ""))
+        if file_name and file_name != "Unknown":
+            from Backend.helper.metadata.music_scraper import strip_copy_prefix
+            clean_fn = strip_copy_prefix(file_name)
+            clean_fn = re.sub(r'\.(mp3|flac|wav|m4a|aac|ogg|dat)$', '', clean_fn, flags=re.I).strip()
+            clean_title = re.sub(r'^(track\s*\d+|\d+[\.\-\s]+)', '', clean_fn, flags=re.I).strip()
+            if len(clean_title) >= 2 and not clean_title.lower().startswith("track"):
+                cand_queries.append((clean_title, hint_artist or "", hint_album or ""))
+
+        for q_title, q_artist, q_album in cand_queries:
+            from Backend.helper.metadata.music_scraper import is_generic_music_query, fetch_music_metadata
+            if not is_generic_music_query(q_title, q_artist):
+                if log_callback:
+                    log_callback(f"Shazam & ID3 chưa khớp -> Lớp 3: Đang tra cứu trực tuyến Apple Music & Deezer cho '{q_title}'...", "info")
+                try:
+                    sc_res = await fetch_music_metadata(
+                        raw_title=q_title,
+                        raw_artist=q_artist,
+                        raw_album=q_album,
+                        file_name=file_name
+                    )
+                    if sc_res and sc_res.get("title") and sc_res.get("artist"):
+                        LOGGER.info(f"[ONLINE SCRAPER] Khớp thành công: {sc_res.get('artist')} - {sc_res.get('title')}")
+                        return {
+                            "title": sc_res["title"],
+                            "artist": sc_res["artist"],
+                            "album": sc_res.get("album") or f"{sc_res['title']} - Single",
+                            "cover_url": sc_res.get("cover_url", ""),
+                            "genre": sc_res.get("genre", ""),
+                            "layer": "Apple Music & Deezer",
+                            "source": "Online Music Scraper"
+                        }
+                except Exception as ex_sc:
+                    LOGGER.debug(f"[ONLINE SCRAPER] Error: {ex_sc}")
+
         LOGGER.info(f"[SHAZAM] Không nhận diện được qua Audio Fingerprint & Thẻ gốc cho: {file_name}")
         return None
 
@@ -614,16 +692,22 @@ async def recognize_audio_from_telegram(
 async def recognize_audio_from_local_file(
     file_path: str,
     log_callback=None,
+    hint_title: str = None,
+    hint_artist: str = None,
+    hint_album: str = None,
 ) -> Optional[dict]:
     """
-    Nhận diện âm thanh Đa Lớp (Shazam 5 cửa sổ vàng 16kHz Mono + Thẻ Tag ID3/RIFF gốc)
-    trực tiếp từ file âm thanh cục bộ trên ổ đĩa. Tốc độ cực nhanh (1-2 giây) không cần qua mạng Telegram.
+    Nhận diện âm thanh Đa Lớp (Shazam 5 cửa sổ vàng 16kHz Mono + Thẻ Tag ID3/RIFF gốc + Apple Music & Deezer)
+    trực tiếp từ file âm thanh cục bộ trên ổ đĩa. Tốc độ cực nhanh không cần qua mạng Telegram.
     """
     if not file_path or not os.path.exists(file_path):
         return None
     return await recognize_audio_from_telegram(
         local_file_path=file_path,
-        log_callback=log_callback
+        log_callback=log_callback,
+        hint_title=hint_title,
+        hint_artist=hint_artist,
+        hint_album=hint_album,
     )
 
 

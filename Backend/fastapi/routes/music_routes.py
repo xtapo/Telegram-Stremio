@@ -3262,7 +3262,11 @@ class MusicShazamManager:
                 def _track_log(msg_text: str, lvl: str = "info"):
                     self._add_log(f"  ↳ #{idx} {msg_text}", lvl)
 
-                # Lớp 1 & Lớp 2: Vân tay âm thanh 2 phân đoạn & Thẻ ID3 gốc
+                # Lớp 1 & Lớp 2 & Lớp 3: Vân tay Shazam + Thẻ ID3 gốc + Apple Music & Deezer trực tuyến
+                h_name = curr_track.get("name") if curr_track else orig_name
+                h_artist = curr_track.get("artist") if curr_track else None
+                h_album = curr_album.get("title") if curr_album else None
+
                 fg_res = await recognize_audio_from_telegram(
                     client=None,
                     message=None,
@@ -3270,6 +3274,9 @@ class MusicShazamManager:
                     chat_id=chat_id_int,
                     msg_id=msg_id_int,
                     log_callback=_track_log,
+                    hint_title=h_name,
+                    hint_artist=h_artist,
+                    hint_album=h_album,
                 )
                 await asyncio.sleep(0.15)
 
@@ -3290,9 +3297,9 @@ class MusicShazamManager:
                     except Exception:
                         pass
 
-                # Nếu Shazam và ID3 không khớp, dừng lại an toàn để không ghi đè tên sai
+                # Nếu tất cả các lớp không khớp, thông báo chi tiết
                 if not fg_res:
-                    _track_log("⚠️ Không tìm thấy dấu vân tay âm thanh khớp trên Shazam và thẻ ID3 gốc.", "warn")
+                    _track_log("⚠️ Không tìm thấy kết quả khớp trên Shazam (vân tay), Thẻ ID3 gốc hoặc kho nhạc trực tuyến.", "warn")
 
                 if fg_res:
                     matched_layer = fg_res.get("layer", "Đa Lớp")

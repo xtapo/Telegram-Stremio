@@ -3889,6 +3889,12 @@ function selectCoverObj(type, coverObj) {
     if (type === 'track') {
         document.getElementById('edit-track-cover').value = coverUrl;
         document.getElementById('edit-track-cover-preview').src = coverUrl;
+        if (coverObj.title && (!document.getElementById('edit-track-album').value || document.getElementById('edit-track-album').value.toLowerCase().includes('unknown') || document.getElementById('edit-track-album').value.toLowerCase().includes('ips'))) {
+            document.getElementById('edit-track-album').value = coverObj.title;
+        }
+        if (coverObj.artist && (!document.getElementById('edit-track-artist').value || document.getElementById('edit-track-artist').value.toLowerCase().includes('unknown') || document.getElementById('edit-track-artist').value.toLowerCase().includes('damso'))) {
+            document.getElementById('edit-track-artist').value = coverObj.artist;
+        }
         document.getElementById('track-cover-search-results').classList.add('hidden');
     } else if (type === 'bulk') {
         document.getElementById('bulk-edit-cover').value = coverUrl;
