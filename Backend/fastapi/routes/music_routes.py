@@ -759,7 +759,6 @@ async def _db_save_channels(channels: list):
                 for c in channels:
                     ch_id = str(c.get("id"))
                     doc = {
-                        "_id": ch_id,
                         "id": ch_id,
                         "name": c.get("name", ""),
                         "username": c.get("username", ""),
@@ -877,7 +876,6 @@ async def _save_compressed_mongo_library(albums: list, force: bool = False):
         compressed_bytes = _compress_albums(albums)
         total_tracks = sum(len(a.get("tracks", [])) for a in albums)
         doc_payload = {
-            "_id": "telegram_music_library_gz",
             "compressed_data": compressed_bytes,
             "count": total_tracks,
             "album_count": len(albums),
@@ -893,11 +891,9 @@ async def _save_compressed_mongo_library(albums: list, force: bool = False):
 
         # Lưu thêm bản backup dự phòng nếu thư viện >= 100 albums
         if len(albums) >= 100:
-            bak_payload = dict(doc_payload)
-            bak_payload["_id"] = "telegram_music_library_gz_backup"
             await coll_lib.update_one(
                 {"_id": "telegram_music_library_gz_backup"},
-                {"$set": bak_payload},
+                {"$set": doc_payload},
                 upsert=True
             )
     except Exception as e:
@@ -1286,7 +1282,6 @@ async def _db_save_library(albums: list):
             await coll_old.update_one(
                 {"_id": "telegram_music_library"},
                 {"$set": {
-                    "_id": "telegram_music_library",
                     "albums": albums,
                     "count": sum(len(a.get("tracks", [])) for a in albums),
                     "updated_at": time.time()
@@ -4575,6 +4570,21 @@ async def cancel_gdrive_upload(_: bool = Depends(require_auth)):
 BACKUP_DIR = os.path.join(MUSIC_DATA_DIR, "backups")
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
+def _bson_to_json_safe(obj):
+    """Chuyển đổi các kiểu dữ liệu đặc biệt của MongoDB (ObjectId, datetime, ...) sang dạng JSON-safe."""
+    if isinstance(obj, dict):
+        return {k: _bson_to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_bson_to_json_safe(x) for x in obj]
+    from bson import ObjectId
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    from datetime import datetime, date
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    return obj
+
+
 async def _build_music_backup_data() -> dict:
     """Thu thập toàn bộ dữ liệu Music phục vụ sao lưu."""
     albums = await _db_load_library() or []
@@ -4588,14 +4598,14 @@ async def _build_music_backup_data() -> dict:
             cursor = coll.find()
             async for doc in cursor:
                 artists_metadata.append(doc)
-    except Exception:
-        pass
+    except Exception as e:
+        LOGGER.warning(f"[BACKUP] Lỗi thu thập metadata ca sĩ: {e}")
 
-    total_tracks = sum(len(a.get("tracks", [])) for a in albums)
+    total_tracks = sum(len(a.get("tracks", [])) for a in albums if isinstance(a, dict))
     from datetime import datetime
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    return {
+    data = {
         "app": "Telegram-Stremio-Music",
         "version": "1.0",
         "timestamp": time.time(),
@@ -4612,16 +4622,51 @@ async def _build_music_backup_data() -> dict:
             "artists_count": len(artists_metadata)
         }
     }
+    return _bson_to_json_safe(data)
 
-async def _perform_music_restore(backup_data: dict) -> dict:
-    """Thực thi khôi phục dữ liệu từ từ điển sao lưu vào MongoDB + SSD + RAM."""
-    if not isinstance(backup_data, dict):
-        raise ValueError("Dữ liệu sao lưu không hợp lệ.")
+async def _perform_music_restore(backup_data: Any) -> dict:
+    """Thực thi khôi phục dữ liệu từ từ điển hoặc danh sách sao lưu vào MongoDB + SSD + RAM."""
+    albums = None
+    channels = None
+    playlists = None
+    artists_metadata = None
 
-    albums = backup_data.get("albums")
-    channels = backup_data.get("channels")
-    playlists = backup_data.get("playlists")
-    artists_metadata = backup_data.get("artists_metadata")
+    if isinstance(backup_data, list):
+        # Người dùng tải lên trực tiếp file telegram_library.json hoặc mảng danh sách
+        if backup_data and isinstance(backup_data[0], dict):
+            sample = backup_data[0]
+            if "last_scanned_id" in sample or ("username" in sample and "tracks" not in sample):
+                channels = backup_data
+            elif "playlist_id" in sample or ("tracks" in sample and "artist" not in sample and "title" in sample):
+                first_track = sample.get("tracks", [{}])[0] if isinstance(sample.get("tracks"), list) and sample.get("tracks") else {}
+                if "chat_id" in first_track or "file_id" in first_track or "artist" in sample:
+                    albums = backup_data
+                else:
+                    playlists = backup_data
+            else:
+                albums = backup_data
+        else:
+            albums = backup_data
+
+    elif isinstance(backup_data, dict):
+        # Hỗ trợ trường hợp dữ liệu bọc trong {"data": ...}
+        raw_data = backup_data.get("data") if isinstance(backup_data.get("data"), (dict, list)) else backup_data
+        if isinstance(raw_data, list):
+            albums = raw_data
+        elif isinstance(raw_data, dict):
+            albums = raw_data.get("albums") or raw_data.get("library") or raw_data.get("music_library")
+            channels = raw_data.get("channels") or raw_data.get("music_channels")
+            playlists = raw_data.get("playlists") or raw_data.get("telegram_playlists")
+            artists_metadata = raw_data.get("artists_metadata") or raw_data.get("music_artists") or raw_data.get("artists")
+    else:
+        raise ValueError("Định dạng file không hợp lệ (phải là JSON Object hoặc Array).")
+
+    # Nếu albums lưu dưới dạng dictionary {album_id: {...}}, chuẩn hóa thành list
+    if isinstance(albums, dict):
+        albums = list(albums.values())
+
+    if albums is None and channels is None and playlists is None and artists_metadata is None:
+        raise ValueError("File sao lưu không chứa dữ liệu hợp lệ (không tìm thấy kho nhạc, kênh hoặc danh sách phát).")
 
     restored_stats = {}
 
@@ -4629,28 +4674,39 @@ async def _perform_music_restore(backup_data: dict) -> dict:
     if albums is not None and isinstance(albums, list):
         await _db_save_library(albums)
         restored_stats["albums"] = len(albums)
-        restored_stats["tracks"] = sum(len(a.get("tracks", [])) for a in albums)
+        restored_stats["tracks"] = sum(len(a.get("tracks", [])) for a in albums if isinstance(a, dict))
+        LOGGER.info(f"[RESTORE] Đã khôi phục thành công {restored_stats['albums']} albums ({restored_stats['tracks']} bài hát).")
 
     # 2. Khôi phục Channels
     if channels is not None and isinstance(channels, list):
         await _db_save_channels(channels)
         restored_stats["channels"] = len(channels)
+        LOGGER.info(f"[RESTORE] Đã khôi phục thành công {len(channels)} kênh.")
 
     # 3. Khôi phục Playlists
     if playlists is not None and isinstance(playlists, list):
         _save_playlists_file(playlists)
         restored_stats["playlists"] = len(playlists)
+        LOGGER.info(f"[RESTORE] Đã khôi phục thành công {len(playlists)} playlists.")
 
     # 4. Khôi phục Artists Metadata
     if artists_metadata is not None and isinstance(artists_metadata, list) and artists_metadata:
         try:
             if db and hasattr(db, "dbs") and "tracking" in db.dbs:
                 coll = db.dbs["tracking"]["music_artists"]
+                count = 0
                 for art in artists_metadata:
-                    art_id = art.get("_id") or (art.get("name", "").lower().strip() if art.get("name") else "")
+                    if not isinstance(art, dict):
+                        continue
+                    art_id = str(art.get("_id") or (art.get("name", "").lower().strip() if art.get("name") else "")).strip()
                     if art_id:
-                        await coll.update_one({"_id": art_id}, {"$set": art}, upsert=True)
-                restored_stats["artists"] = len(artists_metadata)
+                        # QUAN TRỌNG: Loại bỏ _id khỏi $set để MongoDB không ném lỗi immutable field
+                        clean_art = {k: v for k, v in art.items() if k != "_id"}
+                        if clean_art:
+                            await coll.update_one({"_id": art_id}, {"$set": clean_art}, upsert=True)
+                            count += 1
+                restored_stats["artists"] = count
+                LOGGER.info(f"[RESTORE] Đã khôi phục thành công {count} ca sĩ metadata.")
         except Exception as e:
             LOGGER.warning(f"[RESTORE] Lỗi phục hồi artists: {e}")
 
@@ -4785,15 +4841,33 @@ async def restore_from_snapshot(payload: dict, _: bool = Depends(require_auth)):
         with open(fpath, "rb") as f:
             raw_content = f.read()
 
-        if safe_name.endswith(".gz"):
+        if len(raw_content) >= 2 and raw_content[:2] == b'\x1f\x8b':
             raw_content = gzip.decompress(raw_content)
+        elif len(raw_content) >= 4 and raw_content[:4] == b'PK\x03\x04':
+            import zipfile, io
+            with zipfile.ZipFile(io.BytesIO(raw_content)) as z:
+                json_names = [n for n in z.namelist() if n.endswith('.json') and not n.startswith('__MACOSX')]
+                target_name = json_names[0] if json_names else z.namelist()[0]
+                raw_content = z.read(target_name)
 
-        backup_data = json.loads(raw_content.decode("utf-8"))
+        backup_data = json.loads(raw_content.decode("utf-8-sig"))
         restored = await _perform_music_restore(backup_data)
+
+        # Xây dựng thông báo kết quả chi tiết
+        parts = []
+        if "albums" in restored:
+            parts.append(f"{restored['albums']} album ({restored.get('tracks', 0)} bài)")
+        if "channels" in restored:
+            parts.append(f"{restored['channels']} kênh")
+        if "playlists" in restored:
+            parts.append(f"{restored['playlists']} playlist")
+        if "artists" in restored:
+            parts.append(f"{restored['artists']} ca sĩ")
+        detail_msg = f" ({', '.join(parts)})" if parts else ""
 
         return JSONResponse(content={
             "status": "success",
-            "message": f"Đã khôi phục thành công từ bản sao lưu '{safe_name}'!",
+            "message": f"Khôi phục từ bản sao lưu '{safe_name}' thành công!{detail_msg}",
             "restored": restored
         })
     except Exception as e:
@@ -4803,15 +4877,34 @@ async def restore_from_snapshot(payload: dict, _: bool = Depends(require_auth)):
 
 @router.post("/api/music/backup/restore-upload")
 async def restore_from_upload(file: UploadFile = File(...), _: bool = Depends(require_auth)):
-    """Khôi phục dữ liệu từ file sao lưu người dùng tải lên từ máy tính (.json hoặc .json.gz)"""
+    """Khôi phục dữ liệu từ file sao lưu người dùng tải lên từ máy tính (.json, .json.gz hoặc .zip)"""
     try:
         content = await file.read()
-        fname = (file.filename or "").lower()
+        if not content:
+            return JSONResponse(status_code=400, content={"status": "error", "message": "File tải lên bị rỗng (0 bytes)."})
 
-        if fname.endswith(".gz") or (len(content) >= 2 and content[:2] == b'\x1f\x8b'):
-            content = gzip.decompress(content)
+        # Giải nén Gzip nếu header là \x1f\x8b
+        if len(content) >= 2 and content[:2] == b'\x1f\x8b':
+            try:
+                content = gzip.decompress(content)
+            except Exception as gz_err:
+                LOGGER.warning(f"[RESTORE UPLOAD] Gzip decompress failed: {gz_err}")
+        # Giải nén ZIP nếu header là PK\x03\x04
+        elif len(content) >= 4 and content[:4] == b'PK\x03\x04':
+            import zipfile, io
+            try:
+                with zipfile.ZipFile(io.BytesIO(content)) as z:
+                    json_names = [n for n in z.namelist() if n.endswith('.json') and not n.startswith('__MACOSX')]
+                    target_name = json_names[0] if json_names else z.namelist()[0]
+                    content = z.read(target_name)
+            except Exception as zip_err:
+                LOGGER.warning(f"[RESTORE UPLOAD] ZIP extract failed: {zip_err}")
 
-        backup_data = json.loads(content.decode("utf-8"))
+        try:
+            backup_data = json.loads(content.decode("utf-8-sig"))
+        except Exception as json_err:
+            return JSONResponse(status_code=400, content={"status": "error", "message": f"Không thể đọc nội dung file JSON: {json_err}"})
+
         restored = await _perform_music_restore(backup_data)
 
         # Lưu lại 1 bản sao trên máy chủ luôn để làm snapshot an toàn
@@ -4825,9 +4918,21 @@ async def restore_from_upload(file: UploadFile = File(...), _: bool = Depends(re
         except Exception:
             pass
 
+        # Xây dựng thông báo kết quả chi tiết
+        parts = []
+        if "albums" in restored:
+            parts.append(f"{restored['albums']} album ({restored.get('tracks', 0)} bài)")
+        if "channels" in restored:
+            parts.append(f"{restored['channels']} kênh")
+        if "playlists" in restored:
+            parts.append(f"{restored['playlists']} playlist")
+        if "artists" in restored:
+            parts.append(f"{restored['artists']} ca sĩ")
+        detail_msg = f" ({', '.join(parts)})" if parts else ""
+
         return JSONResponse(content={
             "status": "success",
-            "message": f"Đã khôi phục thành công dữ liệu từ file '{file.filename}'!",
+            "message": f"Đã khôi phục thành công từ '{file.filename}'!{detail_msg}",
             "restored": restored
         })
     except Exception as e:
