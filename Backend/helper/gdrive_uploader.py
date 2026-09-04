@@ -23,8 +23,13 @@ from Backend.helper.metadata.music_scraper import (
     fetch_music_metadata,
     parse_artist_and_title,
     is_generic_music_query,
+    strip_copy_prefix,
+    fetch_album_tracklist_online,
 )
-from Backend.helper.metadata.audio_fingerprint import extract_embedded_audio_tags
+from Backend.helper.metadata.audio_fingerprint import (
+    extract_embedded_audio_tags,
+    recognize_audio_from_local_file,
+)
 
 AUDIO_EXTENSIONS = (
     ".mp3", ".flac", ".m4a", ".wav", ".aac", 
@@ -1041,10 +1046,14 @@ class GoogleDriveUploadManager:
             return None
 
     def _collect_audio_files(self, extract_dir: str) -> List[str]:
-        """Duyệt đệ quy và thu thập tất cả các file âm thanh trong thư mục đã giải nén"""
+        """Duyệt đệ quy và thu thập tất cả các file âm thanh trong thư mục đã giải nén theo thứ tự tự nhiên (Track 01..12)"""
         audio_files = []
         for root, _, files in os.walk(extract_dir):
-            for file in sorted(files):
+            sorted_files = sorted(
+                files,
+                key=lambda s: [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+            )
+            for file in sorted_files:
                 ext = os.path.splitext(file)[1].lower()
                 if ext in AUDIO_EXTENSIONS:
                     audio_files.append(os.path.join(root, file))
@@ -1171,15 +1180,16 @@ class GoogleDriveUploadManager:
 
                         # Trích xuất gợi ý Ca sĩ / Album từ tên file nén nếu người dùng chưa nhập
                         archive_stem = os.path.splitext(os.path.basename(dl_path))[0]
+                        archive_stem = strip_copy_prefix(archive_stem)
                         inf_art, inf_alb = extract_context_from_text(archive_stem)
                         if not item_default_artist and inf_art:
-                            item_default_artist = inf_art
+                            item_default_artist = strip_copy_prefix(inf_art)
                         if not item_default_album and inf_alb:
-                            item_default_album = inf_alb
+                            item_default_album = strip_copy_prefix(inf_alb)
                         if not item_default_album and archive_stem and not re.match(r'^(gdrive_|item_|download|test_)', archive_stem, re.I):
                             clean_arch_name = clean_audio_filename(archive_stem)
                             if clean_arch_name and len(clean_arch_name) >= 3 and not is_generic_music_query(clean_arch_name):
-                                item_default_album = clean_arch_name
+                                item_default_album = strip_copy_prefix(clean_arch_name)
 
                         # Tìm file .cue trong thư mục giải nén
                         if os.path.exists(sub_extract_dir):
@@ -1188,6 +1198,19 @@ class GoogleDriveUploadManager:
                                 cue_track_map = parse_cue_file(cue_files[0])
                                 if cue_track_map:
                                     self._log(f"📑 Phát hiện CUE Sheet '{os.path.basename(cue_files[0])}' ({len(cue_track_map)} bài) — áp dụng danh sách tên bài gốc!", "success")
+
+                        # Nếu không có CUE Sheet, tự động tra cứu Danh mục Album (Album Tracklist Resolver) từ Apple Music / Deezer
+                        if not cue_track_map and (item_default_album or item_default_artist):
+                            has_generic = any(is_generic_music_query(clean_audio_filename(os.path.basename(f))) for f in files_to_upload)
+                            if has_generic and item_default_album:
+                                self._log(f"🔍 Không có CUE Sheet. Đang tự động tra cứu Danh mục Album '{item_default_album}' ({item_default_artist or ''}) từ Apple Music & Deezer...", "info")
+                                try:
+                                    album_tracks = await fetch_album_tracklist_online(item_default_album, item_default_artist)
+                                    if album_tracks:
+                                        cue_track_map = album_tracks
+                                        self._log(f"💿 Đã tự động khớp Danh mục Album: '{item_default_album}' ({len(album_tracks)} bài) từ Apple Music / Deezer!", "success")
+                                except Exception as ex_alb:
+                                    LOGGER.debug(f"Album tracklist fetch note: {ex_alb}")
                     else:
                         self._log(f"⚠️ Lỗi giải nén {os.path.basename(dl_path)}: {extract_msg}", "warn")
                 elif ext in AUDIO_EXTENSIONS:
@@ -1228,7 +1251,7 @@ class GoogleDriveUploadManager:
                     # Đọc thẻ metadata cục bộ gốc từ file (ID3v2, RIFF INFO, Vorbis)
                     local_meta = read_audio_metadata_from_file(file_path)
 
-                    # Khớp thông tin từ CUE Sheet (nếu có)
+                    # Khớp thông tin từ CUE Sheet hoặc Album Tracklist (nếu có)
                     cue_info = {}
                     if cue_track_map:
                         for c_idx, c_data in cue_track_map.items():
@@ -1238,7 +1261,7 @@ class GoogleDriveUploadManager:
                         if not cue_info and track_idx in cue_track_map:
                             cue_info = cue_track_map[track_idx]
 
-                    # Ưu tiên dữ liệu: CUE Sheet > Thẻ nhúng cục bộ > Parser tiêu đề > Tên sạch
+                    # Ưu tiên dữ liệu: CUE Sheet/Album Tracklist > Thẻ nhúng cục bộ > Parser tiêu đề > Tên sạch
                     artist_candidate = (
                         (cue_info.get("artist") if cue_info else "") or
                         local_meta.get("artist", "") or
@@ -1257,6 +1280,10 @@ class GoogleDriveUploadManager:
                         default_album
                     )
 
+                    artist_candidate = strip_copy_prefix(artist_candidate)
+                    title_candidate = strip_copy_prefix(title_candidate)
+                    album_candidate = strip_copy_prefix(album_candidate)
+
                     # Nếu chưa có thông tin rõ từ CUE/thẻ gốc, phân tích lại từ tên file
                     if not (cue_info.get("title") or local_meta.get("title")):
                         parsed_artist, parsed_title, parsed_album = parse_artist_and_title(
@@ -1266,13 +1293,32 @@ class GoogleDriveUploadManager:
                             file_name=raw_filename
                         )
                         if parsed_title and not is_generic_music_query(parsed_title, parsed_artist):
-                            title_candidate = parsed_title
+                            title_candidate = strip_copy_prefix(parsed_title)
                         if parsed_artist and not artist_candidate:
-                            artist_candidate = parsed_artist
+                            artist_candidate = strip_copy_prefix(parsed_artist)
                         if parsed_album and not album_candidate:
-                            album_candidate = parsed_album
+                            album_candidate = strip_copy_prefix(parsed_album)
 
-                    cover_url = ""
+                    cover_url = (cue_info.get("cover_url", "") if cue_info else "") or ""
+
+                    # NHẬN DIỆN VÂN TAY ÂM THANH SHAZAM CỤC BỘ:
+                    # Nếu tiêu đề vẫn là tên chung chung (Track 01, Audio 01...), cho Shazam "nghe" trực tiếp từ file trên ổ đĩa
+                    if is_generic_music_query(title_candidate, artist_candidate):
+                        self._log(f"🔍 Bài [{track_idx}/{len(files_to_upload)}] có tên chưa rõ ('{raw_filename}') -> Đang nhận diện vân tay âm thanh (Shazam / Tags) trực tiếp từ tệp...", "info")
+                        try:
+                            fp_res = await recognize_audio_from_local_file(file_path)
+                            if fp_res and fp_res.get("title"):
+                                title_candidate = strip_copy_prefix(fp_res["title"])
+                                if fp_res.get("artist") and (not artist_candidate or is_generic_music_query(artist_candidate)):
+                                    artist_candidate = strip_copy_prefix(fp_res["artist"])
+                                if fp_res.get("album") and not (item_default_album or default_album):
+                                    album_candidate = strip_copy_prefix(fp_res["album"])
+                                if fp_res.get("cover_url") and not cover_url:
+                                    cover_url = fp_res["cover_url"]
+                                self._log(f"✅ Đã nhận diện âm thanh thành công qua {fp_res.get('layer', 'Shazam')}: {artist_candidate} - {title_candidate}", "success")
+                        except Exception as ex_fp:
+                            LOGGER.debug(f"Audio fingerprint error for {file_path}: {ex_fp}")
+
                     has_solid_cue = bool(cue_info.get("title") and cue_info.get("artist"))
                     # Chỉ tra cứu trực tuyến nếu có tên bài hát cụ thể (không phải chuỗi generic như Track 01)
                     if auto_scrape and not has_solid_cue and not is_generic_music_query(title_candidate, artist_candidate):
@@ -1286,9 +1332,9 @@ class GoogleDriveUploadManager:
                                 default_album=item_default_album or default_album,
                             )
                             if scraped:
-                                if scraped.get("title"): title_candidate = scraped["title"]
-                                if scraped.get("artist"): artist_candidate = scraped["artist"]
-                                if scraped.get("album") and not (item_default_album or default_album): album_candidate = scraped["album"]
+                                if scraped.get("title"): title_candidate = strip_copy_prefix(scraped["title"])
+                                if scraped.get("artist"): artist_candidate = strip_copy_prefix(scraped["artist"])
+                                if scraped.get("album") and not (item_default_album or default_album): album_candidate = strip_copy_prefix(scraped["album"])
                                 if scraped.get("cover_url"): cover_url = scraped["cover_url"]
                         except Exception as e:
                             LOGGER.debug(f"Metadata scrape note: {e}")
@@ -1476,9 +1522,9 @@ class GoogleDriveUploadManager:
                     caption_text=sent_msg.caption or ""
                 )
 
-                final_artist = (artist or "Unknown Artist").strip()
-                final_album = (album_name or "Single").strip().upper()
-                final_title = title or clean_audio_filename(raw_fname)
+                final_artist = strip_copy_prefix((artist or "Unknown Artist").strip())
+                final_album = strip_copy_prefix((album_name or "Single").strip()).upper()
+                final_title = strip_copy_prefix(title or clean_audio_filename(raw_fname))
 
                 track_dict = {
                     "id": sent_msg.id,

@@ -451,12 +451,27 @@ def token_similarity(str1: str, str2: str) -> float:
     return len(intersection) / max(len(w1), len(w2))
 
 
+def strip_copy_prefix(text: str) -> str:
+    """
+    Loại bỏ tiền tố sao chép do Google Drive hoặc hệ điều hành tự động thêm vào:
+    'Bản sao của ...', 'Bản sao (1) của ...', 'Bản sao ...', 'Copy of ...', 'Copy (1) of ...'
+    """
+    if not text:
+        return ""
+    pattern = r'^(?:bản\s*sao(?:\s*\(\d+\))?\s*(?:của)?|copy(?:\s*(?:of|\(\d+\)))?\s*(?:of)?)\s*[:\-–]?\s+'
+    res = re.sub(pattern, '', text, flags=re.IGNORECASE).strip()
+    return res or text
+
+
 def clean_audio_filename(fn: str) -> str:
-    """Làm sạch tên file/tiêu đề, loại bỏ các tag rác Telegram"""
+    """Làm sạch tên file/tiêu đề, loại bỏ các tag rác Telegram và tiền tố sao chép Google Drive"""
     if not fn:
         return ""
     
     orig_base = re.sub(r'\.(mp3|flac|m4a|wav|aac|ogg|opus|alac|dsf|dff|dsd|ape|wma)$', '', fn, flags=re.IGNORECASE).strip()
+    
+    # 0. Loại bỏ tiền tố sao chép Google Drive (Bản sao của, Copy of)
+    orig_base = strip_copy_prefix(orig_base)
     
     # 1. Bỏ phần mở rộng audio
     res = orig_base
@@ -500,6 +515,7 @@ def clean_audio_filename(fn: str) -> str:
             else:
                 res = orig_base or "Track"
     
+    res = strip_copy_prefix(res)
     res = re.sub(r'\s+', ' ', res).strip()
     return res
 
@@ -529,11 +545,13 @@ def _is_valid_name(text: str, max_len: int = 60) -> bool:
 def extract_context_from_text(text: str) -> Tuple[str, str]:
     """
     Trích xuất tên Album và Ca Sĩ từ tin nhắn văn bản / caption một cách an toàn và nghiêm ngặt (Strict).
+    Tự động loại bỏ tiền tố sao chép từ Google Drive (Bản sao của, Copy of).
     """
     if not text:
         return "", ""
     
     clean = re.sub(r'https?://\S+|t\.me/\S+|@[\w_]+|#\w+', '', text).strip()
+    clean = strip_copy_prefix(clean)
     if not clean:
         return "", ""
 
@@ -543,14 +561,14 @@ def extract_context_from_text(text: str) -> Tuple[str, str]:
     artist_labels = r'Ca\s*s[ĩỹi]|Ngh[eệ]\s*s[ĩi]|Tr[iì]nh\s*b[aà]y|Artist|Singer|Performer'
     m_artist = re.search(rf'(?:{artist_labels})\s*[:\-–]\s*([^\n\r,;\|]+)', clean, re.IGNORECASE)
     if m_artist:
-        candidate_artist = m_artist.group(1).strip()
+        candidate_artist = strip_copy_prefix(m_artist.group(1).strip())
         if _is_valid_name(candidate_artist, 50):
             artist = candidate_artist
 
     album_labels = r'Album|CD\s*\d*|Tuy[eể]n\s*t[aậ]p|[ĐD][ĩi]a\s*h[aá]t|Collection|Nh[aạ]c\s*tuy[eể]n'
     m_album = re.search(rf'(?:{album_labels})\s*[:\-–]\s*([^\n\r,;\|]+)', clean, re.IGNORECASE)
     if m_album:
-        candidate_album = m_album.group(1).strip()
+        candidate_album = strip_copy_prefix(m_album.group(1).strip())
         if _is_valid_name(candidate_album, 60):
             album = candidate_album
 
@@ -558,7 +576,8 @@ def extract_context_from_text(text: str) -> Tuple[str, str]:
         lines = [line.strip() for line in clean.split('\n') if line.strip()]
         if lines:
             first_line = lines[0]
-            if len(first_line) <= 70:
+            if len(first_line) <= 80:
+                first_line = strip_copy_prefix(first_line)
                 first_line = re.sub(r'^[^\w\s\u00C0-\u1EF9]+', '', first_line).strip()
                 first_line = re.sub(r'\[.*?\]', '', first_line).strip()
                 first_line = re.sub(r'\((?:19|20)\d{2}\)', '', first_line).strip()
@@ -567,8 +586,8 @@ def extract_context_from_text(text: str) -> Tuple[str, str]:
                     if sep in first_line:
                         parts = first_line.split(sep)
                         if len(parts) >= 2:
-                            p_art = parts[0].strip()
-                            p_alb = parts[1].strip()
+                            p_art = strip_copy_prefix(parts[0].strip())
+                            p_alb = strip_copy_prefix(parts[1].strip())
                             if not artist and _is_valid_name(p_art, 50):
                                 artist = p_art
                             if not album and _is_valid_name(p_alb, 60):
@@ -881,3 +900,144 @@ async def fetch_music_metadata(
     }
     _METADATA_CACHE[cache_key] = fallback_res
     return fallback_res
+
+
+async def fetch_album_tracklist_online(album_name: str, artist_name: str = "") -> Dict[int, dict]:
+    """
+    Tra cứu danh sách toàn bộ bài hát (Tracklist) của một Album từ Apple Music / iTunes và Deezer.
+    Trả về Dict: {track_number: {"title": str, "artist": str, "album": str, "cover_url": str}}
+    """
+    if not album_name:
+        return {}
+
+    clean_alb = strip_copy_prefix(album_name).strip()
+    clean_art = strip_copy_prefix(artist_name).strip()
+    if not clean_alb:
+        return {}
+
+    tracks_map: Dict[int, dict] = {}
+    query = f"{clean_art} {clean_alb}".strip() if clean_art else clean_alb
+
+    # 1. Thử iTunes API (ưu tiên catalog VN, sau đó fallback sang US)
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            for country in ["VN", "US"]:
+                url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity=album&country={country}&limit=6"
+                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                results = data.get("results", [])
+                if not results:
+                    continue
+
+                best_col = None
+                target_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', clean_alb.lower())
+                target_num = re.search(r'\d+', clean_alb)
+
+                # Ưu tiên 1: Khớp chính xác tuyệt đối tên album
+                for col in results:
+                    c_name = col.get("collectionName", "")
+                    c_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', c_name.lower())
+                    if target_clean == c_clean:
+                        best_col = col
+                        break
+
+                # Ưu tiên 2: Khớp số thứ tự tập/album (ví dụ: Khúc Tình Xưa 6 khớp album có số 6)
+                if not best_col and target_num:
+                    for col in results:
+                        c_name = col.get("collectionName", "")
+                        c_num = re.search(r'\d+', c_name)
+                        if c_num and c_num.group(0) == target_num.group(0):
+                            best_col = col
+                            break
+
+                # Ưu tiên 3: Chuỗi con tương đồng
+                if not best_col:
+                    for col in results:
+                        c_name = col.get("collectionName", "")
+                        c_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', c_name.lower())
+                        if target_clean in c_clean or c_clean in target_clean:
+                            best_col = col
+                            break
+
+                if not best_col and results:
+                    best_col = results[0]
+
+                if best_col:
+                    cid = best_col.get("collectionId")
+                    raw_cover = best_col.get("artworkUrl100", "")
+                    cover_url = raw_cover.replace("100x100bb", "600x600bb") if raw_cover else ""
+                    lookup_url = f"https://itunes.apple.com/lookup?id={cid}&entity=song&country={country}"
+                    l_resp = await client.get(lookup_url, headers={"User-Agent": "Mozilla/5.0"})
+                    if l_resp.status_code == 200:
+                        l_data = l_resp.json()
+                        for item in l_data.get("results", []):
+                            if item.get("wrapperType") == "track":
+                                t_num = item.get("trackNumber")
+                                t_name = item.get("trackName")
+                                if t_num and t_name:
+                                    tracks_map[int(t_num)] = {
+                                        "title": t_name,
+                                        "artist": item.get("artistName", clean_art),
+                                        "album": best_col.get("collectionName", clean_alb),
+                                        "cover_url": cover_url
+                                    }
+                        if tracks_map:
+                            LOGGER.info(f"[ALBUM TRACKLIST] Đã khớp {len(tracks_map)} bài cho album '{clean_alb}' từ iTunes ({country})")
+                            return tracks_map
+    except Exception as e:
+        LOGGER.debug(f"[ALBUM TRACKLIST] iTunes search error: {e}")
+
+    # 2. Fallback sang Deezer API nếu iTunes chưa tìm thấy
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            d_url = f"https://api.deezer.com/search/album?q={urllib.parse.quote(query)}&limit=5"
+            d_resp = await client.get(d_url, headers={"User-Agent": "Mozilla/5.0"})
+            if d_resp.status_code == 200:
+                d_data = d_resp.json()
+                albums = d_data.get("data", [])
+                best_alb = None
+                target_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', clean_alb.lower())
+                target_num = re.search(r'\d+', clean_alb)
+                for alb in albums:
+                    a_title = alb.get("title", "")
+                    a_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', a_title.lower())
+                    if target_clean == a_clean:
+                        best_alb = alb
+                        break
+                if not best_alb and target_num:
+                    for alb in albums:
+                        a_title = alb.get("title", "")
+                        a_num = re.search(r'\d+', a_title)
+                        if a_num and a_num.group(0) == target_num.group(0):
+                            best_alb = alb
+                            break
+                if not best_alb and albums:
+                    best_alb = albums[0]
+
+                if best_alb:
+                    alb_id = best_alb.get("id")
+                    cover_url = best_alb.get("cover_xl") or best_alb.get("cover_big") or best_alb.get("cover_medium", "")
+                    t_url = f"https://api.deezer.com/album/{alb_id}/tracks?limit=50"
+                    t_resp = await client.get(t_url, headers={"User-Agent": "Mozilla/5.0"})
+                    if t_resp.status_code == 200:
+                        t_data = t_resp.json()
+                        for idx, track_item in enumerate(t_data.get("data", []), start=1):
+                            t_num = track_item.get("track_position") or idx
+                            t_title = track_item.get("title") or track_item.get("title_short")
+                            art_name = track_item.get("artist", {}).get("name") or clean_art
+                            if t_title:
+                                tracks_map[int(t_num)] = {
+                                    "title": t_title,
+                                    "artist": art_name,
+                                    "album": best_alb.get("title", clean_alb),
+                                    "cover_url": cover_url
+                                }
+                        if tracks_map:
+                            LOGGER.info(f"[ALBUM TRACKLIST] Đã khớp {len(tracks_map)} bài cho album '{clean_alb}' từ Deezer")
+                            return tracks_map
+    except Exception as e:
+        LOGGER.debug(f"[ALBUM TRACKLIST] Deezer search error: {e}")
+
+    return tracks_map

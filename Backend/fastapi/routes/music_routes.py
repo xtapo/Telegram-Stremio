@@ -3203,7 +3203,7 @@ class MusicShazamManager:
         self._start_time = time.time()
         self._end_time = None
 
-        self._add_log(f"Bắt đầu nhận diện Đa Lớp cho {self._total} bài hát (Shazam Nửa Bài Hát 50% + ID3 + Apple Music & Deezer)...", "info")
+        self._add_log(f"Bắt đầu nhận diện Đa Lớp cho {self._total} bài hát (Shazam Mono 16kHz + Thẻ ID3/RIFF + Apple Music & Deezer)...", "info")
         self._task = asyncio.create_task(self._run_worker(tracks))
         return {"ok": True, "message": f"Đã bắt đầu nhận diện {self._total} bài hát."}
 
