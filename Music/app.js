@@ -2818,27 +2818,29 @@ class XTAPOMusicApp {
         album = album || this.currentAlbum;
 
         const fallback = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop';
-        const isCustomPlaylist = Boolean(this.activePlaylistId || (album && String(album.id).startsWith('pl-')) || (album && album.id === 'favorites-queue'));
 
-        let cover = '';
-
-        if (isCustomPlaylist) {
-            // Trong danh sách phát tùy biến / hàng đợi yêu thích: ưu tiên ảnh riêng của từng bài hát
-            cover = (track && (track.coverUrl || track.cover_url || track.cover || track.albumCover || track.thumb)) ||
-                    (album && (album.coverUrl || album.cover_url || album.cover || album.thumb)) ||
-                    fallback;
-        } else {
-            // Trong Album thông thường: ưu tiên ảnh bìa Album đã nạp sẵn trong cache để hiển thị tức thì (0ms)
-            cover = (album && (album.coverUrl || album.cover_url || album.cover || album.thumb)) ||
-                    (track && (track.coverUrl || track.cover_url || track.cover || track.albumCover || track.thumb)) ||
-                    (album && album.tracks && album.tracks[0] && (album.tracks[0].coverUrl || album.tracks[0].cover_url || album.tracks[0].cover)) ||
-                    fallback;
+        // 1. Ưu tiên cao nhất: Ảnh bìa riêng của bài hát đang phát
+        const trackCover = track && (track.coverUrl || track.cover_url || track.cover || track.albumCover || track.thumb);
+        if (trackCover && typeof trackCover === 'string' && trackCover.trim() !== '') {
+            return trackCover;
         }
 
-        if (!cover || typeof cover !== 'string' || cover.trim() === '') {
-            cover = (this.currentUser && this.currentUser.avatar_url) || fallback;
+        // 2. Ảnh bìa đại diện chung của Album / Tuyển tập
+        const albumCover = album && (album.coverUrl || album.cover_url || album.cover || album.thumb);
+        if (albumCover && typeof albumCover === 'string' && albumCover.trim() !== '') {
+            return albumCover;
         }
-        return cover;
+
+        // 3. Ảnh bìa của bài hát đầu tiên trong Album
+        if (album && album.tracks && album.tracks[0]) {
+            const firstTrackCover = album.tracks[0].coverUrl || album.tracks[0].cover_url || album.tracks[0].cover;
+            if (firstTrackCover && typeof firstTrackCover === 'string' && firstTrackCover.trim() !== '') {
+                return firstTrackCover;
+            }
+        }
+
+        // 4. Fallback: Avatar của người dùng hoặc ảnh mặc định HD
+        return (this.currentUser && this.currentUser.avatar_url) || fallback;
     }
 
     updateCovers(coverUrl) {
@@ -2869,14 +2871,20 @@ class XTAPOMusicApp {
 
         this.updateDynamicBackdrop(resolvedCover);
 
-        // Nếu bài hát có ảnh bìa riêng khác với bìa album, tải ngầm và cập nhật mượt mà vào đĩa than
+        // Nếu bài hát có ảnh bìa riêng khác với resolvedCover, tải ngầm và cập nhật đồng bộ mượt mà vào cả đĩa than lẫn ảnh bìa chính
         const track = this.currentTrack;
         const trackSpecificCover = track && (track.coverUrl || track.cover_url || track.cover);
         if (trackSpecificCover && trackSpecificCover !== resolvedCover && typeof trackSpecificCover === 'string' && !trackSpecificCover.startsWith('data:')) {
             const preImg = new Image();
             preImg.onload = () => {
-                if (this.currentTrack === track && this.vinylCenterImg) {
-                    this.vinylCenterImg.src = trackSpecificCover;
+                if (this.currentTrack === track) {
+                    if (this.vinylCenterImg && this.vinylCenterImg.src !== trackSpecificCover) {
+                        this.vinylCenterImg.src = trackSpecificCover;
+                    }
+                    if (this.albumCoverImg && this.albumCoverImg.src !== trackSpecificCover) {
+                        this.albumCoverImg.src = trackSpecificCover;
+                    }
+                    this.updateDynamicBackdrop(trackSpecificCover);
                 }
             };
             preImg.src = trackSpecificCover;
