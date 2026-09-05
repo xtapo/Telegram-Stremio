@@ -817,8 +817,6 @@ class XTAPOMusicApp {
         this.renderEqualizerSliders();
         this.updateEqualizerUI();
         this.setupDeviceSyncEvents();
-        this.initMusicSync();
-        this.sendSyncHeartbeat();
         const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
         // Tối ưu chu kỳ heartbeat: 6s trên Desktop, 10s trên Mobile (tạm dừng khi ẩn tab để chống nghẽn socket HTTP)
         const heartbeatInterval = isMobileDevice ? 10000 : 6000;
@@ -832,11 +830,10 @@ class XTAPOMusicApp {
         this.setupSpatialNavigation();
         this.setupKeyboardShortcuts();
         
-        // 1. Tải song song thông tin User, Thư viện Albums Telegram và Metadata nghệ sĩ
+        // Tải song song hai nguồn dữ liệu cần thiết cho màn hình đầu.
         await Promise.all([
             this.fetchUserProfile(),
-            this.fetchTelegramAlbums(false),
-            this.fetchArtistMetadata()
+            this.fetchTelegramAlbums(false)
         ]);
 
         // 2. Khôi phục bài hát & vị trí đang phát dở (Player State) hoặc mở mặc định
@@ -877,6 +874,21 @@ class XTAPOMusicApp {
                 });
             }
         } catch (e) {}
+
+        // Chỉ bắt đầu các request nền sau khi nội dung chính đã sẵn sàng và trình duyệt
+        // có cơ hội vẽ frame đầu tiên.
+        this.scheduleBackgroundTask(() => {
+            this.fetchArtistMetadata();
+            this.initMusicSync();
+        });
+    }
+
+    scheduleBackgroundTask(callback) {
+        if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(callback, { timeout: 1500 });
+            return;
+        }
+        setTimeout(callback, 250);
     }
 
     // --- Authentication & User State & Heartbeat Manager ---
@@ -10107,11 +10119,12 @@ class XTAPOMusicApp {
     }
 }
 
-// Initialize on DOM Ready
-document.addEventListener('DOMContentLoaded', () => {
+// Script nằm cuối <body>, nên toàn bộ markup cần thiết đã sẵn sàng. Khởi tạo ngay
+// để không phải chờ các tài nguyên defer/remote không thuộc đường tải chính.
+{
     window.xtapoApp = new XTAPOMusicApp();
     window._musicApp = window.xtapoApp;
     window.player = window.xtapoApp;
-});
+}
 
 

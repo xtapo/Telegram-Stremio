@@ -13,7 +13,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="dns-prefetch" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"></noscript>
     <link rel="stylesheet" href="/music/style.css?v=4.1">
     <style>
         @media (max-width: 1024px) {
@@ -26,8 +27,7 @@
             }
         }
     </style>
-    <!-- Non-blocking scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+    <!-- QR library is local; JSZip is loaded only when the user downloads a ZIP. -->
     <script src="/music/qrcode.min.js?v=1.0" defer></script>
 </head>
 <body class="kmusic-body">
@@ -118,7 +118,7 @@
                 </button>
                 <!-- User Profile / Login -->
                 <button class="nav-btn user-profile-btn tv-focusable" id="userProfileBtn" tabindex="0" role="button" onclick="window._musicApp?.openAuthModal()" title="Tài khoản / Đăng nhập">
-                    <img id="userAvatarImg" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Guest" alt="Guest" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px;">
+                    <img id="userAvatarImg" src="/music/icon-192.png" alt="Guest" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px;">
                     <span id="userDisplayName">Đăng nhập</span>
                 </button>
                 
@@ -237,14 +237,14 @@
                             <div class="vinyl-grooves"></div>
                             <div class="vinyl-reflection"></div>
                             <div class="vinyl-center-label" id="vinylCenterLabel">
-                                <img src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop" id="vinylCenterImg" alt="Center Label">
+                                <img src="/music/icon-512.png" id="vinylCenterImg" alt="Center Label">
                                 <div class="vinyl-spindle-hole"></div>
                             </div>
                         </div>
 
                         <!-- Album Cover Sleeve / Jacket -->
                         <div class="album-sleeve" id="albumSleeve">
-                            <img src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop" id="albumCoverImg" alt="Album Cover" class="cover-image">
+                            <img src="/music/icon-512.png" id="albumCoverImg" alt="Album Cover" class="cover-image">
                             <div class="sleeve-sheen"></div>
                             <div class="sleeve-spine"></div>
                         </div>
@@ -829,7 +829,7 @@
                 <!-- User Avatar & Identity Header -->
                 <div class="profile-hero-card">
                     <div class="profile-avatar-wrap">
-                        <img id="profileCardAvatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Guest" alt="User Avatar" class="profile-card-avatar">
+                        <img id="profileCardAvatar" src="/music/icon-192.png" alt="User Avatar" class="profile-card-avatar">
                         <span class="profile-online-badge"></span>
                     </div>
                     <div class="profile-identity-info">
@@ -1829,6 +1829,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="none" playsinline webkit-playsinline></audio>
 
-    <script src="/music/app.js?v=5.8"></script>
+    <script src="/music/app.js?v=5.9"></script>
 </body>
 </html>
