@@ -34,8 +34,7 @@ from Backend.helper.metadata.audio_fingerprint import (
 
 AUDIO_EXTENSIONS = (
     ".mp3", ".flac", ".m4a", ".wav", ".aac", 
-    ".alac", ".ogg", ".opus", ".dsf", ".dff", ".ape", ".aiff",
-    ".wv", ".wma", ".m4b", ".mka", ".tak", ".tta"
+    ".alac", ".ogg", ".opus", ".dsf", ".dff", ".ape", ".aiff"
 )
 ARCHIVE_EXTENSIONS = (".zip", ".rar", ".7z", ".tar", ".tar.gz", ".tgz", ".bz2", ".xz", ".iso")
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
@@ -422,21 +421,8 @@ def read_audio_metadata_from_file(file_path: str) -> dict:
     return tags
 
 
-def cue_time_to_seconds(ts: str) -> float:
-    """Chuyển đổi tem thời gian CUE sheet (mm:ss:ff, 75 frames/sec) sang số giây thực."""
-    try:
-        parts = ts.strip().split(':')
-        if len(parts) == 3:
-            return int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 75.0
-        elif len(parts) == 2:
-            return int(parts[0]) * 60 + int(parts[1])
-    except Exception:
-        pass
-    return 0.0
-
-
 def parse_cue_file(cue_path: str) -> dict:
-    """Trích xuất chi tiết danh sách bài hát và tem thời gian từ file CUE sheet nếu có trong thư mục giải nén."""
+    """Trích xuất danh sách bài hát từ file CUE sheet nếu có trong thư mục giải nén."""
     tracks_info = {}
     if not cue_path or not os.path.exists(cue_path):
         return tracks_info
@@ -455,8 +441,6 @@ def parse_cue_file(cue_path: str) -> dict:
 
         album_artist = ""
         album_title = ""
-        genre = ""
-        year = ""
         cur_file = ""
         cur_track_num = 0
 
@@ -464,31 +448,18 @@ def parse_cue_file(cue_path: str) -> dict:
             line = line.strip()
             if not line:
                 continue
-
-            m_rem = re.match(r'^REM\s+(GENRE|DATE|YEAR)\s+["\']?([^"\']+)["\']?', line, re.I)
-            if m_rem:
-                tag, val = m_rem.group(1).upper(), m_rem.group(2).strip()
-                if tag == "GENRE" and not genre:
-                    genre = val
-                elif tag in ("DATE", "YEAR") and not year:
-                    year = val[:4]
-                continue
-
-            m_alb_art = re.match(r'^PERFORMER\s+["\']?([^"\']+)["\']?', line, re.I)
-            if m_alb_art and not album_artist and cur_track_num == 0:
+            m_alb_art = re.match(r'^PERFORMER\s+"([^"]+)"', line, re.I)
+            if m_alb_art and not album_artist:
                 album_artist = m_alb_art.group(1).strip()
                 continue
-
-            m_alb_tit = re.match(r'^TITLE\s+["\']?([^"\']+)["\']?', line, re.I)
-            if m_alb_tit and not album_title and cur_track_num == 0:
+            m_alb_tit = re.match(r'^TITLE\s+"([^"]+)"', line, re.I)
+            if m_alb_tit and not album_title:
                 album_title = m_alb_tit.group(1).strip()
                 continue
-
-            m_file = re.match(r'^FILE\s+["\']?([^"\']+)["\']?', line, re.I)
+            m_file = re.match(r'^FILE\s+"([^"]+)"', line, re.I)
             if m_file:
                 cur_file = os.path.basename(m_file.group(1).strip())
                 continue
-
             m_track = re.match(r'^TRACK\s+(\d+)\s+AUDIO', line, re.I)
             if m_track:
                 cur_track_num = int(m_track.group(1))
@@ -497,260 +468,20 @@ def parse_cue_file(cue_path: str) -> dict:
                         "track_num": cur_track_num,
                         "album": album_title,
                         "artist": album_artist,
-                        "title": "",
-                        "file_name": cur_file,
-                        "genre": genre,
-                        "year": year,
-                        "start_sec": 0.0,
+                        "file_name": cur_file
                     }
                 continue
-
-            if cur_track_num in tracks_info:
-                m_tr_tit = re.match(r'^\s*TITLE\s+["\']?([^"\']+)["\']?', line, re.I)
-                if m_tr_tit:
-                    tracks_info[cur_track_num]["title"] = m_tr_tit.group(1).strip()
-                    continue
-                m_tr_art = re.match(r'^\s*PERFORMER\s+["\']?([^"\']+)["\']?', line, re.I)
-                if m_tr_art:
-                    tracks_info[cur_track_num]["artist"] = m_tr_art.group(1).strip()
-                    continue
-                m_idx1 = re.match(r'^\s*INDEX\s+01\s+(\d+:\d+:\d+)', line, re.I)
-                if m_idx1:
-                    tracks_info[cur_track_num]["start_sec"] = cue_time_to_seconds(m_idx1.group(1))
-                    continue
-
-        for t in tracks_info.values():
-            if not t.get("artist"):
-                t["artist"] = album_artist
-            if not t.get("album"):
-                t["album"] = album_title
-            if not t.get("genre") and genre:
-                t["genre"] = genre
-            if not t.get("year") and year:
-                t["year"] = year
+            m_tr_tit = re.match(r'^\s*TITLE\s+"([^"]+)"', line, re.I)
+            if m_tr_tit and cur_track_num in tracks_info:
+                tracks_info[cur_track_num]["title"] = m_tr_tit.group(1).strip()
+                continue
+            m_tr_art = re.match(r'^\s*PERFORMER\s+"([^"]+)"', line, re.I)
+            if m_tr_art and cur_track_num in tracks_info:
+                tracks_info[cur_track_num]["artist"] = m_tr_art.group(1).strip()
+                continue
     except Exception as e:
         LOGGER.debug(f"[CUE PARSER] Lỗi đọc CUE: {e}")
     return tracks_info
-
-
-def find_audio_file_for_cue(cue_path: str, referenced_filename: str = "") -> str:
-    """Xác định file âm thanh gốc đi kèm với file CUE sheet (kể cả khi tên file khác đuôi mã hóa)."""
-    cue_dir = os.path.dirname(os.path.abspath(cue_path))
-    if not os.path.exists(cue_dir):
-        return ""
-
-    if referenced_filename:
-        direct = os.path.join(cue_dir, referenced_filename)
-        if os.path.isfile(direct):
-            return direct
-        ref_stem = os.path.splitext(referenced_filename)[0].lower()
-        for f in os.listdir(cue_dir):
-            f_stem, f_ext = os.path.splitext(f)
-            if f_ext.lower() in AUDIO_EXTENSIONS and f_stem.lower() == ref_stem:
-                cand = os.path.join(cue_dir, f)
-                if os.path.isfile(cand):
-                    return cand
-
-    cue_stem = os.path.splitext(os.path.basename(cue_path))[0].lower()
-    for f in os.listdir(cue_dir):
-        f_stem, f_ext = os.path.splitext(f)
-        if f_ext.lower() in AUDIO_EXTENSIONS and f_stem.lower() == cue_stem:
-            cand = os.path.join(cue_dir, f)
-            if os.path.isfile(cand):
-                return cand
-
-    audio_cands = [
-        os.path.join(cue_dir, f) for f in os.listdir(cue_dir)
-        if os.path.isfile(os.path.join(cue_dir, f)) and os.path.splitext(f)[1].lower() in AUDIO_EXTENSIONS
-    ]
-    if len(audio_cands) == 1:
-        return audio_cands[0]
-
-    return ""
-
-
-def split_single_image_cue(cue_path: str, log_callback=None) -> list:
-    """
-    Tự động cắt tách Single-Image CD Rip (.wv/.flac/.ape/.wav + .cue) thành từng track .flac riêng lẻ
-    dựa trên tem thời gian chính xác (sample-accurate) từ CUE sheet và ghi thẻ metadata ID3/Vorbis.
-    """
-    tracks_info = parse_cue_file(cue_path)
-    if not tracks_info or len(tracks_info) < 2:
-        return []
-
-    cue_dir = os.path.dirname(os.path.abspath(cue_path))
-    ref_fn = next((t.get("file_name") for t in tracks_info.values() if t.get("file_name")), "")
-    source_audio = find_audio_file_for_cue(cue_path, ref_fn)
-    if not source_audio or not os.path.isfile(source_audio):
-        return []
-
-    # Nếu thư mục đã có sẵn các file âm thanh rời khớp số lượng track, không cần cắt
-    existing_audios = [
-        os.path.join(cue_dir, f) for f in os.listdir(cue_dir)
-        if os.path.isfile(os.path.join(cue_dir, f)) and os.path.splitext(f)[1].lower() in AUDIO_EXTENSIONS
-    ]
-    if len(existing_audios) >= len(tracks_info):
-        return []
-
-    ffmpeg_bin = shutil.which("ffmpeg")
-    if not ffmpeg_bin:
-        LOGGER.warning("[CUE SPLIT] Không tìm thấy ffmpeg trên hệ thống để cắt Single-Image CUE!")
-        return []
-
-    sorted_tracks = sorted(tracks_info.values(), key=lambda x: x["track_num"])
-    split_tracks = []
-    total_tracks = len(sorted_tracks)
-
-    cue_base = os.path.basename(cue_path)
-    if log_callback:
-        log_callback(f"✂️ Đang tự động cắt {total_tracks} bài hát từ Single-Image CUE '{cue_base}'...", "info")
-
-    for i, t in enumerate(sorted_tracks):
-        start_sec = t["start_sec"]
-        end_sec = sorted_tracks[i + 1]["start_sec"] if i + 1 < total_tracks else None
-
-        c_title = t.get("title") or f"Track {t['track_num']:02d}"
-        c_artist = t.get("artist") or "Unknown Artist"
-        c_album = t.get("album") or ""
-        t_num = t["track_num"]
-
-        safe_title = re.sub(r'[\\/*?:"<>|]', "", c_title).strip()
-        safe_artist = re.sub(r'[\\/*?:"<>|]', "", c_artist).strip()
-        out_fn = f"{t_num:02d}. {safe_artist} - {safe_title}.flac" if safe_artist else f"{t_num:02d}. {safe_title}.flac"
-        out_path = os.path.join(cue_dir, out_fn)
-
-        cmd = [
-            ffmpeg_bin, "-y",
-            "-i", source_audio,
-            "-ss", f"{start_sec:.3f}"
-        ]
-        if end_sec is not None and end_sec > start_sec:
-            cmd.extend(["-to", f"{end_sec:.3f}"])
-        cmd.extend([
-            "-vn",
-            "-c:a", "flac",
-            "-metadata", f"title={c_title}",
-            "-metadata", f"artist={c_artist}",
-            "-metadata", f"album={c_album}",
-            "-metadata", f"track={t_num}/{total_tracks}"
-        ])
-        if t.get("genre"):
-            cmd.extend(["-metadata", f"genre={t['genre']}"])
-        if t.get("year"):
-            cmd.extend(["-metadata", f"date={t['year']}"])
-        cmd.append(out_path)
-
-        res = subprocess.run(cmd, capture_output=True, timeout=120)
-        if res.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 1024:
-            split_tracks.append(out_path)
-
-    if len(split_tracks) >= int(total_tracks * 0.8):
-        try:
-            if os.path.exists(source_audio):
-                os.remove(source_audio)
-        except Exception:
-            pass
-        if log_callback:
-            log_callback(f"✅ Đã cắt thành công {len(split_tracks)}/{total_tracks} bài hát chuẩn .flac từ CUE '{cue_base}'!", "success")
-        return split_tracks
-
-    return []
-
-
-def convert_unsupported_audio_to_flac(extract_dir: str, log_callback=None) -> list:
-    """
-    Tự động chuyển đổi các file âm thanh lossless không phổ biến (.wv, .ape, .tak, .tta, .wma)
-    sang định dạng .flac chuẩn để trình phát Telegram và Stremio phát trực tiếp mượt mà.
-    """
-    ffmpeg_bin = shutil.which("ffmpeg")
-    if not ffmpeg_bin or not os.path.exists(extract_dir):
-        return []
-
-    converted_files = []
-    unsupported_exts = (".wv", ".ape", ".tak", ".tta", ".wma")
-
-    for root, _, files in os.walk(extract_dir):
-        for f in files:
-            ext = os.path.splitext(f)[1].lower()
-            if ext in unsupported_exts:
-                src_path = os.path.join(root, f)
-                stem = os.path.splitext(f)[0]
-                out_path = os.path.join(root, f"{stem}.flac")
-                if not os.path.exists(out_path):
-                    if log_callback:
-                        log_callback(f"🔄 Đang chuyển đổi định dạng âm thanh '{f}' sang .flac lossless...", "info")
-                    cmd = [ffmpeg_bin, "-y", "-i", src_path, "-vn", "-c:a", "flac", out_path]
-                    res = subprocess.run(cmd, capture_output=True, timeout=180)
-                    if res.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 1024:
-                        try:
-                            os.remove(src_path)
-                        except Exception:
-                            pass
-                        converted_files.append(out_path)
-    return converted_files
-
-
-def _extract_nested_archives(extract_dir: str, log_callback=None, max_depth: int = 3):
-    """Tự động kiểm tra và giải nén các file nén lồng nhau (nested archives như CD1.rar, CD2.zip) bên trong thư mục giải nén."""
-    if not os.path.exists(extract_dir):
-        return
-    for _ in range(max_depth):
-        found_archives = []
-        for root, _, files in os.walk(extract_dir):
-            for f in files:
-                ext = os.path.splitext(f)[1].lower()
-                if ext in ARCHIVE_EXTENSIONS:
-                    found_archives.append(os.path.join(root, f))
-        if not found_archives:
-            break
-        for arch_path in found_archives:
-            arch_stem = os.path.splitext(os.path.basename(arch_path))[0]
-            target_out = os.path.join(os.path.dirname(arch_path), f"{arch_stem}_extracted")
-            if log_callback:
-                log_callback(f"📦 Phát hiện file nén con '{os.path.basename(arch_path)}', đang giải nén tiếp...", "info")
-            success, _ = _sync_extract_archive(arch_path, target_out)
-            if success:
-                try:
-                    os.remove(arch_path)
-                except Exception:
-                    pass
-
-
-def find_local_cover_art(audio_path: str) -> Optional[str]:
-    """Tìm ảnh bìa cục bộ (.jpg, .png) trong cùng thư mục chứa bài hát hoặc thư mục cha của album."""
-    audio_dir = os.path.dirname(os.path.abspath(audio_path))
-    stem = os.path.splitext(os.path.basename(audio_path))[0].lower()
-
-    dirs_to_check = [audio_dir]
-    parent_dir = os.path.dirname(audio_dir)
-    if parent_dir and os.path.exists(parent_dir) and parent_dir != audio_dir:
-        dirs_to_check.append(parent_dir)
-
-    for d in dirs_to_check:
-        if not os.path.exists(d):
-            continue
-        try:
-            files = os.listdir(d)
-        except Exception:
-            continue
-        prioritized = []
-        regular = []
-        for f in files:
-            ext = os.path.splitext(f)[1].lower()
-            if ext in IMAGE_EXTENSIONS:
-                f_lower = f.lower()
-                full_p = os.path.join(d, f)
-                if stem and stem in f_lower:
-                    prioritized.insert(0, full_p)
-                elif any(k in f_lower for k in ("cover", "front", "folder", "album", "cd")):
-                    prioritized.append(full_p)
-                else:
-                    regular.append(full_p)
-        if prioritized:
-            return prioritized[0]
-        if regular:
-            return regular[0]
-    return None
 
 
 _UPLOAD_USERBOT_INDEX = 0
@@ -1446,9 +1177,7 @@ class GoogleDriveUploadManager:
                     success, extract_msg = await _extract_archive(dl_path, sub_extract_dir)
                     if success:
                         self._log(f"✅ {extract_msg}", "success")
-
-                        # 1. Tự động kiểm tra và giải nén các file nén con (nested archives: CD1.rar, CD2.zip...)
-                        await asyncio.to_thread(_extract_nested_archives, sub_extract_dir, self._log)
+                        files_to_upload = self._collect_audio_files(sub_extract_dir)
 
                         # Trích xuất gợi ý Ca sĩ / Album từ tên file nén nếu người dùng chưa nhập
                         archive_stem = os.path.splitext(os.path.basename(dl_path))[0]
@@ -1463,37 +1192,13 @@ class GoogleDriveUploadManager:
                             if clean_arch_name and len(clean_arch_name) >= 3 and not is_generic_music_query(clean_arch_name):
                                 item_default_album = strip_copy_prefix(clean_arch_name)
 
-                        # 2. Xử lý toàn bộ các tệp .cue trong thư mục giải nén (Hỗ trợ Multi-CD: CD1, CD2... & Single-Image CUE)
+                        # Tìm file .cue trong thư mục giải nén
                         if os.path.exists(sub_extract_dir):
                             cue_files = [os.path.join(root, f) for root, _, files in os.walk(sub_extract_dir) for f in files if f.lower().endswith('.cue')]
-                            cue_files.sort()
-                            for c_file in cue_files:
-                                parsed_c = parse_cue_file(c_file)
-                                if parsed_c:
-                                    self._log(f"📑 Phát hiện CUE Sheet '{os.path.basename(c_file)}' ({len(parsed_c)} bài)", "info")
-                                    split_files = await asyncio.to_thread(split_single_image_cue, c_file, self._log)
-                                    if split_files:
-                                        for sf in split_files:
-                                            bn = os.path.basename(sf)
-                                            m_num = re.match(r'^(\d+)\.', bn)
-                                            if m_num:
-                                                t_num = int(m_num.group(1))
-                                                if t_num in parsed_c:
-                                                    cue_track_map[bn.lower()] = parsed_c[t_num]
-                                                    if t_num not in cue_track_map:
-                                                        cue_track_map[t_num] = parsed_c[t_num]
-                                    else:
-                                        for t_idx, t_dat in parsed_c.items():
-                                            if t_dat.get("file_name"):
-                                                cue_track_map[t_dat["file_name"].lower()] = t_dat
-                                            if t_idx not in cue_track_map:
-                                                cue_track_map[t_idx] = t_dat
-
-                        # 3. Tự động chuyển đổi các định dạng âm thanh lạ (.wv, .ape, .tak, .tta, .wma) sang .flac lossless chuẩn
-                        await asyncio.to_thread(convert_unsupported_audio_to_flac, sub_extract_dir, self._log)
-
-                        # 4. Thu thập toàn bộ tệp âm thanh hoàn chỉnh sau khi xử lý
-                        files_to_upload = self._collect_audio_files(sub_extract_dir)
+                            if cue_files:
+                                cue_track_map = parse_cue_file(cue_files[0])
+                                if cue_track_map:
+                                    self._log(f"📑 Phát hiện CUE Sheet '{os.path.basename(cue_files[0])}' ({len(cue_track_map)} bài) — áp dụng danh sách tên bài gốc!", "success")
 
                         # Nếu không có CUE Sheet, tự động tra cứu Danh mục Album (Album Tracklist Resolver) từ Apple Music / Deezer
                         if not cue_track_map and (item_default_album or item_default_artist):
@@ -1510,18 +1215,6 @@ class GoogleDriveUploadManager:
                     else:
                         self._log(f"⚠️ Lỗi giải nén {os.path.basename(dl_path)}: {extract_msg}", "warn")
                 elif ext in AUDIO_EXTENSIONS:
-                    if ext in (".wv", ".ape", ".tak", ".tta", ".wma") and shutil.which("ffmpeg"):
-                        flac_path = os.path.splitext(dl_path)[0] + ".flac"
-                        if not os.path.exists(flac_path):
-                            self._log(f"🔄 Đang chuyển đổi '{os.path.basename(dl_path)}' sang định dạng .flac lossless...", "info")
-                            cmd = [shutil.which("ffmpeg"), "-y", "-i", dl_path, "-vn", "-c:a", "flac", flac_path]
-                            res = await asyncio.to_thread(subprocess.run, cmd, capture_output=True)
-                            if res.returncode == 0 and os.path.exists(flac_path):
-                                try:
-                                    os.remove(dl_path)
-                                except Exception:
-                                    pass
-                                dl_path = flac_path
                     files_to_upload = [dl_path]
 
                 if not files_to_upload:
@@ -1562,15 +1255,12 @@ class GoogleDriveUploadManager:
                     # Khớp thông tin từ CUE Sheet hoặc Album Tracklist (nếu có)
                     cue_info = {}
                     if cue_track_map:
-                        if raw_filename.lower() in cue_track_map:
-                            cue_info = cue_track_map[raw_filename.lower()]
-                        else:
-                            for c_idx, c_data in cue_track_map.items():
-                                if isinstance(c_data, dict) and c_data.get("file_name") and c_data["file_name"].lower() == raw_filename.lower():
-                                    cue_info = c_data
-                                    break
-                            if not cue_info and track_idx in cue_track_map and isinstance(cue_track_map[track_idx], dict):
-                                cue_info = cue_track_map[track_idx]
+                        for c_idx, c_data in cue_track_map.items():
+                            if c_data.get("file_name") and c_data["file_name"].lower() == raw_filename.lower():
+                                cue_info = c_data
+                                break
+                        if not cue_info and track_idx in cue_track_map:
+                            cue_info = cue_track_map[track_idx]
 
                     # Ưu tiên dữ liệu: CUE Sheet/Album Tracklist > Thẻ nhúng cục bộ > Parser tiêu đề > Tên sạch
                     artist_candidate = (
@@ -1651,10 +1341,6 @@ class GoogleDriveUploadManager:
                             LOGGER.debug(f"Metadata scrape note: {e}")
 
                     thumb_path = await self._download_cover_image(cover_url, work_dir) if cover_url else None
-                    if not thumb_path or not os.path.exists(thumb_path):
-                        local_cover = find_local_cover_art(file_path)
-                        if local_cover and os.path.exists(local_cover):
-                            thumb_path = local_cover
 
                     caption = f"🎵 {title_candidate}\n👤 {artist_candidate or 'Unknown Artist'}\n💿 {album_candidate or 'Single'}"
                     ext_f = os.path.splitext(file_path)[1].lower()
