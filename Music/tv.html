@@ -2491,36 +2491,43 @@
         function isThisTrackPlaying(tr) {
             if (!isPlaying || !currentlyPlayingTrack || !tr) return false;
 
-            // 1. So khớp theo msg_id + chat_id nếu có
+            // 1. So khớp trực tiếp object reference (Chính xác tuyệt đối 100%)
+            if (tr === currentlyPlayingTrack) return true;
+
+            // 2. Nếu đang xem đúng nhóm / danh sách đang phát:
+            // Chỉ duy nhất 1 bài khớp object reference ở trên được tính là true!
+            // Tuyệt đối không so khớp lỏng lẻo trong cùng danh sách đang phát để tránh trùng lặp UI.
+            const isViewingPlayingGroup = currentlyPlayingGroup && currentActiveGroup && 
+                (currentlyPlayingGroup === currentActiveGroup || currentlyPlayingGroup.id === currentActiveGroup.id);
+            if (isViewingPlayingGroup) {
+                return false;
+            }
+
+            // 3. Khi người dùng chuyển sang nhóm khác (Album khác, Nghệ sĩ khác, Yêu thích, Playlist...):
+            // Ưu tiên so khớp theo chat_id + msg_id hợp lệ (chỉ khi cả 2 đều tồn tại và msg_id > 0)
             const curMid = currentlyPlayingTrack.msg_id || currentlyPlayingTrack.msgId;
             const curCid = currentlyPlayingTrack.chat_id || currentlyPlayingTrack.chatId;
             const trMid = tr.msg_id || tr.msgId;
             const trCid = tr.chat_id || tr.chatId;
-            if (curMid && trMid && String(curMid) === String(trMid)) {
-                if (!curCid || !trCid || String(curCid) === String(trCid)) return true;
+            if (curMid && trMid && Number(curMid) > 0 && Number(curMid) === Number(trMid)) {
+                if (curCid && trCid && String(curCid) === String(trCid)) return true;
             }
 
-            // 2. So khớp trực tiếp object reference
-            if (tr === currentlyPlayingTrack) return true;
-
-            // 3. So khớp theo ID bài hát nếu cùng thuộc nhóm đang phát
-            if (tr.id && currentlyPlayingTrack.id && String(tr.id) === String(currentlyPlayingTrack.id)) {
-                if (currentlyPlayingGroup && currentActiveGroup && 
-                    (currentlyPlayingGroup === currentActiveGroup || currentlyPlayingGroup.id === currentActiveGroup.id)) {
-                    return true;
-                }
+            // 4. Fallback so khớp theo Stream URL duy nhất nếu có
+            const curStream = currentlyPlayingTrack.stream_url || currentlyPlayingTrack.previewUrl || currentlyPlayingTrack.url;
+            const trStream = tr.stream_url || tr.previewUrl || tr.url;
+            if (curStream && trStream && curStream === trStream && !curStream.includes('/undefined')) {
+                return true;
             }
 
-            // 4. So khớp theo Tên bài + Ca sĩ nếu ở cùng nhóm đang phát
-            if (currentlyPlayingGroup && currentActiveGroup && 
-                (currentlyPlayingGroup === currentActiveGroup || currentlyPlayingGroup.id === currentActiveGroup.id)) {
-                const curName = (currentlyPlayingTrack.name || currentlyPlayingTrack.title || '').trim().toLowerCase();
-                const trName = (tr.name || tr.title || '').trim().toLowerCase();
-                if (curName && trName && curName === trName) {
-                    const curArt = (currentlyPlayingTrack.artist || '').trim().toLowerCase();
-                    const trArt = (tr.artist || '').trim().toLowerCase();
-                    if (!curArt || !trArt || curArt === trArt) return true;
-                }
+            // 5. Fallback so khớp theo Tên bài + Ca sĩ chuẩn hóa (chỉ khi tên bài hợp lệ, không generic)
+            const curName = (currentlyPlayingTrack.name || currentlyPlayingTrack.title || '').trim().toLowerCase();
+            const trName = (tr.name || tr.title || '').trim().toLowerCase();
+            const genericNames = ['', 'unknown', 'bài hát', 'audio', 'track', 'track 1', 'track 2'];
+            if (curName && trName && curName === trName && !genericNames.includes(curName)) {
+                const curArt = (currentlyPlayingTrack.artist || '').trim().toLowerCase();
+                const trArt = (tr.artist || '').trim().toLowerCase();
+                if (curArt && trArt && curArt === trArt) return true;
             }
 
             return false;
