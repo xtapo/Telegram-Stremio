@@ -416,74 +416,15 @@
     <div class="modal-overlay" id="searchModal">
         <div class="search-card">
             <div class="search-input-wrap">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" class="search-input-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="search" id="searchInput" placeholder="Tìm kiếm bài hát, ca sĩ, album, thể loại..." autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search">
-                <button class="search-clear-btn" id="searchClearBtn" title="Xóa từ khóa" style="display: none;">✕</button>
-                <button class="search-esc" id="closeSearchModal" title="Đóng tìm kiếm (ESC)">ESC</button>
+                <input type="search" id="searchInput" placeholder="Tìm kiếm bài hát, nghệ sĩ, album..." autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search">
+                <button class="search-esc" id="closeSearchModal">ESC</button>
             </div>
-
-            <!-- Search Filter Tabs -->
-            <div class="search-filter-tabs" id="searchFilterTabs">
-                <button class="search-tab-pill active" data-tab="all">
-                    <span>Tất cả</span>
-                    <span class="search-tab-count" id="countSearchAll">0</span>
-                </button>
-                <button class="search-tab-pill" data-tab="tracks">
-                    <span>🎵 Bài hát</span>
-                    <span class="search-tab-count" id="countSearchTracks">0</span>
-                </button>
-                <button class="search-tab-pill" data-tab="artists">
-                    <span>👤 Nghệ sĩ</span>
-                    <span class="search-tab-count" id="countSearchArtists">0</span>
-                </button>
-                <button class="search-tab-pill" data-tab="albums">
-                    <span>💿 Album</span>
-                    <span class="search-tab-count" id="countSearchAlbums">0</span>
-                </button>
-                <button class="search-tab-pill" data-tab="playlists">
-                    <span>📑 Playlist</span>
-                    <span class="search-tab-count" id="countSearchPlaylists">0</span>
-                </button>
-            </div>
-
-            <!-- Suggestions & Recent Searches (Khi chưa gõ từ khóa) -->
-            <div class="search-suggestions-container" id="searchSuggestionsContainer">
-                <div class="search-recent-section" id="searchRecentSection" style="display: none;">
-                    <div class="search-section-header">
-                        <div class="search-section-title">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            <span>Tìm kiếm gần đây</span>
-                        </div>
-                        <button class="search-clear-recent-btn" id="btnClearRecentSearches">Xóa tất cả</button>
-                    </div>
-                    <div class="search-recent-tags" id="searchRecentTags"></div>
-                </div>
-
-                <div class="search-quick-section">
-                    <div class="search-section-header">
-                        <div class="search-section-title">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <span>Gợi ý phổ biến</span>
-                        </div>
-                    </div>
-                    <div class="search-quick-tags" id="searchQuickTags"></div>
-                </div>
-            </div>
-
-            <!-- Search Results -->
             <div class="search-results" id="searchResults">
-                <div class="search-empty">Nhập từ khoá để tìm bài hát, ca sĩ, album...</div>
-            </div>
-
-            <!-- Keyboard Navigation Footer -->
-            <div class="search-footer-hint">
-                <span class="search-hint-item"><kbd>↑</kbd><kbd>↓</kbd> Di chuyển</span>
-                <span class="search-hint-item"><kbd>Enter</kbd> Chọn / Phát</span>
-                <span class="search-hint-item"><kbd>Tab</kbd> Đổi danh mục</span>
-                <span class="search-hint-item"><kbd>ESC</kbd> Đóng</span>
+                <div class="search-empty">Nhập từ khoá để tìm bài hát nhanh...</div>
             </div>
         </div>
     </div>

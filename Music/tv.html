@@ -507,29 +507,6 @@
             font-weight: 500;
         }
 
-        .tv-card-badge {
-            display: inline-block;
-            font-size: 9px;
-            font-weight: 800;
-            padding: 1px 5px;
-            border-radius: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            margin-left: 6px;
-            vertical-align: middle;
-            background: rgba(245, 158, 11, 0.18);
-            color: #fbbf24;
-            border: 1px solid rgba(245, 158, 11, 0.35);
-        }
-
-        .tv-search-highlight {
-            background: rgba(245, 158, 11, 0.35);
-            color: #ffd700;
-            font-weight: 800;
-            border-radius: 2px;
-            padding: 0 2px;
-        }
-
         /* PANEL 3: RIGHT TRACKLIST & SHOWCASE (COMPACT) */
         .tv-col-right {
             flex: 1;
@@ -1584,53 +1561,6 @@
             return tNorm.includes(qNorm);
         }
 
-        function highlightMatchTv(text, query) {
-            if (!text) return '';
-            if (!query || !query.trim()) return escapeHtml(text);
-            const rawText = String(text);
-            const qTrim = query.trim();
-
-            const lowText = rawText.toLowerCase();
-            const lowQ = qTrim.toLowerCase();
-            const idx = lowText.indexOf(lowQ);
-            if (idx !== -1) {
-                const before = escapeHtml(rawText.substring(0, idx));
-                const matched = escapeHtml(rawText.substring(idx, idx + lowQ.length));
-                const after = highlightMatchTv(rawText.substring(idx + lowQ.length), query);
-                return `${before}<mark class="tv-search-highlight">${matched}</mark>${after}`;
-            }
-
-            const normText = removeVietnameseTones(lowText);
-            const normQ = removeVietnameseTones(lowQ);
-            const normIdx = normText.indexOf(normQ);
-            if (normIdx !== -1 && normQ.length > 0) {
-                const before = escapeHtml(rawText.substring(0, normIdx));
-                const matched = escapeHtml(rawText.substring(normIdx, normIdx + normQ.length));
-                const after = highlightMatchTv(rawText.substring(normIdx + normQ.length), query);
-                return `${before}<mark class="tv-search-highlight">${matched}</mark>${after}`;
-            }
-
-            return escapeHtml(rawText);
-        }
-
-        function getTvRecentSearches() {
-            try {
-                const d = localStorage.getItem('xtapo_tv_recent_searches');
-                return d ? JSON.parse(d) : [];
-            } catch(e) { return []; }
-        }
-
-        function saveTvRecentSearch(term) {
-            if (!term || !term.trim()) return;
-            const clean = term.trim();
-            let list = getTvRecentSearches().filter(t => t.toLowerCase() !== clean.toLowerCase());
-            list.unshift(clean);
-            if (list.length > 8) list = list.slice(0, 8);
-            try {
-                localStorage.setItem('xtapo_tv_recent_searches', JSON.stringify(list));
-            } catch(e) {}
-        }
-
         function updateSearchPlaceholder() {
             if (!itemsSearchInput) return;
             const phMap = {
@@ -2139,8 +2069,6 @@
                 const matchedItems = [];
 
                 if (q) {
-                    saveTvRecentSearch(q);
-
                     // 1. Tìm Albums khớp
                     rawAlbums.forEach(alb => {
                         const albMatch = matchVietnamese(alb.title, q) || matchVietnamese(alb.artist, q);
@@ -2164,22 +2092,16 @@
                     rawAlbums.forEach(alb => {
                         const art = (alb.artist || '').trim();
                         if (art && matchVietnamese(art, q) && !artistMap[art]) {
-                            const artTracks = [];
-                            rawAlbums.forEach(a => {
-                                if ((a.artist || '').trim().toLowerCase() === art.toLowerCase()) {
-                                    artTracks.push(...(a.tracks || []));
-                                }
-                            });
                             artistMap[art] = {
                                 type: 'artist',
                                 id: art,
                                 title: art,
-                                sub: `Nghệ Sĩ • ${artTracks.length} bài hát`,
+                                sub: `Nghệ Sĩ • ${alb.tracks ? alb.tracks.length : 0} bài`,
                                 cover: alb.coverUrl || alb.cover || '/music/icon-192.png',
                                 isAvatar: true,
                                 year: 'Nghệ Sĩ',
                                 badge: 'ARTIST',
-                                tracks: artTracks
+                                tracks: alb.tracks || []
                             };
                         }
                     });
@@ -2199,32 +2121,15 @@
                     });
 
                     if (allTracksMatching.length > 0) {
-                        // Thẻ nhóm toàn bộ bài hát khớp
                         matchedItems.unshift({
                             type: 'tracks_group',
                             id: '__search_tracks__',
-                            title: `Toàn bộ bài hát: "${q}"`,
+                            title: `Bài hát: "${q}"`,
                             sub: `Tổng hợp ${allTracksMatching.length} bài hát tìm thấy`,
                             cover: allTracksMatching[0]?.coverUrl || allTracksMatching[0]?.cover || '/music/icon-192.png',
                             year: 'Kết Quả',
-                            badge: 'TẤT CẢ BÀI',
+                            badge: 'BÀI HÁT',
                             tracks: allTracksMatching
-                        });
-
-                        // Thêm từng bài hát lẻ hàng đầu (tối đa 12 bài) để người dùng TV có thể chọn phát nhanh
-                        allTracksMatching.slice(0, 12).forEach((tr, trI) => {
-                            const isHires = (tr.format || '').toLowerCase().includes('hi-res') || (tr.format || '').toLowerCase().includes('24-bit') || (tr.format || '').toLowerCase().includes('dsd');
-                            matchedItems.push({
-                                type: 'single_track',
-                                id: `__single_tr_${tr.msg_id || tr.id || trI}`,
-                                title: tr.name || tr.title || 'Không có tên bài hát',
-                                sub: `${tr.artist || 'Nhiều nghệ sĩ'} • ${tr.duration || ''}`,
-                                cover: getTrackCover(tr),
-                                year: tr.duration || 'Track',
-                                badge: isHires ? 'HI-RES' : 'BÀI HÁT',
-                                track: tr,
-                                tracks: [tr]
-                            });
                         });
                     }
 
@@ -2246,56 +2151,16 @@
 
                     currentItems = matchedItems;
                 } else {
-                    // Khi chưa nhập từ khóa: Hiển thị Thẻ Lịch sử tìm kiếm & Gợi ý thể loại nhanh
-                    const emptyItems = [];
-
-                    // Thẻ Lịch sử tìm kiếm gần đây (nếu có)
-                    const tvRecent = getTvRecentSearches();
-                    if (tvRecent.length > 0) {
-                        tvRecent.forEach(term => {
-                            emptyItems.push({
-                                type: 'quick_search',
-                                id: `__recent_${term}`,
-                                searchTerm: term,
-                                title: `Tìm lại: "${term}"`,
-                                sub: 'Lịch sử tìm kiếm gần đây • Bấm để tìm lại',
-                                cover: '/music/icon-192.png',
-                                year: 'Gần Đây',
-                                badge: 'LỊCH SỬ',
-                                tracks: []
-                            });
-                        });
-                    }
-
-                    // Thẻ Gợi ý phổ biến
-                    const popularSuggestions = [
-                        { name: 'Bolero / Trữ Tình', desc: 'Tuyệt phẩm nhạc vàng, trữ tình bất hủ' },
-                        { name: 'Hi-Res Lossless', desc: 'Âm thanh chất lượng cao 24-bit / DSD' },
-                        { name: 'V-Pop / Nhạc Trẻ', desc: 'Các bản hit thịnh hành mới nhất' },
-                        { name: 'Trịnh Công Sơn', desc: 'Tuyệt tác nhạc Trịnh sâu lắng' },
-                        { name: 'Acoustic / Chill', desc: 'Giai điệu mộc mạc thư giãn tâm hồn' },
-                        { name: 'Nhạc Vàng', desc: 'Giai điệu quê hương & bolero vang bóng' },
-                        { name: 'EDM / Remix', desc: 'Sôi động, bass bốc tràn đầy năng lượng' },
-                        { name: 'Lệ Quyên', desc: 'Giọng ca phòng trà nồng nàn' },
-                        { name: 'Đan Nguyên', desc: 'Tiếng hát trầm ấm phong trần' },
-                        { name: 'Vũ', desc: 'Những bản tình ca indie da diết' }
-                    ];
-
-                    popularSuggestions.forEach(sug => {
-                        emptyItems.push({
-                            type: 'quick_search',
-                            id: `__quick_${sug.name}`,
-                            searchTerm: sug.name,
-                            title: sug.name,
-                            sub: `${sug.desc} • Bấm để tìm nhanh`,
-                            cover: '/music/icon-192.png',
-                            year: 'Gợi Ý',
-                            badge: 'PHỔ BIẾN',
-                            tracks: []
-                        });
-                    });
-
-                    currentItems = emptyItems;
+                    currentItems = [{
+                        type: 'search_prompt',
+                        id: '__search_prompt__',
+                        title: 'Nhập từ khóa tìm kiếm',
+                        sub: 'Bấm vào ô tìm kiếm để tìm bài hát, album, ca sĩ...',
+                        cover: '/music/icon-192.png',
+                        year: 'Tìm Kiếm',
+                        badge: 'SEARCH',
+                        tracks: []
+                    }];
                 }
             }
         }
@@ -2401,20 +2266,11 @@
                     ? `<img src="${coverSrc}" class="tv-card-avatar" alt="" onerror="this.src='/music/icon-192.png'">`
                     : `<img src="${coverSrc}" class="tv-card-cover" alt="" onerror="this.src='/music/icon-192.png'">`;
 
-                const qSearch = (itemSearchQuery || '').trim();
-                const displayTitle = (qSearch && (currentTab === 'search' || qSearch.length >= 2))
-                    ? highlightMatchTv(item.title, qSearch)
-                    : escapeHtml(item.title);
-                const displaySub = (qSearch && (currentTab === 'search' || qSearch.length >= 2))
-                    ? highlightMatchTv(item.sub, qSearch)
-                    : escapeHtml(item.sub);
-                const badgeHtml = item.badge ? `<span class="tv-card-badge">${escapeHtml(item.badge)}</span>` : '';
-
                 card.innerHTML = `
                     ${avatarHtml}
                     <div class="tv-card-info">
-                        <div class="tv-card-title">${displayTitle} ${badgeHtml}</div>
-                        <div class="tv-card-sub">${displaySub}</div>
+                        <div class="tv-card-title">${escapeHtml(item.title)}</div>
+                        <div class="tv-card-sub">${escapeHtml(item.sub)}</div>
                     </div>
                 `;
 
@@ -2503,21 +2359,6 @@
             const list = sourceList || getFilteredItems();
             const item = list[idx] || currentItems[idx];
             if (!item) return;
-
-            // Xử lý khi chọn thẻ Gợi ý / Lịch sử tìm kiếm nhanh trên TV
-            if (item.type === 'quick_search') {
-                if (itemsSearchInput) {
-                    itemsSearchInput.value = item.searchTerm;
-                }
-                itemSearchQuery = item.searchTerm;
-                saveTvRecentSearch(item.searchTerm);
-                if (btnItemsClearSearch) btnItemsClearSearch.style.display = 'inline-flex';
-                currentPage = 1;
-                selectedItemIdx = 0;
-                buildCategoryData();
-                renderItems();
-                return;
-            }
 
             selectedItemIdx = idx;
             currentActiveGroup = item;
