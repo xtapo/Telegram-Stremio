@@ -374,6 +374,21 @@ class XTAPOMusicApp {
         this.closeSearchModal = document.getElementById('closeSearchModal');
         this.searchInput = document.getElementById('searchInput');
         this.searchResults = document.getElementById('searchResults');
+        this.searchClearBtn = document.getElementById('searchClearBtn');
+        this.searchFilterTabs = document.getElementById('searchFilterTabs');
+        this.searchSuggestionsContainer = document.getElementById('searchSuggestionsContainer');
+        this.searchRecentSection = document.getElementById('searchRecentSection');
+        this.searchRecentTags = document.getElementById('searchRecentTags');
+        this.btnClearRecentSearches = document.getElementById('btnClearRecentSearches');
+        this.searchQuickTags = document.getElementById('searchQuickTags');
+        this.countSearchAll = document.getElementById('countSearchAll');
+        this.countSearchTracks = document.getElementById('countSearchTracks');
+        this.countSearchArtists = document.getElementById('countSearchArtists');
+        this.countSearchAlbums = document.getElementById('countSearchAlbums');
+        this.countSearchPlaylists = document.getElementById('countSearchPlaylists');
+        this.currentSearchTab = 'all';
+        this.currentNavSearchIndex = -1;
+        this._cachedSearchMatches = { tracks: [], artists: [], albums: [], playlists: [] };
 
         this.metaInfoBtn = document.getElementById('metaInfoBtn');
         this.openDrawerBtn = document.getElementById('openDrawerBtn');
@@ -3537,14 +3552,63 @@ class XTAPOMusicApp {
             });
         }
 
-        // Search Modal
+        // Search Modal & Advanced Search Controls
         if (this.searchBtn) {
             this.searchBtn.addEventListener('click', () => {
                 this.openModal(this.searchModal);
-                setTimeout(() => this.searchInput.focus(), 100);
+                this.renderRecentSearches();
+                this.initSearchSuggestions();
+                setTimeout(() => {
+                    if (this.searchInput) {
+                        this.searchInput.focus();
+                        if (!this.searchInput.value) this.handleSearch('');
+                    }
+                }, 100);
             });
         }
-        if (this.closeSearchModal) this.closeSearchModal.addEventListener('click', () => this.closeModal(this.searchModal));
+        if (this.closeSearchModal) {
+            this.closeSearchModal.addEventListener('click', () => this.closeModal(this.searchModal));
+        }
+
+        // Search Clear Button
+        if (this.searchClearBtn) {
+            this.searchClearBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.searchInput) {
+                    this.searchInput.value = '';
+                    this.handleSearch('');
+                    this.searchInput.focus();
+                }
+            });
+        }
+
+        // Search Filter Tabs Click
+        if (this.searchFilterTabs) {
+            this.searchFilterTabs.addEventListener('click', (e) => {
+                const tabBtn = e.target.closest('.search-tab-pill');
+                if (!tabBtn) return;
+                const tabKey = tabBtn.getAttribute('data-tab');
+                if (!tabKey) return;
+
+                this.currentSearchTab = tabKey;
+                this.searchFilterTabs.querySelectorAll('.search-tab-pill').forEach(btn => {
+                    btn.classList.toggle('active', btn.getAttribute('data-tab') === tabKey);
+                });
+
+                // Re-render current results with the new category tab
+                this.renderSearchResults();
+            });
+        }
+
+        // Clear All Recent Searches
+        if (this.btnClearRecentSearches) {
+            this.btnClearRecentSearches.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.clearRecentSearches();
+            });
+        }
+
+        // Search Input listeners with debounce and keyboard navigation
         if (this.searchInput) {
             let isSearchComposing = false;
             this.searchInput.addEventListener('compositionstart', () => { isSearchComposing = true; });
@@ -3559,11 +3623,50 @@ class XTAPOMusicApp {
                 const val = e.target.value;
                 this._searchDebounceTimer = setTimeout(() => {
                     this.handleSearch(val);
-                }, 200);
+                }, 180);
             });
             this.searchInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && (isSearchComposing || e.isComposing || e.keyCode === 229)) {
+                if (isSearchComposing || e.isComposing || e.keyCode === 229) {
                     return;
+                }
+                const items = this.searchResults ? Array.from(this.searchResults.querySelectorAll('.search-item')) : [];
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (items.length > 0) {
+                        this.currentNavSearchIndex = (this.currentNavSearchIndex + 1) % items.length;
+                        this.highlightNavSearchItem(items);
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (items.length > 0) {
+                        this.currentNavSearchIndex = (this.currentNavSearchIndex - 1 + items.length) % items.length;
+                        this.highlightNavSearchItem(items);
+                    }
+                } else if (e.key === 'Tab') {
+                    if (this.searchFilterTabs) {
+                        e.preventDefault();
+                        const tabs = Array.from(this.searchFilterTabs.querySelectorAll('.search-tab-pill'));
+                        const curIdx = tabs.findIndex(t => t.classList.contains('active'));
+                        const nextIdx = e.shiftKey ? (curIdx - 1 + tabs.length) % tabs.length : (curIdx + 1) % tabs.length;
+                        tabs[nextIdx].click();
+                    }
+                } else if (e.key === 'Enter') {
+                    if (items.length > 0) {
+                        e.preventDefault();
+                        const targetItem = (this.currentNavSearchIndex >= 0 && this.currentNavSearchIndex < items.length)
+                            ? items[this.currentNavSearchIndex]
+                            : items[0];
+                        if (targetItem) targetItem.click();
+                    }
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (this.searchInput.value) {
+                        this.searchInput.value = '';
+                        this.handleSearch('');
+                    } else {
+                        this.closeModal(this.searchModal);
+                    }
                 }
             });
         }
@@ -4926,86 +5029,494 @@ class XTAPOMusicApp {
         this._drawerRenderedCount = end;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // ADVANCED MULTI-CATEGORY SEARCH ENGINE (WEB & MOBILE)
+    // ─────────────────────────────────────────────────────────────
+    getRecentSearches() {
+        try {
+            const data = localStorage.getItem('xtapo_recent_music_searches');
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    saveRecentSearch(term) {
+        if (!term || !term.trim()) return;
+        const clean = term.trim();
+        let list = this.getRecentSearches().filter(t => t.toLowerCase() !== clean.toLowerCase());
+        list.unshift(clean);
+        if (list.length > 12) list = list.slice(0, 12);
+        try {
+            localStorage.setItem('xtapo_recent_music_searches', JSON.stringify(list));
+        } catch (e) {}
+        this.renderRecentSearches();
+    }
+
+    removeRecentSearch(term) {
+        let list = this.getRecentSearches().filter(t => t.toLowerCase() !== term.toLowerCase());
+        try {
+            localStorage.setItem('xtapo_recent_music_searches', JSON.stringify(list));
+        } catch (e) {}
+        this.renderRecentSearches();
+    }
+
+    clearRecentSearches() {
+        try {
+            localStorage.removeItem('xtapo_recent_music_searches');
+        } catch (e) {}
+        this.renderRecentSearches();
+    }
+
+    renderRecentSearches() {
+        if (!this.searchRecentSection || !this.searchRecentTags) return;
+        const list = this.getRecentSearches();
+        if (list.length === 0) {
+            this.searchRecentSection.style.display = 'none';
+            return;
+        }
+        this.searchRecentSection.style.display = 'block';
+        this.searchRecentTags.innerHTML = '';
+        list.forEach(item => {
+            const chip = document.createElement('div');
+            chip.className = 'search-tag-chip';
+            chip.innerHTML = `
+                <span>🕒 ${this.escapeHtml(item)}</span>
+                <span class="search-tag-delete" title="Xóa từ khóa này">✕</span>
+            `;
+            chip.querySelector('span:first-child').onclick = (e) => {
+                e.stopPropagation();
+                if (this.searchInput) {
+                    this.searchInput.value = item;
+                    this.handleSearch(item);
+                    this.searchInput.focus();
+                }
+            };
+            chip.querySelector('.search-tag-delete').onclick = (e) => {
+                e.stopPropagation();
+                this.removeRecentSearch(item);
+            };
+            this.searchRecentTags.appendChild(chip);
+        });
+    }
+
+    initSearchSuggestions() {
+        if (!this.searchQuickTags) return;
+        const suggestions = [
+            'Bolero / Trữ Tình', 'Hi-Res Lossless', 'V-Pop / Nhạc Trẻ',
+            'Trịnh Công Sơn', 'Acoustic / Chill', 'Nhạc Vàng',
+            'EDM / Remix', 'Rap / Hip-Hop', 'Lệ Quyên', 'Vũ', 'Đan Nguyên'
+        ];
+        this.searchQuickTags.innerHTML = '';
+        suggestions.forEach(item => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'search-tag-chip quick-chip';
+            chip.innerHTML = `<span>✨ ${this.escapeHtml(item)}</span>`;
+            chip.onclick = () => {
+                if (this.searchInput) {
+                    this.searchInput.value = item;
+                    this.handleSearch(item);
+                    this.searchInput.focus();
+                }
+            };
+            this.searchQuickTags.appendChild(chip);
+        });
+    }
+
+    highlightMatch(text, query) {
+        if (!text) return '';
+        if (!query || !query.trim()) return this.escapeHtml(text);
+        const rawText = String(text);
+        const qTrim = query.trim();
+
+        const lowText = rawText.toLowerCase();
+        const lowQ = qTrim.toLowerCase();
+        const idx = lowText.indexOf(lowQ);
+        if (idx !== -1) {
+            const before = this.escapeHtml(rawText.substring(0, idx));
+            const matched = this.escapeHtml(rawText.substring(idx, idx + lowQ.length));
+            const after = this.highlightMatch(rawText.substring(idx + lowQ.length), query);
+            return `${before}<mark class="search-highlight">${matched}</mark>${after}`;
+        }
+
+        const normText = this.removeVietnameseTones(lowText);
+        const normQ = this.removeVietnameseTones(lowQ);
+        const normIdx = normText.indexOf(normQ);
+        if (normIdx !== -1 && normQ.length > 0) {
+            const before = this.escapeHtml(rawText.substring(0, normIdx));
+            const matched = this.escapeHtml(rawText.substring(normIdx, normIdx + normQ.length));
+            const after = this.highlightMatch(rawText.substring(normIdx + normQ.length), query);
+            return `${before}<mark class="search-highlight">${matched}</mark>${after}`;
+        }
+
+        return this.escapeHtml(rawText);
+    }
+
+    highlightNavSearchItem(items) {
+        items.forEach((it, idx) => {
+            it.classList.toggle('focused-nav', idx === this.currentNavSearchIndex);
+            if (idx === this.currentNavSearchIndex) {
+                it.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        });
+    }
+
     handleSearch(query) {
-        if (!query.trim()) {
-            this.searchResults.innerHTML = '<div class="search-empty">Nhập từ khoá để tìm bài hát nhanh...</div>';
+        const q = (query || '').trim();
+        this.currentNavSearchIndex = -1;
+
+        if (!q) {
+            if (this.searchClearBtn) this.searchClearBtn.style.display = 'none';
+            if (this.searchSuggestionsContainer) this.searchSuggestionsContainer.style.display = 'flex';
+            if (this.searchResults) this.searchResults.style.display = 'none';
+
+            if (this.countSearchAll) this.countSearchAll.textContent = '0';
+            if (this.countSearchTracks) this.countSearchTracks.textContent = '0';
+            if (this.countSearchArtists) this.countSearchArtists.textContent = '0';
+            if (this.countSearchAlbums) this.countSearchAlbums.textContent = '0';
+            if (this.countSearchPlaylists) this.countSearchPlaylists.textContent = '0';
+
+            this.renderRecentSearches();
+            this.initSearchSuggestions();
             return;
         }
 
-        const q = query.toLowerCase().trim();
-        let matches = [];
-        const baseAlbums = this.getBaseAlbums();
+        if (this.searchClearBtn) this.searchClearBtn.style.display = 'inline-flex';
+        if (this.searchSuggestionsContainer) this.searchSuggestionsContainer.style.display = 'none';
+        if (this.searchResults) this.searchResults.style.display = 'block';
 
+        const baseAlbums = this.getBaseAlbums();
+        const matchedTracks = [];
+        const matchedAlbums = [];
+        const artistMap = new Map();
+        const matchedPlaylists = [];
+
+        // 1. Quét Albums & Tracks
         for (let albumIdx = 0; albumIdx < baseAlbums.length; albumIdx++) {
             const album = baseAlbums[albumIdx];
-            const artistLow = (album.artist || '').toLowerCase();
-            const titleLow = (album.title || '').toLowerCase();
+            const artistName = (album.artist || '').trim();
+            const albumTitle = (album.title || '').trim();
+            const albumGenre = (album.genre || '').trim();
+            const formatStr = (album.format || '').trim();
+
+            const isAlbumMatch = this.matchVietnamese(albumTitle, q) ||
+                                 this.matchVietnamese(albumGenre, q) ||
+                                 (q.toLowerCase().includes('hi-res') && (formatStr.toLowerCase().includes('24-bit') || formatStr.toLowerCase().includes('dsd') || formatStr.toLowerCase().includes('hi-res')));
+
+            if (isAlbumMatch) {
+                matchedAlbums.push({ album, albumIdx });
+            }
+
+            // Thu thập nghệ sĩ
+            if (artistName && !artistMap.has(artistName.toLowerCase())) {
+                const isArtistMatch = this.matchVietnamese(artistName, q);
+                if (isArtistMatch) {
+                    artistMap.set(artistName.toLowerCase(), {
+                        name: artistName,
+                        coverUrl: album.coverUrl || '/music/icon-192.png',
+                        bannerUrl: album.coverUrl || '',
+                        albumsCount: 1,
+                        tracksCount: (album.tracks || []).length,
+                        sampleAlbum: album
+                    });
+                }
+            } else if (artistName && artistMap.has(artistName.toLowerCase())) {
+                const existing = artistMap.get(artistName.toLowerCase());
+                existing.albumsCount += 1;
+                existing.tracksCount += (album.tracks || []).length;
+            }
+
+            // Quét Tracks trong album
             const tracks = album.tracks || [];
             for (let trackIdx = 0; trackIdx < tracks.length; trackIdx++) {
                 const track = tracks[trackIdx];
-                const trackNameLow = (track.name || '').toLowerCase();
-                const trackArtistLow = (track.artist || '').toLowerCase();
-                if (this.matchVietnamese(trackNameLow, q) || this.matchVietnamese(trackArtistLow, q) || this.matchVietnamese(artistLow, q) || this.matchVietnamese(titleLow, q)) {
-                    matches.push({ album, albumIdx, track, trackIdx });
-                    if (matches.length >= 100) break;
+                const trackName = track.name || '';
+                const trackArtist = track.artist || artistName;
+
+                if (this.matchVietnamese(trackName, q) || this.matchVietnamese(trackArtist, q) || this.matchVietnamese(albumTitle, q)) {
+                    matchedTracks.push({
+                        album,
+                        albumIdx,
+                        track,
+                        trackIdx
+                    });
                 }
             }
-            if (matches.length >= 100) break;
         }
 
-        if (matches.length === 0) {
-            this.searchResults.innerHTML = `<div class="search-empty">Không tìm thấy bài hát nào khớp với "${this.escapeHtml(query)}"</div>`;
+        // 2. Quét Playlists cá nhân
+        if (Array.isArray(this.playlists)) {
+            this.playlists.forEach(pl => {
+                if (pl && pl.name && this.matchVietnamese(pl.name, q)) {
+                    matchedPlaylists.push(pl);
+                }
+            });
+        }
+
+        const matchedArtists = Array.from(artistMap.values());
+        const totalMatches = matchedTracks.length + matchedArtists.length + matchedAlbums.length + matchedPlaylists.length;
+
+        // Cập nhật số lượng trên các tab
+        if (this.countSearchAll) this.countSearchAll.textContent = totalMatches;
+        if (this.countSearchTracks) this.countSearchTracks.textContent = matchedTracks.length;
+        if (this.countSearchArtists) this.countSearchArtists.textContent = matchedArtists.length;
+        if (this.countSearchAlbums) this.countSearchAlbums.textContent = matchedAlbums.length;
+        if (this.countSearchPlaylists) this.countSearchPlaylists.textContent = matchedPlaylists.length;
+
+        this._cachedSearchMatches = {
+            query: q,
+            tracks: matchedTracks,
+            artists: matchedArtists,
+            albums: matchedAlbums,
+            playlists: matchedPlaylists
+        };
+
+        this.renderSearchResults();
+    }
+
+    renderSearchResults() {
+        if (!this.searchResults) return;
+        const matches = this._cachedSearchMatches || { query: '', tracks: [], artists: [], albums: [], playlists: [] };
+        const q = matches.query || (this.searchInput ? this.searchInput.value.trim() : '');
+        const tab = this.currentSearchTab || 'all';
+
+        const hasAny = (matches.tracks.length + matches.artists.length + matches.albums.length + matches.playlists.length) > 0;
+        if (!hasAny) {
+            this.searchResults.innerHTML = `
+                <div class="search-empty">
+                    <div style="font-size: 2rem; margin-bottom: 8px;">🔍</div>
+                    <div style="font-weight: 700; color: #fff; margin-bottom: 4px;">Không tìm thấy kết quả nào</div>
+                    <div>Không có bài hát, nghệ sĩ hay album nào khớp với từ khóa "<strong>${this.escapeHtml(q)}</strong>".</div>
+                </div>
+            `;
             return;
         }
 
         this.searchResults.innerHTML = '';
         const frag = document.createDocumentFragment();
-        matches.forEach(item => {
+
+        // ─── RENDER HELPER CHO ARTIST ITEM ───
+        const renderArtistItem = (art) => {
             const el = document.createElement('div');
             el.className = 'search-item';
             el.innerHTML = `
-                <div>
-                    <div style="font-weight:600; color:#fff;">${this.escapeHtml(item.track.name || '')}</div>
-                    <div style="font-size:0.78rem; color:rgba(255,255,255,0.5);">${this.escapeHtml(item.album.artist || '')} • ${this.escapeHtml(item.album.title || '')}</div>
+                <img src="${art.coverUrl || '/music/icon-192.png'}" class="search-item-thumb is-artist" alt="" onerror="this.src='/music/icon-192.png'">
+                <div class="search-item-info">
+                    <div class="search-item-title">
+                        <span>${this.highlightMatch(art.name, q)}</span>
+                        <span class="search-item-badge badge-artist">Nghệ Sĩ</span>
+                    </div>
+                    <div class="search-item-sub">${art.tracksCount || 0} bài hát • ${art.albumsCount || 1} albums</div>
                 </div>
-                <span style="color:var(--accent-gold); font-size:0.8rem;">${item.track.duration || ''}</span>
+                <div class="search-item-action" title="Xem nghệ sĩ">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
             `;
-
             el.addEventListener('click', () => {
-                // 1. Reset any active virtual queues
+                this.saveRecentSearch(q);
+                this.closeModal(this.searchModal);
+                if (typeof this.openArtistSpotlight === 'function') {
+                    // Xây dựng cấu trúc nghệ sĩ đầy đủ
+                    const fullArtistObj = {
+                        name: art.name,
+                        coverUrl: art.coverUrl,
+                        bannerUrl: art.bannerUrl,
+                        albums: new Set([art.sampleAlbum]),
+                        tracks: (art.sampleAlbum && art.sampleAlbum.tracks) ? art.sampleAlbum.tracks : [],
+                        genres: art.sampleAlbum && art.sampleAlbum.genre ? [art.sampleAlbum.genre] : [],
+                        bio: ''
+                    };
+                    this.openArtistSpotlight(fullArtistObj);
+                } else if (this.artistModal) {
+                    this.openModal(this.artistModal);
+                }
+            });
+            return el;
+        };
+
+        // ─── RENDER HELPER CHO ALBUM ITEM ───
+        const renderAlbumItem = (item) => {
+            const album = item.album;
+            const isHires = (album.format || '').toLowerCase().includes('hi-res') || (album.format || '').toLowerCase().includes('dsd') || (album.format || '').toLowerCase().includes('24-bit');
+            const el = document.createElement('div');
+            el.className = 'search-item';
+            el.innerHTML = `
+                <img src="${album.coverUrl || '/music/icon-192.png'}" class="search-item-thumb" alt="" onerror="this.src='/music/icon-192.png'">
+                <div class="search-item-info">
+                    <div class="search-item-title">
+                        <span>${this.highlightMatch(album.title || 'Không có tên', q)}</span>
+                        <span class="search-item-badge badge-album">Album</span>
+                        ${isHires ? '<span class="search-item-badge badge-hires">Hi-Res</span>' : ''}
+                    </div>
+                    <div class="search-item-sub">${this.highlightMatch(album.artist || 'Nhiều ca sĩ', q)} • ${album.year || '2026'} • ${(album.tracks || []).length} bài</div>
+                </div>
+                <div class="search-item-action" title="Phát album">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </div>
+            `;
+            el.addEventListener('click', () => {
+                this.saveRecentSearch(q);
                 this.activeGenre = null;
                 this.activeCountry = null;
                 this.activeArtist = null;
                 this.activePlaylistId = null;
-
-                // 2. Reset albums array to clean base catalog
                 this.albums = this.getBaseAlbums();
 
-                // 3. Find exact album index in clean albums
-                let realAlbumIdx = this.albums.findIndex(a => (a.id && a.id === item.album.id) || (a.title === item.album.title && a.artist === item.album.artist));
-                if (realAlbumIdx === -1) {
-                    realAlbumIdx = item.albumIdx < this.albums.length ? item.albumIdx : 0;
-                }
+                let realAlbumIdx = this.albums.findIndex(a => (a.id && a.id === album.id) || (a.title === album.title && a.artist === album.artist));
+                if (realAlbumIdx === -1) realAlbumIdx = item.albumIdx < this.albums.length ? item.albumIdx : 0;
 
-                // 4. Find exact track index in that album
+                this.loadAlbum(realAlbumIdx, 0, true);
+                this.renderAlbumGrid();
+                this.closeModal(this.searchModal);
+                this.showToast(`Đang phát album: ${album.title}`);
+            });
+            return el;
+        };
+
+        // ─── RENDER HELPER CHO TRACK ITEM ───
+        const renderTrackItem = (item) => {
+            const track = item.track;
+            const album = item.album;
+            const isHires = (track.format || album.format || '').toLowerCase().includes('hi-res') || (track.format || album.format || '').toLowerCase().includes('dsd') || (track.format || album.format || '').toLowerCase().includes('24-bit');
+            const el = document.createElement('div');
+            el.className = 'search-item';
+            el.innerHTML = `
+                <img src="${track.cover_url || track.coverUrl || album.coverUrl || '/music/icon-192.png'}" class="search-item-thumb" alt="" onerror="this.src='/music/icon-192.png'">
+                <div class="search-item-info">
+                    <div class="search-item-title">
+                        <span>${this.highlightMatch(track.name || 'Không có tên', q)}</span>
+                        <span class="search-item-badge badge-track">Bài Hát</span>
+                        ${isHires ? '<span class="search-item-badge badge-hires">Hi-Res</span>' : ''}
+                    </div>
+                    <div class="search-item-sub">${this.highlightMatch(track.artist || album.artist || 'Nhiều ca sĩ', q)} • ${this.highlightMatch(album.title || '', q)}</div>
+                </div>
+                <div class="search-item-meta">
+                    <span class="search-item-duration">${track.duration || ''}</span>
+                    <div class="search-item-action" title="Phát bài hát">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    </div>
+                </div>
+            `;
+            el.addEventListener('click', () => {
+                this.saveRecentSearch(q);
+                this.activeGenre = null;
+                this.activeCountry = null;
+                this.activeArtist = null;
+                this.activePlaylistId = null;
+                this.albums = this.getBaseAlbums();
+
+                let realAlbumIdx = this.albums.findIndex(a => (a.id && a.id === album.id) || (a.title === album.title && a.artist === album.artist));
+                if (realAlbumIdx === -1) realAlbumIdx = item.albumIdx < this.albums.length ? item.albumIdx : 0;
+
                 const targetAlbum = this.albums[realAlbumIdx];
                 let targetTrackIdx = -1;
                 if (targetAlbum && targetAlbum.tracks) {
-                    targetTrackIdx = targetAlbum.tracks.findIndex(t => (item.track.msgId && t.msgId === item.track.msgId) || (item.track.chatId && t.chatId === item.track.chatId && t.msgId === item.track.msgId) || t.name === item.track.name);
+                    targetTrackIdx = targetAlbum.tracks.findIndex(t => (track.msgId && t.msgId === track.msgId) || (track.chatId && t.chatId === track.chatId && t.msgId === track.msgId) || t.name === track.name);
                 }
-                if (targetTrackIdx === -1) {
-                    targetTrackIdx = item.trackIdx || 0;
-                }
+                if (targetTrackIdx === -1) targetTrackIdx = item.trackIdx || 0;
 
-                // 5. Load and play the exact album and track
                 this.loadAlbum(realAlbumIdx, targetTrackIdx, true);
                 this.renderAlbumGrid();
                 this.closeModal(this.searchModal);
-                this.showToast(`Đang phát: ${item.track.name}`);
+                this.showToast(`Đang phát: ${track.name}`);
             });
+            return el;
+        };
 
-            frag.appendChild(el);
-        });
+        // ─── RENDER HELPER CHO PLAYLIST ITEM ───
+        const renderPlaylistItem = (pl) => {
+            const el = document.createElement('div');
+            el.className = 'search-item';
+            const firstCover = (pl.tracks && pl.tracks[0] && (pl.tracks[0].cover_url || pl.tracks[0].coverUrl)) || '/music/icon-192.png';
+            el.innerHTML = `
+                <img src="${firstCover}" class="search-item-thumb" alt="" onerror="this.src='/music/icon-192.png'">
+                <div class="search-item-info">
+                    <div class="search-item-title">
+                        <span>${this.highlightMatch(pl.name || 'Playlist', q)}</span>
+                        <span class="search-item-badge badge-playlist">Playlist</span>
+                    </div>
+                    <div class="search-item-sub">Danh sách phát cá nhân • ${(pl.tracks || []).length} bài hát</div>
+                </div>
+                <div class="search-item-action" title="Phát playlist">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </div>
+            `;
+            el.addEventListener('click', () => {
+                this.saveRecentSearch(q);
+                this.closeModal(this.searchModal);
+                if (typeof this.playPlaylist === 'function') {
+                    this.playPlaylist(pl);
+                } else {
+                    this.openModal(this.playlistModal);
+                }
+            });
+            return el;
+        };
+
+        // ─── ĐIỀU KIỆN HIỂN THỊ THEO TAB ───
+        if (tab === 'all') {
+            // Hiển thị Nhóm Nghệ sĩ (tối đa 3)
+            if (matches.artists.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'search-group-header';
+                header.innerHTML = `<span>👤 Nghệ Sĩ (${matches.artists.length})</span> <span>Xem thêm ở tab Nghệ sĩ</span>`;
+                frag.appendChild(header);
+                matches.artists.slice(0, 3).forEach(art => frag.appendChild(renderArtistItem(art)));
+            }
+
+            // Hiển thị Nhóm Album (tối đa 3)
+            if (matches.albums.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'search-group-header';
+                header.innerHTML = `<span>💿 Albums (${matches.albums.length})</span> <span>Xem thêm ở tab Album</span>`;
+                frag.appendChild(header);
+                matches.albums.slice(0, 3).forEach(alb => frag.appendChild(renderAlbumItem(alb)));
+            }
+
+            // Hiển thị Nhóm Playlist (tối đa 2)
+            if (matches.playlists.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'search-group-header';
+                header.innerHTML = `<span>📑 Playlist (${matches.playlists.length})</span>`;
+                frag.appendChild(header);
+                matches.playlists.slice(0, 2).forEach(pl => frag.appendChild(renderPlaylistItem(pl)));
+            }
+
+            // Hiển thị Nhóm Bài Hát
+            if (matches.tracks.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'search-group-header';
+                header.innerHTML = `<span>🎵 Bài Hát Khớp (${matches.tracks.length})</span>`;
+                frag.appendChild(header);
+                matches.tracks.slice(0, 60).forEach(tr => frag.appendChild(renderTrackItem(tr)));
+            }
+        } else if (tab === 'tracks') {
+            if (matches.tracks.length === 0) {
+                frag.innerHTML = `<div class="search-empty">Không có bài hát nào khớp với từ khóa.</div>`;
+            } else {
+                matches.tracks.forEach(tr => frag.appendChild(renderTrackItem(tr)));
+            }
+        } else if (tab === 'artists') {
+            if (matches.artists.length === 0) {
+                frag.innerHTML = `<div class="search-empty">Không có nghệ sĩ nào khớp với từ khóa.</div>`;
+            } else {
+                matches.artists.forEach(art => frag.appendChild(renderArtistItem(art)));
+            }
+        } else if (tab === 'albums') {
+            if (matches.albums.length === 0) {
+                frag.innerHTML = `<div class="search-empty">Không có album nào khớp với từ khóa.</div>`;
+            } else {
+                matches.albums.forEach(alb => frag.appendChild(renderAlbumItem(alb)));
+            }
+        } else if (tab === 'playlists') {
+            if (matches.playlists.length === 0) {
+                frag.innerHTML = `<div class="search-empty">Không có playlist nào khớp với từ khóa.</div>`;
+            } else {
+                matches.playlists.forEach(pl => frag.appendChild(renderPlaylistItem(pl)));
+            }
+        }
+
         this.searchResults.appendChild(frag);
     }
 
@@ -5242,7 +5753,14 @@ class XTAPOMusicApp {
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
                 this.openModal(this.searchModal);
-                setTimeout(() => this.searchInput.focus(), 100);
+                this.renderRecentSearches();
+                this.initSearchSuggestions();
+                setTimeout(() => {
+                    if (this.searchInput) {
+                        this.searchInput.focus();
+                        if (!this.searchInput.value) this.handleSearch('');
+                    }
+                }, 100);
             } else if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27 || e.keyCode === 4 || e.keyCode === 111) {
                 // Đóng các modal đang mở
                 const openModals = [

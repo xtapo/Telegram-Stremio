@@ -2014,7 +2014,11 @@ class MusicScanManager:
         try:
             client = _get_active_client()
             all_scanned_tracks = []
-            audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
+            audio_extensions = (
+                ".mp3", ".flac", ".m4a", ".wav", ".aac",
+                ".alac", ".ogg", ".opus", ".dsf", ".dff", ".ape", ".aiff",
+                ".wv", ".wma", ".m4b", ".mka", ".tak", ".tta"
+            )
             from Backend.helper.metadata.music_scraper import extract_context_from_text, fetch_music_metadata, clean_audio_filename, parse_artist_and_title, classify_genre_and_country
             from Backend.helper.metadata.audio_fingerprint import recognize_audio_from_telegram
 
