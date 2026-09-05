@@ -396,6 +396,8 @@ class XTAPOMusicApp {
 
         // Telegram Storage & Scanner Elements
         this.albums = [...ALBUMS_DATABASE];
+        this._searchIndex = null;
+        this._searchActiveIndex = -1;
         this.albumCountBadge = document.getElementById('albumCountBadge');
         this.openTgModalBtn = document.getElementById('openTgModalBtn');
         this.tgModal = document.getElementById('tgModal');
@@ -1740,6 +1742,7 @@ class XTAPOMusicApp {
             this.currentUser = null;
             this.playlists = [];
             this.albums = [...ALBUMS_DATABASE];
+            this.invalidateLibraryIndex();
             this.updateAuthUI(false);
             if (this.playlistGrid) this.playlistGrid.innerHTML = '';
             localStorage.removeItem('xtapo_music_player_state');
@@ -2062,6 +2065,7 @@ class XTAPOMusicApp {
 
     invalidateLibraryIndex() {
         this._libraryIndexDirty = true;
+        this._searchIndex = null;
         this._cachedArtistMap = null;
         this._cachedCountryMap = null;
         this._cachedCountryArtistCounts = null;
@@ -2181,6 +2185,7 @@ class XTAPOMusicApp {
                         }
                     } else {
                         this.albums = [];
+                        this.invalidateLibraryIndex();
                         if (this.albumCountBadge) {
                             this.albumCountBadge.textContent = '0 Albums';
                         }
@@ -2248,6 +2253,7 @@ class XTAPOMusicApp {
 
             if (res.ok && data.status === 'success' && data.albums && data.albums.length > 0) {
                 this.albums = data.albums;
+                this.invalidateLibraryIndex();
                 this.currentAlbumIndex = 0;
                 this.currentTrackIndex = 0;
                 this.loadAlbum(0, 0, true);
@@ -3565,6 +3571,23 @@ class XTAPOMusicApp {
                 if (e.key === 'Enter' && (isSearchComposing || e.isComposing || e.keyCode === 229)) {
                     return;
                 }
+                const resultItems = Array.from(this.searchResults.querySelectorAll('.search-item'));
+                if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && resultItems.length > 0) {
+                    e.preventDefault();
+                    const direction = e.key === 'ArrowDown' ? 1 : -1;
+                    const startIndex = this._searchActiveIndex < 0
+                        ? (direction > 0 ? -1 : 0)
+                        : this._searchActiveIndex;
+                    this._searchActiveIndex = (startIndex + direction + resultItems.length) % resultItems.length;
+                    resultItems.forEach((item, index) => {
+                        const active = index === this._searchActiveIndex;
+                        item.classList.toggle('is-active', active);
+                    });
+                    resultItems[this._searchActiveIndex].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter' && resultItems.length > 0) {
+                    e.preventDefault();
+                    resultItems[this._searchActiveIndex >= 0 ? this._searchActiveIndex : 0].click();
+                }
             });
         }
 
@@ -3634,6 +3657,7 @@ class XTAPOMusicApp {
         if (this.tgLoadDemoBtn) {
             this.tgLoadDemoBtn.addEventListener('click', () => {
                 this.albums = [...ALBUMS_DATABASE];
+                this.invalidateLibraryIndex();
                 this.currentAlbumIndex = 0;
                 this.currentTrackIndex = 0;
                 this.loadAlbum(0, 0, false);
@@ -4926,50 +4950,139 @@ class XTAPOMusicApp {
         this._drawerRenderedCount = end;
     }
 
+    normalizeSearchText(value) {
+        return this.removeVietnameseTones(String(value || ''))
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}]+/gu, ' ')
+            .trim()
+            .replace(/\s+/g, ' ');
+    }
+
+    getMusicSearchIndex() {
+        if (this._searchIndex) return this._searchIndex;
+
+        const index = [];
+        const baseAlbums = this.getBaseAlbums();
+        baseAlbums.forEach((album, albumIdx) => {
+            const albumTitle = this.normalizeSearchText(album.title);
+            const albumArtist = this.normalizeSearchText(album.artist);
+            (album.tracks || []).forEach((track, trackIdx) => {
+                const trackName = track.name || track.title || 'Bài hát chưa đặt tên';
+                const fields = {
+                    track: this.normalizeSearchText(trackName),
+                    artist: this.normalizeSearchText(track.artist || album.artist),
+                    albumArtist,
+                    album: albumTitle,
+                    extra: this.normalizeSearchText([
+                        track.genre || album.genre,
+                        track.country || album.country,
+                        album.year,
+                        album.publisher
+                    ].filter(Boolean).join(' '))
+                };
+                index.push({
+                    album,
+                    albumIdx,
+                    track,
+                    trackIdx,
+                    trackName,
+                    fields,
+                    searchText: Object.values(fields).join(' ')
+                });
+            });
+        });
+
+        this._searchIndex = index;
+        return index;
+    }
+
+    scoreMusicSearchEntry(entry, query, tokens) {
+        if (!query || tokens.length === 0 || !tokens.every(token => entry.searchText.includes(token))) {
+            return { score: 0, label: '' };
+        }
+
+        const weightedFields = [
+            { value: entry.fields.track, label: 'Tên bài', weight: 6 },
+            { value: entry.fields.artist, label: 'Nghệ sĩ', weight: 5 },
+            { value: entry.fields.albumArtist, label: 'Nghệ sĩ', weight: 4 },
+            { value: entry.fields.album, label: 'Album', weight: 4 },
+            { value: entry.fields.extra, label: 'Thông tin', weight: 1 }
+        ];
+        let score = 10;
+        let bestField = { coverage: 0, weight: 0, label: 'Nhiều trường' };
+
+        weightedFields.forEach(field => {
+            if (!field.value) return;
+            if (field.value === query) score += 180 * field.weight;
+            else if (field.value.startsWith(query)) score += 110 * field.weight;
+            else if (field.value.includes(query)) score += 70 * field.weight;
+
+            const words = field.value.split(' ');
+            const coverage = tokens.filter(token => field.value.includes(token)).length;
+            tokens.forEach(token => {
+                if (words.includes(token)) score += 12 * field.weight;
+                else if (words.some(word => word.startsWith(token))) score += 8 * field.weight;
+                else if (field.value.includes(token)) score += 4 * field.weight;
+            });
+            if (coverage > bestField.coverage || (coverage === bestField.coverage && field.weight > bestField.weight)) {
+                bestField = { coverage, weight: field.weight, label: field.label };
+            }
+        });
+
+        return {
+            score,
+            label: bestField.coverage === tokens.length ? bestField.label : 'Nhiều trường'
+        };
+    }
+
     handleSearch(query) {
         if (!query.trim()) {
-            this.searchResults.innerHTML = '<div class="search-empty">Nhập từ khoá để tìm bài hát nhanh...</div>';
+            this._searchActiveIndex = -1;
+            this.searchResults.innerHTML = '<div class="search-empty">Nhập tên bài hát, nghệ sĩ hoặc album để tìm kiếm.</div>';
             return;
         }
 
-        const q = query.toLowerCase().trim();
-        let matches = [];
-        const baseAlbums = this.getBaseAlbums();
-
-        for (let albumIdx = 0; albumIdx < baseAlbums.length; albumIdx++) {
-            const album = baseAlbums[albumIdx];
-            const artistLow = (album.artist || '').toLowerCase();
-            const titleLow = (album.title || '').toLowerCase();
-            const tracks = album.tracks || [];
-            for (let trackIdx = 0; trackIdx < tracks.length; trackIdx++) {
-                const track = tracks[trackIdx];
-                const trackNameLow = (track.name || '').toLowerCase();
-                const trackArtistLow = (track.artist || '').toLowerCase();
-                if (this.matchVietnamese(trackNameLow, q) || this.matchVietnamese(trackArtistLow, q) || this.matchVietnamese(artistLow, q) || this.matchVietnamese(titleLow, q)) {
-                    matches.push({ album, albumIdx, track, trackIdx });
-                    if (matches.length >= 100) break;
-                }
-            }
-            if (matches.length >= 100) break;
-        }
+        const q = this.normalizeSearchText(query);
+        const queryTokens = [...new Set(q.split(' ').filter(Boolean))];
+        const rankedMatches = this.getMusicSearchIndex()
+            .map(entry => ({ ...entry, rank: this.scoreMusicSearchEntry(entry, q, queryTokens) }))
+            .filter(entry => entry.rank.score > 0)
+            .sort((a, b) => b.rank.score - a.rank.score || a.trackName.localeCompare(b.trackName, 'vi'));
+        const totalMatches = rankedMatches.length;
+        const matches = rankedMatches.slice(0, 100);
 
         if (matches.length === 0) {
+            this._searchActiveIndex = -1;
             this.searchResults.innerHTML = `<div class="search-empty">Không tìm thấy bài hát nào khớp với "${this.escapeHtml(query)}"</div>`;
             return;
         }
 
+        this._searchActiveIndex = -1;
         this.searchResults.innerHTML = '';
         const frag = document.createDocumentFragment();
+        const summary = document.createElement('div');
+        summary.className = 'search-result-summary';
+        summary.innerHTML = `<span>${totalMatches.toLocaleString('vi-VN')} kết quả</span>${totalMatches > matches.length ? `<span>Hiển thị ${matches.length} kết quả phù hợp nhất</span>` : ''}`;
+        frag.appendChild(summary);
         matches.forEach(item => {
-            const el = document.createElement('div');
+            const el = document.createElement('button');
+            el.type = 'button';
             el.className = 'search-item';
+            const coverUrl = item.track.coverUrl || item.track.cover_url || item.album.coverUrl || item.album.cover || '/music/icon-192.png';
+            const displayArtist = item.track.artist || item.album.artist || 'Nghệ sĩ chưa xác định';
             el.innerHTML = `
-                <div>
-                    <div style="font-weight:600; color:#fff;">${this.escapeHtml(item.track.name || '')}</div>
-                    <div style="font-size:0.78rem; color:rgba(255,255,255,0.5);">${this.escapeHtml(item.album.artist || '')} • ${this.escapeHtml(item.album.title || '')}</div>
+                <img class="search-item-cover" src="${this.escapeHtml(coverUrl)}" alt="" loading="lazy">
+                <div class="search-item-main">
+                    <div class="search-item-title">${this.escapeHtml(item.trackName)}</div>
+                    <div class="search-item-meta">${this.escapeHtml(displayArtist)} • ${this.escapeHtml(item.album.title || 'Album chưa xác định')}</div>
                 </div>
-                <span style="color:var(--accent-gold); font-size:0.8rem;">${item.track.duration || ''}</span>
+                <div class="search-item-side">
+                    <span class="search-match-badge">${item.rank.label}</span>
+                    <span class="search-item-duration">${this.escapeHtml(item.track.duration || '')}</span>
+                </div>
             `;
+            const cover = el.querySelector('.search-item-cover');
+            cover.addEventListener('error', () => { cover.src = '/music/icon-192.png'; }, { once: true });
 
             el.addEventListener('click', () => {
                 // 1. Reset any active virtual queues

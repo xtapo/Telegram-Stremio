@@ -1347,8 +1347,9 @@ html, body {
 
 .search-results {
     margin-top: 14px;
-    max-height: 320px;
+    max-height: min(430px, 60vh);
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .search-empty {
@@ -1359,17 +1360,111 @@ html, body {
 }
 
 .search-item {
+    width: 100%;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background var(--transition-fast);
+    transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
 }
 
-.search-item:hover {
+.search-item:hover,
+.search-item.is-active,
+.search-item:focus-visible {
     background: var(--bg-surface-hover);
+    border-color: rgba(255, 255, 255, 0.1);
+    outline: none;
+}
+
+.search-item:active {
+    transform: scale(0.99);
+}
+
+.search-item-cover {
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    border-radius: 9px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.search-item-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.search-item-title,
+.search-item-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-item-title {
+    color: #fff;
+    font-weight: 650;
+}
+
+.search-item-meta {
+    margin-top: 3px;
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 0.78rem;
+}
+
+.search-item-side {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+
+.search-match-badge {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--accent-gold);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.search-item-duration {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.72rem;
+}
+
+.search-result-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 10px 8px;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+
+@media (max-width: 480px) {
+    .search-card {
+        padding: 14px;
+    }
+
+    .search-item-cover {
+        width: 42px;
+        height: 42px;
+        flex-basis: 42px;
+    }
+
+    .search-match-badge {
+        display: none;
+    }
 }
 
 /* --- Slide Drawer (Kollersi File Download / Spec Drawer) --- */
