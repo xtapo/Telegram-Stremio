@@ -605,6 +605,13 @@ async def music_management_page(request: Request, _: bool = Depends(require_auth
 
 
 # ── 2. Giao diện Web Music Player & Static Files Fallback ─────────────────────
+_MUSIC_HTML_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
 @router.get("/music", response_class=HTMLResponse)
 @router.get("/music/", response_class=HTMLResponse)
 async def get_music_player(request: Request):
@@ -616,10 +623,10 @@ async def get_music_player(request: Request):
     index_path = os.path.join(MUSIC_DIR, "index.html")
 
     if (tv_param or is_tv_ua) and os.path.exists(tv_path):
-        return FileResponse(tv_path)
+        return FileResponse(tv_path, headers=_MUSIC_HTML_CACHE_HEADERS)
 
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers=_MUSIC_HTML_CACHE_HEADERS)
     return HTMLResponse("<h3>Music Player template not found in /Music/index.html</h3>", status_code=404)
 
 
@@ -637,10 +644,10 @@ async def get_music_player(request: Request):
 async def get_music_tv_player():
     tv_path = os.path.join(MUSIC_DIR, "tv.html")
     if os.path.exists(tv_path):
-        return FileResponse(tv_path)
+        return FileResponse(tv_path, headers=_MUSIC_HTML_CACHE_HEADERS)
     index_path = os.path.join(MUSIC_DIR, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers=_MUSIC_HTML_CACHE_HEADERS)
     return HTMLResponse("<h3>TV Lite template not found</h3>", status_code=404)
 
 
@@ -651,12 +658,12 @@ async def get_music_static_file(filename: str):
     Bảo đảm 100% không bị lỗi 404 trên Linux / Hugging Face.
     """
     if not filename or filename.strip("/") in ["", "index.html"]:
-        return FileResponse(os.path.join(MUSIC_DIR, "index.html"), headers={"Cache-Control": "no-cache, must-revalidate"})
+        return FileResponse(os.path.join(MUSIC_DIR, "index.html"), headers=_MUSIC_HTML_CACHE_HEADERS)
 
     if filename.strip("/") in ["tv", "tv.html", "lite"]:
         tv_path = os.path.join(MUSIC_DIR, "tv.html")
         if os.path.exists(tv_path):
-            return FileResponse(tv_path, headers={"Cache-Control": "no-cache, must-revalidate"})
+            return FileResponse(tv_path, headers=_MUSIC_HTML_CACHE_HEADERS)
 
     clean_name = filename.lstrip("/")
     file_path = os.path.join(MUSIC_DIR, clean_name)
@@ -672,7 +679,7 @@ async def get_music_static_file(filename: str):
     # Fallback to index.html if not a static file
     index_path = os.path.join(MUSIC_DIR, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path, headers={"Cache-Control": "no-cache, must-revalidate"})
+        return FileResponse(index_path, headers=_MUSIC_HTML_CACHE_HEADERS)
     return HTMLResponse("File not found", status_code=404)
 
 

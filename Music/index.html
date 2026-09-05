@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="dns-prefetch" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/music/style.css?v=4.0">
+    <link rel="stylesheet" href="/music/style.css?v=4.1">
     <style>
         @media (max-width: 1024px) {
             .tv-toggle-btn, #topNavTvBtn {
@@ -422,6 +422,10 @@
                 </svg>
                 <input type="search" id="searchInput" placeholder="Tìm bài hát, nghệ sĩ, album..." aria-label="Tìm bài hát, nghệ sĩ hoặc album" aria-controls="searchResults" autocomplete="off" autocorrect="on" autocapitalize="none" inputmode="search" enterkeyhint="search">
                 <button class="search-esc" id="closeSearchModal" type="button" aria-label="Đóng tìm kiếm">ESC</button>
+            </div>
+            <div class="search-help" aria-label="Hướng dẫn tìm kiếm">
+                <span>Tìm được cả tiếng Việt không dấu</span>
+                <span class="search-keyboard-help"><kbd>↑</kbd><kbd>↓</kbd> chọn&nbsp;&nbsp; <kbd>Enter</kbd> phát</span>
             </div>
             <div class="search-results" id="searchResults" role="region" aria-label="Kết quả tìm kiếm" aria-live="polite">
                 <div class="search-empty">Nhập tên bài hát, nghệ sĩ hoặc album để tìm kiếm.</div>
@@ -1825,6 +1829,6 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="none" playsinline webkit-playsinline></audio>
 
-    <script src="/music/app.js?v=5.7"></script>
+    <script src="/music/app.js?v=5.8"></script>
 </body>
 </html>
