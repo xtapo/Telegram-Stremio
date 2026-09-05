@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from Backend import __version__
+from Backend.logger import LOGGER
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
     add_subscription_plan_api,

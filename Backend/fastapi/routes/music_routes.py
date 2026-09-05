@@ -9,7 +9,7 @@ import re
 import secrets
 import time
 import unicodedata
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import quote, unquote
 import httpx
 
