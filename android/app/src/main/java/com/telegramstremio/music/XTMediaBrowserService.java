@@ -4,9 +4,12 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.UiModeManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
@@ -114,8 +117,23 @@ public class XTMediaBrowserService extends MediaBrowserServiceCompat {
         initMediaSession();
         initMediaPlayer();
 
-        // Fetch music catalog from server in background
-        fetchServerCatalog();
+        // Android Auto cần catalog native. Android TV đã giữ catalog trong WebView;
+        // tải thêm một bản đầy đủ tại service làm tăng mạnh RAM và có thể khiến app
+        // bị hệ thống đóng khi thư viện lớn.
+        if (!isTelevisionDevice()) {
+            fetchServerCatalog();
+        }
+    }
+
+    private boolean isTelevisionDevice() {
+        UiModeManager uiModeManager = (UiModeManager) getSystemService(Context.UI_MODE_SERVICE);
+        if (uiModeManager != null
+                && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION) {
+            return true;
+        }
+        PackageManager packageManager = getPackageManager();
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+                || packageManager.hasSystemFeature("android.hardware.type.television");
     }
 
     private void createNotificationChannel() {

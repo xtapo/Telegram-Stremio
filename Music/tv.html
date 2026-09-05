@@ -1422,6 +1422,8 @@
         let userPlaylists = [];
         let qrPollInterval = null;
         let currentQrToken = null;
+        let qrPollRequestInFlight = false;
+        let authenticatedAppLoadPromise = null;
 
         // Search State
         let itemSearchQuery = '';
@@ -2923,14 +2925,16 @@
 
         // ─── AUTH & QR CODE LOCK SCREEN LOGIC ───
         async function checkUserProfile() {
-            // 1. Khôi phục nhanh từ localStorage nếu đã từng đăng nhập trước đó (0ms)
+            // Hiển thị khung ứng dụng ngay từ cache, nhưng chỉ tải thư viện sau khi
+            // phiên đăng nhập đã được máy chủ xác nhận. Việc tải ngay tại đây từng
+            // khiến TV nạp toàn bộ thư viện hai lần và dễ làm WebView hết bộ nhớ.
             try {
                 const cached = localStorage.getItem('xtapo_cached_user');
                 if (cached) {
                     const cu = JSON.parse(cached);
                     if (cu && (cu.id || cu.username)) {
                         currentUser = cu;
-                        await showAuthenticatedApp();
+                        showAuthenticatedShell();
                     }
                 }
             } catch (e) {}
@@ -2946,13 +2950,18 @@
                         return;
                     }
                 }
-            } catch (e) {}
-
-            // Chưa đăng nhập: Chỉ hiển thị màn hình QR Code khóa TV nếu chưa có currentUser
-            if (!currentUser) {
+                // Máy chủ đã trả lời nhưng phiên cache không còn hợp lệ.
                 currentUser = null;
-                showLoginLockScreen();
+                try { localStorage.removeItem('xtapo_cached_user'); } catch (e) {}
+            } catch (e) {
+                // Khi TV tạm mất mạng, vẫn cho phép giao diện cache khởi động một lần.
+                if (currentUser) {
+                    await showAuthenticatedApp();
+                    return;
+                }
             }
+
+            showLoginLockScreen();
         }
 
         function showLoginLockScreen() {
@@ -2969,24 +2978,38 @@
             initQrLogin();
         }
 
-        async function showAuthenticatedApp() {
+        function showAuthenticatedShell() {
             tvLoginScreen.style.display = 'none';
             tvMainWorkspace.style.display = 'flex';
             tvPlayerBar.style.display = 'flex';
             tvUserInfo.style.display = 'flex';
 
             tvUserName.textContent = currentUser.display_name || currentUser.username;
-            tvUserAvatar.src = currentUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
+            tvUserAvatar.src = currentUser.avatar_url || '/music/icon-192.png';
 
             if (qrPollInterval) {
                 clearInterval(qrPollInterval);
                 qrPollInterval = null;
             }
+        }
 
-            // Tải yêu thích và playlists trước, sau đó nạp thư viện và khôi phục đúng vị trí cũ
-            await loadUserFavorites();
-            await loadUserPlaylists();
-            await fetchLibrary();
+        async function showAuthenticatedApp() {
+            showAuthenticatedShell();
+
+            // Single-flight: cache và API hồ sơ có thể hoàn tất gần nhau, nhưng TV chỉ
+            // được phép giữ một bản JSON thư viện và một lượt render trong bộ nhớ.
+            if (!authenticatedAppLoadPromise) {
+                authenticatedAppLoadPromise = (async () => {
+                    await Promise.all([loadUserFavorites(), loadUserPlaylists()]);
+                    await fetchLibrary();
+                })();
+            }
+
+            try {
+                await authenticatedAppLoadPromise;
+            } finally {
+                authenticatedAppLoadPromise = null;
+            }
         }
 
         async function initQrLogin() {
@@ -3025,6 +3048,8 @@
                     clearInterval(qrPollInterval);
                     return;
                 }
+                if (qrPollRequestInFlight) return;
+                qrPollRequestInFlight = true;
                 try {
                     const res = await fetch(`/api/music/auth/tv/qr-status?token=${encodeURIComponent(currentQrToken)}`);
                     const data = await res.json();
@@ -3039,7 +3064,10 @@
                         clearInterval(qrPollInterval);
                         qrStatusText.textContent = '⚠️ Mã QR đã hết hạn. Bấm "Đổi Mã Khác".';
                     }
-                } catch (e) {}
+                } catch (e) {
+                } finally {
+                    qrPollRequestInFlight = false;
+                }
             }, 1500);
         }
 
@@ -3096,12 +3124,6 @@
             document.querySelectorAll('.tv-nav-item').forEach(nav => {
                 nav.classList.toggle('active', nav.dataset.tab === initTab);
             });
-
-            if (initTab === 'playlists') {
-                await loadUserPlaylists();
-            } else if (initTab === 'favorites') {
-                await loadUserFavorites();
-            }
 
             buildCategoryData();
 
@@ -4064,9 +4086,13 @@
         // ═══════════════════════════════════════════════════════════════════════════
         const tvDeviceId = localStorage.getItem('xtapo_tv_device_id') || ('tv_' + Math.random().toString(36).substring(2, 9));
         try { localStorage.setItem('xtapo_tv_device_id', tvDeviceId); } catch(e) {}
-        let lastTvSyncSentAt = 0;
+        let tvHeartbeatInFlight = false;
 
         async function sendTvHeartbeat() {
+            if (tvHeartbeatInFlight || document.hidden) return;
+            tvHeartbeatInFlight = true;
+            const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const abortTimer = abortController ? setTimeout(() => abortController.abort(), 8000) : null;
             try {
                 const curTr = currentTracklist?.[currentPlayingTrackIdx];
                 const payload = {
@@ -4096,7 +4122,8 @@
                 const res = await fetch('/api/music/sync/heartbeat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
+                    ...(abortController ? { signal: abortController.signal } : {})
                 });
 
                 if (res.ok) {
@@ -4107,7 +4134,11 @@
                         }
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+            } finally {
+                if (abortTimer) clearTimeout(abortTimer);
+                tvHeartbeatInFlight = false;
+            }
         }
 
         function sendTvSyncRegister() {
@@ -4116,14 +4147,6 @@
 
         function sendTvSyncState() {
             sendTvHeartbeat();
-        }
-
-        function throttledSendTvSyncState() {
-            const now = Date.now();
-            if (now - lastTvSyncSentAt > 1200) {
-                lastTvSyncSentAt = now;
-                sendTvHeartbeat();
-            }
         }
 
         function handleTvSyncMessage(msg) {
@@ -4255,7 +4278,6 @@
         }
 
         // Lắng nghe audio events trên TV để bắn sync state về Phone
-        audio.addEventListener('timeupdate', throttledSendTvSyncState);
         audio.addEventListener('play', sendTvSyncState);
         audio.addEventListener('pause', sendTvSyncState);
         audio.addEventListener('ended', sendTvSyncState);
@@ -4277,7 +4299,7 @@
         initSearchListeners();
         checkUserProfile();
         sendTvHeartbeat();
-        setInterval(sendTvHeartbeat, 1800);
+        setInterval(sendTvHeartbeat, 3000);
     })();
     </script>
 </body>

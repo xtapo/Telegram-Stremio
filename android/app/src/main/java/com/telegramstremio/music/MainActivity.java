@@ -18,8 +18,10 @@ import android.content.res.Configuration;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -263,6 +265,41 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
             }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                // Android TV thường có ít RAM. Nếu renderer WebView bị hệ thống hủy,
+                // giữ lỗi trong Activity và tạo WebView mới thay vì để app văng.
+                ViewGroup parent = view.getParent() instanceof ViewGroup
+                        ? (ViewGroup) view.getParent()
+                        : null;
+                int childIndex = parent != null ? parent.indexOfChild(view) : -1;
+                ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+
+                if (parent == null) {
+                    view.destroy();
+                    webView = null;
+                    recreate();
+                    return true;
+                }
+                parent.removeView(view);
+                view.destroy();
+
+                webView = new WebView(MainActivity.this);
+                webView.setId(R.id.web_view);
+                parent.addView(webView, Math.max(0, childIndex), layoutParams);
+                setupWebView();
+
+                Toast.makeText(
+                        MainActivity.this,
+                        detail.didCrash()
+                                ? "Đang khôi phục trình phát sau lỗi WebView"
+                                : "Đang khôi phục trình phát để giải phóng bộ nhớ",
+                        Toast.LENGTH_SHORT
+                ).show();
+                loadMusicUrl(getServerUrl());
+                return true;
+            }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -496,6 +533,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        XTMediaBrowserService.setControlListener(null);
         if (wakeLock != null && wakeLock.isHeld()) {
             try {
                 wakeLock.release();
