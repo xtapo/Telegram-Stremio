@@ -14,6 +14,9 @@ jobs:
   build-apk:
     name: Build XT-Music APK
     runs-on: ubuntu-latest
+    env:
+      APP_VERSION_CODE: ${{ github.run_number }}
+      APP_VERSION_NAME: 1.0.${{ github.run_number }}
 
     steps:
       - name: Checkout repository
@@ -33,21 +36,29 @@ jobs:
         with:
           gradle-version: 8.4
 
-      - name: Build Android Debug APK
+      - name: Build Phone and TV release APKs
         run: |
           cd android
-          gradle assembleDebug --stacktrace
+          gradle assemblePhoneRelease assembleTvRelease --stacktrace
 
-      - name: Rename APK for distribution
+      - name: Prepare APKs for distribution
         run: |
           mkdir -p build_output
-          cp android/app/build/outputs/apk/debug/app-debug.apk build_output/XT-Music.apk
+          cp android/app/build/outputs/apk/phone/release/app-phone-release.apk "build_output/XT-Music-Phone-v${APP_VERSION_NAME}.apk"
+          cp android/app/build/outputs/apk/tv/release/app-tv-release.apk "build_output/XT-Music-TV-v${APP_VERSION_NAME}.apk"
 
-      - name: Upload APK Artifact
+      - name: Upload Phone APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: XT-Music-APK
-          path: build_output/XT-Music.apk
+          name: XT-Music-Phone-v${{ env.APP_VERSION_NAME }}
+          path: build_output/XT-Music-Phone-v${{ env.APP_VERSION_NAME }}.apk
+          retention-days: 30
+
+      - name: Upload TV APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XT-Music-TV-v${{ env.APP_VERSION_NAME }}
+          path: build_output/XT-Music-TV-v${{ env.APP_VERSION_NAME }}.apk
           retention-days: 30
 
 
