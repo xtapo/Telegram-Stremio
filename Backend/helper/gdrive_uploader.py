@@ -1302,26 +1302,91 @@ class GoogleDriveUploadManager:
 
                     cover_url = (cue_info.get("cover_url", "") if cue_info else "") or ""
 
-                    # NHẬN DIỆN VÂN TAY ÂM THANH SHAZAM CỤC BỘ:
-                    # Nếu tiêu đề vẫn là tên chung chung (Track 01, Audio 01...), cho Shazam "nghe" trực tiếp từ file trên ổ đĩa
-                    if is_generic_music_query(title_candidate, artist_candidate):
-                        self._log(f"🔍 Bài [{track_idx}/{len(files_to_upload)}] có tên chưa rõ ('{raw_filename}') -> Đang nhận diện vân tay âm thanh (Shazam / Tags) trực tiếp từ tệp...", "info")
+                    # Độ tin cậy metadata trước khi upload:
+                    # - CUE/tracklist có đủ title + artist: tin cậy cao, không cần Shazam sâu.
+                    # - ID3 có đủ title + artist: cũng ưu tiên tốc độ, không gọi Shazam.
+                    # - Chỉ dựa vào tên file / thiếu artist / metadata generic: dùng Shazam đa mẫu
+                    #   trên file local để tránh nhận nhầm các tên kiểu Track 01 hoặc tên file bị đặt sai.
+                    has_solid_cue = bool(cue_info.get("title") and cue_info.get("artist"))
+                    local_title = strip_copy_prefix(local_meta.get("title", ""))
+                    local_artist = strip_copy_prefix(local_meta.get("artist", ""))
+                    weak_artist_values = {
+                        "", "unknown", "unknown artist", "various artists", "various",
+                        "va", "telegram", "lossless", "admin"
+                    }
+                    local_artist_is_weak = (local_artist or "").strip().lower() in weak_artist_values
+                    local_tag_has_noise = bool(re.search(
+                        r"https?://|t\.me/|@[\w_]+|\b(?:download|join\s+channel)\b",
+                        f"{local_title} {local_artist}",
+                        re.I,
+                    ))
+                    has_solid_local_tags = bool(
+                        local_title
+                        and local_artist
+                        and not local_artist_is_weak
+                        and not local_tag_has_noise
+                        and not is_generic_music_query(local_title, local_artist)
+                    )
+                    artist_is_weak = (artist_candidate or "").strip().lower() in weak_artist_values
+                    title_is_generic = is_generic_music_query(title_candidate, artist_candidate)
+                    needs_deep_fingerprint = (
+                        not has_solid_cue
+                        and not has_solid_local_tags
+                        and (title_is_generic or artist_is_weak or not local_meta.get("title"))
+                    )
+
+                    fingerprint_confirmed = False
+                    if needs_deep_fingerprint:
+                        self._log(
+                            f"🔍 Bài [{track_idx}/{len(files_to_upload)}] metadata chưa đủ tin cậy ('{raw_filename}') "
+                            "-> Shazam đa mẫu toàn thời lượng + xác nhận chéo ID3...",
+                            "info"
+                        )
                         try:
-                            fp_res = await recognize_audio_from_local_file(file_path)
+                            fp_res = await recognize_audio_from_local_file(
+                                file_path,
+                                hint_title=title_candidate,
+                                hint_artist=artist_candidate,
+                                hint_album=album_candidate,
+                                is_manual=True,
+                            )
                             if fp_res and fp_res.get("title"):
-                                title_candidate = strip_copy_prefix(fp_res["title"])
-                                if fp_res.get("artist") and (not artist_candidate or is_generic_music_query(artist_candidate)):
-                                    artist_candidate = strip_copy_prefix(fp_res["artist"])
-                                if fp_res.get("album") and not (item_default_album or default_album):
-                                    album_candidate = strip_copy_prefix(fp_res["album"])
-                                if fp_res.get("cover_url") and not cover_url:
-                                    cover_url = fp_res["cover_url"]
-                                self._log(f"✅ Đã nhận diện âm thanh thành công qua {fp_res.get('layer', 'Shazam')}: {artist_candidate} - {title_candidate}", "success")
+                                fp_layer = str(fp_res.get("layer", ""))
+                                fp_is_shazam = fp_layer.startswith("Shazam")
+
+                                if fp_is_shazam:
+                                    # Kết quả fingerprint là bằng chứng mạnh hơn tên file suy đoán.
+                                    title_candidate = strip_copy_prefix(fp_res["title"])
+                                    if fp_res.get("artist"):
+                                        artist_candidate = strip_copy_prefix(fp_res["artist"])
+                                    if fp_res.get("album") and not (item_default_album or default_album):
+                                        album_candidate = strip_copy_prefix(fp_res["album"])
+                                    if fp_res.get("cover_url"):
+                                        cover_url = fp_res["cover_url"]
+                                    fingerprint_confirmed = True
+                                    votes = fp_res.get("match_votes", 1)
+                                    confidence = fp_res.get("confidence", "normal")
+                                    self._log(
+                                        f"✅ Shazam xác nhận [{confidence}, {votes} mẫu]: "
+                                        f"{artist_candidate} - {title_candidate}",
+                                        "success"
+                                    )
+                                else:
+                                    # ID3/online fallback bên trong fingerprint chỉ dùng để lấp dữ liệu yếu,
+                                    # không ghi đè một title/artist đã có vẻ hợp lệ từ nguồn khác.
+                                    if title_is_generic and fp_res.get("title"):
+                                        title_candidate = strip_copy_prefix(fp_res["title"])
+                                    if artist_is_weak and fp_res.get("artist") and fp_res.get("artist") != "Unknown Artist":
+                                        artist_candidate = strip_copy_prefix(fp_res["artist"])
+                                    if fp_res.get("album") and not album_candidate:
+                                        album_candidate = strip_copy_prefix(fp_res["album"])
+                                    if fp_res.get("cover_url") and not cover_url:
+                                        cover_url = fp_res["cover_url"]
                         except Exception as ex_fp:
                             LOGGER.debug(f"Audio fingerprint error for {file_path}: {ex_fp}")
 
-                    has_solid_cue = bool(cue_info.get("title") and cue_info.get("artist"))
-                    # Chỉ tra cứu trực tuyến nếu có tên bài hát cụ thể (không phải chuỗi generic như Track 01)
+                    # Apple Music/Deezer dùng để xác nhận/bổ sung metadata. Không cho kết quả
+                    # catalog độ tin cậy thấp ghi đè title/artist đã được Shazam xác nhận.
                     if auto_scrape and not has_solid_cue and not is_generic_music_query(title_candidate, artist_candidate):
                         try:
                             scraped = await fetch_music_metadata(
@@ -1333,10 +1398,32 @@ class GoogleDriveUploadManager:
                                 default_album=item_default_album or default_album,
                             )
                             if scraped:
-                                if scraped.get("title"): title_candidate = strip_copy_prefix(scraped["title"])
-                                if scraped.get("artist"): artist_candidate = strip_copy_prefix(scraped["artist"])
-                                if scraped.get("album") and not (item_default_album or default_album): album_candidate = strip_copy_prefix(scraped["album"])
-                                if scraped.get("cover_url"): cover_url = scraped["cover_url"]
+                                scraped_source = str(scraped.get("source", ""))
+                                try:
+                                    scraped_score = float(scraped.get("score", 0) or 0)
+                                except Exception:
+                                    scraped_score = 0.0
+                                is_catalog_match = scraped_source in ("Apple Music / iTunes", "Deezer API")
+                                catalog_confident = is_catalog_match and scraped_score >= 0.50
+
+                                if catalog_confident and not fingerprint_confirmed:
+                                    if scraped.get("title"):
+                                        title_candidate = strip_copy_prefix(scraped["title"])
+                                    if scraped.get("artist"):
+                                        artist_candidate = strip_copy_prefix(scraped["artist"])
+
+                                # Khi Shazam đã xác nhận, catalog chỉ bổ sung album/cover;
+                                # khi chưa có Shazam, chỉ bổ sung nếu chính catalog đạt ngưỡng score.
+                                if catalog_confident:
+                                    if scraped.get("album") and not (item_default_album or default_album):
+                                        album_candidate = strip_copy_prefix(scraped["album"])
+                                    if scraped.get("cover_url"):
+                                        cover_url = scraped["cover_url"]
+                                elif is_catalog_match:
+                                    self._log(
+                                        f"⚠️ Bỏ qua kết quả catalog độ tin cậy thấp ({scraped_score:.2f}) cho '{raw_filename}'.",
+                                        "warn"
+                                    )
                         except Exception as e:
                             LOGGER.debug(f"Metadata scrape note: {e}")
 
