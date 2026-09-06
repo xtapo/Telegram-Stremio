@@ -2,6 +2,7 @@ import asyncio
 import re
 import urllib.parse
 import httpx
+from difflib import SequenceMatcher
 from typing import Dict, Optional, Tuple, List
 from Backend.logger import LOGGER
 
@@ -923,6 +924,45 @@ async def fetch_album_tracklist_online(album_name: str, artist_name: str = "") -
     tracks_map: Dict[int, dict] = {}
     query = f"{clean_art} {clean_alb}".strip() if clean_art else clean_alb
 
+    def _album_norm(value: str) -> str:
+        # \w của Python hỗ trợ Unicode nên không làm mất tên album Trung/Nhật/Hàn.
+        return re.sub(r"[\W_]+", "", str(value or "").casefold(), flags=re.UNICODE)
+
+    def _album_candidate_score(candidate_album: str, candidate_artist: str = "") -> float:
+        target_album = _album_norm(clean_alb)
+        cand_album = _album_norm(candidate_album)
+        if not target_album or not cand_album:
+            return 0.0
+        if target_album == cand_album:
+            title_score = 1.0
+        else:
+            title_score = SequenceMatcher(None, target_album, cand_album).ratio()
+            if min(len(target_album), len(cand_album)) >= 3 and (
+                target_album in cand_album or cand_album in target_album
+            ):
+                title_score = max(title_score, 0.88)
+
+        if not clean_art:
+            return title_score
+
+        target_artist = _album_norm(clean_art)
+        cand_artist = _album_norm(candidate_artist)
+        if not target_artist or not cand_artist:
+            return title_score * 0.82
+        if target_artist == cand_artist:
+            artist_score = 1.0
+        else:
+            artist_score = SequenceMatcher(None, target_artist, cand_artist).ratio()
+            if min(len(target_artist), len(cand_artist)) >= 2 and (
+                target_artist in cand_artist or cand_artist in target_artist
+            ):
+                artist_score = max(artist_score, 0.88)
+
+        # Có artist từ tên thư mục thì yêu cầu artist không được lệch quá xa.
+        if artist_score < 0.35:
+            return title_score * 0.60
+        return (title_score * 0.78) + (artist_score * 0.22)
+
     # 1. Thử iTunes API (ưu tiên catalog VN, sau đó fallback sang US)
     try:
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
@@ -937,37 +977,23 @@ async def fetch_album_tracklist_online(album_name: str, artist_name: str = "") -
                     continue
 
                 best_col = None
-                target_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', clean_alb.lower())
+                best_score = 0.0
                 target_num = re.search(r'\d+', clean_alb)
-
-                # Ưu tiên 1: Khớp chính xác tuyệt đối tên album
                 for col in results:
                     c_name = col.get("collectionName", "")
-                    c_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', c_name.lower())
-                    if target_clean == c_clean:
-                        best_col = col
-                        break
-
-                # Ưu tiên 2: Khớp số thứ tự tập/album (ví dụ: Khúc Tình Xưa 6 khớp album có số 6)
-                if not best_col and target_num:
-                    for col in results:
-                        c_name = col.get("collectionName", "")
+                    c_artist = col.get("artistName", "")
+                    score = _album_candidate_score(c_name, c_artist)
+                    if target_num:
                         c_num = re.search(r'\d+', c_name)
                         if c_num and c_num.group(0) == target_num.group(0):
-                            best_col = col
-                            break
+                            score = min(1.0, score + 0.06)
+                    if score > best_score:
+                        best_score = score
+                        best_col = col
 
-                # Ưu tiên 3: Chuỗi con tương đồng
-                if not best_col:
-                    for col in results:
-                        c_name = col.get("collectionName", "")
-                        c_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', c_name.lower())
-                        if target_clean in c_clean or c_clean in target_clean:
-                            best_col = col
-                            break
-
-                if not best_col and results:
-                    best_col = results[0]
+                # Không còn lấy kết quả đầu tiên khi tên album không đủ giống.
+                if best_score < 0.70:
+                    best_col = None
 
                 if best_col:
                     cid = best_col.get("collectionId")
@@ -1003,23 +1029,21 @@ async def fetch_album_tracklist_online(album_name: str, artist_name: str = "") -
                 d_data = d_resp.json()
                 albums = d_data.get("data", [])
                 best_alb = None
-                target_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', clean_alb.lower())
+                best_score = 0.0
                 target_num = re.search(r'\d+', clean_alb)
                 for alb in albums:
                     a_title = alb.get("title", "")
-                    a_clean = re.sub(r'[^a-zA-Z0-9\u00C0-\u1EF9]', '', a_title.lower())
-                    if target_clean == a_clean:
-                        best_alb = alb
-                        break
-                if not best_alb and target_num:
-                    for alb in albums:
-                        a_title = alb.get("title", "")
+                    a_artist = alb.get("artist", {}).get("name", "")
+                    score = _album_candidate_score(a_title, a_artist)
+                    if target_num:
                         a_num = re.search(r'\d+', a_title)
                         if a_num and a_num.group(0) == target_num.group(0):
-                            best_alb = alb
-                            break
-                if not best_alb and albums:
-                    best_alb = albums[0]
+                            score = min(1.0, score + 0.06)
+                    if score > best_score:
+                        best_score = score
+                        best_alb = alb
+                if best_score < 0.70:
+                    best_alb = None
 
                 if best_alb:
                     alb_id = best_alb.get("id")

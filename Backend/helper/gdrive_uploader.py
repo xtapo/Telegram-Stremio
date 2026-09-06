@@ -10,6 +10,7 @@ import zipfile
 import tarfile
 import json
 import subprocess
+from difflib import SequenceMatcher
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -26,6 +27,7 @@ from Backend.helper.metadata.music_scraper import (
     is_generic_music_query,
     strip_copy_prefix,
     fetch_album_tracklist_online,
+    token_similarity,
 )
 from Backend.helper.metadata.audio_fingerprint import (
     extract_embedded_audio_tags,
@@ -327,11 +329,16 @@ def _sync_list_gdrive_folder(folder_url_or_id: str) -> List[dict]:
         if items:
             result = []
             for item in items:
-                fn = os.path.basename(getattr(item, "path", "")) or getattr(item, "name", "") or f"gdrive_{item.id}"
+                raw_path = str(getattr(item, "path", "") or "").replace("\\", "/").strip("/")
+                fn = os.path.basename(raw_path) or getattr(item, "name", "") or f"gdrive_{item.id}"
+                folder_path = os.path.dirname(raw_path).replace("\\", "/").strip("/") if raw_path else ""
+                folder_name = os.path.basename(folder_path) if folder_path else ""
                 result.append({
                     "id": item.id,
                     "name": fn,
-                    "url": f"https://drive.google.com/file/d/{item.id}/view"
+                    "url": f"https://drive.google.com/file/d/{item.id}/view",
+                    "folder_name": folder_name,
+                    "folder_path": folder_path,
                 })
             LOGGER.info(f"[GDRIVE FOLDER] gdown quét được {len(result)} files trong folder: {folder_url}")
             return result
@@ -354,6 +361,75 @@ def _sync_list_gdrive_folder(folder_url_or_id: str) -> List[dict]:
         LOGGER.warning(f"[GDRIVE FOLDER HTML] fallback error: {ex2}")
 
     return []
+
+
+def _drive_album_context(folder_path: str = "", folder_name: str = "") -> str:
+    """Lấy tên thư mục album đáng tin cậy nhất từ cấu trúc Google Drive."""
+    raw = (folder_path or folder_name or "").replace("\\", "/").strip("/")
+    parts = [strip_copy_prefix(p.strip()) for p in raw.split("/") if p.strip()]
+    if not parts and folder_name:
+        parts = [strip_copy_prefix(folder_name.strip())]
+    skip_re = re.compile(r"^(?:cd|disc|disk|part|folder|music|audio|tracks?)\s*\d*$", re.I)
+    for part in reversed(parts):
+        if not part or skip_re.match(part):
+            continue
+        cleaned = clean_audio_filename(part)
+        if cleaned and len(cleaned) >= 2 and not is_generic_music_query(cleaned):
+            return strip_copy_prefix(cleaned)
+    return ""
+
+
+def _track_number_hint(raw_filename: str, local_meta: dict) -> Optional[int]:
+    """Ưu tiên track number trong tag, sau đó số thứ tự ở đầu tên file."""
+    raw_track = str((local_meta or {}).get("track", "") or "")
+    m = re.search(r"\d{1,3}", raw_track)
+    if m:
+        try:
+            return int(m.group(0))
+        except Exception:
+            pass
+    stem = os.path.splitext(os.path.basename(raw_filename or ""))[0]
+    m = re.match(r"^\s*(?:track\s*)?[\[(]?0*(\d{1,3})[\])]?\s*(?:[.\-_ ]|$)", stem, re.I)
+    if m:
+        try:
+            return int(m.group(1))
+        except Exception:
+            pass
+    return None
+
+
+def _match_album_tracklist(track_map: dict, raw_filename: str, local_meta: dict, sequence_index: int = 0, allow_sequence: bool = False) -> dict:
+    """Khớp bài theo số track trước; nếu thiếu số thì dùng tên file với ngưỡng tương đồng chặt."""
+    if not track_map:
+        return {}
+    track_no = _track_number_hint(raw_filename, local_meta)
+    if track_no and track_no in track_map:
+        return track_map[track_no]
+
+    clean_name = clean_audio_filename(raw_filename or "")
+    best = None
+    best_score = 0.0
+    if clean_name and not is_generic_music_query(clean_name):
+        name_norm = re.sub(r"[\W_]+", "", clean_name.casefold(), flags=re.UNICODE)
+        for info in track_map.values():
+            track_title = str(info.get("title", "") or "")
+            title_norm = re.sub(r"[\W_]+", "", track_title.casefold(), flags=re.UNICODE)
+            score = token_similarity(clean_name, track_title)
+            if name_norm and title_norm:
+                score = max(score, SequenceMatcher(None, name_norm, title_norm).ratio())
+                if min(len(name_norm), len(title_norm)) >= 2 and (
+                    name_norm in title_norm or title_norm in name_norm
+                ):
+                    score = max(score, 0.90)
+            if score > best_score:
+                best_score = score
+                best = info
+        if best and best_score >= 0.72:
+            return best
+
+    if allow_sequence and sequence_index in track_map:
+        return track_map[sequence_index]
+    return {}
 
 
 def _extract_filename_from_headers(headers: httpx.Headers, default_name: str = "downloaded_file") -> str:
@@ -1108,7 +1184,9 @@ class GoogleDriveUploadManager:
                                 "link_type": "file",
                                 "resource_id": ff["id"],
                                 "known_filename": ff["name"],
-                                "source_label": f"📁 {ff['name']}"
+                                "source_label": f"📁 {ff['name']}",
+                                "folder_name": ff.get("folder_name", ""),
+                                "folder_path": ff.get("folder_path", ""),
                             })
                     else:
                         self._log(f"⚠️ Không tìm thấy tập tin nào trong thư mục Google Drive (ID: {resource_id})", "warn")
@@ -1117,14 +1195,18 @@ class GoogleDriveUploadManager:
                         "link_type": "file",
                         "resource_id": resource_id,
                         "known_filename": "",
-                        "source_label": original_url
+                        "source_label": original_url,
+                        "folder_name": "",
+                        "folder_path": "",
                     })
                 elif link_type == "direct":
                     items_queue.append({
                         "link_type": "direct",
                         "resource_id": resource_id,
                         "known_filename": "",
-                        "source_label": original_url
+                        "source_label": original_url,
+                        "folder_name": "",
+                        "folder_path": "",
                     })
 
             if not items_queue:
@@ -1136,6 +1218,7 @@ class GoogleDriveUploadManager:
             total_queue_items = len(items_queue)
             self._log(f"🚀 Bắt đầu xử lý hàng đợi gồm {total_queue_items} mục (tập tin/album)...", "info")
             uploaded_messages_all = []
+            album_tracklist_cache = {}
 
             # 2. Xử lý tuần tự từng mục trong hàng đợi
             for q_idx, q_item in enumerate(items_queue, 1):
@@ -1146,6 +1229,8 @@ class GoogleDriveUploadManager:
                 q_res_id = q_item["resource_id"]
                 q_known_fn = q_item["known_filename"]
                 q_label = q_item["source_label"]
+                q_folder_name = q_item.get("folder_name", "")
+                q_folder_path = q_item.get("folder_path", "")
 
                 self._file_index = q_idx
                 self._total_files = total_queue_items
@@ -1170,6 +1255,20 @@ class GoogleDriveUploadManager:
                 item_default_artist = default_artist
                 item_default_album = default_album
                 cue_track_map = {}
+                drive_folder_context = _drive_album_context(q_folder_path, q_folder_name)
+                if drive_folder_context and not item_default_album:
+                    inf_art, inf_alb = extract_context_from_text(drive_folder_context)
+                    if inf_art and inf_alb:
+                        if not item_default_artist:
+                            item_default_artist = strip_copy_prefix(inf_art)
+                        item_default_album = strip_copy_prefix(inf_alb)
+                    else:
+                        item_default_album = strip_copy_prefix(drive_folder_context)
+                    self._log(
+                        f"📂 Dùng ngữ cảnh thư mục Google Drive làm Album ưu tiên: "
+                        f"'{item_default_album}'{f' / {item_default_artist}' if item_default_artist else ''}",
+                        "info"
+                    )
 
                 if ext in ARCHIVE_EXTENSIONS:
                     self._stage = f"[{q_idx}/{total_queue_items}] Đang giải nén tập tin album: {os.path.basename(dl_path)}..."
@@ -1217,6 +1316,32 @@ class GoogleDriveUploadManager:
                 elif ext in AUDIO_EXTENSIONS:
                     files_to_upload = [dl_path]
 
+                # Với file audio nằm trực tiếp trong Google Drive Folder, tên thư mục là
+                # ngữ cảnh album mạnh. Tra tracklist một lần rồi cache để các file kế tiếp
+                # cùng album không phải gọi Apple Music/Deezer lặp lại.
+                if not cue_track_map and files_to_upload and drive_folder_context and item_default_album:
+                    cache_key = f"{item_default_artist or ''}|{item_default_album}".casefold().strip()
+                    if cache_key not in album_tracklist_cache:
+                        self._log(
+                            f"🔍 Đối chiếu thư mục Album '{item_default_album}' với Apple Music / Deezer...",
+                            "info"
+                        )
+                        try:
+                            album_tracklist_cache[cache_key] = await fetch_album_tracklist_online(
+                                item_default_album,
+                                item_default_artist,
+                            )
+                        except Exception as ex_alb:
+                            LOGGER.debug(f"Drive folder album tracklist fetch note: {ex_alb}")
+                            album_tracklist_cache[cache_key] = {}
+                    cue_track_map = album_tracklist_cache.get(cache_key, {})
+                    if cue_track_map:
+                        self._log(
+                            f"💿 Đã xác nhận Album theo thư mục Google Drive: '{item_default_album}' "
+                            f"({len(cue_track_map)} track).",
+                            "success"
+                        )
+
                 if not files_to_upload:
                     self._log(f"⚠️ Không tìm thấy bài hát nào trong {os.path.basename(dl_path)}", "warn")
                     continue
@@ -1259,8 +1384,20 @@ class GoogleDriveUploadManager:
                             if c_data.get("file_name") and c_data["file_name"].lower() == raw_filename.lower():
                                 cue_info = c_data
                                 break
-                        if not cue_info and track_idx in cue_track_map:
-                            cue_info = cue_track_map[track_idx]
+                        if not cue_info:
+                            cue_info = _match_album_tracklist(
+                                cue_track_map,
+                                raw_filename,
+                                local_meta,
+                                sequence_index=track_idx,
+                                allow_sequence=(len(files_to_upload) > 1),
+                            )
+                        if cue_info:
+                            self._log(
+                                f"🎯 Khớp theo Album/tracklist: #{_track_number_hint(raw_filename, local_meta) or track_idx} "
+                                f"{cue_info.get('artist', '')} - {cue_info.get('title', '')}",
+                                "success"
+                            )
 
                     # Ưu tiên dữ liệu: CUE Sheet/Album Tracklist > Thẻ nhúng cục bộ > Parser tiêu đề > Tên sạch
                     artist_candidate = (
@@ -1276,6 +1413,7 @@ class GoogleDriveUploadManager:
                     )
                     album_candidate = (
                         (cue_info.get("album") if cue_info else "") or
+                        (item_default_album if drive_folder_context else "") or
                         local_meta.get("album", "") or
                         item_default_album or
                         default_album
@@ -1329,10 +1467,18 @@ class GoogleDriveUploadManager:
                     )
                     artist_is_weak = (artist_candidate or "").strip().lower() in weak_artist_values
                     title_is_generic = is_generic_music_query(title_candidate, artist_candidate)
+                    album_context_conflict = bool(
+                        drive_folder_context and cue_track_map and not cue_info
+                    )
                     needs_deep_fingerprint = (
                         not has_solid_cue
-                        and not has_solid_local_tags
-                        and (title_is_generic or artist_is_weak or not local_meta.get("title"))
+                        and (
+                            album_context_conflict
+                            or (
+                                not has_solid_local_tags
+                                and (title_is_generic or artist_is_weak or not local_meta.get("title"))
+                            )
+                        )
                     )
 
                     fingerprint_confirmed = False
