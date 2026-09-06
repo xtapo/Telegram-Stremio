@@ -498,7 +498,9 @@ def _normalize_manual_match_text(value: str) -> str:
         text,
         flags=re.I,
     )
-    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+    # Giữ toàn bộ chữ/số Unicode. Regex cũ chỉ giữ [a-z0-9], khiến kết quả
+    # Shazam tiếng Hàn/Nhật/Trung/Cyrillic bị biến thành chuỗi rỗng và bị loại.
+    return re.sub(r"[\W_]+", " ", text, flags=re.UNICODE).strip()
 
 
 def _manual_text_similarity(left: str, right: str) -> float:
@@ -518,6 +520,27 @@ def _manual_result_key(result: dict) -> str:
     if not title or not artist:
         return ""
     return f"{artist}|{title}"
+
+
+def _manual_results_equivalent(left: dict, right: dict) -> bool:
+    """Gộp các biến thể metadata nhỏ của cùng một kết quả Shazam giữa nhiều mẫu."""
+    if not left or not right:
+        return False
+    left_title = _normalize_manual_match_text(left.get("title", ""))
+    right_title = _normalize_manual_match_text(right.get("title", ""))
+    left_artist = _normalize_manual_match_text(left.get("artist", ""))
+    right_artist = _normalize_manual_match_text(right.get("artist", ""))
+    if not left_title or not right_title or not left_artist or not right_artist:
+        return False
+
+    title_sim = _manual_text_similarity(left_title, right_title)
+    artist_sim = _manual_text_similarity(left_artist, right_artist)
+    title_contains = left_title in right_title or right_title in left_title
+    artist_contains = left_artist in right_artist or right_artist in left_artist
+
+    # Title phải gần như cùng một bài; artist cho phép khác biệt kiểu
+    # "A" so với "A & B" hoặc cách Shazam ghi featured artist khác nhau.
+    return (title_sim >= 0.82 or title_contains) and (artist_sim >= 0.50 or artist_contains)
 
 
 def _is_useful_manual_hint(value: str) -> bool:
@@ -569,13 +592,19 @@ def _select_manual_shazam_result(
     trả về kết quả khác nhau, tag gốc và thông tin hiện có của thư viện được dùng để
     phá hòa; trường hợp vẫn mơ hồ sẽ được bỏ qua để pipeline rơi xuống ID3/online.
     """
-    groups = {}
+    groups = []
     for item in candidates:
         result = item.get("result") or {}
         key = _manual_result_key(result)
         if not key:
             continue
-        bucket = groups.setdefault(key, {"result": result, "segments": [], "votes": 0})
+        bucket = next(
+            (group for group in groups if _manual_results_equivalent(group["result"], result)),
+            None,
+        )
+        if bucket is None:
+            bucket = {"result": result, "segments": [], "votes": 0}
+            groups.append(bucket)
         bucket["votes"] += 1
         bucket["segments"].append(item.get("segment") or "Mẫu")
 
@@ -583,7 +612,7 @@ def _select_manual_shazam_result(
         return None
 
     ranked = []
-    for group in groups.values():
+    for group in groups:
         support = _manual_candidate_support(group["result"], embedded_tags, hints)
         total_score = (group["votes"] * 3.0) + support
         ranked.append((total_score, support, group))
@@ -632,31 +661,76 @@ def _select_manual_shazam_result(
 
 
 def _build_manual_scan_windows(total_sec: float) -> list:
-    """Tạo các cửa sổ nghe phân bố theo toàn bộ thời lượng cho nút nhận diện thủ công."""
+    """Tạo rolling windows 12 giây, tập trung tối đa ~90 giây vùng hữu ích của bài."""
     if total_sec <= 0:
-        return [("Mẫu mở đầu", 0.0, 22.0)]
-    if total_sec <= 24:
+        return [("Mẫu mở đầu", 0.0, 12.0)]
+    if total_sec <= 18:
         return [("Toàn bộ bài hát", 0.0, max(5.0, total_sec))]
 
-    duration = min(22.0, max(14.0, total_sec * 0.12))
-    anchors = [
-        ("Đầu bài hát", 0.10),
-        ("Verse / đoạn đầu", 0.28),
-        ("Giữa bài", 0.50),
-        ("Điệp khúc / cao trào", 0.68),
-        ("Đoạn cuối", 0.84),
-    ]
+    duration = min(12.0, total_sec)
+    step = 6.0
+    scan_span = min(total_sec, 90.0)
+
+    # Với bài dài, nghe liên tục quanh phần giữa bài để tránh intro/outro dài.
+    # Ba probe 28/50/68% bên dưới vẫn đảm bảo phủ verse/chorus ở bài rất dài.
+    span_start = max(0.0, min(total_sec - scan_span, (total_sec * 0.50) - (scan_span / 2.0)))
+    span_end = min(total_sec, span_start + scan_span)
+
+    starts = []
+    current = span_start
+    last_start = max(0.0, span_end - duration)
+    while current <= last_start + 0.01:
+        starts.append(current)
+        current += step
+    if not starts or abs(starts[-1] - last_start) > 2.0:
+        starts.append(last_start)
+
+    # Bài rất dài có thể có cấu trúc bất thường. Thêm các probe toàn cục nhưng
+    # giữ số request hữu hạn để thao tác thủ công vẫn phản hồi nhanh.
+    for ratio in (0.28, 0.50, 0.68):
+        probe = max(0.0, min(total_sec - duration, (total_sec * ratio) - (duration / 2.0)))
+        if all(abs(probe - existing) >= step * 0.75 for existing in starts):
+            starts.append(probe)
+
+    starts = sorted(starts)[:18]
     windows = []
-    for name, ratio in anchors:
-        center = total_sec * ratio
-        start = max(0.0, min(total_sec - duration, center - (duration / 2.0)))
+    for idx, start in enumerate(starts, start=1):
         dur = min(duration, total_sec - start)
-        if dur < 5.0:
-            continue
-        if windows and abs(start - windows[-1][1]) < min(8.0, duration * 0.45):
-            continue
-        windows.append((name, start, dur))
-    return windows or [("Toàn bộ bài hát", 0.0, min(22.0, total_sec))]
+        if dur >= 5.0:
+            windows.append((f"Rolling {idx}", start, dur))
+    return windows or [("Toàn bộ bài hát", 0.0, min(12.0, total_sec))]
+
+
+def _measure_pcm_wav_energy(file_path: str) -> float:
+    """Ước lượng năng lượng của WAV PCM16 mono để ưu tiên đoạn có tín hiệu nhạc rõ."""
+    if not file_path or not os.path.exists(file_path):
+        return 0.0
+    try:
+        import array
+        import sys
+        import wave
+
+        with wave.open(file_path, "rb") as wf:
+            if wf.getsampwidth() != 2:
+                return 0.0
+            raw = wf.readframes(wf.getnframes())
+        if not raw:
+            return 0.0
+
+        samples = array.array("h")
+        samples.frombytes(raw)
+        if sys.byteorder != "little":
+            samples.byteswap()
+        if not samples:
+            return 0.0
+
+        mean_square = sum(int(sample) * int(sample) for sample in samples) / len(samples)
+        rms = mean_square ** 0.5
+        active_ratio = sum(1 for sample in samples if abs(int(sample)) >= 384) / len(samples)
+        return (rms / 32768.0) + (active_ratio * 0.05)
+    except Exception as exc:
+        LOGGER.debug(f"[SHAZAM ENERGY] Không thể đo năng lượng {file_path}: {exc}")
+        return 0.0
 
 
 async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", log_callback=None, timeout_sec: float = 12.0) -> dict:
@@ -676,6 +750,13 @@ async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", lo
         try:
             out = await query_shazam_isolated(file_path, language=lang, endpoint_country=country, timeout_sec=timeout_sec)
             if not out:
+                continue
+
+            runner_error = out.get("_error") if isinstance(out, dict) else None
+            if runner_error:
+                LOGGER.warning(f"[SHAZAM] Runner lỗi tại [{segment_name}] ({country}): {runner_error}")
+                if country == endpoint_configs[-1][1] and log_callback:
+                    log_callback(f"Shazam không thể xử lý [{segment_name}]: {runner_error}", "warn")
                 continue
 
             track = out.get("track", {})
@@ -769,14 +850,39 @@ async def recognize_audio_from_telegram(
 
             for k in [f"{abs(target_chat_id)}_{target_msg_id}.dat", f"{target_chat_id}_{target_msg_id}.dat"]:
                 p = os.path.join(cache_dir, k)
-                if os.path.exists(p) and os.path.getsize(p) > 1024:
-                    source_audio_path = p
-                    detected_file_size = os.path.getsize(p)
-                    size_mb_str = f"{round(detected_file_size/1024/1024, 1)}MB"
-                    LOGGER.info(f"[SHAZAM] Sử dụng tệp từ Cache cục bộ: {p} ({size_mb_str})")
-                    if log_callback:
-                        log_callback(f"Sử dụng tệp từ bộ nhớ đệm máy chủ ({size_mb_str})...", "info")
-                    break
+                if not os.path.exists(p) or os.path.getsize(p) <= 1024:
+                    continue
+
+                # Cache stream chỉ hợp lệ khi có metadata và kích thước .dat khớp
+                # file gốc. Không đưa cache dở dang/cũ vào Shazam vì sẽ tạo false miss.
+                meta_path = os.path.splitext(p)[0] + ".json"
+                cache_meta = {}
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as mf:
+                            cache_meta = json.load(mf) or {}
+                    except Exception:
+                        cache_meta = {}
+
+                actual_size = os.path.getsize(p)
+                expected_size = int(cache_meta.get("file_size") or 0)
+                if expected_size <= 0 or actual_size != expected_size:
+                    LOGGER.warning(
+                        f"[SHAZAM] Bỏ qua cache không hoàn chỉnh: {p} "
+                        f"({actual_size}B/{expected_size or '?'}B)"
+                    )
+                    continue
+
+                source_audio_path = p
+                detected_file_size = actual_size
+                cached_name = str(cache_meta.get("file_name") or "").strip()
+                if cached_name:
+                    file_name = cached_name
+                size_mb_str = f"{round(detected_file_size/1024/1024, 1)}MB"
+                LOGGER.info(f"[SHAZAM] Sử dụng tệp từ Cache cục bộ: {p} ({size_mb_str})")
+                if log_callback:
+                    log_callback(f"Sử dụng tệp hoàn chỉnh từ bộ nhớ đệm máy chủ ({size_mb_str})...", "info")
+                break
         except Exception as e:
             LOGGER.warning(f"[SHAZAM] Lỗi kiểm tra cache: {e}")
 
@@ -881,7 +987,7 @@ async def recognize_audio_from_telegram(
             # ══════════════════════════════════════════════════════════════════
             # CHẾ ĐỘ 1: QUÉT KÊNH TELEGRAM SIÊU TỐC (is_manual == False)
             # Tốc độ ~1-2 giây / bài: 1 pass Shazam nhanh mẫu đầu bài + Thẻ ID3/FLAC gốc
-            # Tuyệt đối không lặp 5 cửa sổ và không gọi online scraper để tránh nghẽn kênh
+            # Không chạy rolling scan và không gọi online scraper để tránh nghẽn kênh
             # ══════════════════════════════════════════════════════════════════
             tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             sample_w_path = tmp_wav.name
@@ -928,7 +1034,7 @@ async def recognize_audio_from_telegram(
 
         # ══════════════════════════════════════════════════════════════════
         # CHẾ ĐỘ 2: QUÉT THỦ CÔNG ĐA LỚP CHÍNH XÁC CAO (is_manual == True)
-        # Nhận diện sâu đầy đủ: 5 cửa sổ vàng Shazam + Thẻ Tag + Apple Music & Deezer
+        # Nhận diện sâu: rolling windows Shazam + Thẻ Tag + Apple Music & Deezer
         # ══════════════════════════════════════════════════════════════════
         # Xác định tổng thời lượng âm thanh bằng ffprobe hoặc wave/pydub
         ffprobe_bin = _find_ffprobe()
@@ -972,57 +1078,100 @@ async def recognize_audio_from_telegram(
             "album": hint_album or "",
         }
 
-        # Phân bố mẫu theo % thời lượng thay vì các mốc giây cố định. Cách này phù hợp
-        # cả bài ngắn, bài dài, live/remix và album track có intro dài.
+        # Rolling scan: tạo nhiều cửa sổ chồng lấn rồi ưu tiên các đoạn có năng lượng
+        # âm thanh tốt. Cách này gần với hành vi "nghe tiếp" của ứng dụng Shazam hơn
+        # việc chỉ thử một vài mốc cố định trong bài.
         scan_windows = _build_manual_scan_windows(total_sec)
         shazam_candidates = []
-        vote_counts = {}
+        prepared_windows = []
 
-        # Quét lần lượt qua các cửa sổ âm thanh đã chuẩn hóa Mono 16kHz 16-bit PCM WAV
+        # Chuẩn hóa trước các cửa sổ về Mono 16kHz PCM16 và đo RMS/active-ratio.
+        # Shazam sẽ thử đoạn nhiều tín hiệu trước, nhưng vẫn giữ các đoạn yếu làm fallback.
         for seg_idx, (seg_name, start_s, dur_s) in enumerate(scan_windows, start=1):
             tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             sample_w_path = tmp_wav.name
             tmp_wav.close()
-            try:
+            ok = _extract_normalized_segment(
+                input_audio_path=source_audio_path,
+                output_wav_path=sample_w_path,
+                start_sec=start_s,
+                duration_sec=dur_s,
+                audio_seg_pydub=audio_seg,
+            )
+            if not ok:
+                LOGGER.warning(
+                    f"[SHAZAM] Không thể trích xuất đoạn [{seg_name}] "
+                    f"({int(start_s)}s - {int(start_s + dur_s)}s)"
+                )
+                try:
+                    os.remove(sample_w_path)
+                except Exception:
+                    pass
+                continue
+
+            prepared_windows.append({
+                "index": seg_idx,
+                "name": seg_name,
+                "start": start_s,
+                "duration": dur_s,
+                "path": sample_w_path,
+                "energy": _measure_pcm_wav_energy(sample_w_path),
+            })
+
+        prepared_windows.sort(key=lambda item: (item["energy"], -item["index"]), reverse=True)
+        if log_callback and prepared_windows:
+            log_callback(
+                f"Lớp 1: Đã chuẩn bị {len(prepared_windows)} mẫu rolling; ưu tiên các đoạn có tín hiệu âm thanh rõ nhất...",
+                "info",
+            )
+
+        try:
+            for query_idx, item in enumerate(prepared_windows, start=1):
+                seg_name = item["name"]
+                start_s = item["start"]
+                dur_s = item["duration"]
+                sample_w_path = item["path"]
                 t_from = int(start_s)
                 t_to = int(start_s + dur_s)
-                if log_callback:
-                    if seg_idx == 1:
-                        log_callback(f"Lớp 1: Quét vân tay Shazam [{seg_name}] ({t_from}s - {t_to}s)...", "info")
-                    else:
-                        log_callback(f"Chưa khớp -> Quét tiếp Shazam [{seg_name}] ({t_from}s - {t_to}s)...", "info")
-                LOGGER.info(f"[SHAZAM] Quét vân tay tại [{seg_name}] ({t_from}s - {t_to}s) cho: {file_name}")
-
-                ok = _extract_normalized_segment(
-                    input_audio_path=source_audio_path,
-                    output_wav_path=sample_w_path,
-                    start_sec=start_s,
-                    duration_sec=dur_s,
-                    audio_seg_pydub=audio_seg
+                LOGGER.info(
+                    f"[SHAZAM] Rolling #{query_idx}/{len(prepared_windows)} [{seg_name}] "
+                    f"({t_from}s - {t_to}s, energy={item['energy']:.4f}) cho: {file_name}"
                 )
-                if not ok:
-                    LOGGER.warning(f"[SHAZAM] Không thể trích xuất đoạn âm thanh [{seg_name}] ({t_from}s - {t_to}s)")
+                if log_callback:
+                    log_callback(
+                        f"Shazam mẫu {query_idx}/{len(prepared_windows)} [{seg_name}] ({t_from}s - {t_to}s)...",
+                        "info",
+                    )
+
+                res = await _query_shazam_file(
+                    sample_w_path,
+                    segment_name=seg_name,
+                    log_callback=log_callback,
+                    timeout_sec=10.0,
+                )
+                if not res:
                     continue
 
-                res = await _query_shazam_file(sample_w_path, segment_name=seg_name, log_callback=log_callback, timeout_sec=10.0)
-                if res:
-                    shazam_candidates.append({"result": res, "segment": seg_name})
-                    key = _manual_result_key(res)
-                    if key:
-                        vote_counts[key] = vote_counts.get(key, 0) + 1
-                        if vote_counts[key] >= 2:
-                            # Hai đoạn khác nhau cùng nhận ra một bài là đủ chắc chắn;
-                            # dừng sớm để tránh gọi Shazam thừa.
-                            selected = _select_manual_shazam_result(
-                                shazam_candidates,
-                                embedded_tags,
-                                manual_hints,
-                                log_callback=log_callback,
-                            )
-                            if selected:
-                                return selected
-            finally:
-                if os.path.exists(sample_w_path):
+                shazam_candidates.append({"result": res, "segment": seg_name})
+                matching_votes = sum(
+                    1
+                    for candidate in shazam_candidates
+                    if _manual_results_equivalent(candidate.get("result") or {}, res)
+                )
+                if matching_votes >= 2:
+                    # Hai rolling windows khác nhau cùng nhận ra một bài: dừng sớm.
+                    selected = _select_manual_shazam_result(
+                        shazam_candidates,
+                        embedded_tags,
+                        manual_hints,
+                        log_callback=log_callback,
+                    )
+                    if selected:
+                        return selected
+        finally:
+            for item in prepared_windows:
+                sample_w_path = item.get("path")
+                if sample_w_path and os.path.exists(sample_w_path):
                     try:
                         os.remove(sample_w_path)
                     except Exception:

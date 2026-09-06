@@ -59,16 +59,19 @@ async def query_shazam_isolated(
     if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
         return None
 
+    direct_error = None
+
     # Nếu Python hiện tại < 3.14 và có shazamio hoạt động được trong tiến trình:
     if sys.version_info < (3, 14):
         try:
             from shazamio import Shazam
             shz = Shazam(language=language, endpoint_country=endpoint_country)
             out = await asyncio.wait_for(shz.recognize(file_path), timeout=timeout_sec)
-            if out and out.get("track"):
-                return out
-        except Exception:
-            pass
+            # Phản hồi hợp lệ nhưng không có track chỉ là "no match". Trước đây
+            # code gọi lại chính đoạn đó qua subprocess, làm request tăng gấp đôi.
+            return out or {}
+        except Exception as exc:
+            direct_error = f"{type(exc).__name__}: {exc}"
 
     # Chạy qua subprocess độc lập bằng Python 3.11
     python_bin = get_shazam_python()
@@ -99,11 +102,34 @@ async def query_shazam_isolated(
                         data = json.loads(line)
                         if data and data.get("track"):
                             return data
+                        if data and data.get("error"):
+                            worker_error = str(data.get("error"))
+                            if direct_error:
+                                worker_error = f"{direct_error}; subprocess: {worker_error}"
+                            return {"_error": worker_error}
+                        # Worker chạy thành công nhưng Shazam không match.
+                        return data or {}
                     except Exception:
                         pass
-    except Exception:
-        pass
+        if proc.returncode != 0:
+            stderr_text = stderr_bytes.decode("utf-8", errors="ignore").strip() if stderr_bytes else ""
+            err = stderr_text or f"subprocess exit code {proc.returncode}"
+            if direct_error:
+                err = f"{direct_error}; {err}"
+            return {"_error": err}
+    except asyncio.TimeoutError:
+        err = f"Timeout sau {timeout_sec:.0f}s"
+        if direct_error:
+            err = f"{direct_error}; {err}"
+        return {"_error": err}
+    except Exception as exc:
+        err = f"{type(exc).__name__}: {exc}"
+        if direct_error:
+            err = f"{direct_error}; {err}"
+        return {"_error": err}
 
+    if direct_error:
+        return {"_error": direct_error}
     return None
 
 
