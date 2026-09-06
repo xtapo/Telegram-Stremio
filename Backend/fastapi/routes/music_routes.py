@@ -822,6 +822,7 @@ async def _db_update_channel_progress(chat_id: str, last_scanned_id: int, last_s
 _IN_MEMORY_LIBRARY_CACHE = None
 _LIBRARY_BG_REFRESH_LOCK = asyncio.Lock()
 _LIBRARY_MIGRATED = False  # Flag để chỉ migrate 1 lần
+_LIBRARY_BG_SAVE_TASKS = set()
 
 # ── Collection mới: mỗi album = 1 document trong `music_albums` ──
 
@@ -1224,7 +1225,7 @@ async def _db_load_library(force_reload: bool = False) -> list:
     return []
 
 
-async def _db_save_library(albums: list):
+async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remote: bool = True):
     global _IN_MEMORY_LIBRARY_CACHE
     _IN_MEMORY_LIBRARY_CACHE = albums
     _invalidate_artists_cache()
@@ -1242,61 +1243,76 @@ async def _db_save_library(albums: list):
         except Exception as e:
             LOGGER.error(f"[MUSIC] Failed to write cache to {path}: {e}")
 
-    # 2. Lưu bản nén Gzip lên MongoDB (nhanh nhất & nhẹ nhất)
-    await _save_compressed_mongo_library(albums, force=True)
+    if not sync_remote:
+        return
 
-    # 3. Lưu theo per-album schema mới
-    coll = _get_albums_collection()
-    if coll is not None:
-        try:
-            await coll.delete_many({})
-            if albums:
-                seen_ids = set()
-                docs_to_insert = []
-                for idx, alb in enumerate(albums):
-                    album_id = (alb.get("id") or "").strip()
-                    if not album_id:
-                        title = alb.get("title", "unknown")
-                        artist = alb.get("artist", "unknown")
-                        album_id = generate_album_id(title, artist)
-                        alb["id"] = album_id
+    async def _sync_remote_library():
+        # 2. Lưu bản nén Gzip lên MongoDB (nhanh nhất & nhẹ nhất)
+        await _save_compressed_mongo_library(albums, force=True)
 
-                    # Bảo đảm 100% _id không bị trùng lặp trong MongoDB để không bao giờ bị mất album
-                    if album_id in seen_ids:
-                        album_id = f"{album_id}-{hashlib.md5(f'{album_id}_{idx}'.encode('utf-8')).hexdigest()[:6]}"
-                        alb["id"] = album_id
-                    seen_ids.add(album_id)
+        # 3. Lưu theo per-album schema mới
+        coll = _get_albums_collection()
+        if coll is not None:
+            try:
+                await coll.delete_many({})
+                if albums:
+                    seen_ids = set()
+                    docs_to_insert = []
+                    for idx, alb in enumerate(albums):
+                        album_id = (alb.get("id") or "").strip()
+                        if not album_id:
+                            title = alb.get("title", "unknown")
+                            artist = alb.get("artist", "unknown")
+                            album_id = generate_album_id(title, artist)
+                            alb["id"] = album_id
 
-                    album_doc = {**alb, "_id": album_id}
-                    docs_to_insert.append(album_doc)
+                        # Bảo đảm 100% _id không bị trùng lặp trong MongoDB để không bao giờ bị mất album
+                        if album_id in seen_ids:
+                            album_id = f"{album_id}-{hashlib.md5(f'{album_id}_{idx}'.encode('utf-8')).hexdigest()[:6]}"
+                            alb["id"] = album_id
+                        seen_ids.add(album_id)
 
-                for i in range(0, len(docs_to_insert), 100):
-                    batch = docs_to_insert[i:i+100]
-                    try:
-                        await coll.insert_many(batch, ordered=False)
-                    except Exception as e:
-                        if "duplicate" not in str(e).lower() and "E11000" not in str(e):
-                            LOGGER.warning(f"[MUSIC DB] Save batch warning: {e}")
+                        album_doc = {**alb, "_id": album_id}
+                        docs_to_insert.append(album_doc)
 
-            LOGGER.info(f"[MUSIC DB] Đã lưu {len(albums)} albums (per-album schema).")
-        except Exception as e:
-            LOGGER.warning(f"[MUSIC DB] Could not save to per-album collection: {e}")
+                    for i in range(0, len(docs_to_insert), 100):
+                        batch = docs_to_insert[i:i+100]
+                        try:
+                            await coll.insert_many(batch, ordered=False)
+                        except Exception as e:
+                            if "duplicate" not in str(e).lower() and "E11000" not in str(e):
+                                LOGGER.warning(f"[MUSIC DB] Save batch warning: {e}")
 
-    # 4. Đồng thời cập nhật legacy document để backward compatibility
-    coll_old = _get_legacy_collection()
-    if coll_old is not None:
-        try:
-            await coll_old.update_one(
-                {"_id": "telegram_music_library"},
-                {"$set": {
-                    "albums": albums,
-                    "count": sum(len(a.get("tracks", [])) for a in albums),
-                    "updated_at": time.time()
-                }},
-                upsert=True
-            )
-        except Exception as e:
-            LOGGER.warning(f"[MUSIC DB] Could not sync to legacy collection: {e}")
+                LOGGER.info(f"[MUSIC DB] Đã lưu {len(albums)} albums (per-album schema).")
+            except Exception as e:
+                LOGGER.warning(f"[MUSIC DB] Could not save to per-album collection: {e}")
+
+        # 4. Đồng thời cập nhật legacy document để backward compatibility
+        coll_old = _get_legacy_collection()
+        if coll_old is not None:
+            try:
+                await coll_old.update_one(
+                    {"_id": "telegram_music_library"},
+                    {"$set": {
+                        "albums": albums,
+                        "count": sum(len(a.get("tracks", [])) for a in albums),
+                        "updated_at": time.time()
+                    }},
+                    upsert=True
+                )
+            except Exception as e:
+                LOGGER.warning(f"[MUSIC DB] Could not sync to legacy collection: {e}")
+
+    if wait_remote:
+        await _sync_remote_library()
+        return
+
+    # Nút Shazam thủ công chỉ cần chờ cache RAM/file được ghi xong. MongoDB được
+    # đồng bộ nền để một kết nối chậm không giữ trạng thái "Đang nhận diện" nhiều phút.
+    task = asyncio.create_task(_sync_remote_library())
+    _LIBRARY_BG_SAVE_TASKS.add(task)
+    task.add_done_callback(_LIBRARY_BG_SAVE_TASKS.discard)
+    LOGGER.info("[MUSIC DB] Đã ghi cache cục bộ; đang đồng bộ MongoDB ở nền.")
 
 
 
@@ -3459,14 +3475,14 @@ class MusicShazamManager:
                 if idx % 5 == 0 and self._success_count > 0:
                     try:
                         valid_albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-                        await _db_save_library(valid_albums)
+                        await _db_save_library(valid_albums, sync_remote=False)
                     except Exception:
                         pass
 
             # Lưu thư viện cuối cùng
             if self._success_count > 0:
                 albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
-                await _db_save_library(albums)
+                await _db_save_library(albums, wait_remote=False)
 
             self._status = "completed"
             self._end_time = time.time()
