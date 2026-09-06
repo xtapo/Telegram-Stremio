@@ -1748,6 +1748,29 @@ Ví dụ chuẩn LRC:
                             <input type="range" class="eq-fx-slider" id="preampSlider" min="-12" max="12" step="0.5" value="0">
                         </div>
                     </div>
+
+                    <!-- Seamless Playback / Crossfade Control Card -->
+                    <div class="eq-fx-card">
+                        <div class="eq-fx-header">
+                            <div class="eq-fx-icon" style="color: #34d399; background: rgba(52, 211, 153, 0.15);">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 6h3c5 0 5 12 10 12h5"></path>
+                                    <path d="M18 15l3 3-3 3"></path>
+                                    <path d="M3 18h3c2.3 0 3.6-2.5 5-5"></path>
+                                    <path d="M14 6h7"></path>
+                                    <path d="M18 3l3 3-3 3"></path>
+                                </svg>
+                            </div>
+                            <div class="eq-fx-info">
+                                <span class="eq-fx-name">CROSSFADE / GAPLESS</span>
+                                <span class="eq-fx-desc">0 giây = gapless, tối đa 12 giây</span>
+                            </div>
+                            <span class="eq-fx-val-badge" id="crossfadeValBadge">GAPLESS</span>
+                        </div>
+                        <div class="eq-fx-slider-wrap">
+                            <input type="range" class="eq-fx-slider" id="crossfadeSlider" min="0" max="12" step="1" value="0">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

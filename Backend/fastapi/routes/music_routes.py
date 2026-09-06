@@ -38,14 +38,34 @@ LEGACY_LIBRARY_CACHE_FILE = os.path.join(MUSIC_DIR, "telegram_library.json")
 AUDIO_CACHE_DIR = os.path.join(MUSIC_DIR, "cache")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 MAX_AUDIO_CACHE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB cache giới hạn tự dọn dẹp
+PLAYBACK_CACHE_WINDOW_TTL = 15 * 60
+PLAYBACK_CACHE_UNPINNED_GRACE = 5 * 60
+_PLAYBACK_CACHE_WINDOWS: Dict[str, tuple[set[str], float]] = {}
 
 _cover_cache: Dict[str, tuple] = {}
 _COVER_CACHE_TTL = 86400
+
+
+def _active_playback_cache_keys(now: Optional[float] = None) -> set[str]:
+    now = now or time.time()
+    active: set[str] = set()
+    for owner, (keys, expires_at) in list(_PLAYBACK_CACHE_WINDOWS.items()):
+        if expires_at <= now:
+            _PLAYBACK_CACHE_WINDOWS.pop(owner, None)
+            continue
+        active.update(keys)
+    return active
+
+
+def _is_playback_cache_key_active(cache_key: str) -> bool:
+    return cache_key in _active_playback_cache_keys()
 
 def _clean_audio_cache():
     try:
         if not os.path.exists(AUDIO_CACHE_DIR):
             return
+        now = time.time()
+        active_keys = _active_playback_cache_keys(now)
         files = []
         total_size = 0
         for fname in os.listdir(AUDIO_CACHE_DIR):
@@ -54,6 +74,35 @@ def _clean_audio_cache():
                 stat = os.stat(fpath)
                 files.append((fpath, stat.st_atime, stat.st_size))
                 total_size += stat.st_size
+
+        # Once a playback window is known, keep disk cache focused on the current
+        # track plus the next two tracks. Old completed tracks get a short grace
+        # period so back/previous remains responsive without turning this into an
+        # ever-growing passive music cache.
+        if _PLAYBACK_CACHE_WINDOWS:
+            for fpath, atime, fsize in list(files):
+                if not fpath.endswith(".dat"):
+                    continue
+                cache_key = os.path.splitext(os.path.basename(fpath))[0]
+                if cache_key in active_keys or now - atime <= PLAYBACK_CACHE_UNPINNED_GRACE:
+                    continue
+                try:
+                    os.remove(fpath)
+                    total_size -= fsize
+                    meta_f = fpath[:-4] + ".json"
+                    if os.path.exists(meta_f):
+                        os.remove(meta_f)
+                except Exception:
+                    pass
+
+            files = []
+            total_size = 0
+            for fname in os.listdir(AUDIO_CACHE_DIR):
+                fpath = os.path.join(AUDIO_CACHE_DIR, fname)
+                if os.path.isfile(fpath):
+                    stat = os.stat(fpath)
+                    files.append((fpath, stat.st_atime, stat.st_size))
+                    total_size += stat.st_size
         
         if total_size > MAX_AUDIO_CACHE_SIZE:
             files.sort(key=lambda x: x[1])
@@ -2572,7 +2621,7 @@ async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mi
     dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
     json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")
     
-    can_cache = (start_offset == 0)
+    can_cache = (start_offset == 0 and _is_playback_cache_key_active(cache_key))
     tmp_file = None
     bytes_written = 0
     
@@ -2633,6 +2682,38 @@ async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mi
                         pass
 
 
+@router.post("/api/music/playback/cache-window")
+async def update_music_playback_cache_window(payload: dict, request: Request):
+    """Pin only the current track and up to two upcoming tracks in the music cache."""
+    raw_device_id = str(payload.get("device_id") or "").strip()
+    session_user = str(request.session.get("music_user_id") or "").strip()
+    client_host = request.client.host if request.client else "unknown"
+    owner = raw_device_id or session_user or f"anon:{client_host}"
+
+    keys: set[str] = set()
+    for item in (payload.get("tracks") or [])[:3]:
+        try:
+            chat_id = int(item.get("chat_id") if isinstance(item, dict) else 0)
+            msg_id = int(item.get("msg_id") if isinstance(item, dict) else 0)
+        except (TypeError, ValueError):
+            continue
+        if chat_id and msg_id:
+            keys.add(f"{abs(chat_id)}_{msg_id}")
+
+    if keys:
+        _PLAYBACK_CACHE_WINDOWS[owner] = (keys, time.time() + PLAYBACK_CACHE_WINDOW_TTL)
+    else:
+        _PLAYBACK_CACHE_WINDOWS.pop(owner, None)
+
+    asyncio.create_task(asyncio.to_thread(_clean_audio_cache))
+    return {
+        "status": "success",
+        "cached_window": len(keys),
+        "max_window": 3,
+        "ttl_seconds": PLAYBACK_CACHE_WINDOW_TTL,
+    }
+
+
 # ── 4. Stream trực tiếp Audio từ Telegram với HTTP Range 206 + Multi-Bot + Local Cache ──────────────────
 @router.get("/api/music/stream/{chat_id}/{msg_id}")
 @router.head("/api/music/stream/{chat_id}/{msg_id}")
@@ -2650,6 +2731,12 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
             pass
 
     cache_key = f"{abs(chat_id)}_{msg_id}"
+    if request.query_params.get("playback") == "1":
+        owner = str(request.query_params.get("device") or request.session.get("music_user_id") or "direct")
+        existing_keys, _ = _PLAYBACK_CACHE_WINDOWS.get(owner, (set(), 0.0))
+        refreshed = set(existing_keys)
+        refreshed.add(cache_key)
+        _PLAYBACK_CACHE_WINDOWS[owner] = (refreshed, time.time() + PLAYBACK_CACHE_WINDOW_TTL)
     dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
     json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")
 
@@ -2782,8 +2869,11 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
     prefetch_count = max(4, prefetch_count)
 
     extra_clients_for_stream = []
-    if parallelism > 1 and len(multi_clients) > 1:
-        other_indices = sorted((i for i in multi_clients if i != client_idx), key=lambda i: work_loads.get(i, 0))
+    if len(multi_clients) > 1:
+        other_indices = sorted(
+            (i for i in multi_clients if i != client_idx),
+            key=lambda i: (client_failures.get(i, 0), work_loads.get(i, 0)),
+        )
 
         async def _get_extra_file_id(ec_idx: int):
             ec_client = multi_clients[ec_idx]
@@ -2795,7 +2885,11 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
                 LOGGER.warning("Extra client %s file_id fetch failed: %s", ec_idx, e)
                 return None
 
-        results = await asyncio.gather(*[_get_extra_file_id(i) for i in other_indices[:parallelism - 1]])
+        # Keep at least one hot standby even when chunk parallelism is 1. This lets
+        # ByteStreamer fail over a slow/FloodWait client inside the same HTTP range
+        # response instead of forcing the browser to reconnect.
+        standby_count = min(len(other_indices), max(1, parallelism))
+        results = await asyncio.gather(*[_get_extra_file_id(i) for i in other_indices[:standby_count]])
         extra_clients_for_stream = [r for r in results if r is not None]
 
     body_gen = None

@@ -178,13 +178,36 @@ class ByteStreamer:
                 except Exception as e:
                     LOGGER.warning("Skipping extra client %s (session setup failed): %s", ec_idx, e)
 
-        async def fetch_chunk_with_retries(seq_idx: int, off: int) -> Tuple[int, Optional[bytes]]:
-            slot = seq_idx % len(session_pool)
-            c_idx, c_session, c_loc_box, c_refresh = session_pool[slot]
+        session_latency: Dict[int, float] = {}
 
+        def _ordered_session_slots(seq_idx: int) -> List[int]:
+            """Prefer healthy/fast sessions, while preserving fair rotation on ties."""
+            total = len(session_pool)
+            if total <= 1:
+                return [0]
+            base = seq_idx % total
+            slots = list(range(total))
+            slots.sort(
+                key=lambda slot: (
+                    client_failures.get(session_pool[slot][0], 0),
+                    session_latency.get(session_pool[slot][0], 0.0),
+                    (slot - base) % total,
+                )
+            )
+            return slots
+
+        async def fetch_chunk_with_retries(seq_idx: int, off: int) -> Tuple[int, Optional[bytes]]:
+            ordered_slots = _ordered_session_slots(seq_idx)
             tries = 0
             flood_tries = 0
-            while tries < 3 and flood_tries < 5 and not stop_event.is_set():
+            slot_cursor = 0
+            max_attempts = max(3, len(ordered_slots) * 2)
+
+            while tries < max_attempts and flood_tries < max(5, len(ordered_slots) * 2) and not stop_event.is_set():
+                slot = ordered_slots[slot_cursor % len(ordered_slots)]
+                slot_cursor += 1
+                c_idx, c_session, c_loc_box, c_refresh = session_pool[slot]
+                started = time.monotonic()
                 try:
                     r = await asyncio.wait_for(
                         c_session.send(
@@ -192,8 +215,14 @@ class ByteStreamer:
                                 location=c_loc_box[0], offset=off, limit=chunk_size
                             )
                         ),
-                        timeout=15.0,
+                        # 1 MiB audio chunks should normally arrive quickly. A slow
+                        # client is abandoned early so another bot/session can serve
+                        # the same byte range without the player noticing a stall.
+                        timeout=8.0 if len(session_pool) > 1 else 15.0,
                     )
+                    elapsed = max(time.monotonic() - started, 1e-3)
+                    previous_latency = session_latency.get(c_idx)
+                    session_latency[c_idx] = elapsed if previous_latency is None else (0.7 * previous_latency + 0.3 * elapsed)
                     chunk_bytes = getattr(r, "bytes", None) if r else None
 
                     if chunk_bytes == b"":
@@ -204,7 +233,9 @@ class ByteStreamer:
                 except asyncio.TimeoutError:
                     tries += 1
                     client_failures[c_idx] = client_failures.get(c_idx, 0) + 1
-                    await asyncio.sleep(min(0.5 * (2 ** (tries - 1)), 10.0))
+                    session_latency[c_idx] = max(session_latency.get(c_idx, 0.0), 8.0)
+                    if len(session_pool) <= 1:
+                        await asyncio.sleep(min(0.35 * (2 ** min(tries - 1, 4)), 5.0))
 
                 except Exception as e:
                     err_str = str(e)
@@ -215,14 +246,19 @@ class ByteStreamer:
                     flood_m = re.search(r'wait of (\d+) second', err_str, re.IGNORECASE)
                     if flood_m:
                         required = float(flood_m.group(1))
-                        jitter = random.uniform(0.5, 2.0)
-                        wait = required + jitter
                         flood_tries += 1
-                        await asyncio.sleep(wait)
+                        client_failures[c_idx] = client_failures.get(c_idx, 0) + 1
+                        # With another client available, fail over immediately instead
+                        # of making playback wait for this client's FloodWait window.
+                        if len(session_pool) <= 1:
+                            jitter = random.uniform(0.5, 2.0)
+                            await asyncio.sleep(required + jitter)
                     else:
                         tries += 1
+                        client_failures[c_idx] = client_failures.get(c_idx, 0) + 1
                         backoff = min(0.5 * (2 ** (tries - 1)), 10.0)
-                        await asyncio.sleep(backoff)
+                        if len(session_pool) <= 1:
+                            await asyncio.sleep(backoff)
             return seq_idx, None
 
         async def producer():

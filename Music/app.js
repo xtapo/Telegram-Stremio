@@ -306,13 +306,28 @@ class XTAPOMusicApp {
         this.audio = document.getElementById('mainAudio');
         const isMobileInit = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
         if (this.audio) {
-            this.audio.preload = isMobileInit ? 'none' : 'metadata';
+            this.audio.preload = 'none';
             this.audio.playsInline = true;
             this.audio.setAttribute('playsinline', '');
             this.audio.setAttribute('webkit-playsinline', '');
         }
         this.preloaderAudio = new Audio();
-        this.preloaderAudio.preload = isMobileInit ? 'none' : 'metadata';
+        this.lookaheadAudio = new Audio();
+        this.playbackDecks = [this.audio, this.preloaderAudio, this.lookaheadAudio].filter(Boolean);
+        this.playbackDecks.forEach((deck, index) => {
+            deck.preload = 'none';
+            deck.playsInline = true;
+            deck.setAttribute('playsinline', '');
+            deck.setAttribute('webkit-playsinline', '');
+            deck._xtapoDeckIndex = index;
+            deck._xtapoTrackIndex = null;
+            deck._xtapoTrackKey = null;
+            deck._xtapoPreparedUrl = null;
+        });
+        this.preloadLeadSeconds = 15;
+        this._playbackWindowPreparedFor = null;
+        this._transitionInProgress = false;
+        this._crossfadeAnimation = null;
         this._preloadedTrackUrl = null;
         this._pendingAudioSrc = null;
         this.albumTitle = document.getElementById('albumTitle');
@@ -756,6 +771,8 @@ class XTAPOMusicApp {
         this.bassBoostValBadge = document.getElementById('bassBoostValBadge');
         this.preampSlider = document.getElementById('preampSlider');
         this.preampValBadge = document.getElementById('preampValBadge');
+        this.crossfadeSlider = document.getElementById('crossfadeSlider');
+        this.crossfadeValBadge = document.getElementById('crossfadeValBadge');
 
         this.eqFrequencies = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
         this.eqBandLabels = ['32Hz', '64Hz', '125Hz', '250Hz', '500Hz', '1kHz', '2kHz', '4kHz', '8kHz', '16kHz'];
@@ -767,6 +784,7 @@ class XTAPOMusicApp {
         this.eqBandsGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.eqBassBoost = 0;
         this.eqPreamp = 0;
+        this.crossfadeSeconds = Math.max(0, Math.min(12, parseFloat(localStorage.getItem('xtapo_crossfade_seconds') || '0') || 0));
 
         // Load saved Equalizer state
         this.loadEqualizerSettings();
@@ -2689,34 +2707,38 @@ class XTAPOMusicApp {
         return li;
     }
 
-    loadTrack(trackIndex, autoPlay = true) {
+    loadTrack(trackIndex, autoPlay = true, options = {}) {
+        const preparedAudio = options.preparedAudio || null;
+        if (preparedAudio) {
+            this.audio = preparedAudio;
+        } else {
+            this.cancelSeamlessTransition();
+        }
+
         this.currentTrackIndex = trackIndex;
         const track = this.currentTrack;
         const album = this.currentAlbum;
         if (!track) return;
 
-        // 1. Cập nhật thông tin bài hát đang phát & thanh trạng thái ngay lập tức
+        const initialTime = preparedAudio && this.audio ? (this.audio.currentTime || 0) : 0;
+        const initialDuration = preparedAudio && this.audio && Number.isFinite(this.audio.duration) ? this.audio.duration : 0;
         const artistName = (track && track.artist) || (album && album.artist) || 'XTAPO Music';
         this.nowPlayingTitle.textContent = `${this.currentTrackIndex + 1}. ${track.name || 'Unknown Track'}`;
         this.nowPlayingArtist.textContent = artistName;
-        this.timeTotal.textContent = track.duration || '--:--';
-        this.timeCurrent.textContent = "0:00";
-        this.updateProgress(0);
+        this.timeTotal.textContent = initialDuration > 0 ? this.formatTime(initialDuration) : (track.duration || '--:--');
+        this.timeCurrent.textContent = this.formatTime(initialTime);
+        this.updateProgress(initialDuration > 0 ? (initialTime / initialDuration) * 100 : 0);
 
-        // 2. Cập nhật ảnh đĩa than & dynamic backdrop
         const trackCover = this.getTrackCover(track, album);
         this.updateCovers(trackCover);
 
-        // 3. Highlight item trong danh sách phát (dùng auto scroll để không gây giật lag UI)
         if (this.tracklistEl) {
             if (this.currentTrackIndex >= (this._mainTracklistRenderedCount || 0)) {
                 this.appendMainTracklistBatch(this.currentTrackIndex - (this._mainTracklistRenderedCount || 0) + 20);
             }
 
             const prevActive = this.tracklistEl.querySelector('.track-item.active');
-            if (prevActive) {
-                prevActive.classList.remove('active', 'paused');
-            }
+            if (prevActive) prevActive.classList.remove('active', 'paused');
 
             const activeItem = this.tracklistEl.querySelector(`.track-item[data-index="${this.currentTrackIndex}"]`);
             if (activeItem) {
@@ -2727,17 +2749,15 @@ class XTAPOMusicApp {
             }
         }
 
-        // 4. Cập nhật Audio Source & phát nhạc ngay
-        if (this.audio) {
+        if (!preparedAudio && this.audio) {
             try {
                 this.audio.pause();
                 this.audio.currentTime = 0;
             } catch (e) {}
         }
         this.stopAudioSynth();
-        this._preloadedTrackUrl = null;
+        this._playbackWindowPreparedFor = null;
 
-        // Nếu đang ở chế độ Điều Khiển Từ Xa (Remote Controller target TV / PC khác)
         if (this.remoteTargetDeviceId) {
             const rawList = (album && album.tracks && album.tracks.length > 0) ? album.tracks : [track];
             const sanitizedTracks = rawList.map(t => ({
@@ -2768,18 +2788,23 @@ class XTAPOMusicApp {
             return;
         }
 
-        if (track.previewUrl) {
+        const playbackUrl = this.getPlaybackStreamUrl(track);
+        if (!preparedAudio && playbackUrl) {
             const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
             if (isMobileDevice && !autoPlay) {
-                // Trên thiết bị di động, khi chỉ khôi phục thông tin bài hát lúc mới vào (autoPlay = false),
-                // lưu tạm vào _pendingAudioSrc mà không gán ngay vào audio.src để tránh kích hoạt stream FLAC ngầm
-                this._pendingAudioSrc = track.previewUrl;
+                this._pendingAudioSrc = playbackUrl;
             } else {
-                if (this.audio && (this.audio.src !== track.previewUrl && !this.audio.src.endsWith(track.previewUrl))) {
-                    this.audio.src = track.previewUrl;
-                }
+                const absoluteUrl = new URL(playbackUrl, window.location.href).href;
+                if (this.audio && this.audio.src !== absoluteUrl) this.audio.src = playbackUrl;
                 this._pendingAudioSrc = null;
             }
+        }
+
+        if (this.audio) {
+            this.audio._xtapoTrackIndex = trackIndex;
+            this.audio._xtapoTrackKey = this.getPlaybackTrackKey(track);
+            this.audio._xtapoPreparedUrl = playbackUrl;
+            if (!options.seamless) this.audio.volume = this.isMuted ? 0 : this.volume;
         }
 
         if (autoPlay) {
@@ -2787,12 +2812,17 @@ class XTAPOMusicApp {
                 this.audio.src = this._pendingAudioSrc;
                 this._pendingAudioSrc = null;
             }
-            this.play();
+            if (options.alreadyPlaying) {
+                this.isPlaying = true;
+                this.updatePlayStateVisuals(true);
+                this.startLyricsSyncLoop();
+            } else {
+                this.play();
+            }
         } else {
             this.pauseVisuals();
         }
 
-        // 5. Chạy các tác vụ cập nhật thứ cấp qua rAF để không block luồng xử lý UI
         requestAnimationFrame(() => {
             this.updateAudioBadges(track, album);
             this.updateMediaSession();
@@ -2801,20 +2831,16 @@ class XTAPOMusicApp {
             if (this.karaokeTrackTitle) this.karaokeTrackTitle.textContent = track.name || 'Unknown Track';
             if (this.karaokeArtistName) this.karaokeArtistName.textContent = artistName;
             if (this.karaokeBackdrop) this.karaokeBackdrop.style.backgroundImage = `url("${trackCover}")`;
-            if (this.karaokeTimeTotal) this.karaokeTimeTotal.textContent = track.duration || '--:--';
-            if (this.karaokeTimeCurrent) this.karaokeTimeCurrent.textContent = "0:00";
-            if (this.karaokeProgressFill) this.karaokeProgressFill.style.width = '0%';
+            if (this.karaokeTimeTotal) this.karaokeTimeTotal.textContent = initialDuration > 0 ? this.formatTime(initialDuration) : (track.duration || '--:--');
+            if (this.karaokeTimeCurrent) this.karaokeTimeCurrent.textContent = this.formatTime(initialTime);
+            if (this.karaokeProgressFill) this.karaokeProgressFill.style.width = initialDuration > 0 ? `${(initialTime / initialDuration) * 100}%` : '0%';
 
-            // Cập nhật Lời bài hát thời gian thực (Real-time Synced Lyrics)
             this.fetchTrackLyrics(track, album);
             this.savePlayerState();
         });
 
-        // 6. Nạp trước cover và bài hát kế tiếp sau khi giao diện đã ổn định
-        setTimeout(() => {
-            this.preloadCoversForCurrentAlbum();
-            this.preloadNextTrack();
-        }, 800);
+        this.syncPlaybackCacheWindow();
+        setTimeout(() => this.preloadCoversForCurrentAlbum(), 800);
     }
 
     playTrackById(trackId) {
@@ -2859,17 +2885,210 @@ class XTAPOMusicApp {
         }
     }
 
-    preloadNextTrack() {
-        if (!this.currentAlbum || !this.currentAlbum.tracks || this.currentAlbum.tracks.length <= 1) return;
-        const nextIdx = (this.currentTrackIndex + 1) % this.currentAlbum.tracks.length;
-        const nextTrack = this.currentAlbum.tracks[nextIdx];
-        if (nextTrack && nextTrack.previewUrl && nextTrack.previewUrl !== this._preloadedTrackUrl) {
-            this._preloadedTrackUrl = nextTrack.previewUrl;
-            if (this.preloaderAudio) {
-                this.preloaderAudio.preload = 'metadata';
-                this.preloaderAudio.src = nextTrack.previewUrl;
+    getPlaybackTrackKey(track) {
+        if (!track) return '';
+        const { chatId, msgId } = this.getTrackIdentifiers(track);
+        if (chatId && msgId) return `${chatId}:${msgId}`;
+        return String(track.previewUrl || track.stream_url || track.url || track.id || track.name || '');
+    }
+
+    getPlaybackStreamUrl(track) {
+        if (!track) return '';
+        const { chatId, msgId } = this.getTrackIdentifiers(track);
+        let rawUrl = track.previewUrl || track.stream_url || track.url || track.preview_url || '';
+        if (!rawUrl && chatId && msgId) rawUrl = `/api/music/stream/${chatId}/${msgId}`;
+        if (!rawUrl) return '';
+
+        try {
+            const parsed = new URL(rawUrl, window.location.href);
+            if (parsed.origin === window.location.origin && parsed.pathname.startsWith('/api/music/stream/')) {
+                parsed.searchParams.set('playback', '1');
+                parsed.searchParams.set('device', this.syncDeviceId || 'web');
+                return `${parsed.pathname}${parsed.search}${parsed.hash}`;
             }
+        } catch (e) {}
+        return rawUrl;
+    }
+
+    getSequentialLookaheadIndices(limit = 2) {
+        const album = this.currentAlbum;
+        if (!album || !Array.isArray(album.tracks) || album.tracks.length <= 1 || this.isShuffle || this.repeatMode === 2) return [];
+        const out = [];
+        let idx = this.currentTrackIndex;
+        for (let step = 0; step < limit; step++) {
+            idx += 1;
+            if (idx >= album.tracks.length) {
+                if (this.repeatMode === 1) idx = 0;
+                else break;
+            }
+            if (idx === this.currentTrackIndex || out.includes(idx)) break;
+            out.push(idx);
         }
+        return out;
+    }
+
+    syncPlaybackCacheWindow() {
+        const album = this.currentAlbum;
+        if (!album || !Array.isArray(album.tracks) || album.tracks.length === 0 || !this.syncDeviceId) return;
+        const indices = [this.currentTrackIndex, ...this.getSequentialLookaheadIndices(2)].slice(0, 3);
+        const tracks = indices.map(idx => {
+            const track = album.tracks[idx];
+            const { chatId, msgId } = this.getTrackIdentifiers(track || {});
+            return chatId && msgId ? { chat_id: chatId, msg_id: msgId } : null;
+        }).filter(Boolean);
+        if (!tracks.length) return;
+
+        fetch('/api/music/playback/cache-window', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: this.syncDeviceId, tracks }),
+            keepalive: true
+        }).catch(() => {});
+    }
+
+    clearPreparedDeck(deck) {
+        if (!deck || deck === this.audio) return;
+        try { deck.pause(); } catch (e) {}
+        try {
+            deck.removeAttribute('src');
+            deck.load();
+        } catch (e) {}
+        deck.preload = 'none';
+        deck.volume = 0;
+        deck._xtapoTrackIndex = null;
+        deck._xtapoTrackKey = null;
+        deck._xtapoPreparedUrl = null;
+    }
+
+    preparePlaybackWindow(force = false) {
+        if (this.remoteTargetDeviceId || !this.isPlaying) return;
+        const album = this.currentAlbum;
+        if (!album || !Array.isArray(album.tracks)) return;
+        const indices = this.getSequentialLookaheadIndices(2);
+        if (!indices.length) return;
+        const signature = `${album.id || album.title}:${this.currentTrackIndex}:${indices.join(',')}`;
+        if (!force && this._playbackWindowPreparedFor === signature) return;
+        this._playbackWindowPreparedFor = signature;
+        this.syncPlaybackCacheWindow();
+
+        const freeDecks = this.playbackDecks.filter(deck => deck !== this.audio);
+        const reserved = new Set();
+        indices.forEach(trackIndex => {
+            const track = album.tracks[trackIndex];
+            if (!track) return;
+            const key = this.getPlaybackTrackKey(track);
+            const url = this.getPlaybackStreamUrl(track);
+            if (!url) return;
+
+            let deck = freeDecks.find(candidate => !reserved.has(candidate) && candidate._xtapoTrackIndex === trackIndex && candidate._xtapoTrackKey === key);
+            if (!deck) deck = freeDecks.find(candidate => !reserved.has(candidate));
+            if (!deck) return;
+            reserved.add(deck);
+
+            if (deck._xtapoTrackKey === key && deck._xtapoPreparedUrl === url && deck.src) return;
+            try { deck.pause(); } catch (e) {}
+            deck.preload = 'auto';
+            deck.volume = 0;
+            deck._xtapoTrackIndex = trackIndex;
+            deck._xtapoTrackKey = key;
+            deck._xtapoPreparedUrl = url;
+            deck.src = url;
+            try { deck.load(); } catch (e) {}
+        });
+
+        freeDecks.forEach(deck => {
+            if (!reserved.has(deck) && deck._xtapoTrackIndex !== null) this.clearPreparedDeck(deck);
+        });
+        this._preloadedTrackUrl = album.tracks[indices[0]] ? this.getPlaybackStreamUrl(album.tracks[indices[0]]) : null;
+    }
+
+    preloadNextTrack() {
+        this.preparePlaybackWindow(true);
+    }
+
+    getPreparedDeck(trackIndex) {
+        return this.playbackDecks.find(deck => deck !== this.audio && deck._xtapoTrackIndex === trackIndex && deck.src) || null;
+    }
+
+    cancelSeamlessTransition() {
+        if (this._crossfadeAnimation) {
+            cancelAnimationFrame(this._crossfadeAnimation);
+            this._crossfadeAnimation = null;
+        }
+        this._transitionInProgress = false;
+        this.playbackDecks.forEach(deck => {
+            if (deck !== this.audio) {
+                try { deck.pause(); } catch (e) {}
+                deck.volume = 0;
+            }
+        });
+        if (this.audio) this.audio.volume = this.isMuted ? 0 : this.volume;
+    }
+
+    async activatePreparedTrack(trackIndex, fadeSeconds = 0) {
+        if (this._transitionInProgress) return false;
+        const nextDeck = this.getPreparedDeck(trackIndex);
+        if (!nextDeck || nextDeck.readyState < 2) return false;
+
+        const oldDeck = this.audio;
+        const baseVolume = this.isMuted ? 0 : this.volume;
+        this._transitionInProgress = true;
+        try {
+            if (!Number.isFinite(nextDeck.currentTime) || nextDeck.currentTime > 0.35) nextDeck.currentTime = 0;
+            nextDeck.volume = fadeSeconds > 0 ? 0 : baseVolume;
+            await nextDeck.play();
+        } catch (e) {
+            this._transitionInProgress = false;
+            return false;
+        }
+
+        this.loadTrack(trackIndex, true, {
+            preparedAudio: nextDeck,
+            alreadyPlaying: true,
+            seamless: true
+        });
+
+        if (fadeSeconds <= 0 || !oldDeck || oldDeck === nextDeck) {
+            try { if (oldDeck && oldDeck !== nextDeck) oldDeck.pause(); } catch (e) {}
+            if (oldDeck && oldDeck !== nextDeck) this.clearPreparedDeck(oldDeck);
+            nextDeck.volume = baseVolume;
+            this._transitionInProgress = false;
+            return true;
+        }
+
+        const fadeMs = Math.max(80, fadeSeconds * 1000);
+        const startedAt = performance.now();
+        const animate = (now) => {
+            const progress = Math.min(1, (now - startedAt) / fadeMs);
+            oldDeck.volume = baseVolume * (1 - progress);
+            nextDeck.volume = baseVolume * progress;
+            if (progress < 1 && this._transitionInProgress) {
+                this._crossfadeAnimation = requestAnimationFrame(animate);
+                return;
+            }
+            try { oldDeck.pause(); } catch (e) {}
+            this.clearPreparedDeck(oldDeck);
+            nextDeck.volume = baseVolume;
+            this._crossfadeAnimation = null;
+            this._transitionInProgress = false;
+        };
+        this._crossfadeAnimation = requestAnimationFrame(animate);
+        return true;
+    }
+
+    maybePrepareOrTransition() {
+        if (!this.audio || !this.isPlaying || this.remoteTargetDeviceId || this.synthesizerActive) return;
+        const duration = this.audio.duration;
+        const currentTime = this.audio.currentTime;
+        if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(currentTime)) return;
+        const remaining = Math.max(0, duration - currentTime);
+        if (remaining <= this.preloadLeadSeconds) this.preparePlaybackWindow();
+
+        if (this.crossfadeSeconds <= 0 || this._transitionInProgress || this.sleepTimerMode === 'end_of_track') return;
+        if (remaining > this.crossfadeSeconds) return;
+        const nextIdx = this.getSequentialLookaheadIndices(1)[0];
+        if (nextIdx === undefined) return;
+        this.activatePreparedTrack(nextIdx, Math.min(this.crossfadeSeconds, remaining)).catch(() => {});
     }
 
     getTrackCover(track, album) {
@@ -3088,10 +3307,26 @@ class XTAPOMusicApp {
             this.analyser.smoothingTimeConstant = 0.8;
             this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
+            if (!this.audioSourceNodes) this.audioSourceNodes = new Map();
+            const newlyCreated = [];
+            this.playbackDecks.forEach(deck => {
+                if (!deck || this.audioSourceNodes.has(deck)) return;
+                const source = this.audioContext.createMediaElementSource(deck);
+                this.audioSourceNodes.set(deck, source);
+                newlyCreated.push(source);
+            });
+
             if (!this.audioSourceNode && this.audio) {
-                this.audioSourceNode = this.audioContext.createMediaElementSource(this.audio);
-                this.initEqualizerAudioGraph();
-                console.log('[XTAPO Visualizer & Equalizer] Đã kết nối Web Audio Pipeline thời gian thực thành công!');
+                this.audioSourceNode = this.audioSourceNodes.get(this.audio) || newlyCreated[0] || null;
+                if (this.audioSourceNode) {
+                    this.initEqualizerAudioGraph();
+                    newlyCreated.forEach(source => {
+                        if (source !== this.audioSourceNode && this.preampGainNode) source.connect(this.preampGainNode);
+                    });
+                    console.log('[XTAPO Visualizer & Equalizer] Đã kết nối multi-deck Web Audio Pipeline thành công!');
+                }
+            } else if (this.preampGainNode) {
+                newlyCreated.forEach(source => source.connect(this.preampGainNode));
             }
         } catch (err) {
             console.warn('[XTAPO Visualizer] MediaElementSource note:', err);
@@ -3155,6 +3390,7 @@ class XTAPOMusicApp {
             this.sendSyncCommand('PAUSE', {});
             return;
         }
+        this.cancelSeamlessTransition();
         this.audio.pause();
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = 'paused';
@@ -3188,17 +3424,26 @@ class XTAPOMusicApp {
                 nextIdx = Math.floor(Math.random() * album.tracks.length);
             } while (nextIdx === this.currentTrackIndex && album.tracks.length > 1);
             this.loadTrack(nextIdx, true);
+            return;
+        }
+
+        let nextIdx = null;
+        if (this.currentTrackIndex < album.tracks.length - 1) nextIdx = this.currentTrackIndex + 1;
+        else if (this.repeatMode === 1) nextIdx = 0;
+
+        if (nextIdx === null) {
+            this.loadTrack(0, false);
+            this.pause();
+            return;
+        }
+
+        const prepared = this.getPreparedDeck(nextIdx);
+        if (prepared && prepared.readyState >= 2) {
+            this.activatePreparedTrack(nextIdx, 0).then(switched => {
+                if (!switched) this.loadTrack(nextIdx, true);
+            });
         } else {
-            if (this.currentTrackIndex < album.tracks.length - 1) {
-                this.loadTrack(this.currentTrackIndex + 1, true);
-            } else {
-                if (this.repeatMode === 1) { // Repeat all
-                    this.loadTrack(0, true);
-                } else {
-                    this.loadTrack(0, false);
-                    this.pause();
-                }
-            }
+            this.loadTrack(nextIdx, true);
         }
     }
 
@@ -3324,111 +3569,134 @@ class XTAPOMusicApp {
 
     // --- Audio Events ---
     setupAudioEvents() {
-        // rAF-throttled timeupdate: prevents rendering more frames than display can show
-        let _rafPending = false;
-        this.audio.addEventListener('timeupdate', () => {
-            if (this.synthesizerActive) return;
-            if (_rafPending) return;
-            _rafPending = true;
-            requestAnimationFrame(() => {
-                _rafPending = false;
-                if (this.audio.duration && !isNaN(this.audio.duration)) {
-                    const percent = (this.audio.currentTime / this.audio.duration) * 100;
-                    this.updateProgress(percent);
-                    this.timeCurrent.textContent = this.formatTime(this.audio.currentTime);
-                    this.syncLyricsTime(this.audio.currentTime);
+        let rafPending = false;
 
-                    if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
-                        try {
-                            navigator.mediaSession.setPositionState({
-                                duration: this.audio.duration,
-                                playbackRate: this.audio.playbackRate || 1,
-                                position: Math.min(this.audio.currentTime, this.audio.duration)
-                        });
-                    } catch (e) {}
+        const isActiveDeck = (deck) => deck === this.audio;
+        const bindDeck = (deck) => {
+            if (!deck || deck._xtapoEventsBound) return;
+            deck._xtapoEventsBound = true;
+
+            deck.addEventListener('timeupdate', () => {
+                if (!isActiveDeck(deck) || this.synthesizerActive || rafPending) return;
+                rafPending = true;
+                requestAnimationFrame(() => {
+                    rafPending = false;
+                    if (!isActiveDeck(deck)) return;
+                    if (deck.duration && !isNaN(deck.duration)) {
+                        const percent = (deck.currentTime / deck.duration) * 100;
+                        this.updateProgress(percent);
+                        this.timeCurrent.textContent = this.formatTime(deck.currentTime);
+                        this.syncLyricsTime(deck.currentTime);
+                        this.maybePrepareOrTransition();
+
+                        if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+                            try {
+                                navigator.mediaSession.setPositionState({
+                                    duration: deck.duration,
+                                    playbackRate: deck.playbackRate || 1,
+                                    position: Math.min(deck.currentTime, deck.duration)
+                                });
+                            } catch (e) {}
+                        }
+                        this.throttledSavePlayerState();
+                    }
+                });
+            });
+
+            deck.addEventListener('loadedmetadata', () => {
+                if (!isActiveDeck(deck) || !deck.duration || isNaN(deck.duration)) return;
+                const formatted = this.formatTime(deck.duration);
+                this.timeTotal.textContent = formatted;
+                if (this.currentTrack) this.currentTrack.duration = formatted;
+                const activeDurationEl = this.tracklistEl && this.tracklistEl.querySelector('.track-item.active .track-duration');
+                if (activeDurationEl) activeDurationEl.textContent = formatted;
+                this.updateMediaSession();
+            });
+
+            deck.addEventListener('durationchange', () => {
+                if (!isActiveDeck(deck) || !deck.duration || isNaN(deck.duration)) return;
+                const formatted = this.formatTime(deck.duration);
+                this.timeTotal.textContent = formatted;
+                if (this.currentTrack) this.currentTrack.duration = formatted;
+            });
+
+            deck.addEventListener('loadeddata', () => {
+                if (isActiveDeck(deck)) this.updateMediaSession();
+            });
+
+            deck.addEventListener('play', () => {
+                if (isActiveDeck(deck)) this.updateMediaSession();
+            });
+
+            deck.addEventListener('playing', () => {
+                if (!isActiveDeck(deck)) return;
+                deck._xtapoRetryCount = 0;
+                this.updateMediaSession();
+                this.sendHeartbeat();
+            });
+
+            deck.addEventListener('pause', () => {
+                if (isActiveDeck(deck)) this.sendHeartbeat();
+            });
+
+            deck.addEventListener('progress', () => {
+                if (!isActiveDeck(deck) || !deck.duration || deck.buffered.length === 0) return;
+                const bufferedEnd = deck.buffered.end(deck.buffered.length - 1);
+                const bufferedPercent = (bufferedEnd / deck.duration) * 100;
+                this.progressBuffered.style.width = `${bufferedPercent}%`;
+            });
+
+            deck.addEventListener('ended', () => {
+                if (!isActiveDeck(deck)) return;
+                this.savePlayerState();
+                if (this.sleepTimerMode === 'end_of_track') {
+                    this.cancelSleepTimer(true);
+                    this.pause();
+                    this.showToast('🌙 Hẹn giờ: Đã dừng phát nhạc sau khi hết bài hát. Chúc bạn ngủ ngon! ✨', 5000);
+                    return;
+                }
+                if (this.repeatMode === 2) {
+                    deck.currentTime = 0;
+                    this.play();
+                    return;
                 }
 
-                this.throttledSavePlayerState();
+                const nextIdx = this.getSequentialLookaheadIndices(1)[0];
+                if (nextIdx !== undefined && this.getPreparedDeck(nextIdx)) {
+                    this.activatePreparedTrack(nextIdx, 0).then(switched => {
+                        if (!switched) this.nextTrack();
+                    });
+                } else {
+                    this.nextTrack();
                 }
             });
-        });
 
-        this.audio.addEventListener('loadedmetadata', () => {
-            if (this.audio.duration && !isNaN(this.audio.duration)) {
-                const formatted = this.formatTime(this.audio.duration);
-                this.timeTotal.textContent = formatted;
-                if (this.currentTrack) {
-                    this.currentTrack.duration = formatted;
+            deck.addEventListener('error', () => {
+                if (!isActiveDeck(deck) || !deck.src || deck._xtapoTransitioning) return;
+                const retryCount = (deck._xtapoRetryCount || 0) + 1;
+                deck._xtapoRetryCount = retryCount;
+                if (retryCount <= 2 && this.isPlaying) {
+                    const resumeAt = Number.isFinite(deck.currentTime) ? deck.currentTime : 0;
+                    try {
+                        const retryUrl = new URL(deck._xtapoPreparedUrl || deck.src, window.location.href);
+                        retryUrl.searchParams.set('retry', Date.now().toString());
+                        deck.src = retryUrl.href;
+                        deck.load();
+                        const resume = () => {
+                            deck.removeEventListener('loadedmetadata', resume);
+                            try { if (resumeAt > 0 && resumeAt < deck.duration) deck.currentTime = resumeAt; } catch (e) {}
+                            deck.play().catch(() => {});
+                        };
+                        deck.addEventListener('loadedmetadata', resume, { once: true });
+                        return;
+                    } catch (e) {}
                 }
-                const activeDurationEl = this.tracklistEl.querySelector('.track-item.active .track-duration');
-                if (activeDurationEl) {
-                    activeDurationEl.textContent = formatted;
-                }
-                this.updateMediaSession();
-            }
-        });
+                console.warn('[XTAPO Playback] Audio stream failed after transparent retries.');
+                if (this.isPlaying) this.startAudioSynth();
+            });
+        };
 
-        this.audio.addEventListener('durationchange', () => {
-            if (this.audio.duration && !isNaN(this.audio.duration)) {
-                const formatted = this.formatTime(this.audio.duration);
-                this.timeTotal.textContent = formatted;
-                if (this.currentTrack) {
-                    this.currentTrack.duration = formatted;
-                }
-                const activeDurationEl = this.tracklistEl.querySelector('.track-item.active .track-duration');
-                if (activeDurationEl) {
-                    activeDurationEl.textContent = formatted;
-                }
-            }
-        });
-
-        this.audio.addEventListener('loadeddata', () => {
-            this.updateMediaSession();
-        });
-
-        this.audio.addEventListener('play', () => {
-            this.updateMediaSession();
-        });
-
-        this.audio.addEventListener('playing', () => {
-            this.updateMediaSession();
-            this.sendHeartbeat();
-        });
-
-        this.audio.addEventListener('pause', () => {
-            this.sendHeartbeat();
-        });
-
-        this.audio.addEventListener('progress', () => {
-            if (this.audio.buffered.length > 0 && this.audio.duration) {
-                const bufferedEnd = this.audio.buffered.end(this.audio.buffered.length - 1);
-                const bufferedPercent = (bufferedEnd / this.audio.duration) * 100;
-                this.progressBuffered.style.width = `${bufferedPercent}%`;
-            }
-        });
-
-        this.audio.addEventListener('ended', () => {
-            if (this.sleepTimerMode === 'end_of_track') {
-                this.cancelSleepTimer(true);
-                this.pause();
-                this.showToast('🌙 Hẹn giờ: Đã dừng phát nhạc sau khi hết bài hát. Chúc bạn ngủ ngon! ✨', 5000);
-                return;
-            }
-            if (this.repeatMode === 2) { // Repeat one
-                this.audio.currentTime = 0;
-                this.play();
-            } else {
-                this.nextTrack();
-            }
-        });
-
-        this.audio.addEventListener('error', (e) => {
-            console.warn("Audio stream load error, triggering synth mode fallback.", e);
-            this.showToast('Telegram đang giới hạn tải bài hát này (FloodWait). Vui lòng đợi vài phút hoặc chọn bài khác!');
-            if (this.isPlaying) {
-                this.startAudioSynth();
-            }
-        });
+        this.playbackDecks.forEach(bindDeck);
     }
 
     updateProgress(percent) {
@@ -4372,6 +4640,11 @@ class XTAPOMusicApp {
                 sessionStorage.setItem('xtapo_music_scroll_pos', window.scrollY.toString());
             } catch (e) {}
         });
+
+        window.addEventListener('pagehide', () => this.savePlayerState());
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.savePlayerState();
+        });
     }
 
     // --- State Persistence & URL Deep Linking ---
@@ -4386,8 +4659,8 @@ class XTAPOMusicApp {
                 albumIndex: this.currentAlbumIndex,
                 trackIndex: this.currentTrackIndex,
                 trackName: track ? track.name : null,
-                trackChatId: track ? track.chatId : null,
-                trackMsgId: track ? track.msgId : null,
+                trackChatId: track ? (track.chatId || track.chat_id || null) : null,
+                trackMsgId: track ? (track.msgId || track.msg_id || null) : null,
                 currentTime: (this.audio && !isNaN(this.audio.currentTime)) ? this.audio.currentTime : 0,
                 volume: typeof this.volume === 'number' ? this.volume : 0.85,
                 isMuted: !!this.isMuted,
@@ -4408,7 +4681,7 @@ class XTAPOMusicApp {
 
     throttledSavePlayerState() {
         const now = Date.now();
-        if (!this._lastStateSaveTime || now - this._lastStateSaveTime > 2500) {
+        if (!this._lastStateSaveTime || now - this._lastStateSaveTime > 500) {
             this._lastStateSaveTime = now;
             this.savePlayerState();
         }
@@ -9336,6 +9609,11 @@ class XTAPOMusicApp {
             this.preampValBadge.textContent = `${prefix}${this.eqPreamp.toFixed(1)} dB`;
         }
 
+        if (this.crossfadeSlider) this.crossfadeSlider.value = this.crossfadeSeconds;
+        if (this.crossfadeValBadge) {
+            this.crossfadeValBadge.textContent = this.crossfadeSeconds > 0 ? `${this.crossfadeSeconds}s` : 'GAPLESS';
+        }
+
         this.updatePresetPillsUI();
         this.updateEqualizerButtonBadges();
         this.drawEqCurve();
@@ -9589,6 +9867,22 @@ class XTAPOMusicApp {
             this.preampSlider.addEventListener('input', (e) => {
                 this.initWebAudioAnalyser();
                 this.setPreamp(e.target.value, true);
+            });
+        }
+
+
+        if (this.crossfadeSlider) {
+            this.crossfadeSlider.value = this.crossfadeSeconds;
+            if (this.crossfadeValBadge) {
+                this.crossfadeValBadge.textContent = this.crossfadeSeconds > 0 ? `${this.crossfadeSeconds}s` : 'GAPLESS';
+            }
+            this.crossfadeSlider.addEventListener('input', (e) => {
+                this.crossfadeSeconds = Math.max(0, Math.min(12, parseFloat(e.target.value) || 0));
+                try { localStorage.setItem('xtapo_crossfade_seconds', String(this.crossfadeSeconds)); } catch (err) {}
+                if (this.crossfadeValBadge) {
+                    this.crossfadeValBadge.textContent = this.crossfadeSeconds > 0 ? `${this.crossfadeSeconds}s` : 'GAPLESS';
+                }
+                if (this.isPlaying) this.preparePlaybackWindow(true);
             });
         }
 
