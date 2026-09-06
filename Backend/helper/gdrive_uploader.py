@@ -1421,8 +1421,9 @@ class GoogleDriveUploadManager:
                             "size": f"{fsize_mb} MB"
                         })
 
-                    # Nghỉ nhẹ an toàn giữa các bài để giữ tốc độ và tránh bị Telegram bóp băng thông
-                    await asyncio.sleep(0.8)
+                    # Upload đã chạy tuần tự và FloodWait được xử lý riêng; chỉ nhường event loop
+                    # rất ngắn để không cộng thêm gần 1 giây cho mỗi bài trong album lớn.
+                    await asyncio.sleep(0.1)
 
                 # 5. Đồng bộ các bài hát vừa upload vào Database MongoDB
                 if uploaded_messages_item:
@@ -1447,6 +1448,18 @@ class GoogleDriveUploadManager:
                                     os.remove(c_file)
                 except Exception:
                     pass
+
+            # Trong từng mục chỉ ghi RAM/file cache. Sau khi toàn bộ phiên upload xong,
+            # khởi chạy duy nhất một lần đồng bộ MongoDB ở nền để không chặn tiến trình.
+            if uploaded_messages_all:
+                try:
+                    from Backend.fastapi.routes.music_routes import _db_load_library, _db_save_library
+                    latest_albums = await _db_load_library()
+                    if latest_albums:
+                        await _db_save_library(latest_albums, wait_remote=False)
+                        self._log("Đã cập nhật thư viện cục bộ; MongoDB đang đồng bộ ở nền.", "info")
+                except Exception as sync_exc:
+                    LOGGER.warning(f"[GDRIVE INDEX] Không thể khởi chạy đồng bộ MongoDB nền: {sync_exc}")
 
             self._status = "completed"
             self._stage = f"Hoàn tất upload toàn bộ {len(self._uploaded_tracks)} bài hát!"
@@ -1573,8 +1586,10 @@ class GoogleDriveUploadManager:
                 if not existing_track:
                     target_album["tracks"].append(track_dict)
 
-            await _db_save_library(albums)
-            self._log(f"Đã lưu và cập nhật {len(uploaded_items)} bài hát vào cơ sở dữ liệu!", "success")
+            # Ghi RAM + file cache ngay để UI/thư viện thấy bài mới tức thì. MongoDB chỉ
+            # đồng bộ một lần ở cuối toàn bộ phiên upload để tránh ghi lại cả thư viện nhiều lần.
+            await _db_save_library(albums, sync_remote=False)
+            self._log(f"Đã cập nhật {len(uploaded_items)} bài hát vào thư viện cục bộ!", "success")
         except Exception as e:
             LOGGER.error(f"[GDRIVE INDEX ERROR] {e}", exc_info=True)
 
