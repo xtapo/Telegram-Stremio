@@ -754,12 +754,22 @@ class GoogleDriveUploadManager:
             pass
         return "", ""
 
-    async def _download_gdrive_file(self, file_id: str, work_dir: str, known_filename: str = "") -> Optional[str]:
+    async def _download_gdrive_file(
+        self,
+        file_id: str,
+        work_dir: str,
+        known_filename: str = "",
+        background: bool = False,
+    ) -> Optional[str]:
         """
         Tải file từ Google Drive với hỗ trợ file lớn, tự động vượt trang cảnh báo virus,
         cơ chế Quota Exceeded và Download Cache.
         """
-        real_title, page_html = await self._get_gdrive_file_info(file_id)
+        # Khi quét từ Google Drive Folder, gdown đã trả về đúng filename. Không cần
+        # mở thêm trang preview cho từng file (tiết kiệm 1 HTTP request/file).
+        real_title, page_html = ("", "")
+        if not known_filename:
+            real_title, page_html = await self._get_gdrive_file_info(file_id)
         if known_filename:
             target_filename = known_filename
         elif real_title and "." in real_title:
@@ -776,8 +786,9 @@ class GoogleDriveUploadManager:
                         if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
                             cached_sz = os.path.getsize(c_path)
                             cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
-                            self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua bước tải Google Drive!", "success")
-                            self._download_percent = 100
+                            if not background:
+                                self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua bước tải Google Drive!", "success")
+                                self._download_percent = 100
                             out_path = os.path.join(work_dir, cached_fn)
                             try:
                                 if hasattr(os, "link"):
@@ -902,7 +913,8 @@ class GoogleDriveUploadManager:
                                 download_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm={match_val}"
 
                     final_dl_url = download_url or f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
-                    self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
+                    if not background:
+                        self._log(f"Đã xác thực token tải file lớn từ Google Drive cho '{target_filename}'...", "info")
                     final_stream_ctx = client.stream("GET", final_dl_url, headers=headers)
                     final_stream_resp = await final_stream_ctx.__aenter__()
 
@@ -951,11 +963,12 @@ class GoogleDriveUploadManager:
                 content_len = final_stream_resp.headers.get("content-length")
                 total_bytes = int(content_len) if content_len and content_len.isdigit() else 0
 
-                self._download_total = total_bytes
-                self._download_bytes = 0
-                self._current_file = final_filename
-                self._stage = f"Đang tải về từ Google Drive: {final_filename}"
-                self._log(f"Bắt đầu tải (Pure Stream): {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
+                if not background:
+                    self._download_total = total_bytes
+                    self._download_bytes = 0
+                    self._current_file = final_filename
+                    self._stage = f"Đang tải về từ Google Drive: {final_filename}"
+                    self._log(f"Bắt đầu tải (Pure Stream): {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
 
                 cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{file_id}_{final_filename}")
                 out_path = os.path.join(work_dir, final_filename)
@@ -963,22 +976,26 @@ class GoogleDriveUploadManager:
                 last_update = 0
                 last_dl_bytes = 0
 
-                # Ghi trực tiếp từng chunk 1MB vào đĩa - RAM luôn duy trì mức cực thấp < 10MB
+                # Chunk 4MB giảm số lần ghi/iteration đáng kể với album lossless lớn,
+                # nhưng vẫn giữ mức RAM rất thấp.
+                downloaded_bytes = 0
                 with open(cache_path, "wb") as f_out:
-                    async for chunk in final_stream_resp.aiter_bytes(chunk_size=1024 * 1024):
+                    async for chunk in final_stream_resp.aiter_bytes(chunk_size=4 * 1024 * 1024):
                         if self._cancel_requested:
                             return None
                         f_out.write(chunk)
-                        self._download_bytes += len(chunk)
+                        downloaded_bytes += len(chunk)
+                        if not background:
+                            self._download_bytes = downloaded_bytes
 
                         now = time.time()
-                        if now - last_update >= 0.5:
+                        if not background and now - last_update >= 0.5:
                             delta_t = now - last_update if last_update > 0 else (now - start_dl)
-                            delta_b = self._download_bytes - last_dl_bytes if last_update > 0 else self._download_bytes
+                            delta_b = downloaded_bytes - last_dl_bytes if last_update > 0 else downloaded_bytes
                             last_update = now
-                            last_dl_bytes = self._download_bytes
+                            last_dl_bytes = downloaded_bytes
                             if total_bytes > 0:
-                                self._download_percent = min(100, int((self._download_bytes / total_bytes) * 100))
+                                self._download_percent = min(100, int((downloaded_bytes / total_bytes) * 100))
                             if delta_t > 0 and delta_b >= 0:
                                 mbps = (delta_b / (1024 * 1024)) / delta_t
                                 self._speed_str = f"{mbps:.2f} MB/s"
@@ -1004,8 +1021,11 @@ class GoogleDriveUploadManager:
                     except Exception:
                         pass
 
-                self._download_percent = 100
-                self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize / (1024 * 1024), 2)} MB)", "success")
+                if not background:
+                    self._download_percent = 100
+                    self._log(f"✅ Tải thành công từ Google Drive: {final_filename} ({round(downloaded_fsize / (1024 * 1024), 2)} MB)", "success")
+                else:
+                    LOGGER.info(f"[GDRIVE PREFETCH] Đã tải trước: {final_filename} ({round(downloaded_fsize / (1024 * 1024), 2)} MB)")
 
                 # Tối ưu ổ đĩa: Dùng hardlink để không nhân đôi dung lượng file trên đĩa
                 try:
@@ -1034,7 +1054,7 @@ class GoogleDriveUploadManager:
                     except Exception:
                         pass
 
-    async def _download_direct_url(self, url: str, work_dir: str) -> Optional[str]:
+    async def _download_direct_url(self, url: str, work_dir: str, background: bool = False) -> Optional[str]:
         """Tải file từ link HTTP/HTTPS trực tiếp với bộ nhớ đệm"""
         import hashlib
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
@@ -1047,8 +1067,9 @@ class GoogleDriveUploadManager:
                     if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
                         cached_sz = os.path.getsize(c_path)
                         cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
-                        self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua tải trực tiếp!", "success")
-                        self._download_percent = 100
+                        if not background:
+                            self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua tải trực tiếp!", "success")
+                            self._download_percent = 100
                         out_path = os.path.join(work_dir, cached_fn)
                         try:
                             shutil.copy2(c_path, out_path)
@@ -1074,37 +1095,44 @@ class GoogleDriveUploadManager:
                     content_len = stream_resp.headers.get("content-length")
                     total_bytes = int(content_len) if content_len and content_len.isdigit() else 0
 
-                    self._download_total = total_bytes
-                    self._download_bytes = 0
-                    self._current_file = final_filename
-                    self._stage = f"Đang tải về: {final_filename}"
-                    self._log(f"Bắt đầu tải trực tiếp: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
+                    if not background:
+                        self._download_total = total_bytes
+                        self._download_bytes = 0
+                        self._current_file = final_filename
+                        self._stage = f"Đang tải về: {final_filename}"
+                        self._log(f"Bắt đầu tải trực tiếp: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
 
                     cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}_{final_filename}")
                     out_path = os.path.join(work_dir, final_filename)
                     start_dl = time.time()
                     last_update = 0
 
+                    downloaded_bytes = 0
                     with open(cache_path, "wb") as f_out:
-                        async for chunk in stream_resp.aiter_bytes(chunk_size=1024 * 1024):
+                        async for chunk in stream_resp.aiter_bytes(chunk_size=4 * 1024 * 1024):
                             if self._cancel_requested:
                                 return None
                             f_out.write(chunk)
-                            self._download_bytes += len(chunk)
+                            downloaded_bytes += len(chunk)
+                            if not background:
+                                self._download_bytes = downloaded_bytes
 
                             now = time.time()
-                            if now - last_update > 0.5:
+                            if not background and now - last_update > 0.5:
                                 last_update = now
                                 if total_bytes > 0:
-                                    self._download_percent = min(100, int((self._download_bytes / total_bytes) * 100))
+                                    self._download_percent = min(100, int((downloaded_bytes / total_bytes) * 100))
                                 elapsed_dl = now - start_dl
                                 if elapsed_dl > 0:
-                                    mbps = (self._download_bytes / (1024 * 1024)) / elapsed_dl
+                                    mbps = (downloaded_bytes / (1024 * 1024)) / elapsed_dl
                                     self._speed_str = f"{mbps:.2f} MB/s"
 
-                    self._download_percent = 100
                     dl_sz = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
-                    self._log(f"✅ Tải thành công: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)", "success")
+                    if not background:
+                        self._download_percent = 100
+                        self._log(f"✅ Tải thành công: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)", "success")
+                    else:
+                        LOGGER.info(f"[GDRIVE PREFETCH] Đã tải trước link trực tiếp: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)")
                     try:
                         if hasattr(os, "link"):
                             try:
@@ -1140,7 +1168,12 @@ class GoogleDriveUploadManager:
         if not cover_url:
             return None
         try:
-            cover_path = os.path.join(work_dir, "cover_thumb.jpg")
+            # Một album thường dùng cùng một cover cho mọi track. Cache theo URL
+            # để không tải lại ảnh bìa trước từng lần send_audio().
+            cover_hash = hashlib.md5(cover_url.encode("utf-8", errors="ignore")).hexdigest()[:12]
+            cover_path = os.path.join(work_dir, f"cover_{cover_hash}.jpg")
+            if os.path.exists(cover_path) and os.path.getsize(cover_path) > 1024:
+                return cover_path
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 r = await client.get(cover_url)
                 if r.status_code == 200:
@@ -1162,6 +1195,31 @@ class GoogleDriveUploadManager:
         send_as_document: bool,
     ):
         work_dir = tempfile.mkdtemp(prefix="gdrive_upload_", dir=TEMP_UPLOAD_DIR)
+        prefetch_task: Optional[asyncio.Task] = None
+        prefetch_index: int = 0
+
+        async def _download_queue_item(item: dict, item_dir: str, *, background: bool = False) -> Optional[str]:
+            os.makedirs(item_dir, exist_ok=True)
+            try:
+                if item.get("link_type") == "file":
+                    return await self._download_gdrive_file(
+                        item.get("resource_id", ""),
+                        item_dir,
+                        known_filename=item.get("known_filename", ""),
+                        background=background,
+                    )
+                if item.get("link_type") == "direct":
+                    return await self._download_direct_url(
+                        item.get("resource_id", ""),
+                        item_dir,
+                        background=background,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as dl_exc:
+                LOGGER.warning(f"[GDRIVE PREFETCH] Download item failed: {dl_exc}")
+            return None
+
         try:
             client, client_type = await _get_upload_client()
             target_chat_id = int(target_channel_id) if target_channel_id.lstrip("-").isdigit() else target_channel_id
@@ -1220,7 +1278,9 @@ class GoogleDriveUploadManager:
             uploaded_messages_all = []
             album_tracklist_cache = {}
 
-            # 2. Xử lý tuần tự từng mục trong hàng đợi
+            # 2. Pipeline 2 tầng: trong lúc upload/xử lý mục hiện tại, tải trước đúng
+            # một mục kế tiếp. Cách này tận dụng đồng thời download Google Drive và
+            # upload Telegram nhưng không mở quá nhiều kết nối gây quota/FloodWait.
             for q_idx, q_item in enumerate(items_queue, 1):
                 if self._cancel_requested:
                     break
@@ -1237,15 +1297,33 @@ class GoogleDriveUploadManager:
                 self._stage = f"[{q_idx}/{total_queue_items}] Đang tải: {q_known_fn or q_label}..."
                 self._log(f"👉 [{q_idx}/{total_queue_items}] Bắt đầu xử lý: {q_known_fn or q_label}", "info")
 
-                dl_path = None
-                if q_link_type == "file":
-                    dl_path = await self._download_gdrive_file(q_res_id, work_dir, known_filename=q_known_fn)
-                elif q_link_type == "direct":
-                    dl_path = await self._download_direct_url(q_res_id, work_dir)
+                item_download_dir = os.path.join(work_dir, f"item_{q_idx}_download")
+                if prefetch_task is not None and prefetch_index == q_idx:
+                    dl_path = await prefetch_task
+                    prefetch_task = None
+                    prefetch_index = 0
+                    if dl_path:
+                        self._log(
+                            f"⚡ [{q_idx}/{total_queue_items}] File đã được tải trước trong lúc upload mục trước.",
+                            "success",
+                        )
+                else:
+                    dl_path = await _download_queue_item(q_item, item_download_dir, background=False)
 
                 if not dl_path or not os.path.exists(dl_path):
                     self._log(f"⚠️ Bỏ qua mục [{q_idx}/{total_queue_items}] do tải về thất bại: {q_label}", "warn")
                     continue
+
+                # Bắt đầu tải trước mục kế tiếp ngay khi file hiện tại đã sẵn sàng.
+                # Mỗi item dùng thư mục riêng để các album có filename trùng nhau
+                # không ghi đè file đang được Telegram đọc/upload.
+                if q_idx < total_queue_items and prefetch_task is None and not self._cancel_requested:
+                    next_item = items_queue[q_idx]
+                    next_dir = os.path.join(work_dir, f"item_{q_idx + 1}_download")
+                    prefetch_index = q_idx + 1
+                    prefetch_task = asyncio.create_task(
+                        _download_queue_item(next_item, next_dir, background=True)
+                    )
 
                 # 3. Giải nén (nếu là file nén) hoặc lấy trực tiếp file audio
                 files_to_upload = []
@@ -1550,16 +1628,29 @@ class GoogleDriveUploadManager:
                                 except Exception:
                                     scraped_score = 0.0
                                 is_catalog_match = scraped_source in ("Apple Music / iTunes", "Deezer API")
-                                catalog_confident = is_catalog_match and scraped_score >= 0.50
+                                scraped_title = strip_copy_prefix(scraped.get("title", ""))
+                                scraped_artist = strip_copy_prefix(scraped.get("artist", ""))
+                                title_match = token_similarity(title_candidate, scraped_title) if scraped_title else 0.0
+                                artist_match = (
+                                    token_similarity(artist_candidate, scraped_artist)
+                                    if scraped_artist and not artist_is_weak
+                                    else 1.0
+                                )
+                                catalog_confident = (
+                                    is_catalog_match
+                                    and scraped_score >= 0.70
+                                    and title_match >= 0.55
+                                    and artist_match >= 0.45
+                                )
+                                trusted_identity = has_solid_cue or has_solid_local_tags or fingerprint_confirmed
 
-                                if catalog_confident and not fingerprint_confirmed:
+                                if catalog_confident and not trusted_identity:
                                     if scraped.get("title"):
                                         title_candidate = strip_copy_prefix(scraped["title"])
                                     if scraped.get("artist"):
                                         artist_candidate = strip_copy_prefix(scraped["artist"])
 
-                                # Khi Shazam đã xác nhận, catalog chỉ bổ sung album/cover;
-                                # khi chưa có Shazam, chỉ bổ sung nếu chính catalog đạt ngưỡng score.
+                                # CUE/ID3/Shazam xác nhận danh tính bài hát; catalog chỉ bổ sung album/cover.
                                 if catalog_confident:
                                     if scraped.get("album") and not (item_default_album or default_album):
                                         album_candidate = strip_copy_prefix(scraped["album"])
@@ -1567,7 +1658,8 @@ class GoogleDriveUploadManager:
                                         cover_url = scraped["cover_url"]
                                 elif is_catalog_match:
                                     self._log(
-                                        f"⚠️ Bỏ qua kết quả catalog độ tin cậy thấp ({scraped_score:.2f}) cho '{raw_filename}'.",
+                                        f"⚠️ Bỏ qua catalog không đủ khớp cho '{raw_filename}' "
+                                        f"(score={scraped_score:.2f}, title={title_match:.2f}, artist={artist_match:.2f}).",
                                         "warn"
                                     )
                         except Exception as e:
@@ -1710,6 +1802,14 @@ class GoogleDriveUploadManager:
             self._log(f"Lỗi: {exc}", "error")
             LOGGER.error(f"[GDRIVE UPLOAD PIPELINE ERROR] {exc}", exc_info=True)
         finally:
+            if prefetch_task is not None:
+                if not prefetch_task.done():
+                    prefetch_task.cancel()
+                try:
+                    await prefetch_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
             # 1. Dọn dẹp thư mục làm việc tạm
             try:
                 if os.path.exists(work_dir):

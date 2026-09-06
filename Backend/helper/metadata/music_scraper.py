@@ -444,8 +444,14 @@ def token_similarity(str1: str, str2: str) -> float:
     """Tính độ tương đồng token giữa 2 chuỗi để chọn kết quả chính xác nhất"""
     if not str1 or not str2:
         return 0.0
-    w1 = set(re.findall(r'[a-zA-Z0-9\u00C0-\u1EF9]+', str1.lower()))
-    w2 = set(re.findall(r'[a-zA-Z0-9\u00C0-\u1EF9]+', str2.lower()))
+
+    def _fold(value: str) -> str:
+        text = unicodedata.normalize("NFKD", str(value or "").casefold())
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        return text.replace("đ", "d")
+
+    w1 = set(re.findall(r'\w+', _fold(str1), flags=re.UNICODE))
+    w2 = set(re.findall(r'\w+', _fold(str2), flags=re.UNICODE))
     if not w1 or not w2:
         return 0.0
     intersection = w1.intersection(w2)
@@ -787,8 +793,9 @@ async def fetch_music_metadata(
                         
                         score_full = token_similarity(search_query, f"{cand_artist} {cand_title}")
                         score_title = token_similarity(title, cand_title)
+                        score_artist = token_similarity(artist, cand_artist) if artist else 0.0
                         
-                        match_fwd = (token_similarity(artist, cand_artist) * 0.5 + token_similarity(title, cand_title) * 0.5) if (artist and title) else 0.0
+                        match_fwd = (score_artist * 0.5 + score_title * 0.5) if (artist and title) else 0.0
                         match_rev = (token_similarity(artist, cand_title) * 0.5 + token_similarity(title, cand_artist) * 0.5) if (artist and title) else 0.0
                         
                         final_score = max(score_full, score_title * 0.8, match_fwd, match_rev)
@@ -806,9 +813,11 @@ async def fetch_music_metadata(
                             else:
                                 continue
                         else:
-                            artist_score_fwd = token_similarity(artist, cand_artist)
+                            artist_score_fwd = score_artist
                             artist_score_rev = token_similarity(title, cand_artist)
                             if max(artist_score_fwd, artist_score_rev) < 0.35 and cand_artist.lower() not in full_raw_text:
+                                continue
+                            if score_title < 0.55:
                                 continue
 
                             final_score = min(1.0, final_score + 0.25)
