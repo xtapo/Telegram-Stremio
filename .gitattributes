@@ -7,3 +7,7 @@
 *.jpeg filter=lfs diff=lfs merge=lfs -text
 *.webp filter=lfs diff=lfs merge=lfs -text
 *.ico filter=lfs diff=lfs merge=lfs -text
+
+# Android launcher resources must stay as normal Git blobs so GitHub Actions
+# can build even when unrelated Git LFS objects are unavailable.
+android/app/src/main/res/**/*.png -filter -diff -merge -text
