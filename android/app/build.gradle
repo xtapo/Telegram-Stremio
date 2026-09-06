@@ -6,6 +6,8 @@ android {
     namespace 'com.telegramstremio.music'
     compileSdk 34
 
+    flavorDimensions += "device"
+
     defaultConfig {
         applicationId "com.telegramstremio.music"
         minSdk 24
@@ -15,6 +17,23 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+    }
+
+    productFlavors {
+        phone {
+            dimension "device"
+            applicationIdSuffix ".phone"
+            versionNameSuffix "-phone"
+            buildConfigField "String", "APP_TARGET", '"phone"'
+            resValue "string", "app_name", "XT-Music Phone"
+        }
+        tv {
+            dimension "device"
+            applicationIdSuffix ".tv"
+            versionNameSuffix "-tv"
+            buildConfigField "String", "APP_TARGET", '"tv"'
+            resValue "string", "app_name", "XT-Music TV"
+        }
     }
 
     buildTypes {
@@ -32,6 +51,10 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 }
 

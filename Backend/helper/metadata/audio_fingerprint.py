@@ -6,6 +6,7 @@ import shutil
 import asyncio
 import tempfile
 import subprocess
+import unicodedata
 from typing import Optional, Dict, Tuple, List
 from pyrogram.errors import FloodWait, RPCError
 from Backend.logger import LOGGER
@@ -482,6 +483,182 @@ def _read_embedded_metadata_file(file_path: str) -> dict:
     return tags
 
 
+def _normalize_manual_match_text(value: str) -> str:
+    """Chuẩn hóa title/artist để so khớp các kết quả Shazam giữa nhiều đoạn nghe."""
+    text = str(value or "").casefold().strip()
+    if not text:
+        return ""
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.replace("đ", "d")
+    text = re.sub(r"\b(?:feat(?:uring)?|ft)\.?\s+.*$", " ", text, flags=re.I)
+    text = re.sub(
+        r"\b(?:official|audio|video|lyrics?|lyric|remaster(?:ed)?|version|visualizer)\b",
+        " ",
+        text,
+        flags=re.I,
+    )
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def _manual_text_similarity(left: str, right: str) -> float:
+    """Độ tương đồng token nhẹ, dùng nội bộ để xác nhận chéo kết quả thủ công."""
+    a = set(_normalize_manual_match_text(left).split())
+    b = set(_normalize_manual_match_text(right).split())
+    if not a or not b:
+        return 0.0
+    return len(a.intersection(b)) / max(len(a), len(b))
+
+
+def _manual_result_key(result: dict) -> str:
+    if not result:
+        return ""
+    title = _normalize_manual_match_text(result.get("title", ""))
+    artist = _normalize_manual_match_text(result.get("artist", ""))
+    if not title or not artist:
+        return ""
+    return f"{artist}|{title}"
+
+
+def _is_useful_manual_hint(value: str) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    return not bool(re.match(r"^(?:track|audio|song|unknown|untitled)\s*\d*$", text, re.I))
+
+
+def _manual_candidate_support(result: dict, embedded_tags: dict, hints: dict) -> float:
+    """Điểm hỗ trợ từ tag/hints, tách khỏi số phiếu Shazam để phát hiện kết quả mâu thuẫn."""
+    score = 0.0
+    title = result.get("title", "")
+    artist = result.get("artist", "")
+    album = result.get("album", "")
+
+    tag_title = embedded_tags.get("title", "")
+    tag_artist = embedded_tags.get("artist", "")
+    tag_album = embedded_tags.get("album", "")
+    if tag_title:
+        score += 1.35 * _manual_text_similarity(title, tag_title)
+    if tag_artist:
+        score += 1.15 * _manual_text_similarity(artist, tag_artist)
+    if tag_album:
+        score += 0.35 * _manual_text_similarity(album, tag_album)
+
+    hint_title = hints.get("title", "")
+    hint_artist = hints.get("artist", "")
+    hint_album = hints.get("album", "")
+    if _is_useful_manual_hint(hint_title):
+        score += 0.75 * _manual_text_similarity(title, hint_title)
+    if _is_useful_manual_hint(hint_artist):
+        score += 0.65 * _manual_text_similarity(artist, hint_artist)
+    if _is_useful_manual_hint(hint_album):
+        score += 0.20 * _manual_text_similarity(album, hint_album)
+    return score
+
+
+def _select_manual_shazam_result(
+    candidates: list,
+    embedded_tags: dict,
+    hints: dict,
+    log_callback=None,
+) -> Optional[dict]:
+    """
+    Chọn kết quả Shazam cho chế độ thủ công bằng đồng thuận nhiều đoạn nghe.
+
+    Hai đoạn độc lập cùng nhận ra một bài được xem là tín hiệu rất mạnh. Nếu các đoạn
+    trả về kết quả khác nhau, tag gốc và thông tin hiện có của thư viện được dùng để
+    phá hòa; trường hợp vẫn mơ hồ sẽ được bỏ qua để pipeline rơi xuống ID3/online.
+    """
+    groups = {}
+    for item in candidates:
+        result = item.get("result") or {}
+        key = _manual_result_key(result)
+        if not key:
+            continue
+        bucket = groups.setdefault(key, {"result": result, "segments": [], "votes": 0})
+        bucket["votes"] += 1
+        bucket["segments"].append(item.get("segment") or "Mẫu")
+
+    if not groups:
+        return None
+
+    ranked = []
+    for group in groups.values():
+        support = _manual_candidate_support(group["result"], embedded_tags, hints)
+        total_score = (group["votes"] * 3.0) + support
+        ranked.append((total_score, support, group))
+    ranked.sort(key=lambda row: (row[0], row[1], row[2]["votes"]), reverse=True)
+
+    best_score, best_support, best = ranked[0]
+    runner_score = ranked[1][0] if len(ranked) > 1 else None
+
+    # Đồng thuận >= 2 đoạn: đủ mạnh để nhận luôn.
+    accepted = best["votes"] >= 2
+    reason = "đồng thuận nhiều đoạn"
+
+    # Chỉ có duy nhất một ứng viên Shazam: vẫn giữ hành vi thực dụng của Shazam,
+    # nhưng đánh dấu confidence thấp hơn.
+    if not accepted and len(ranked) == 1:
+        accepted = True
+        reason = "một kết quả Shazam duy nhất"
+
+    # Có nhiều kết quả xung đột: chỉ nhận khi tag/hint hỗ trợ rõ và có khoảng cách.
+    if not accepted and runner_score is not None:
+        margin = best_score - runner_score
+        accepted = best_support >= 1.10 and margin >= 0.30
+        reason = "được ID3/gợi ý xác nhận chéo" if accepted else "kết quả Shazam mâu thuẫn"
+
+    if not accepted:
+        if log_callback:
+            log_callback(
+                "Shazam trả về nhiều kết quả khác nhau nhưng không đủ bằng chứng xác nhận; chuyển sang ID3/tra cứu trực tuyến để tránh ghi sai.",
+                "warn",
+            )
+        return None
+
+    result = dict(best["result"])
+    result["match_votes"] = best["votes"]
+    result["match_segments"] = list(best["segments"])
+    result["confidence"] = "high" if best["votes"] >= 2 else ("medium" if best_support >= 1.10 else "normal")
+    if best["votes"] >= 2:
+        result["layer"] = f"Shazam Đa Mẫu {best['votes']}x"
+    if log_callback:
+        seg_text = ", ".join(best["segments"][:3])
+        log_callback(
+            f"Shazam xác nhận: {result.get('artist')} - {result.get('title')} ({reason}; {best['votes']} mẫu: {seg_text}).",
+            "success",
+        )
+    return result
+
+
+def _build_manual_scan_windows(total_sec: float) -> list:
+    """Tạo các cửa sổ nghe phân bố theo toàn bộ thời lượng cho nút nhận diện thủ công."""
+    if total_sec <= 0:
+        return [("Mẫu mở đầu", 0.0, 22.0)]
+    if total_sec <= 24:
+        return [("Toàn bộ bài hát", 0.0, max(5.0, total_sec))]
+
+    duration = min(22.0, max(14.0, total_sec * 0.12))
+    anchors = [
+        ("Đầu bài hát", 0.10),
+        ("Verse / đoạn đầu", 0.28),
+        ("Giữa bài", 0.50),
+        ("Điệp khúc / cao trào", 0.68),
+        ("Đoạn cuối", 0.84),
+    ]
+    windows = []
+    for name, ratio in anchors:
+        center = total_sec * ratio
+        start = max(0.0, min(total_sec - duration, center - (duration / 2.0)))
+        dur = min(duration, total_sec - start)
+        if dur < 5.0:
+            continue
+        if windows and abs(start - windows[-1][1]) < min(8.0, duration * 0.45):
+            continue
+        windows.append((name, start, dur))
+    return windows or [("Toàn bộ bài hát", 0.0, min(22.0, total_sec))]
+
+
 async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", log_callback=None, timeout_sec: float = 12.0) -> dict:
     """Gửi tệp âm thanh thực tế tới máy chủ Shazam để trích xuất dấu vân tay âm thanh chuẩn xác."""
     if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
@@ -649,14 +826,13 @@ async def recognize_audio_from_telegram(
                     # Chế độ quét kênh Telegram siêu tốc: Chỉ tải tối đa 2.5MB (~1-2 giây)
                     # 2.5MB là quá đủ để chứa các frame âm thanh đầu bài và thẻ ID3v2/FLAC header
                     download_limit = min(detected_file_size, 2500 * 1024) if detected_file_size > 0 else (2500 * 1024)
+                    limit_mb_str = f"{round(download_limit/1024/1024, 1)}MB"
                 else:
-                    # Chế độ thủ công sâu: Tải mẫu lớn 25MB - 35MB (đủ trích xuất cả Intro, Verse lẫn Điệp khúc)
-                    if detected_file_size > 0:
-                        download_limit = min(detected_file_size, max(25 * 1024 * 1024, int(detected_file_size * 0.60)))
-                    else:
-                        download_limit = 25 * 1024 * 1024
+                    # Chế độ thủ công ưu tiên độ chính xác: tải đủ file để ffmpeg có thể seek
+                    # tới mọi vị trí và để container M4A/ALAC có đủ metadata ở cuối tệp.
+                    download_limit = None
+                    limit_mb_str = "toàn bộ tệp"
 
-                limit_mb_str = f"{round(download_limit/1024/1024, 1)}MB"
                 LOGGER.info(f"[SHAZAM] Đang tải mẫu bài hát '{file_name}' ({limit_mb_str}) bằng client [{cl_name}]...")
                 if log_callback:
                     log_callback(f"Đang tải mẫu âm thanh ({limit_mb_str})...", "info")
@@ -672,7 +848,7 @@ async def recognize_audio_from_telegram(
                 async for chunk in current_cl.stream_media(target_msg, limit=0):
                     tf.write(chunk)
                     downloaded += len(chunk)
-                    if downloaded >= download_limit:
+                    if download_limit is not None and downloaded >= download_limit:
                         break
 
                 tf.close()
@@ -787,30 +963,20 @@ async def recognize_audio_from_telegram(
 
         LOGGER.info(f"[SHAZAM] Thời lượng tệp mẫu phân tích: {round(total_sec, 1)}s")
 
-        # Định nghĩa các cửa sổ âm thanh vàng (chuẩn 25 giây để nhận diện vân tay rõ nhất)
-        scan_windows = []
-        if total_sec >= 90:
-            # 1. Điệp khúc chính: ~70s - 95s
-            c1 = min(70.0, max(0.0, total_sec - 25.0))
-            scan_windows.append(("Điệp khúc chính", c1, 25.0))
-            # 2. Lời hát mở đầu Verse 1: ~26s - 51s (bỏ qua đoạn dạo đầu không lời)
-            scan_windows.append(("Đoạn hát Verse 1", 26.0, 25.0))
-            # 3. Điệp khúc 2 / Cao trào (nếu bài dài >= 125s)
-            if total_sec >= 125:
-                c2 = min(98.0, total_sec - 25.0)
-                scan_windows.append(("Điệp khúc 2 / Cao trào", c2, 25.0))
-            # 4. Tiền điệp khúc Pre-Chorus: ~48s - 73s
-            scan_windows.append(("Tiền Điệp khúc", 48.0, 25.0))
-            # 5. Đoạn đầu bài hát: ~6s - 31s
-            scan_windows.append(("Đầu bài hát", 6.0, 25.0))
-        elif total_sec >= 45:
-            scan_windows.append(("Điệp khúc", total_sec * 0.50, min(25.0, total_sec * 0.45)))
-            scan_windows.append(("Đoạn hát Verse 1", 15.0, min(25.0, total_sec - 15.0)))
-            scan_windows.append(("Đầu bài hát", 3.0, min(25.0, total_sec - 3.0)))
-        elif total_sec > 5:
-            scan_windows.append(("Toàn bộ bài hát", 0.0, total_sec))
-        else:
-            scan_windows.append(("Mẫu âm thanh", 0.0, 25.0))
+        # Đọc tag trước để dùng làm bằng chứng xác nhận chéo cho các kết quả Shazam.
+        # Tag chỉ được trả về như fallback nếu Shazam không đủ chắc chắn.
+        embedded_tags = _read_embedded_metadata_file(source_audio_path)
+        manual_hints = {
+            "title": hint_title or "",
+            "artist": hint_artist or "",
+            "album": hint_album or "",
+        }
+
+        # Phân bố mẫu theo % thời lượng thay vì các mốc giây cố định. Cách này phù hợp
+        # cả bài ngắn, bài dài, live/remix và album track có intro dài.
+        scan_windows = _build_manual_scan_windows(total_sec)
+        shazam_candidates = []
+        vote_counts = {}
 
         # Quét lần lượt qua các cửa sổ âm thanh đã chuẩn hóa Mono 16kHz 16-bit PCM WAV
         for seg_idx, (seg_name, start_s, dur_s) in enumerate(scan_windows, start=1):
@@ -838,9 +1004,23 @@ async def recognize_audio_from_telegram(
                     LOGGER.warning(f"[SHAZAM] Không thể trích xuất đoạn âm thanh [{seg_name}] ({t_from}s - {t_to}s)")
                     continue
 
-                res = await _query_shazam_file(sample_w_path, segment_name=seg_name, log_callback=log_callback)
+                res = await _query_shazam_file(sample_w_path, segment_name=seg_name, log_callback=log_callback, timeout_sec=10.0)
                 if res:
-                    return res
+                    shazam_candidates.append({"result": res, "segment": seg_name})
+                    key = _manual_result_key(res)
+                    if key:
+                        vote_counts[key] = vote_counts.get(key, 0) + 1
+                        if vote_counts[key] >= 2:
+                            # Hai đoạn khác nhau cùng nhận ra một bài là đủ chắc chắn;
+                            # dừng sớm để tránh gọi Shazam thừa.
+                            selected = _select_manual_shazam_result(
+                                shazam_candidates,
+                                embedded_tags,
+                                manual_hints,
+                                log_callback=log_callback,
+                            )
+                            if selected:
+                                return selected
             finally:
                 if os.path.exists(sample_w_path):
                     try:
@@ -848,36 +1028,19 @@ async def recognize_audio_from_telegram(
                     except Exception:
                         pass
 
-        # Thử 1 lần cuối: quét trực tiếp đoạn 30s đầu bài từ nguồn chuẩn hóa
-        tmp_final_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        final_sample_path = tmp_final_wav.name
-        tmp_final_wav.close()
-        try:
-            if log_callback:
-                log_callback("Quét mở rộng toàn dải âm thanh đầu bài (0s - 30s)...", "info")
-            ok = _extract_normalized_segment(
-                input_audio_path=source_audio_path,
-                output_wav_path=final_sample_path,
-                start_sec=0.0,
-                duration_sec=min(30.0, total_sec) if total_sec > 0 else 30.0,
-                audio_seg_pydub=audio_seg
-            )
-            if ok:
-                res = await _query_shazam_file(final_sample_path, segment_name="Toàn dải đầu", log_callback=log_callback)
-                if res:
-                    return res
-        finally:
-            if os.path.exists(final_sample_path):
-                try:
-                    os.remove(final_sample_path)
-                except Exception:
-                    pass
+        # Sau khi đã nghe toàn dải, chọn bằng đồng thuận + xác nhận chéo tag/hints.
+        selected = _select_manual_shazam_result(
+            shazam_candidates,
+            embedded_tags,
+            manual_hints,
+            log_callback=log_callback,
+        )
+        if selected:
+            return selected
 
         # ── LỚP 2: Trích xuất Thẻ Metadata Gốc (ID3v2, RIFF INFO, FLAC Vorbis) từ tệp ──
         if log_callback:
             log_callback("Shazam chưa khớp -> Lớp 2: Đang đọc Thẻ Tag ID3 / Metadata gốc nhúng trong tệp...", "info")
-
-        embedded_tags = _read_embedded_metadata_file(source_audio_path)
         if embedded_tags.get("title") and (embedded_tags.get("artist") or embedded_tags.get("album")):
             t_tit = embedded_tags["title"].strip()
             t_art = embedded_tags.get("artist", "").strip()

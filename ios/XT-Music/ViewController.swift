@@ -1,7 +1,7 @@
 import UIKit
 import WebKit
 
-class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
+class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
 
     private var webView: WKWebView!
     private var progressView: UIProgressView!
@@ -33,6 +33,7 @@ class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
+        config.userContentController.add(self, name: "pullToRefresh")
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -80,6 +81,17 @@ class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
 
     @objc private func handleRefresh() {
         webView.reload()
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "pullToRefresh", let enabled = message.body as? Bool else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if !enabled && self.refreshControl.isRefreshing {
+                self.refreshControl.endRefreshing()
+            }
+            self.refreshControl.isEnabled = enabled
+        }
     }
 
     private func loadMusicPage() {

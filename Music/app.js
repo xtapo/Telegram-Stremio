@@ -795,6 +795,13 @@ class XTAPOMusicApp {
         try { localStorage.setItem('xtapo_device_id', this.syncDeviceId); } catch(e) {}
         this.syncDeviceName = this.detectDeviceName();
         this.syncDeviceType = this.detectDeviceType();
+        this.syncPairToken = localStorage.getItem('xtapo_sync_pair_token') || null;
+        this.syncActiveDeviceId = null;
+        this.syncRoomRevision = 0;
+        this._lastSyncPlaybackState = null;
+        this._lastSyncPlaybackContext = null;
+        this._syncAckCommandIds = [];
+        this._claimLocalPlayback = false;
         this.remoteTargetDeviceId = null;
         this.remoteTargetName = null;
         this.availableDevices = [];
@@ -2597,6 +2604,40 @@ class XTAPOMusicApp {
             </div>
         `;
 
+        // Mobile browsers can still emit a click after a short drag gesture.
+        // Suppress that synthetic click when the finger actually moved so
+        // scrolling the tracklist never starts/stops a track by accident.
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchMoved = false;
+        let suppressClickUntil = 0;
+        li.addEventListener('touchstart', (e) => {
+            const touch = e.touches && e.touches[0];
+            if (!touch) return;
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            touchMoved = false;
+        }, { passive: true });
+        li.addEventListener('touchmove', (e) => {
+            const touch = e.touches && e.touches[0];
+            if (!touch || touchMoved) return;
+            if (Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY) >= 10) {
+                touchMoved = true;
+            }
+        }, { passive: true });
+        li.addEventListener('touchend', () => {
+            if (touchMoved) suppressClickUntil = Date.now() + 500;
+        }, { passive: true });
+        li.addEventListener('touchcancel', () => {
+            if (touchMoved) suppressClickUntil = Date.now() + 500;
+        }, { passive: true });
+        li.addEventListener('click', (e) => {
+            if (Date.now() < suppressClickUntil) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
+        }, true);
+
         const addPlBtn = li.querySelector('.track-add-playlist-btn');
         if (addPlBtn) {
             addPlBtn.addEventListener('click', (e) => {
@@ -3501,6 +3542,47 @@ class XTAPOMusicApp {
 
     // --- Modals & Drawers Setup ---
     setupModalEvents() {
+        // Native Android/iOS wrappers provide pull-to-refresh for the whole
+        // WebView. Temporarily disable it while a finger gesture belongs to a
+        // nested tracklist scroller so the native wrapper cannot reload the
+        // page when the user is only browsing songs.
+        let nativeRefreshReleaseTimer = null;
+        const setNativePullRefreshEnabled = (enabled) => {
+            try {
+                if (window.AndroidBridge && typeof window.AndroidBridge.setPullToRefreshEnabled === 'function') {
+                    window.AndroidBridge.setPullToRefreshEnabled(Boolean(enabled));
+                }
+            } catch (e) {}
+            try {
+                const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pullToRefresh;
+                if (handler) handler.postMessage(Boolean(enabled));
+            } catch (e) {}
+        };
+        const disableNativeRefresh = () => {
+            if (nativeRefreshReleaseTimer) clearTimeout(nativeRefreshReleaseTimer);
+            nativeRefreshReleaseTimer = null;
+            setNativePullRefreshEnabled(false);
+        };
+        const releaseNativeRefresh = () => {
+            if (nativeRefreshReleaseTimer) clearTimeout(nativeRefreshReleaseTimer);
+            nativeRefreshReleaseTimer = setTimeout(() => {
+                setNativePullRefreshEnabled(true);
+                nativeRefreshReleaseTimer = null;
+            }, 150);
+        };
+        const bindTracklistGestureGuard = (el) => {
+            if (!el || el.dataset.nativeRefreshGuardBound === '1') return;
+            el.dataset.nativeRefreshGuardBound = '1';
+            el.addEventListener('touchstart', disableNativeRefresh, { passive: true });
+            el.addEventListener('touchend', releaseNativeRefresh, { passive: true });
+            el.addEventListener('touchcancel', releaseNativeRefresh, { passive: true });
+        };
+        bindTracklistGestureGuard(this.tracklistEl);
+        bindTracklistGestureGuard(this.modalTracklistEl);
+        if (this.tracklistModal) {
+            bindTracklistGestureGuard(this.tracklistModal.querySelector('.tracklist-modal-body'));
+        }
+
         // Album Picker
         if (this.albumPickerBtn) this.albumPickerBtn.addEventListener('click', () => this.openModal(this.albumModal));
         if (this.closeAlbumModal) this.closeAlbumModal.addEventListener('click', () => this.closeModal(this.albumModal));
@@ -9596,8 +9678,11 @@ class XTAPOMusicApp {
                 device_name: this.syncDeviceName,
                 device_type: this.syncDeviceType,
                 user_id: this.currentUser ? this.currentUser._id : null,
+                pair_token: this.syncPairToken,
                 username: this.currentUser ? (this.currentUser.display_name || this.currentUser.username) : null,
-                is_active_player: !this.remoteTargetDeviceId && this.isPlaying,
+                is_active_player: !this.remoteTargetDeviceId && (this.isPlaying || this.syncActiveDeviceId === this.syncDeviceId),
+                claim_active: this._claimLocalPlayback,
+                ack_command_ids: this._syncAckCommandIds.slice(),
                 current_state: {
                     is_playing: this.isPlaying,
                     current_time: this.audio ? (this.audio.currentTime || 0) : 0,
@@ -9627,6 +9712,12 @@ class XTAPOMusicApp {
             if (res.ok) {
                 const data = await res.json();
                 if (data.status === 'success') {
+                    this._claimLocalPlayback = false;
+                    if (this._syncAckCommandIds.length > 0) this._syncAckCommandIds = [];
+                    this.syncRoomRevision = data.revision || this.syncRoomRevision || 0;
+                    this.syncActiveDeviceId = data.active_device_id || null;
+                    this._lastSyncPlaybackState = data.playback_state || null;
+                    this._lastSyncPlaybackContext = data.playback_context || null;
                     if (data.devices) {
                         const prevDevicesJson = this._lastDevicesJson || '';
                         const nextDevicesJson = JSON.stringify(data.devices.map(d => ({ id: d.device_id, name: d.device_name, type: d.device_type, is_active: d.is_active_player, playing: d.current_state?.is_playing })));
@@ -9637,9 +9728,13 @@ class XTAPOMusicApp {
                             this.renderDevicesList();
                         }
                     }
+                    this.syncRemoteTargetFromSnapshot(data);
                     if (Array.isArray(data.commands) && data.commands.length > 0) {
                         for (const cmd of data.commands) {
                             this.handleSyncMessage(cmd);
+                            if (cmd.command_id && !this._syncAckCommandIds.includes(cmd.command_id)) {
+                                this._syncAckCommandIds.push(cmd.command_id);
+                            }
                         }
                     }
                 }
@@ -9680,7 +9775,9 @@ class XTAPOMusicApp {
                     from_device_name: this.syncDeviceName,
                     target_device_id: targetId,
                     command: command,
-                    payload: payload
+                    payload: payload,
+                    user_id: this.currentUser ? this.currentUser._id : null,
+                    pair_token: this.syncPairToken
                 })
             });
         } catch (e) {
@@ -9707,6 +9804,39 @@ class XTAPOMusicApp {
                 this.applyRemotePlaybackState(msg.state);
             }
         }
+    }
+
+    syncRemoteTargetFromSnapshot(snapshot) {
+        const activeId = snapshot && snapshot.active_device_id;
+        if (!activeId) {
+            if (this.remoteTargetDeviceId) {
+                this.remoteTargetDeviceId = null;
+                this.remoteTargetName = null;
+                this.remoteTargetType = null;
+                this.renderDevicesList();
+            }
+            return;
+        }
+
+        if (activeId === this.syncDeviceId) {
+            if (this.remoteTargetDeviceId) {
+                this.remoteTargetDeviceId = null;
+                this.remoteTargetName = null;
+                this.remoteTargetType = null;
+                this.renderDevicesList();
+            }
+            return;
+        }
+
+        const activeDevice = (this.availableDevices || []).find(d => d.device_id === activeId);
+        if (!activeDevice) return;
+
+        const changed = this.remoteTargetDeviceId !== activeId;
+        this.remoteTargetDeviceId = activeId;
+        this.remoteTargetName = activeDevice.device_name || 'Thiết bị từ xa';
+        this.remoteTargetType = activeDevice.device_type || 'desktop';
+        if (snapshot.playback_state) this.applyRemotePlaybackState(snapshot.playback_state);
+        if (changed) this.renderDevicesList();
     }
 
     checkActiveRemoteTarget() {
@@ -9757,6 +9887,7 @@ class XTAPOMusicApp {
         const albumId = payload.album_id;
         const trackIdx = payload.track_index !== undefined ? payload.track_index : 0;
         const seekTime = payload.seek_time || 0;
+        const shouldPlay = payload.is_playing !== false;
 
         let targetAlbumIdx = -1;
         if (albumId) {
@@ -9772,9 +9903,9 @@ class XTAPOMusicApp {
                 coverUrl: payload.album_cover || payload.track?.coverUrl || '',
                 tracks: payload.tracks
             };
-            this.setVirtualAlbum(virtualAlbum, trackIdx, true);
+            this.setVirtualAlbum(virtualAlbum, trackIdx, shouldPlay);
         } else if (targetAlbumIdx !== -1) {
-            this.loadAlbum(targetAlbumIdx, trackIdx, true);
+            this.loadAlbum(targetAlbumIdx, trackIdx, shouldPlay);
         } else if (payload.track) {
             const dummyAlbum = {
                 id: 'remote-stream',
@@ -9783,7 +9914,7 @@ class XTAPOMusicApp {
                 coverUrl: payload.track.coverUrl || '',
                 tracks: [payload.track]
             };
-            this.setVirtualAlbum(dummyAlbum, 0, true);
+            this.setVirtualAlbum(dummyAlbum, 0, shouldPlay);
         }
 
         if (seekTime > 0) {
@@ -10074,9 +10205,30 @@ class XTAPOMusicApp {
     }
 
     disconnectRemoteControl(showToastMsg = true) {
+        const remoteState = this._lastSyncPlaybackState;
+        const remoteContext = this._lastSyncPlaybackContext;
+        const transferPayload = remoteState && remoteState.track ? {
+            album_id: remoteState.album_id || (remoteContext && remoteContext.album_id),
+            album_title: remoteContext && remoteContext.album_title,
+            album_artist: remoteContext && remoteContext.album_artist,
+            album_cover: remoteContext && remoteContext.album_cover,
+            track_index: remoteState.track_index || 0,
+            track: remoteState.track,
+            tracks: remoteContext && Array.isArray(remoteContext.tracks) ? remoteContext.tracks : [remoteState.track],
+            seek_time: remoteState.current_time || 0,
+            is_playing: !!remoteState.is_playing
+        } : null;
+
         this.remoteTargetDeviceId = null;
         this.remoteTargetName = null;
         this.remoteTargetType = null;
+        this.syncActiveDeviceId = this.syncDeviceId;
+        this._claimLocalPlayback = true;
+
+        if (transferPayload) {
+            this.remoteExecutePlay(transferPayload);
+        }
+        this.sendSyncHeartbeat();
         this.renderDevicesList();
         if (showToastMsg) {
             this.showToast('🎧 Đã chuyển chế độ phát âm thanh về máy này.');
@@ -10097,9 +10249,13 @@ class XTAPOMusicApp {
             });
             const data = await res.json();
             if (res.ok && data.status === 'success') {
+                if (data.pair_token) {
+                    this.syncPairToken = data.pair_token;
+                    try { localStorage.setItem('xtapo_sync_pair_token', data.pair_token); } catch(e) {}
+                }
                 this.showToast(`✅ Đã ghép nối mã PIN ${code} thành công! Đang đồng bộ...`);
                 if (this.pairCodeInput) this.pairCodeInput.value = '';
-                this.initMusicSync();
+                await this.sendSyncHeartbeat();
             } else {
                 this.showToast(data.detail || data.message || 'Mã PIN không đúng hoặc đã hết hạn.');
             }

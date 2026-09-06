@@ -149,6 +149,18 @@ public class MainActivity extends AppCompatActivity {
                 XTMediaBrowserService.instance.updateTrack(title, artist, album, coverUrl, isPlaying == 1);
             }
         }
+
+        @android.webkit.JavascriptInterface
+        public void setPullToRefreshEnabled(boolean enabled) {
+            runOnUiThread(() -> {
+                if (swipeRefresh != null) {
+                    if (!enabled && swipeRefresh.isRefreshing()) {
+                        swipeRefresh.setRefreshing(false);
+                    }
+                    swipeRefresh.setEnabled(enabled);
+                }
+            });
+        }
     }
 
     private void initViews() {
@@ -474,6 +486,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isAndroidTvDevice() {
+        // Hai APK được build riêng theo flavor. Ưu tiên flavor để mỗi bản luôn
+        // dùng đúng giao diện, kể cả khi sideload lên thiết bị khác loại.
+        if ("tv".equals(BuildConfig.APP_TARGET)) {
+            return true;
+        }
+        if ("phone".equals(BuildConfig.APP_TARGET)) {
+            return false;
+        }
+
         try {
             UiModeManager uiModeManager = (UiModeManager) getSystemService(Context.UI_MODE_SERVICE);
             if (uiModeManager != null && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION) {
