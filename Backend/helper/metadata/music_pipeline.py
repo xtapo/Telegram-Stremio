@@ -301,7 +301,56 @@ class MusicMetadataPipeline:
             self._remember(doc)
             return _public_doc(doc)
 
-    async def save_many(self, items: Iterable[dict]) -> int:
+    async def save_many(self, items: Iterable[dict], batch_size: int = 500) -> int:
+        """Lưu metadata theo batch giới hạn để tránh nhân RAM với thư viện lớn."""
+        batch_size = max(50, min(1000, int(batch_size or 500)))
+        coll = self._collection()
+        if coll is not None and UpdateOne is not None:
+            await self._ensure_indexes()
+
+        async def flush_docs(docs: list[dict]) -> int:
+            if not docs:
+                return 0
+
+            if coll is None or UpdateOne is None:
+                accepted_count = 0
+                for doc in docs:
+                    existing = self._memory_track.get(doc["_id"])
+                    if existing and existing.get("manual_override") and not doc.get("manual_override"):
+                        continue
+                    self._remember(doc)
+                    accepted_count += 1
+                return accepted_count
+
+            try:
+                ids = [doc["_id"] for doc in docs]
+                protected = {
+                    d["_id"]
+                    async for d in coll.find({"_id": {"$in": ids}, "manual_override": True}, {"_id": 1})
+                }
+                protected.update(
+                    key
+                    for key in ids
+                    if self._memory_track.get(key, {}).get("manual_override")
+                )
+                ops = []
+                accepted_docs = []
+                for doc in docs:
+                    if doc["_id"] in protected and not doc.get("manual_override"):
+                        continue
+                    update_doc = {k: v for k, v in doc.items() if k != "_id"}
+                    ops.append(UpdateOne({"_id": doc["_id"]}, {"$set": update_doc}, upsert=True))
+                    accepted_docs.append(doc)
+                if ops:
+                    await coll.bulk_write(ops, ordered=False)
+                for doc in accepted_docs:
+                    self._remember(doc)
+                return len(accepted_docs)
+            except Exception as exc:
+                LOGGER.warning(f"[MUSIC META CACHE] Batch save failed: {exc}")
+                return 0
+
+        accepted_total = 0
         docs = []
         for item in items:
             doc = self._build_doc(
@@ -313,49 +362,16 @@ class MusicMetadataPipeline:
                 source=item.get("metadata_source") or item.get("metadataSource") or item.get("source") or "",
                 manual_override=bool(item.get("manual_override") or item.get("manualOverride")),
             )
-            if doc:
-                docs.append(doc)
-        if not docs:
-            return 0
+            if not doc:
+                continue
+            docs.append(doc)
+            if len(docs) >= batch_size:
+                accepted_total += await flush_docs(docs)
+                docs = []
 
-        coll = self._collection()
-        if coll is None or UpdateOne is None:
-            accepted = 0
-            for doc in docs:
-                existing = self._memory_track.get(doc["_id"])
-                if existing and existing.get("manual_override") and not doc.get("manual_override"):
-                    continue
-                self._remember(doc)
-                accepted += 1
-            return accepted
-        await self._ensure_indexes()
-        try:
-            ids = [doc["_id"] for doc in docs]
-            protected = {
-                d["_id"]
-                async for d in coll.find({"_id": {"$in": ids}, "manual_override": True}, {"_id": 1})
-            }
-            protected.update(
-                key
-                for key in ids
-                if self._memory_track.get(key, {}).get("manual_override")
-            )
-            ops = []
-            accepted = []
-            for doc in docs:
-                if doc["_id"] in protected and not doc.get("manual_override"):
-                    continue
-                update_doc = {k: v for k, v in doc.items() if k != "_id"}
-                ops.append(UpdateOne({"_id": doc["_id"]}, {"$set": update_doc}, upsert=True))
-                accepted.append(doc)
-            if ops:
-                await coll.bulk_write(ops, ordered=False)
-            for doc in accepted:
-                self._remember(doc)
-            return len(accepted)
-        except Exception as exc:
-            LOGGER.warning(f"[MUSIC META CACHE] Batch save failed: {exc}")
-            return 0
+        if docs:
+            accepted_total += await flush_docs(docs)
+        return accepted_total
 
 
 music_metadata_pipeline = MusicMetadataPipeline()

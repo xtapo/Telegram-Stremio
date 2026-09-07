@@ -984,10 +984,32 @@ def _get_legacy_collection():
         return db.dbs["tracking"]["music_library"]
     return None
 
+def _serialize_albums_json(albums: list) -> bytes:
+    """Serialize thư viện một lần để tái sử dụng cho cache/gzip."""
+    return json.dumps(albums, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
 def _compress_albums(albums: list) -> bytes:
-    """Nén danh sách albums thành gzip binary để lưu trữ siêu nhẹ trên MongoDB."""
-    json_bytes = json.dumps(albums, ensure_ascii=False).encode("utf-8")
-    return gzip.compress(json_bytes, compresslevel=6)
+    """Nén thư viện với mức CPU thấp để không làm nghẽn máy khi scan kết thúc."""
+    try:
+        level = max(1, min(6, int(os.environ.get("MUSIC_LIBRARY_GZIP_LEVEL", "1"))))
+    except (TypeError, ValueError):
+        level = 1
+    return gzip.compress(_serialize_albums_json(albums), compresslevel=level)
+
+
+def _write_library_cache_files(albums: list) -> None:
+    """Ghi cache JSON ngoài event loop, chỉ serialize một lần cho cả hai path."""
+    payload = _serialize_albums_json(albums)
+    for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "wb") as f:
+                f.write(payload)
+            os.replace(tmp_path, path)
+        except Exception as e:
+            LOGGER.error(f"[MUSIC] Failed to write cache to {path}: {e}")
 
 def _decompress_albums(compressed: bytes) -> list:
     """Giải nén gzip binary thành danh sách albums gốc trong RAM."""
@@ -1027,7 +1049,7 @@ async def _save_compressed_mongo_library(albums: list, force: bool = False):
             except Exception as e:
                 LOGGER.warning(f"[MUSIC DB] Không thể kiểm tra album_count hiện tại: {e}")
 
-        compressed_bytes = _compress_albums(albums)
+        compressed_bytes = await asyncio.to_thread(_compress_albums, albums)
         total_tracks = sum(len(a.get("tracks", [])) for a in albums)
         doc_payload = {
             "compressed_data": compressed_bytes,
@@ -1380,14 +1402,9 @@ async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remot
     except Exception:
         pass
 
-    # 1. Ghi file cache cục bộ (cả thư mục data và legacy path)
-    for path in [LIBRARY_CACHE_FILE, LEGACY_LIBRARY_CACHE_FILE]:
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(albums, f, ensure_ascii=False)
-        except Exception as e:
-            LOGGER.error(f"[MUSIC] Failed to write cache to {path}: {e}")
+    # 1. Ghi file cache cục bộ ngoài event loop. Thư viện lớn trước đây bị
+    # json.dump() hai lần ngay trong FastAPI nên có thể làm server đứng hình.
+    await asyncio.to_thread(_write_library_cache_files, albums)
 
     if not sync_remote:
         return
@@ -1403,7 +1420,7 @@ async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remot
                 await coll.delete_many({})
                 if albums:
                     seen_ids = set()
-                    docs_to_insert = []
+                    batch = []
                     for idx, alb in enumerate(albums):
                         album_id = (alb.get("id") or "").strip()
                         if not album_id:
@@ -1418,11 +1435,17 @@ async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remot
                             alb["id"] = album_id
                         seen_ids.add(album_id)
 
-                        album_doc = {**alb, "_id": album_id}
-                        docs_to_insert.append(album_doc)
+                        batch.append({**alb, "_id": album_id})
+                        if len(batch) < 100:
+                            continue
+                        try:
+                            await coll.insert_many(batch, ordered=False)
+                        except Exception as e:
+                            if "duplicate" not in str(e).lower() and "E11000" not in str(e):
+                                LOGGER.warning(f"[MUSIC DB] Save batch warning: {e}")
+                        batch = []
 
-                    for i in range(0, len(docs_to_insert), 100):
-                        batch = docs_to_insert[i:i+100]
+                    if batch:
                         try:
                             await coll.insert_many(batch, ordered=False)
                         except Exception as e:
@@ -1433,9 +1456,14 @@ async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remot
             except Exception as e:
                 LOGGER.warning(f"[MUSIC DB] Could not save to per-album collection: {e}")
 
-        # 4. Đồng thời cập nhật legacy document để backward compatibility
+        # 4. Legacy single-document rất nặng với thư viện lớn vì PyMongo phải
+        # BSON-encode toàn bộ albums thêm một lần. App hiện đọc Gzip/per-album
+        # trước, nên chỉ ghi legacy khi người vận hành chủ động bật lại.
         coll_old = _get_legacy_collection()
-        if coll_old is not None:
+        write_legacy = os.environ.get("MUSIC_WRITE_LEGACY_LIBRARY", "0").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        if coll_old is not None and write_legacy:
             try:
                 await coll_old.update_one(
                     {"_id": "telegram_music_library"},
@@ -2266,7 +2294,14 @@ class MusicScanManager:
                 self._target_messages = scan_count
                 self._log(f"Quét dải ID tin nhắn #{scan_from} -> #{scan_to} (Tổng {scan_count} tin nhắn)...")
 
-                batch_size = 50
+                try:
+                    batch_size = max(10, min(50, int(os.environ.get("MUSIC_SCAN_BATCH_SIZE", "25"))))
+                except (TypeError, ValueError):
+                    batch_size = 25
+                try:
+                    scan_track_delay = max(0.0, min(1.0, float(os.environ.get("MUSIC_SCAN_TRACK_DELAY", "0.05"))))
+                except (TypeError, ValueError):
+                    scan_track_delay = 0.05
                 for batch_start in range(scan_from, scan_to + 1, batch_size):
                     if self._cancel_requested:
                         break
@@ -2549,6 +2584,8 @@ class MusicScanManager:
                             })
                             channel_tracks_found += 1
                             self._found_tracks_count = len(all_scanned_tracks)
+                            if scan_track_delay > 0:
+                                await asyncio.sleep(scan_track_delay)
                         except Exception:
                             continue
 
@@ -2573,7 +2610,9 @@ class MusicScanManager:
                 self._end_time = time.time()
                 return
 
-            self._log(f"Quét hoàn tất! Tìm thấy tổng cộng {len(all_scanned_tracks)} bài hát.")
+            self._log(f"Quét Telegram hoàn tất! Tìm thấy {len(all_scanned_tracks)} bài. Đang tổng hợp thư viện...")
+            self._current_track = "Đang tổng hợp thư viện..."
+            finalize_started = time.time()
 
             existing_tracks = []
             if mode == "append":
@@ -2611,17 +2650,21 @@ class MusicScanManager:
                     self._log(f"Không thể đọc thư viện cũ: {e}")
 
             combined_pool = existing_tracks + all_scanned_tracks
-            combined_pool, dup_removed = deduplicate_tracks(combined_pool)
+            combined_pool, dup_removed = await asyncio.to_thread(deduplicate_tracks, combined_pool)
             self._duplicates_removed = dup_removed
 
-            # Group into Albums
+            # Group into Albums + thống kê trong một lượt. Trước đây vòng final
+            # lại lọc toàn bộ combined_pool cho từng album (O(album * track)),
+            # gây CPU tăng vọt khi thư viện lớn.
             albums_dict = {}
-            for tr in combined_pool:
+            album_stats = {}
+            for tr_idx, tr in enumerate(combined_pool, start=1):
                 alb_name = tr["album"]
                 if alb_name not in albums_dict:
                     color_preset = GLOW_PRESETS[len(albums_dict) % len(GLOW_PRESETS)]
+                    album_id = generate_album_id(alb_name, tr["artist"], tr.get("year") or "")
                     albums_dict[alb_name] = {
-                        "id": generate_album_id(alb_name, tr["artist"], tr.get("year") or ""),
+                        "id": album_id,
                         "title": alb_name.upper(),
                         "artist": tr["artist"].upper(),
                         "year": tr.get("year") or time.strftime("%Y"),
@@ -2633,7 +2676,16 @@ class MusicScanManager:
                         "glowColors": color_preset,
                         "tracks": []
                     }
+                    album_stats[album_id] = {
+                        "total_bytes": 0,
+                        "first_track": tr,
+                        "hires_track": None,
+                    }
                 alb_obj = albums_dict[alb_name]
+                stats = album_stats[alb_obj["id"]]
+                stats["total_bytes"] += int(tr.get("size_bytes", 0) or 0)
+                if stats["hires_track"] is None and tr.get("qualityTier") == "hi-res":
+                    stats["hires_track"] = tr
                 alb_obj["tracks"].append({
                     "id": len(alb_obj["tracks"]) + 1,
                     "name": tr["title"],
@@ -2657,19 +2709,21 @@ class MusicScanManager:
                     "country": tr.get("country") or detect_country_from_track_info(tr),
                     "isShazam": bool(tr.get("isShazam", False))
                 })
+                if tr_idx % 1000 == 0:
+                    await asyncio.sleep(0)
 
             final_albums = list(albums_dict.values())
-            for alb in final_albums:
-                alb_tracks = [t for t in combined_pool if t["album"].upper() == alb["title"]]
-                total_b = sum(t.get("size_bytes", 0) for t in alb_tracks)
-                alb["totalSize"] = _format_size(total_b)
-                hires_t = next((t for t in alb_tracks if t.get("qualityTier") == "hi-res"), None)
+            for alb_idx, alb in enumerate(final_albums, start=1):
+                stats = album_stats.get(alb.get("id"), {})
+                alb["totalSize"] = _format_size(int(stats.get("total_bytes", 0) or 0))
+                hires_t = stats.get("hires_track")
+                first_t = stats.get("first_track")
                 if hires_t:
                     alb["format"] = hires_t["format"]
                     alb["qualityTier"] = "hi-res"
-                elif alb_tracks:
-                    alb["format"] = alb_tracks[0]["format"]
-                    alb["qualityTier"] = alb_tracks[0].get("qualityTier", "lossless")
+                elif first_t:
+                    alb["format"] = first_t["format"]
+                    alb["qualityTier"] = first_t.get("qualityTier", "lossless")
                 
                 # Assign country to album
                 alb["country"] = detect_country_from_track_info({"name": alb.get("title", ""), "artist": alb.get("artist", ""), "album": alb.get("title", "")})
@@ -2678,14 +2732,25 @@ class MusicScanManager:
                     if "/api/music/cover/" in t.get("coverUrl", ""):
                         alb["coverUrl"] = t["coverUrl"]
                         break
+                if alb_idx % 250 == 0:
+                    await asyncio.sleep(0)
 
             # Lưu vào MongoDB và file JSON
+            self._log(
+                f"Tổng hợp xong {len(final_albums)} album trong "
+                f"{time.time() - finalize_started:.1f}s. Đang lưu cache/database..."
+            )
+            self._current_track = "Đang lưu thư viện..."
+            save_started = time.time()
             await _db_save_library(final_albums)
             await music_metadata_pipeline.save_many(combined_pool)
 
             self._status = "completed"
             self._end_time = time.time()
-            self._log(f"Đã lưu thành công {len(final_albums)} albums ({len(combined_pool)} bài hát) vào thư viện.")
+            self._log(
+                f"Đã lưu {len(final_albums)} albums ({len(combined_pool)} bài) trong "
+                f"{time.time() - save_started:.1f}s."
+            )
         except asyncio.CancelledError:
             self._status = "cancelled"
             self._end_time = time.time()

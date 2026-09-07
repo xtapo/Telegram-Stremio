@@ -1,5 +1,6 @@
 import asyncio
 import re
+import unicodedata
 import urllib.parse
 import httpx
 from difflib import SequenceMatcher
