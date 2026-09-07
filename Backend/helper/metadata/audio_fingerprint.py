@@ -2,6 +2,7 @@ import io
 import os
 import re
 import json
+import hashlib
 import shutil
 import asyncio
 import tempfile
@@ -483,6 +484,86 @@ def _read_embedded_metadata_file(file_path: str) -> dict:
     return tags
 
 
+def _embedded_metadata_result(tags: dict) -> Optional[dict]:
+    """Return a trusted identity when embedded tags contain enough information."""
+    if not tags or not tags.get("title") or not (tags.get("artist") or tags.get("album")):
+        return None
+    title = str(tags.get("title") or "").strip()
+    artist = str(tags.get("artist") or "").strip()
+    album = str(tags.get("album") or "").strip()
+    genre = str(tags.get("genre") or "").strip()
+    if len(title) < 2 or any(token in title.lower() for token in ["http", "t.me", "@"]):
+        return None
+    return {
+        "title": title,
+        "artist": artist or "Unknown Artist",
+        "album": album or f"{title} - Single",
+        "cover_url": "",
+        "genre": genre,
+        "year": str(tags.get("year") or "").strip(),
+        "confidence": 0.98,
+        "layer": "Embedded File Tags",
+        "source": "embedded",
+    }
+
+
+def compute_local_audio_fingerprint(file_path: str) -> str:
+    """Create a reusable local fingerprint without requiring an external service.
+
+    Chromaprint/fpcalc is preferred when installed. Otherwise a SHA-256 digest
+    of a normalized PCM sample is used, which still catches identical audio
+    files and repeated Telegram uploads deterministically.
+    """
+    if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
+        return ""
+
+    fpcalc = shutil.which("fpcalc")
+    if fpcalc:
+        try:
+            proc = subprocess.run(
+                [fpcalc, "-json", "-length", "120", file_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=15,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                payload = json.loads(proc.stdout)
+                raw = payload.get("fingerprint")
+                if raw:
+                    if isinstance(raw, list):
+                        raw = ",".join(str(v) for v in raw)
+                    digest = hashlib.sha256(str(raw).encode("utf-8")).hexdigest()
+                    return f"chromaprint:{digest}"
+        except Exception as exc:
+            LOGGER.debug(f"[MUSIC FINGERPRINT] fpcalc failed: {exc}")
+
+    temp_path = None
+    try:
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        temp_path = tmp.name
+        tmp.close()
+        if not _extract_normalized_segment(file_path, temp_path, 0.0, 30.0):
+            return ""
+        digest = hashlib.sha256()
+        with open(temp_path, "rb") as fh:
+            while True:
+                chunk = fh.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return f"pcm16k:{digest.hexdigest()}"
+    except Exception as exc:
+        LOGGER.debug(f"[MUSIC FINGERPRINT] normalized hash failed: {exc}")
+        return ""
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+
 def _normalize_manual_match_text(value: str) -> str:
     """Chuẩn hóa title/artist để so khớp các kết quả Shazam giữa nhiều đoạn nghe."""
     text = str(value or "").casefold().strip()
@@ -814,10 +895,9 @@ async def recognize_audio_from_telegram(
     hint_album: str = None,
 ) -> dict:
     """
-    Nhận diện âm thanh đa phân đoạn (Multi-Segment Audio Fingerprinting):
-    - Lớp 1: Shazam qua các phân đoạn âm thanh vàng chuẩn hóa Mono 16kHz 16-bit (Điệp khúc, Verse, Pre-Chorus)
-    - Lớp 2: Trích xuất trực tiếp thẻ metadata gốc nhúng (ID3v2, RIFF INFO, Vorbis) qua ffprobe và parser nhúng
-    - Lớp 3: Tra cứu trực tuyến thông minh Apple Music & Deezer từ gợi ý & tên tệp
+    Nhận diện theo pipeline: embedded tags -> local fingerprint cache -> Shazam
+    -> Apple Music/Deezer fallback. Filename/caption parsing is performed by
+    the caller before entering this expensive audio stage.
     Tự động tận dụng tối đa Local File, Local Cache hoặc xoay vòng Bot Pool Telegram để tải mẫu audio đầy đủ.
     """
     target_chat_id = chat_id or getattr(getattr(message, "chat", None), "id", None)
@@ -983,6 +1063,54 @@ async def recognize_audio_from_telegram(
         return None
 
     try:
+        # Lớp 1: metadata nhúng luôn được ưu tiên vì không cần gọi dịch vụ ngoài.
+        embedded_tags = _read_embedded_metadata_file(source_audio_path)
+        embedded_result = _embedded_metadata_result(embedded_tags)
+        if embedded_result and not is_manual:
+            LOGGER.info(
+                f"[EMBEDDED TAGS] Trích xuất thành công tag gốc: "
+                f"{embedded_result.get('artist')} - {embedded_result.get('title')}"
+            )
+            if log_callback:
+                log_callback("Đã nhận dạng từ metadata nhúng trong tệp.", "success")
+            return embedded_result
+
+        # Ở chế độ nhận dạng thủ công, embedded tags chỉ là bằng chứng/hint.
+        # Người dùng đã chủ động yêu cầu nhận dạng lại nên cần tiếp tục đến
+        # fingerprint/Shazam để có thể sửa các tag nhúng cũ hoặc sai.
+        if embedded_result and is_manual and log_callback:
+            log_callback(
+                "Đã đọc metadata nhúng; tiếp tục đối chiếu fingerprint/Shazam vì đây là lượt nhận dạng lại.",
+                "info",
+            )
+
+        # Lớp 2: fingerprint cục bộ, dùng lại metadata đã nhận dạng trước đây.
+        local_fingerprint = await asyncio.to_thread(compute_local_audio_fingerprint, source_audio_path)
+        if local_fingerprint and not is_manual:
+            try:
+                from Backend.helper.metadata.music_pipeline import music_metadata_pipeline
+
+                cached = await music_metadata_pipeline.get_cached(
+                    chat_id=target_chat_id,
+                    msg_id=target_msg_id,
+                    fingerprint=local_fingerprint,
+                )
+                if cached and cached.get("title"):
+                    LOGGER.info(
+                        f"[MUSIC FINGERPRINT] Cache hit: {cached.get('artist')} - {cached.get('title')}"
+                    )
+                    if log_callback:
+                        log_callback("Đã khớp fingerprint với metadata đã lưu trong MongoDB.", "success")
+                    return {
+                        **cached,
+                        "fingerprint": local_fingerprint,
+                        "manual_override": False,
+                        "layer": "Local Fingerprint Cache",
+                        "source": "fingerprint",
+                    }
+            except Exception as exc:
+                LOGGER.debug(f"[MUSIC FINGERPRINT] Cache lookup failed: {exc}")
+
         if not is_manual:
             # ══════════════════════════════════════════════════════════════════
             # CHẾ ĐỘ 1: QUÉT KÊNH TELEGRAM SIÊU TỐC (is_manual == False)
@@ -1002,6 +1130,8 @@ async def recognize_audio_from_telegram(
                 query_target = sample_w_path if (ok and os.path.exists(sample_w_path) and os.path.getsize(sample_w_path) > 4096) else source_audio_path
                 res = await _query_shazam_file(query_target, segment_name="Nhanh", log_callback=log_callback, timeout_sec=6.0)
                 if res:
+                    res["fingerprint"] = local_fingerprint
+                    res["confidence"] = 0.95
                     return res
             finally:
                 if os.path.exists(sample_w_path):
@@ -1010,26 +1140,7 @@ async def recognize_audio_from_telegram(
                     except Exception:
                         pass
 
-            # Lớp 2: Kiểm tra thẻ ID3 / FLAC Vorbis / RIFF gốc nhúng trong tệp (~10ms)
-            embedded_tags = _read_embedded_metadata_file(source_audio_path)
-            if embedded_tags.get("title") and (embedded_tags.get("artist") or embedded_tags.get("album")):
-                t_tit = embedded_tags["title"].strip()
-                t_art = embedded_tags.get("artist", "").strip()
-                t_alb = embedded_tags.get("album", "").strip()
-                t_gen = embedded_tags.get("genre", "").strip()
-                if len(t_tit) >= 2 and not any(k in t_tit.lower() for k in ["http", "t.me", "@"]):
-                    LOGGER.info(f"[EMBEDDED TAGS] Trích xuất thành công tag gốc: {t_art} - {t_tit}")
-                    return {
-                        "title": t_tit,
-                        "artist": t_art or "Unknown Artist",
-                        "album": t_alb or f"{t_tit} - Single",
-                        "cover_url": "",
-                        "genre": t_gen,
-                        "layer": "Thẻ ID3 Tệp Gốc",
-                        "source": "Embedded File Tags"
-                    }
-
-            LOGGER.info(f"[SHAZAM] Quét kênh nhanh không khớp vân tay/tag cho: {file_name}")
+            LOGGER.info(f"[SHAZAM] Quét kênh nhanh không khớp fingerprint/Shazam cho: {file_name}")
             return None
 
         # ══════════════════════════════════════════════════════════════════
@@ -1069,9 +1180,7 @@ async def recognize_audio_from_telegram(
 
         LOGGER.info(f"[SHAZAM] Thời lượng tệp mẫu phân tích: {round(total_sec, 1)}s")
 
-        # Đọc tag trước để dùng làm bằng chứng xác nhận chéo cho các kết quả Shazam.
-        # Tag chỉ được trả về như fallback nếu Shazam không đủ chắc chắn.
-        embedded_tags = _read_embedded_metadata_file(source_audio_path)
+        # embedded_tags đã được đọc trước fingerprint/Shazam ở đầu pipeline.
         manual_hints = {
             "title": hint_title or "",
             "artist": hint_artist or "",
@@ -1167,6 +1276,8 @@ async def recognize_audio_from_telegram(
                         log_callback=log_callback,
                     )
                     if selected:
+                        selected["fingerprint"] = local_fingerprint
+                        selected["confidence"] = max(float(selected.get("confidence") or 0), 0.95)
                         return selected
         finally:
             for item in prepared_windows:
@@ -1185,31 +1296,16 @@ async def recognize_audio_from_telegram(
             log_callback=log_callback,
         )
         if selected:
+            selected["fingerprint"] = local_fingerprint
+            selected["confidence"] = max(float(selected.get("confidence") or 0), 0.95)
             return selected
 
-        # ── LỚP 2: Trích xuất Thẻ Metadata Gốc (ID3v2, RIFF INFO, FLAC Vorbis) từ tệp ──
-        if log_callback:
-            log_callback("Shazam chưa khớp -> Lớp 2: Đang đọc Thẻ Tag ID3 / Metadata gốc nhúng trong tệp...", "info")
-        if embedded_tags.get("title") and (embedded_tags.get("artist") or embedded_tags.get("album")):
-            t_tit = embedded_tags["title"].strip()
-            t_art = embedded_tags.get("artist", "").strip()
-            t_alb = embedded_tags.get("album", "").strip()
-            t_gen = embedded_tags.get("genre", "").strip()
+        # Nếu Shazam không đủ chắc chắn thì embedded tags vẫn là fallback tin cậy.
+        if embedded_result:
+            embedded_result["fingerprint"] = local_fingerprint
+            return embedded_result
 
-            # Kiểm tra tính hợp lệ của tag (không phải tag rác quảng cáo)
-            if len(t_tit) >= 2 and not any(k in t_tit.lower() for k in ["http", "t.me", "@"]):
-                LOGGER.info(f"[EMBEDDED TAGS] Trích xuất thành công tag gốc: {t_art} - {t_tit}")
-                return {
-                    "title": t_tit,
-                    "artist": t_art or "Unknown Artist",
-                    "album": t_alb or f"{t_tit} - Single",
-                    "cover_url": "",
-                    "genre": t_gen,
-                    "layer": "Thẻ ID3 Tệp Gốc",
-                    "source": "Embedded File Tags"
-                }
-
-        # ── LỚP 3: Tra cứu Metadata trực tuyến (Apple Music & Deezer) từ Gợi ý & Tên Tệp ──
+        # ── LỚP 4: Tra cứu Metadata trực tuyến (Apple Music & Deezer) từ Gợi ý & Tên Tệp ──
         cand_queries = []
         if hint_title and hint_title not in ["Unknown", "Track 01", "Track 1"] and not re.match(r"^track\s*\d+$", hint_title, re.I):
             from Backend.helper.metadata.music_scraper import clean_audio_filename
@@ -1249,8 +1345,10 @@ async def recognize_audio_from_telegram(
                             "album": sc_res.get("album") or f"{sc_res['title']} - Single",
                             "cover_url": sc_res.get("cover_url", ""),
                             "genre": sc_res.get("genre", ""),
+                            "fingerprint": local_fingerprint,
+                            "confidence": 0.84,
                             "layer": "Apple Music & Deezer",
-                            "source": "Online Music Scraper"
+                            "source": "online"
                         }
                 except Exception as ex_sc:
                     LOGGER.debug(f"[ONLINE SCRAPER] Error: {ex_sc}")

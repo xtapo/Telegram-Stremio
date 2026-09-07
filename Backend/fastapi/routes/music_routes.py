@@ -28,6 +28,11 @@ from Backend.helper.music_cache import (
     PLAYBACK_WINDOW_TTL,
     smart_audio_cache,
 )
+from Backend.helper.metadata.music_pipeline import (
+    metadata_confidence,
+    music_metadata_pipeline,
+    normalize_metadata_source,
+)
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, Userbot, USERBOT_CLIENT_INDEX, multi_clients, work_loads, client_dc_map, client_failures
@@ -2304,6 +2309,7 @@ class MusicScanManager:
                                 continue
                             f_name = getattr(media, "file_name", "") or ""
                             m_type = getattr(media, "mime_type", "") or ""
+                            file_unique_id = str(getattr(media, "file_unique_id", "") or "")
                             is_audio = bool(audio_obj) or m_type.startswith("audio/") or f_name.lower().endswith(audio_extensions)
                             if not is_audio:
                                 continue
@@ -2373,9 +2379,42 @@ class MusicScanManager:
                             final_album = default_album or raw_album or p_alb or ctx_album or chat_title or "Telegram Music Collection"
                             final_title = p_tit or raw_title or os.path.splitext(f_name)[0] or f"Track {msg.id}"
 
+                            identity_source = "embedded" if raw_title and raw_artist else "filename"
+                            identity_confidence = metadata_confidence(identity_source)
+                            manual_override = False
+                            local_fingerprint = ""
+                            cached_year = ""
                             fingerprint_cover = None
                             fingerprint_genre = None
-                            if final_artist == "Unknown Artist" or final_title.lower().startswith("track") or final_title.lower().startswith("audio") or "track" in f_name.lower():
+
+                            # Persistent cache is checked before any network/audio recognition.
+                            cached_meta = await music_metadata_pipeline.get_cached(
+                                chat_id=resolved_chat_id,
+                                msg_id=msg.id,
+                                file_unique_id=file_unique_id,
+                            )
+                            if cached_meta and cached_meta.get("title"):
+                                final_title = cached_meta.get("title") or final_title
+                                final_artist = cached_meta.get("artist") or final_artist
+                                final_album = cached_meta.get("album") or final_album
+                                fingerprint_cover = cached_meta.get("cover_url") or None
+                                fingerprint_genre = cached_meta.get("genre") or None
+                                cached_year = str(cached_meta.get("year") or "")
+                                local_fingerprint = str(cached_meta.get("fingerprint") or "")
+                                identity_source = normalize_metadata_source(cached_meta.get("source"))
+                                identity_confidence = metadata_confidence(
+                                    identity_source,
+                                    cached_meta.get("confidence"),
+                                )
+                                manual_override = bool(cached_meta.get("manual_override"))
+
+                            needs_audio_identity = (
+                                final_artist == "Unknown Artist"
+                                or final_title.lower().startswith("track")
+                                or final_title.lower().startswith("audio")
+                                or "track" in f_name.lower()
+                            )
+                            if not cached_meta and needs_audio_identity:
                                 fg_res = await recognize_audio_from_telegram(
                                     client=client,
                                     message=msg,
@@ -2393,6 +2432,12 @@ class MusicScanManager:
                                     final_album = fg_res.get("album") or final_album
                                     fingerprint_cover = fg_res.get("cover_url")
                                     fingerprint_genre = fg_res.get("genre")
+                                    local_fingerprint = str(fg_res.get("fingerprint") or "")
+                                    identity_source = normalize_metadata_source(fg_res.get("source"))
+                                    identity_confidence = metadata_confidence(
+                                        identity_source,
+                                        fg_res.get("confidence"),
+                                    )
 
                             audio_fmt, q_tier, calc_br = detect_audio_quality(
                                 file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
@@ -2403,7 +2448,7 @@ class MusicScanManager:
                             fallback_cover = fingerprint_cover or (f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop")
 
                             scraped_meta = None
-                            if auto_scrape:
+                            if auto_scrape and not cached_meta and not manual_override:
                                 scraped_meta = await fetch_music_metadata(
                                     raw_title=final_title,
                                     raw_artist=final_artist,
@@ -2415,9 +2460,24 @@ class MusicScanManager:
                                 )
 
                             if scraped_meta:
-                                t_title = scraped_meta.get("title") or final_title
-                                t_artist = scraped_meta.get("artist") or final_artist
-                                t_album = scraped_meta.get("album") or final_album
+                                online_confidence = metadata_confidence("online")
+                                # Dịch vụ online chỉ được thay identity khi bằng chứng hiện tại yếu hơn.
+                                # Với embedded/fingerprint/Shazam, online chỉ làm giàu cover/year/genre.
+                                if identity_confidence <= online_confidence:
+                                    t_title = scraped_meta.get("title") or final_title
+                                    t_artist = scraped_meta.get("artist") or final_artist
+                                    t_album = scraped_meta.get("album") or final_album
+                                    identity_source = normalize_metadata_source(
+                                        scraped_meta.get("source") or "online"
+                                    )
+                                    identity_confidence = metadata_confidence(
+                                        identity_source,
+                                        scraped_meta.get("confidence"),
+                                    )
+                                else:
+                                    t_title = final_title
+                                    t_artist = final_artist
+                                    t_album = final_album
                                 t_cover = scraped_meta.get("cover_url") or fallback_cover
                                 t_year = scraped_meta.get("year", time.strftime("%Y"))
                                 t_pub = scraped_meta.get("publisher", f"Telegram: {chat_title}")
@@ -2429,7 +2489,7 @@ class MusicScanManager:
                                 t_artist = final_artist
                                 t_album = final_album
                                 t_cover = fallback_cover
-                                t_year = time.strftime("%Y")
+                                t_year = cached_year or time.strftime("%Y")
                                 t_pub = f"Telegram: {chat_title}"
                                 t_genre = fingerprint_genre or ""
                                 t_country = ""
@@ -2464,6 +2524,12 @@ class MusicScanManager:
                                 "bitrate": calc_br,
                                 "audioProbe": audio_probe,
                                 "file_name": f_name,
+                                "file_unique_id": file_unique_id,
+                                "fingerprint": local_fingerprint,
+                                "metadata_source": identity_source,
+                                "metadata_confidence": identity_confidence,
+                                "manual_override": manual_override,
+                                "isShazam": identity_source == "shazam",
                                 "cover_url": t_cover,
                                 "year": t_year,
                                 "publisher": t_pub,
@@ -2511,6 +2577,11 @@ class MusicScanManager:
                                 "bitrate": t.get("bitrate", "Lossless"),
                                 "audioProbe": t.get("audioProbe") if isinstance(t.get("audioProbe"), dict) else {},
                                 "file_name": "",
+                                "file_unique_id": t.get("fileUniqueId", ""),
+                                "fingerprint": t.get("fingerprint", ""),
+                                "metadata_source": t.get("metadataSource", "unknown"),
+                                "metadata_confidence": t.get("metadataConfidence", 0.5),
+                                "manual_override": bool(t.get("manualOverride", False)),
                                 "cover_url": t.get("coverUrl", a.get("coverUrl", "")),
                                 "year": a.get("year", "2026"),
                                 "publisher": a.get("publisher", ""),
@@ -2557,6 +2628,11 @@ class MusicScanManager:
                     "previewUrl": tr["stream_url"],
                     "chatId": tr["chat_id"],
                     "msgId": tr["msg_id"],
+                    "fileUniqueId": tr.get("file_unique_id", ""),
+                    "fingerprint": tr.get("fingerprint", ""),
+                    "metadataSource": tr.get("metadata_source", "unknown"),
+                    "metadataConfidence": tr.get("metadata_confidence", 0.5),
+                    "manualOverride": bool(tr.get("manual_override", False)),
                     "coverUrl": tr["cover_url"],
                     "genre": tr.get("genre") or detect_genre_from_track_info(tr),
                     "country": tr.get("country") or detect_country_from_track_info(tr),
@@ -2586,6 +2662,7 @@ class MusicScanManager:
 
             # Lưu vào MongoDB và file JSON
             await _db_save_library(final_albums)
+            await music_metadata_pipeline.save_many(combined_pool)
 
             self._status = "completed"
             self._end_time = time.time()
@@ -3334,13 +3411,19 @@ async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
 
     try:
         target_track = None
+        target_album = None
         for a in albums:
             for t in a.get("tracks", []):
                 if int(t.get("chatId", 0)) == chat_id and int(t.get("msgId", 0)) == msg_id:
                     target_track = t
+                    target_album = a
                     if new_title: t["name"] = new_title
                     if new_artist: t["artist"] = new_artist
                     if new_cover: t["coverUrl"] = new_cover
+                    t["metadataSource"] = "manual"
+                    t["metadataConfidence"] = 1.0
+                    t["manualOverride"] = True
+                    t["isShazam"] = False
                     break
             if target_track:
                 break
@@ -3370,9 +3453,24 @@ async def edit_music_track(payload: dict, _: bool = Depends(require_auth)):
                 albums.append(dest_album)
 
             dest_album["tracks"].append(target_track)
+            target_album = dest_album
 
         albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
         await _db_save_library(albums)
+        await music_metadata_pipeline.save(
+            {
+                **target_track,
+                "album": (target_album or {}).get("title", new_album),
+                "year": (target_album or {}).get("year", ""),
+            },
+            chat_id=chat_id,
+            msg_id=msg_id,
+            file_unique_id=target_track.get("fileUniqueId", ""),
+            fingerprint=target_track.get("fingerprint", ""),
+            source="manual",
+            manual_override=True,
+            force=True,
+        )
 
         return JSONResponse(content={"status": "success", "message": "Đã cập nhật thông tin bài hát", "albums": albums})
     except Exception as e:
@@ -3407,7 +3505,24 @@ async def edit_music_album(payload: dict, _: bool = Depends(require_auth)):
         if new_cover: target_album["coverUrl"] = new_cover
         if new_year: target_album["year"] = new_year
 
+        manual_items = []
+        for t in target_album.get("tracks", []):
+            t["metadataSource"] = "manual"
+            t["metadataConfidence"] = 1.0
+            t["manualOverride"] = True
+            t["isShazam"] = False
+            manual_items.append({
+                **t,
+                "album": target_album.get("title", ""),
+                "year": target_album.get("year", ""),
+                "cover_url": t.get("coverUrl") or target_album.get("coverUrl", ""),
+                "metadata_source": "manual",
+                "metadata_confidence": 1.0,
+                "manual_override": True,
+            })
+
         await _db_save_library(albums)
+        await music_metadata_pipeline.save_many(manual_items)
         return JSONResponse(content={"status": "success", "message": "Đã cập nhật thông tin album", "albums": albums})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -3443,6 +3558,10 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
                 if key in id_set:
                     if new_artist: t["artist"] = new_artist
                     if new_cover: t["coverUrl"] = new_cover
+                    t["metadataSource"] = "manual"
+                    t["metadataConfidence"] = 1.0
+                    t["manualOverride"] = True
+                    t["isShazam"] = False
                     matched_tracks.append(t)
 
         if new_album and matched_tracks:
@@ -3481,7 +3600,22 @@ async def bulk_edit_music_tracks(payload: dict, _: bool = Depends(require_auth))
                         if new_artist: a["artist"] = new_artist.upper()
 
         albums = [a for a in albums if a.get("tracks") and len(a["tracks"]) > 0]
+        manual_items = []
+        for a in albums:
+            for t in a.get("tracks", []):
+                key = (int(t.get("chatId", 0)), int(t.get("msgId", 0)))
+                if key in id_set:
+                    manual_items.append({
+                        **t,
+                        "album": a.get("title", ""),
+                        "year": a.get("year", ""),
+                        "cover_url": t.get("coverUrl") or a.get("coverUrl", ""),
+                        "metadata_source": "manual",
+                        "metadata_confidence": 1.0,
+                        "manual_override": True,
+                    })
         await _db_save_library(albums)
+        await music_metadata_pipeline.save_many(manual_items)
 
         return JSONResponse(content={
             "status": "success",
@@ -3622,7 +3756,7 @@ class MusicShazamManager:
         self._start_time = time.time()
         self._end_time = None
 
-        self._add_log(f"Bắt đầu nhận diện Đa Lớp cho {self._total} bài hát (Shazam đa mẫu toàn thời lượng + xác nhận ID3 + Apple Music & Deezer)...", "info")
+        self._add_log(f"Bắt đầu nhận diện Đa Lớp cho {self._total} bài hát (Embedded tags + fingerprint cache + Shazam đa mẫu + Apple Music & Deezer)...", "info")
         self._task = asyncio.create_task(self._run_worker(tracks))
         return {"ok": True, "message": f"Đã bắt đầu nhận diện {self._total} bài hát."}
 
@@ -3722,12 +3856,21 @@ class MusicShazamManager:
 
                 if fg_res:
                     matched_layer = fg_res.get("layer", "Đa Lớp")
-                    is_audio_shazam = matched_layer.startswith("Shazam")
+                    recognized_source = normalize_metadata_source(fg_res.get("source"))
+                    recognized_confidence = metadata_confidence(
+                        recognized_source,
+                        fg_res.get("confidence"),
+                    )
+                    is_audio_shazam = recognized_source == "shazam"
                     update_fields = {}
                     if fg_res.get("title"): update_fields["name"] = fg_res["title"]
                     if fg_res.get("artist"): update_fields["artist"] = fg_res["artist"]
                     if fg_res.get("album"): update_fields["album"] = fg_res["album"]
                     if fg_res.get("cover_url"): update_fields["coverUrl"] = fg_res["cover_url"]
+                    if fg_res.get("fingerprint"): update_fields["fingerprint"] = fg_res["fingerprint"]
+                    update_fields["metadataSource"] = recognized_source
+                    update_fields["metadataConfidence"] = recognized_confidence
+                    update_fields["manualOverride"] = False
                     update_fields["isShazam"] = is_audio_shazam
 
                     if update_fields:
@@ -3767,6 +3910,27 @@ class MusicShazamManager:
                                 break
                         if updated:
                             self._success_count += 1
+                            await music_metadata_pipeline.save(
+                                {
+                                    **(curr_track or {}),
+                                    "title": fg_res.get("title") or (curr_track or {}).get("name", ""),
+                                    "artist": fg_res.get("artist") or (curr_track or {}).get("artist", ""),
+                                    "album": fg_res.get("album") or (curr_album or {}).get("title", ""),
+                                    "cover_url": fg_res.get("cover_url") or (curr_track or {}).get("coverUrl", ""),
+                                    "genre": fg_res.get("genre") or (curr_track or {}).get("genre", ""),
+                                    "fingerprint": fg_res.get("fingerprint") or (curr_track or {}).get("fingerprint", ""),
+                                    "metadata_source": recognized_source,
+                                    "metadata_confidence": recognized_confidence,
+                                    "manual_override": False,
+                                },
+                                chat_id=chat_id_int,
+                                msg_id=msg_id_int,
+                                file_unique_id=(curr_track or {}).get("fileUniqueId", ""),
+                                fingerprint=fg_res.get("fingerprint") or (curr_track or {}).get("fingerprint", ""),
+                                source=recognized_source,
+                                manual_override=False,
+                                force=True,
+                            )
                             genre_str = f" [{fg_res.get('genre')}]" if fg_res.get('genre') else ""
                             self._add_log(f"✅ #{idx} [{matched_layer}] {fg_res.get('title')} - {fg_res.get('artist')}{genre_str}", "success")
                 else:
