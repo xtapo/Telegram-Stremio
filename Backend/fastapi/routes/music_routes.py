@@ -21,6 +21,11 @@ from fastapi.responses import StreamingResponse
 from Backend import db
 from pyrogram.errors import AuthBytesInvalid, FloodWait
 from Backend.helper.custom_dl import ByteStreamer, get_client_dc_lock
+from Backend.helper.music_cache import (
+    BLOCK_SIZE as AUDIO_CACHE_BLOCK_SIZE,
+    PLAYBACK_WINDOW_TTL,
+    smart_audio_cache,
+)
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, Userbot, USERBOT_CLIENT_INDEX, multi_clients, work_loads, client_dc_map, client_failures
@@ -37,90 +42,12 @@ LIBRARY_CACHE_FILE = os.path.join(MUSIC_DATA_DIR, "telegram_library.json")
 LEGACY_LIBRARY_CACHE_FILE = os.path.join(MUSIC_DIR, "telegram_library.json")
 AUDIO_CACHE_DIR = os.path.join(MUSIC_DIR, "cache")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
-MAX_AUDIO_CACHE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB cache giới hạn tự dọn dẹp
-PLAYBACK_CACHE_WINDOW_TTL = 15 * 60
-PLAYBACK_CACHE_UNPINNED_GRACE = 5 * 60
-_PLAYBACK_CACHE_WINDOWS: Dict[str, tuple[set[str], float]] = {}
+WARM_CACHE_PREFETCH_BYTES = 4 * AUDIO_CACHE_BLOCK_SIZE
+_WARM_CACHE_PREFETCH_INFLIGHT: set[str] = set()
 
 _cover_cache: Dict[str, tuple] = {}
 _COVER_CACHE_TTL = 86400
 
-
-def _active_playback_cache_keys(now: Optional[float] = None) -> set[str]:
-    now = now or time.time()
-    active: set[str] = set()
-    for owner, (keys, expires_at) in list(_PLAYBACK_CACHE_WINDOWS.items()):
-        if expires_at <= now:
-            _PLAYBACK_CACHE_WINDOWS.pop(owner, None)
-            continue
-        active.update(keys)
-    return active
-
-
-def _is_playback_cache_key_active(cache_key: str) -> bool:
-    return cache_key in _active_playback_cache_keys()
-
-def _clean_audio_cache():
-    try:
-        if not os.path.exists(AUDIO_CACHE_DIR):
-            return
-        now = time.time()
-        active_keys = _active_playback_cache_keys(now)
-        files = []
-        total_size = 0
-        for fname in os.listdir(AUDIO_CACHE_DIR):
-            fpath = os.path.join(AUDIO_CACHE_DIR, fname)
-            if os.path.isfile(fpath):
-                stat = os.stat(fpath)
-                files.append((fpath, stat.st_atime, stat.st_size))
-                total_size += stat.st_size
-
-        # Once a playback window is known, keep disk cache focused on the current
-        # track plus the next two tracks. Old completed tracks get a short grace
-        # period so back/previous remains responsive without turning this into an
-        # ever-growing passive music cache.
-        if _PLAYBACK_CACHE_WINDOWS:
-            for fpath, atime, fsize in list(files):
-                if not fpath.endswith(".dat"):
-                    continue
-                cache_key = os.path.splitext(os.path.basename(fpath))[0]
-                if cache_key in active_keys or now - atime <= PLAYBACK_CACHE_UNPINNED_GRACE:
-                    continue
-                try:
-                    os.remove(fpath)
-                    total_size -= fsize
-                    meta_f = fpath[:-4] + ".json"
-                    if os.path.exists(meta_f):
-                        os.remove(meta_f)
-                except Exception:
-                    pass
-
-            files = []
-            total_size = 0
-            for fname in os.listdir(AUDIO_CACHE_DIR):
-                fpath = os.path.join(AUDIO_CACHE_DIR, fname)
-                if os.path.isfile(fpath):
-                    stat = os.stat(fpath)
-                    files.append((fpath, stat.st_atime, stat.st_size))
-                    total_size += stat.st_size
-        
-        if total_size > MAX_AUDIO_CACHE_SIZE:
-            files.sort(key=lambda x: x[1])
-            target_size = int(MAX_AUDIO_CACHE_SIZE * 0.75)
-            for fpath, _, fsize in files:
-                if total_size <= target_size:
-                    break
-                try:
-                    os.remove(fpath)
-                    total_size -= fsize
-                    if fpath.endswith(".dat"):
-                        meta_f = fpath[:-4] + ".json"
-                        if os.path.exists(meta_f):
-                            os.remove(meta_f)
-                except Exception:
-                    pass
-    except Exception as e:
-        LOGGER.warning(f"[MUSIC CACHE] Lỗi dọn dẹp audio cache: {e}")
 
 # Color palette presets for dynamic vinyl glow
 GLOW_PRESETS = [
@@ -2615,102 +2542,189 @@ async def _file_range_gen(file_path: str, start: int, length: int, chunk_size: i
         LOGGER.warning(f"[MUSIC CACHE] Lỗi đọc file cache {file_path}: {e}")
 
 
-async def _caching_stream_generator(body_gen, cache_key: str, file_name: str, mime_type: str, total_size: int, start_offset: int):
-    rand_suffix = secrets.token_hex(4)
-    tmp_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}_{rand_suffix}.tmp")
-    dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
-    json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")
-    
-    can_cache = (start_offset == 0 and _is_playback_cache_key_active(cache_key))
-    tmp_file = None
-    bytes_written = 0
-    
-    if can_cache:
-        try:
-            tmp_file = open(tmp_path, "wb")
-        except Exception:
-            tmp_file = None
-            can_cache = False
+def _cache_overlap_bytes(block_offset: int, file_size: int, start: int, end: int) -> int:
+    block_end = min(int(file_size) - 1, int(block_offset) + AUDIO_CACHE_BLOCK_SIZE - 1)
+    overlap_start = max(int(start), int(block_offset))
+    overlap_end = min(int(end), block_end)
+    return max(0, overlap_end - overlap_start + 1)
 
+
+def _build_music_cache_callbacks(
+    cache_key: str,
+    file_size: int,
+    file_name: str,
+    mime_type: str,
+    start: int,
+    end: int,
+    explicit_favorite: bool = False,
+    count_stats: bool = True,
+):
+    async def chunk_provider(offset: int, _chunk_size: int):
+        served = _cache_overlap_bytes(offset, file_size, start, end)
+        return smart_audio_cache.read_block(
+            cache_key,
+            offset,
+            file_size,
+            served_bytes=served,
+            count_stats=count_stats,
+        )
+
+    async def chunk_observer(offset: int, data: bytes):
+        tier = smart_audio_cache.tier_for(cache_key, explicit_favorite=explicit_favorite)
+        stored = smart_audio_cache.write_block(
+            cache_key=cache_key,
+            offset=offset,
+            data=data,
+            file_size=file_size,
+            file_name=file_name,
+            mime_type=mime_type,
+            tier=tier,
+        )
+        if stored and smart_audio_cache.should_schedule_cleanup():
+            asyncio.create_task(asyncio.to_thread(smart_audio_cache.cleanup))
+
+    return chunk_provider, chunk_observer
+
+
+async def _is_music_user_favorite(user_id: str, chat_id: int, msg_id: int) -> bool:
+    if not user_id:
+        return False
     try:
-        async for chunk in body_gen:
-            if can_cache and tmp_file:
-                try:
-                    tmp_file.write(chunk)
-                    bytes_written += len(chunk)
-                except Exception:
-                    can_cache = False
-                    if tmp_file:
-                        try:
-                            tmp_file.close()
-                        except Exception:
-                            pass
-                        tmp_file = None
-            yield chunk
-            await asyncio.sleep(0)
-    finally:
-        if tmp_file:
+        doc = await db.dbs["tracking"]["music_user_data"].find_one(
+            {"_id": user_id},
+            projection={"favorites": 1},
+        )
+        for fav in (doc or {}).get("favorites", []):
             try:
-                tmp_file.close()
+                fav_chat = int(fav.get("chat_id") if isinstance(fav, dict) else 0)
+                fav_msg = int(fav.get("msg_id") if isinstance(fav, dict) else 0)
+            except (TypeError, ValueError):
+                continue
+            if abs(fav_chat) == abs(int(chat_id)) and fav_msg == int(msg_id):
+                return True
+    except Exception as exc:
+        LOGGER.debug("[MUSIC CACHE] Favorite lookup failed for %s: %s", user_id, exc)
+    return False
+
+
+async def _prefetch_warm_track(chat_id: int, msg_id: int, music_user_id: Optional[str] = None) -> None:
+    """Cache the first few blocks of an upcoming track without downloading the full file."""
+    cache_key = f"{abs(int(chat_id))}_{int(msg_id)}"
+    if cache_key in _WARM_CACHE_PREFETCH_INFLIGHT:
+        return
+    _WARM_CACHE_PREFETCH_INFLIGHT.add(cache_key)
+    try:
+        tg_client = None
+        client_idx = 0
+
+        if music_user_id:
+            try:
+                from Backend.fastapi.routes.telegram_qr_auth import get_user_tg_client
+
+                personal = await get_user_tg_client(music_user_id)
+                if personal and getattr(personal, "is_connected", False):
+                    tg_client = personal
+                    client_idx = -99
             except Exception:
                 pass
-            if can_cache and bytes_written == total_size:
-                try:
-                    meta = {
-                        "file_name": file_name,
-                        "mime_type": mime_type,
-                        "file_size": total_size,
-                        "cached_at": time.time()
-                    }
-                    with open(json_path, "w", encoding="utf-8") as jf:
-                        json.dump(meta, jf)
-                    if os.path.exists(dat_path):
-                        try:
-                            os.remove(dat_path)
-                        except Exception:
-                            pass
-                    os.replace(tmp_path, dat_path)
-                    LOGGER.info(f"[MUSIC CACHE] Đã cache thành công bài hát {cache_key} ({_format_size(total_size)})")
-                    asyncio.create_task(asyncio.to_thread(_clean_audio_cache))
-                except Exception as e:
-                    LOGGER.warning(f"[MUSIC CACHE] Lỗi khi hoàn tất lưu cache: {e}")
-            else:
-                if os.path.exists(tmp_path):
-                    try:
-                        os.remove(tmp_path)
-                    except Exception:
-                        pass
+
+        if tg_client is None and botmod.Userbot and getattr(botmod.Userbot, "is_connected", False):
+            tg_client = botmod.Userbot
+            client_idx = USERBOT_CLIENT_INDEX
+        elif tg_client is None and multi_clients:
+            client_idx = select_best_client(0)
+            tg_client = multi_clients.get(client_idx) or StreamBot
+        elif tg_client is None:
+            tg_client = StreamBot
+            client_idx = 0
+
+        if tg_client is None:
+            return
+
+        work_loads.setdefault(client_idx, 0)
+        client_failures.setdefault(client_idx, 0)
+        streamer = _get_streamer(tg_client, client_idx)
+        file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
+        file_size = int(file_id.file_size or 0)
+        if file_size <= 0:
+            return
+
+        raw_file_name, raw_mime = _resolve_filename_mime(file_id)
+        file_name, mime_type = _fix_audio_mime(raw_file_name, raw_mime)
+        end = min(file_size, WARM_CACHE_PREFETCH_BYTES) - 1
+        if end < 0:
+            return
+
+        part_count = math.ceil((end + 1) / AUDIO_CACHE_BLOCK_SIZE)
+        chunk_provider, chunk_observer = _build_music_cache_callbacks(
+            cache_key=cache_key,
+            file_size=file_size,
+            file_name=file_name,
+            mime_type=mime_type,
+            start=0,
+            end=end,
+            count_stats=False,
+        )
+        body_gen = await streamer.prefetch_stream(
+            file_id=file_id,
+            client_index=client_idx,
+            offset=0,
+            first_part_cut=0,
+            last_part_cut=(end % AUDIO_CACHE_BLOCK_SIZE) + 1,
+            part_count=part_count,
+            chunk_size=AUDIO_CACHE_BLOCK_SIZE,
+            prefetch=min(4, max(1, part_count)),
+            parallelism=min(2, max(1, part_count)),
+            stream_id=secrets.token_hex(8),
+            meta={"cache_prefetch": True, "title": f"Warm cache {msg_id}"},
+            request=None,
+            chat_id=chat_id,
+            message_id=msg_id,
+            extra_clients=None,
+            chunk_provider=chunk_provider,
+            chunk_observer=chunk_observer,
+        )
+        async for _ in body_gen:
+            pass
+    except Exception as exc:
+        LOGGER.debug("[MUSIC CACHE] Warm prefetch failed for %s/%s: %s", chat_id, msg_id, exc)
+    finally:
+        _WARM_CACHE_PREFETCH_INFLIGHT.discard(cache_key)
 
 
 @router.post("/api/music/playback/cache-window")
 async def update_music_playback_cache_window(payload: dict, request: Request):
-    """Pin only the current track and up to two upcoming tracks in the music cache."""
+    """Mark current track hot and the next two tracks warm."""
     raw_device_id = str(payload.get("device_id") or "").strip()
     session_user = str(request.session.get("music_user_id") or "").strip()
     client_host = request.client.host if request.client else "unknown"
     owner = raw_device_id or session_user or f"anon:{client_host}"
 
-    keys: set[str] = set()
-    for item in (payload.get("tracks") or [])[:3]:
+    ordered_keys: List[str] = []
+    warm_tracks: List[tuple[int, int]] = []
+    for idx, item in enumerate((payload.get("tracks") or [])[:3]):
         try:
             chat_id = int(item.get("chat_id") if isinstance(item, dict) else 0)
             msg_id = int(item.get("msg_id") if isinstance(item, dict) else 0)
         except (TypeError, ValueError):
             continue
         if chat_id and msg_id:
-            keys.add(f"{abs(chat_id)}_{msg_id}")
+            ordered_keys.append(f"{abs(chat_id)}_{msg_id}")
+            if idx > 0:
+                warm_tracks.append((chat_id, msg_id))
 
-    if keys:
-        _PLAYBACK_CACHE_WINDOWS[owner] = (keys, time.time() + PLAYBACK_CACHE_WINDOW_TTL)
-    else:
-        _PLAYBACK_CACHE_WINDOWS.pop(owner, None)
-
-    asyncio.create_task(asyncio.to_thread(_clean_audio_cache))
+    tiers = smart_audio_cache.set_playback_window(owner, ordered_keys)
+    for warm_chat_id, warm_msg_id in warm_tracks:
+        asyncio.create_task(_prefetch_warm_track(warm_chat_id, warm_msg_id, session_user or None))
+    if smart_audio_cache.should_schedule_cleanup():
+        asyncio.create_task(asyncio.to_thread(smart_audio_cache.cleanup))
     return {
         "status": "success",
-        "cached_window": len(keys),
+        "cached_window": len(ordered_keys),
         "max_window": 3,
-        "ttl_seconds": PLAYBACK_CACHE_WINDOW_TTL,
+        "ttl_seconds": PLAYBACK_WINDOW_TTL,
+        "tiers": tiers,
+        "warm_prefetch_bytes": WARM_CACHE_PREFETCH_BYTES,
     }
 
 
@@ -2733,10 +2747,8 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
     cache_key = f"{abs(chat_id)}_{msg_id}"
     if request.query_params.get("playback") == "1":
         owner = str(request.query_params.get("device") or request.session.get("music_user_id") or "direct")
-        existing_keys, _ = _PLAYBACK_CACHE_WINDOWS.get(owner, (set(), 0.0))
-        refreshed = set(existing_keys)
-        refreshed.add(cache_key)
-        _PLAYBACK_CACHE_WINDOWS[owner] = (refreshed, time.time() + PLAYBACK_CACHE_WINDOW_TTL)
+        smart_audio_cache.mark_hot(owner, cache_key)
+    smart_audio_cache.mark_play(cache_key)
     dat_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.dat")
     json_path = os.path.join(AUDIO_CACHE_DIR, f"{cache_key}.json")
 
@@ -2757,6 +2769,7 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
                 range_header = request.headers.get("Range", "")
                 start, end = parse_range_header(range_header, cached_size)
                 req_length = end - start + 1
+                smart_audio_cache.record_legacy_hit(req_length)
                 headers, status = _build_stream_headers(cached_mime, cached_name, req_length, range_header, start, end, cached_size)
                 if request.method == "HEAD":
                     return PlainResponse(status_code=status, headers=headers)
@@ -2861,6 +2874,9 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
         "title": f"Music Track {msg_id}",
         "token": "music-player",
     }
+    explicit_favorite = await _is_music_user_favorite(music_user_id, chat_id, msg_id) if music_user_id else False
+    if explicit_favorite:
+        smart_audio_cache.hint_favorite(cache_key)
 
     # Tính toán số lượng worker song song và prefetch an toàn
     token_count = len(multi_clients) - 1 if multi_clients else 0
@@ -2918,6 +2934,18 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
                 except Exception:
                     continue
 
+            c_raw_file_name, c_raw_mime = _resolve_filename_mime(c_file_id)
+            c_file_name, c_mime_type = _fix_audio_mime(c_raw_file_name, c_raw_mime)
+            chunk_provider, chunk_observer = _build_music_cache_callbacks(
+                cache_key=cache_key,
+                file_size=file_size,
+                file_name=c_file_name,
+                mime_type=c_mime_type,
+                start=start,
+                end=end,
+                explicit_favorite=explicit_favorite,
+            )
+
             body_gen = await strm.prefetch_stream(
                 file_id=c_file_id,
                 client_index=c_idx,
@@ -2934,6 +2962,8 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
                 chat_id=chat_id,
                 message_id=msg_id,
                 extra_clients=extra_clients_for_stream,
+                chunk_provider=chunk_provider,
+                chunk_observer=chunk_observer,
             )
             if body_gen:
                 file_id = c_file_id
@@ -2961,9 +2991,7 @@ async def stream_music_track(request: Request, chat_id: int, msg_id: int):
     if request.method == "HEAD":
         return PlainResponse(status_code=status, headers=headers)
 
-    # Wrap body_gen với cache writer nếu đang tải từ đầu
-    cached_stream = _caching_stream_generator(body_gen, cache_key, file_name, mime_type, file_size, start)
-    return StreamingResponse(cached_stream, headers=headers, status_code=status, media_type=mime_type)
+    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
 
 
 DEFAULT_COVER_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
@@ -5070,6 +5098,4 @@ async def delete_backup_snapshot(filename: str, _: bool = Depends(require_auth))
         return JSONResponse(content={"status": "success", "message": f"Đã xóa bản sao lưu '{safe_name}'"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
-
-
 

@@ -517,6 +517,19 @@ async def toggle_user_favorite(payload: dict, user_id: str = Depends(require_mus
             is_favorite = True
             
         await coll.update_one({"_id": user_id}, {"$set": {"favorites": favorites}})
+        if chat_id is not None and msg_id is not None:
+            try:
+                from Backend.helper.music_cache import smart_audio_cache
+
+                cache_key = f"{abs(int(chat_id))}_{int(msg_id)}"
+                if is_favorite:
+                    smart_audio_cache.hint_favorite(cache_key)
+                else:
+                    smart_audio_cache.clear_favorite_hint(cache_key)
+            except (TypeError, ValueError):
+                pass
+            except Exception:
+                pass
         return {"status": "success", "is_favorite": is_favorite, "message": "Đã thêm vào bài hát yêu thích ❤️" if is_favorite else "Đã xóa khỏi danh sách yêu thích 🤍"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})

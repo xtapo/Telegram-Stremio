@@ -5,7 +5,7 @@ import secrets
 import time
 import traceback
 from collections import deque
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
 from fastapi import Request
 from pyrogram import Client, raw
@@ -115,6 +115,8 @@ class ByteStreamer:
         chat_id: Optional[int] = None,
         message_id: Optional[int] = None,
         extra_clients: Optional[List] = None,
+        chunk_provider: Optional[Callable[[int, int], Awaitable[Optional[bytes]]]] = None,
+        chunk_observer: Optional[Callable[[int, bytes], Awaitable[None]]] = None,
     ):
         if not stream_id:
             stream_id = secrets.token_hex(8)
@@ -197,6 +199,14 @@ class ByteStreamer:
             return slots
 
         async def fetch_chunk_with_retries(seq_idx: int, off: int) -> Tuple[int, Optional[bytes]]:
+            if chunk_provider is not None:
+                try:
+                    cached = await chunk_provider(off, chunk_size)
+                    if cached is not None:
+                        return seq_idx, cached
+                except Exception as exc:
+                    LOGGER.debug("Chunk provider failed at offset %s: %s", off, exc)
+
             ordered_slots = _ordered_session_slots(seq_idx)
             tries = 0
             flood_tries = 0
@@ -227,6 +237,12 @@ class ByteStreamer:
 
                     if chunk_bytes == b"":
                         return seq_idx, None
+
+                    if chunk_bytes is not None and chunk_observer is not None:
+                        try:
+                            await chunk_observer(off, chunk_bytes)
+                        except Exception as exc:
+                            LOGGER.debug("Chunk observer failed at offset %s: %s", off, exc)
 
                     return seq_idx, chunk_bytes
 
@@ -481,7 +497,8 @@ class ByteStreamer:
                         client_avg_mbps[client_index] = 0.5 * prev + 0.5 * avg_mbps
                     
                     entry["chunk_size"] = chunk_size
-                    asyncio.create_task(db.log_stream_stats(entry))
+                    if not (entry.get("meta") or {}).get("cache_prefetch"):
+                        asyncio.create_task(db.log_stream_stats(entry))
 
                     async def delayed_pop():
                         await asyncio.sleep(3)

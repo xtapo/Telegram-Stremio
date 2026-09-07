@@ -325,7 +325,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
                 <button onclick="clearCache()" class="btn-ui btn-danger">
                     <i class="fas fa-trash-alt"></i>
-                    Clear File Cache
+                    Clear Caches
                 </button>
                 <button onclick="clearAnalytics()" class="btn-ui btn-ghost">
                     <i class="fas fa-chart-line"></i>
@@ -335,7 +335,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8" id="stats-container">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8" id="stats-container">
         <div class="glass-card metric-card rounded-3xl p-5 sm:p-6">
             <div class="flex items-start gap-4">
                 <div class="metric-icon">
@@ -358,6 +358,33 @@
                     <p class="muted text-sm font-semibold">Connected Bots</p>
                     <p class="text-3xl sm:text-4xl font-black tracking-tight mt-2 text-text" id="stat-bot-count">-</p>
                     <p class="muted text-xs sm:text-sm mt-2">Active Telegram bot clients available right now.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card metric-card rounded-3xl p-5 sm:p-6">
+            <div class="flex items-start gap-4">
+                <div class="metric-icon">
+                    <i class="fas fa-hard-drive text-xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <p class="muted text-sm font-semibold">Smart Audio Cache</p>
+                    <p class="text-2xl sm:text-3xl font-black tracking-tight mt-2 text-text" id="stat-audio-cache">-</p>
+                    <p class="muted text-xs sm:text-sm mt-2" id="stat-audio-cache-tiers">Hot/Warm/Favorite block cache.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card metric-card rounded-3xl p-5 sm:p-6">
+            <div class="flex items-start gap-4">
+                <div class="metric-icon">
+                    <i class="fas fa-bolt text-xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <p class="muted text-sm font-semibold">Audio Cache Hit Rate</p>
+                    <p class="text-3xl sm:text-4xl font-black tracking-tight mt-2 text-text" id="stat-cache-hit-rate">-</p>
+                    <p class="muted text-xs sm:text-sm mt-2" id="stat-cache-hit-detail">-</p>
+                    <p class="muted text-xs sm:text-sm mt-1" id="stat-cache-saved">-</p>
                 </div>
             </div>
         </div>
@@ -556,6 +583,14 @@
             const data = await res.json();
             document.getElementById('stat-cache-size').textContent = data.cache_size ?? '-';
             document.getElementById('stat-bot-count').textContent = data.total_bots ?? '-';
+            const ac = data.audio_cache || {};
+            document.getElementById('stat-audio-cache').textContent = `${fmtBytes(ac.size_bytes || 0)} / ${ac.limit_gb || 2} GB`;
+            const tiers = ac.tiers || {};
+            document.getElementById('stat-audio-cache-tiers').textContent =
+                `Hot ${fmtBytes(tiers.hot || 0)} · Warm ${fmtBytes(tiers.warm || 0)} · Favorite ${fmtBytes(tiers.favorite || 0)}`;
+            document.getElementById('stat-cache-hit-rate').textContent = `${Number(ac.hit_rate || 0).toFixed(1)}%`;
+            document.getElementById('stat-cache-hit-detail').textContent = `${ac.hits || 0} hit · ${ac.misses || 0} miss`;
+            document.getElementById('stat-cache-saved').textContent = `Telegram saved ${fmtBytes(ac.bandwidth_saved_bytes || 0)}`;
 
             const workloadsWrap = document.getElementById('stat-workloads');
             const bots = data.bot_workloads || [];
@@ -830,7 +865,7 @@
     }
 
     async function clearCache() {
-        if (!confirm("Are you sure you want to clear the Telegram FileId cache? This will force bots to re-fetch metadata on the next stream.")) return;
+        if (!confirm("Clear Telegram FileId and smart audio caches? Audio blocks will be fetched again when needed.")) return;
 
         try {
             const res = await fetch('/api/admin/clear-cache', { method: 'POST' });

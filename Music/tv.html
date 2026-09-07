@@ -2689,6 +2689,25 @@
             return null;
         }
 
+        function syncTvPlaybackCacheWindow(list, currentIdx) {
+            if (!Array.isArray(list) || !list.length) return;
+            const tracks = [];
+            for (let step = 0; step < 3; step++) {
+                const track = list[(currentIdx + step) % list.length];
+                if (!track) continue;
+                const chatId = track.chat_id || track.chatId;
+                const msgId = track.msg_id || track.msgId;
+                if (chatId && msgId) tracks.push({ chat_id: chatId, msg_id: msgId });
+            }
+            if (!tracks.length) return;
+            fetch('/api/music/playback/cache-window', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tracks }),
+                keepalive: true
+            }).catch(() => {});
+        }
+
         // ─── AUDIO PLAYBACK LOGIC ───
         function playTrack(idx, fromList, fromGroup, autoPlay = true) {
             const list = fromList || currentTracklist;
@@ -2704,6 +2723,7 @@
 
             const track = currentlyPlayingTrack;
             const url = getTrackStreamUrl(track);
+            syncTvPlaybackCacheWindow(list, idx);
 
             try {
                 audio.pause();

@@ -53,6 +53,7 @@ _DEFAULTS: Dict[str, Any] = {
     "fanart_shuffle": False,
     "fanart_shuffle_interval": 5,
     "fanart_low_res_poster": True,
+    "audio_cache_size_gb": 2,
 }
 
 
@@ -257,6 +258,14 @@ class Settings:
         except (ValueError, TypeError):
             return 5
 
+    @property
+    def audio_cache_size_gb(self) -> int:
+        try:
+            value = int(self._d.get("audio_cache_size_gb", 2))
+        except (ValueError, TypeError):
+            value = 2
+        return value if value in (2, 5, 10, 20) else 2
+
     #----- Lists
     @property
     def auth_channels(self) -> List[str]:
@@ -460,5 +469,8 @@ class SettingsManager:
         #----- Global Search toggle changed (module reads current() live per call)
         if old.get("global_search") != new.get("global_search") and "global_search" not in results:
             results["global_search"] = "enabled" if new.get("global_search") else "disabled"
+
+        if old.get("audio_cache_size_gb") != new.get("audio_cache_size_gb"):
+            results["audio_cache"] = f"limit set to {new.get('audio_cache_size_gb', 2)} GB"
 
         return results

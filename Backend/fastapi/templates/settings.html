@@ -1135,6 +1135,24 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
         </div>
     </div>
 
+    <!-- ── Smart Audio Cache ───────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-hard-drive"></i> Smart Audio Cache</h2>
+        <p style="font-size:0.83rem;color:var(--text-sec);margin-bottom:1rem">
+            Cache audio theo block 1 MiB. Bài đang phát được ưu tiên Hot, bài kế tiếp Warm,
+            còn bài yêu thích/nghe thường xuyên được giữ lâu hơn khi cần dọn cache.
+        </p>
+        <label class="s-label" for="audio_cache_size_gb">Giới hạn dung lượng cache</label>
+        <select id="audio_cache_size_gb" class="s-input">
+            {% for gb in [2, 5, 10, 20] %}
+            <option value="{{ gb }}" {% if settings.audio_cache_size_gb == gb %}selected{% endif %}>{{ gb }} GB</option>
+            {% endfor %}
+        </select>
+        <p style="font-size:0.75rem;color:var(--text-sec);margin-top:0.55rem">
+            Khi vượt giới hạn, hệ thống dọn Cold trước, sau đó Warm/Favorite; Hot được giữ ưu tiên cao nhất.
+        </p>
+    </div>
+
     <!-- ── Backup & Restore ───────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-box-archive"></i> Backup &amp; Restore</h2>
@@ -1522,6 +1540,7 @@ async function saveSettings() {
         announcement_channel:          (function(){const el=document.getElementById('announcement_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
         skip_channel:                  (function(){const el=document.getElementById('skip_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
         delete_on_metadata_fail:       document.getElementById('delete_on_metadata_fail').checked,
+        audio_cache_size_gb:           parseInt(document.getElementById('audio_cache_size_gb').value, 10) || 2,
     };
 
     try {
@@ -1651,6 +1670,7 @@ function renderSettings(s) {
     toggleFanartShuffle();
     document.getElementById('upstream_repo').value = s.upstream_repo || '';
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
+    document.getElementById('audio_cache_size_gb').value = String(s.audio_cache_size_gb || 2);
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
     document.getElementById('mediaflow_proxy').checked = !!s.mediaflow_proxy;

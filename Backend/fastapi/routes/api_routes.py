@@ -547,6 +547,13 @@ async def speed_test_stream_api(
 async def get_admin_stats_api() -> dict:
     cache_size = sum(len(s._file_id_cache) for s in _streamer_by_client.values())
 
+    try:
+        from Backend.helper.music_cache import smart_audio_cache
+        audio_cache = await asyncio.to_thread(smart_audio_cache.get_stats)
+    except Exception as exc:
+        LOGGER.warning("get_admin_stats_api: could not load audio cache stats: %s", exc)
+        audio_cache = {}
+
     bot_stats = []
     for client_index in multi_clients:
         load = work_loads.get(client_index, 0)
@@ -572,18 +579,34 @@ async def get_admin_stats_api() -> dict:
     return {
         "cache_size": cache_size,
         "total_bots": len(multi_clients),
-        "bot_workloads": bot_stats
+        "bot_workloads": bot_stats,
+        "audio_cache": audio_cache,
     }
 
 
-#----- Clear the FileId cache across all active streamers
+#----- Clear FileId + smart audio cache
 async def clear_cache_api() -> dict:
     total_cleared = sum(len(s._file_id_cache) for s in _streamer_by_client.values())
     for streamer in _streamer_by_client.values():
         streamer._file_id_cache.clear()
-    LOGGER.info(f"Admin cleared the FileId cache ({total_cleared} items purged across {len(_streamer_by_client)} clients).")
+    audio_removed = 0
+    try:
+        from Backend.helper.music_cache import smart_audio_cache
 
-    return {"status": "success", "message": f"{total_cleared} cached items cleared."}
+        audio_result = await asyncio.to_thread(smart_audio_cache.clear, False)
+        audio_removed = int(audio_result.get("removed_bytes", 0))
+    except Exception as exc:
+        LOGGER.warning("Admin audio cache clear failed: %s", exc)
+    LOGGER.info(
+        "Admin cleared caches (%s FileId items; %s audio bytes).",
+        total_cleared,
+        audio_removed,
+    )
+
+    return {
+        "status": "success",
+        "message": f"Cleared {total_cleared} FileId entries and {audio_removed / (1024 * 1024):.1f} MB audio cache.",
+    }
 
 
 #----- List dead links recorded in the DB
@@ -1799,6 +1822,14 @@ async def update_settings_api(payload: dict) -> dict:
         except (ValueError, TypeError):
             payload["fanart_shuffle_interval"] = 5
 
+    if "audio_cache_size_gb" in payload:
+        try:
+            payload["audio_cache_size_gb"] = int(payload["audio_cache_size_gb"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="'audio_cache_size_gb' must be 2, 5, 10, or 20.")
+        if payload["audio_cache_size_gb"] not in (2, 5, 10, 20):
+            raise HTTPException(status_code=400, detail="'audio_cache_size_gb' must be 2, 5, 10, or 20.")
+
     if len([k for k in ("better_poster_enabled", "rpdb_enabled", "fanart_enabled") if payload.get(k)]) > 1:
         raise HTTPException(status_code=400, detail="Enable only one poster provider at a time")
 
@@ -1928,6 +1959,9 @@ async def update_settings_api(payload: dict) -> dict:
 
     try:
         reinit_results = await SettingsManager.update(db, payload)
+        if "audio_cache_size_gb" in payload:
+            from Backend.helper.music_cache import smart_audio_cache
+            await asyncio.to_thread(smart_audio_cache.cleanup)
         return {
             "message": "Settings saved successfully.",
             "reinit": reinit_results,
