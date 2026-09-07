@@ -2254,15 +2254,16 @@ class MusicScanManager:
 
                 self._current_msg_id = scan_from
                 self._target_msg_id = scan_to
-                scan_range = list(range(scan_from, scan_to + 1))
-                self._target_messages = len(scan_range)
-                self._log(f"Quét dải ID tin nhắn #{scan_from} -> #{scan_to} (Tổng {len(scan_range)} tin nhắn)...")
+                scan_count = max(0, scan_to - scan_from + 1)
+                self._target_messages = scan_count
+                self._log(f"Quét dải ID tin nhắn #{scan_from} -> #{scan_to} (Tổng {scan_count} tin nhắn)...")
 
                 batch_size = 50
-                for i in range(0, len(scan_range), batch_size):
+                for batch_start in range(scan_from, scan_to + 1, batch_size):
                     if self._cancel_requested:
                         break
-                    sub_ids = scan_range[i:i + batch_size]
+                    batch_end = min(scan_to + 1, batch_start + batch_size)
+                    sub_ids = list(range(batch_start, batch_end))
                     self._current_msg_id = sub_ids[-1]
 
                     b_msgs = []

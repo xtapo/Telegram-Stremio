@@ -61,6 +61,14 @@ def _find_ffprobe() -> Optional[str]:
     return None
 
 
+def _recognition_ffmpeg_threads() -> int:
+    """Giới hạn thread FFmpeg cho nhận dạng để tránh chiếm toàn bộ CPU máy chủ."""
+    try:
+        return max(1, min(4, int(os.environ.get("MUSIC_RECOGNITION_FFMPEG_THREADS", "1"))))
+    except (TypeError, ValueError):
+        return 1
+
+
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning, module=r".*pydub.*")
 
@@ -382,9 +390,12 @@ def _extract_normalized_segment(
         try:
             cmd = [
                 ffmpeg_bin, "-y",
+                "-threads", str(_recognition_ffmpeg_threads()),
                 "-ss", str(max(0.0, round(start_sec, 2))),
                 "-t", str(round(duration_sec, 2)),
                 "-i", input_audio_path,
+                "-filter_threads", str(_recognition_ffmpeg_threads()),
+                "-threads", str(_recognition_ffmpeg_threads()),
                 "-ac", "1",           # Downmix về Mono (1 channel)
                 "-ar", "16000",       # Resample về 16kHz chuẩn Shazam
                 "-c:a", "pcm_s16le",  # PCM 16-bit Little-Endian
@@ -436,8 +447,20 @@ def _read_embedded_metadata_file(file_path: str) -> dict:
     if not file_path or not os.path.exists(file_path):
         return {}
     tags = {}
+
+    # Ưu tiên parser thuần Python trên phần đầu file. Với MP3/FLAC/WAV có tag
+    # chuẩn, cách này tránh phải spawn ffprobe cho từng bài trong lúc quét kênh.
+    try:
+        with open(file_path, "rb") as f:
+            header_bytes = f.read(131072)
+        tags.update(extract_embedded_audio_tags(header_bytes))
+    except Exception:
+        pass
+
+    # Chỉ fallback sang ffprobe khi parser nhẹ chưa lấy đủ identity.
+    # ffprobe hữu ích cho M4A/ALAC và các container có metadata nằm ngoài header.
     ffprobe_bin = _find_ffprobe()
-    if ffprobe_bin:
+    if ffprobe_bin and (not tags.get("title") or not tags.get("artist")):
         try:
             cmd = [
                 ffprobe_bin, "-v", "quiet",
@@ -458,28 +481,14 @@ def _read_embedded_metadata_file(file_path: str) -> dict:
                 track_no = low_tags.get("track") or low_tags.get("trck")
                 date = low_tags.get("date") or low_tags.get("year") or low_tags.get("tdor") or low_tags.get("tyer")
 
-                if title: tags["title"] = str(title).strip()
-                if artist: tags["artist"] = str(artist).strip()
-                if album: tags["album"] = str(album).strip()
-                if genre: tags["genre"] = str(genre).strip()
-                if track_no: tags["track"] = str(track_no).strip()
-                if date: tags["year"] = str(date).strip()[:4]
+                if title and "title" not in tags: tags["title"] = str(title).strip()
+                if artist and "artist" not in tags: tags["artist"] = str(artist).strip()
+                if album and "album" not in tags: tags["album"] = str(album).strip()
+                if genre and "genre" not in tags: tags["genre"] = str(genre).strip()
+                if track_no and "track" not in tags: tags["track"] = str(track_no).strip()
+                if date and "year" not in tags: tags["year"] = str(date).strip()[:4]
         except Exception as e:
             LOGGER.debug(f"[LOCAL TAGS] ffprobe error on {file_path}: {e}")
-
-
-    # Fallback pure-python extract_embedded_audio_tags
-    if not tags.get("title") or not tags.get("artist"):
-        try:
-            with open(file_path, "rb") as f:
-                header_bytes = f.read(131072)
-            emb = extract_embedded_audio_tags(header_bytes)
-            if emb.get("title") and "title" not in tags: tags["title"] = emb["title"]
-            if emb.get("artist") and "artist" not in tags: tags["artist"] = emb["artist"]
-            if emb.get("album") and "album" not in tags: tags["album"] = emb["album"]
-            if emb.get("genre") and "genre" not in tags: tags["genre"] = emb["genre"]
-        except Exception:
-            pass
 
     return tags
 
@@ -505,6 +514,24 @@ def _embedded_metadata_result(tags: dict) -> Optional[dict]:
         "layer": "Embedded File Tags",
         "source": "embedded",
     }
+
+
+def _hash_normalized_pcm_sample(file_path: str) -> str:
+    """Hash a normalized PCM WAV sample without decoding it again."""
+    if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
+        return ""
+    try:
+        digest = hashlib.sha256()
+        with open(file_path, "rb") as fh:
+            while True:
+                chunk = fh.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return f"pcm16k:{digest.hexdigest()}"
+    except Exception as exc:
+        LOGGER.debug(f"[MUSIC FINGERPRINT] sample hash failed: {exc}")
+        return ""
 
 
 def compute_local_audio_fingerprint(file_path: str) -> str:
@@ -545,14 +572,7 @@ def compute_local_audio_fingerprint(file_path: str) -> str:
         tmp.close()
         if not _extract_normalized_segment(file_path, temp_path, 0.0, 30.0):
             return ""
-        digest = hashlib.sha256()
-        with open(temp_path, "rb") as fh:
-            while True:
-                chunk = fh.read(1024 * 1024)
-                if not chunk:
-                    break
-                digest.update(chunk)
-        return f"pcm16k:{digest.hexdigest()}"
+        return _hash_normalized_pcm_sample(temp_path)
     except Exception as exc:
         LOGGER.debug(f"[MUSIC FINGERPRINT] normalized hash failed: {exc}")
         return ""
@@ -782,6 +802,26 @@ def _build_manual_scan_windows(total_sec: float) -> list:
     return windows or [("Toàn bộ bài hát", 0.0, min(12.0, total_sec))]
 
 
+def _preselect_manual_scan_windows(scan_windows: list, max_windows: int = 6) -> list:
+    """Giảm số cửa sổ cần giải mã trước khi đo energy.
+
+    Trước đây có thể giải mã tới 18 cửa sổ rồi mới chọn 6 cửa sổ để gửi Shazam.
+    Chọn trước các mốc phân bố đều giúp giảm mạnh CPU mà vẫn phủ đầu/giữa/cuối bài.
+    """
+    if len(scan_windows) <= max_windows:
+        return list(scan_windows)
+    if max_windows <= 1:
+        return [scan_windows[len(scan_windows) // 2]]
+
+    last_index = len(scan_windows) - 1
+    indexes = []
+    for slot in range(max_windows):
+        idx = round(slot * last_index / (max_windows - 1))
+        if idx not in indexes:
+            indexes.append(idx)
+    return [scan_windows[idx] for idx in indexes]
+
+
 def _select_manual_query_windows(prepared_windows: list, max_windows: int = 6) -> list:
     """Chọn vài mẫu mạnh và phân bố theo thời gian để tránh spam Shazam.
 
@@ -839,7 +879,13 @@ def _measure_pcm_wav_energy(file_path: str) -> float:
         return 0.0
 
 
-async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", log_callback=None, timeout_sec: float = 12.0) -> dict:
+async def _query_shazam_file(
+    file_path: str,
+    segment_name: str = "Đoạn 1",
+    log_callback=None,
+    timeout_sec: float = 12.0,
+    low_cpu: bool = False,
+) -> dict:
     """Gửi tệp âm thanh thực tế tới máy chủ Shazam để trích xuất dấu vân tay âm thanh chuẩn xác."""
     if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
         return None
@@ -854,7 +900,13 @@ async def _query_shazam_file(file_path: str, segment_name: str = "Đoạn 1", lo
 
     for lang, country in endpoint_configs:
         try:
-            out = await query_shazam_isolated(file_path, language=lang, endpoint_country=country, timeout_sec=timeout_sec)
+            out = await query_shazam_isolated(
+                file_path,
+                language=lang,
+                endpoint_country=country,
+                timeout_sec=timeout_sec,
+                low_cpu=low_cpu,
+            )
             if not out:
                 continue
 
@@ -1089,7 +1141,9 @@ async def recognize_audio_from_telegram(
 
     try:
         # Lớp 1: metadata nhúng luôn được ưu tiên vì không cần gọi dịch vụ ngoài.
-        embedded_tags = _read_embedded_metadata_file(source_audio_path)
+        # ffprobe / đọc tag là I/O + subprocess đồng bộ; không để chúng chặn
+        # event loop FastAPI khi bộ quét nền đang chạy.
+        embedded_tags = await asyncio.to_thread(_read_embedded_metadata_file, source_audio_path)
         embedded_result = _embedded_metadata_result(embedded_tags)
         if embedded_result and not is_manual:
             LOGGER.info(
@@ -1109,51 +1163,66 @@ async def recognize_audio_from_telegram(
                 "info",
             )
 
-        # Lớp 2: fingerprint cục bộ, dùng lại metadata đã nhận dạng trước đây.
-        local_fingerprint = await asyncio.to_thread(compute_local_audio_fingerprint, source_audio_path)
-        if local_fingerprint and not is_manual:
-            try:
-                from Backend.helper.metadata.music_pipeline import music_metadata_pipeline
-
-                cached = await music_metadata_pipeline.get_cached(
-                    chat_id=target_chat_id,
-                    msg_id=target_msg_id,
-                    fingerprint=local_fingerprint,
-                )
-                if cached and cached.get("title"):
-                    LOGGER.info(
-                        f"[MUSIC FINGERPRINT] Cache hit: {cached.get('artist')} - {cached.get('title')}"
-                    )
-                    if log_callback:
-                        log_callback("Đã khớp fingerprint với metadata đã lưu trong MongoDB.", "success")
-                    return {
-                        **cached,
-                        "fingerprint": local_fingerprint,
-                        "manual_override": False,
-                        "layer": "Local Fingerprint Cache",
-                        "source": "fingerprint",
-                    }
-            except Exception as exc:
-                LOGGER.debug(f"[MUSIC FINGERPRINT] Cache lookup failed: {exc}")
+        # Nhận dạng thủ công vẫn giữ fingerprint sâu như trước. Với quét kênh,
+        # fingerprint được tạo trực tiếp từ chính mẫu 10 giây dùng cho Shazam
+        # bên dưới để tránh giải mã cùng một bài hai lần.
+        local_fingerprint = ""
+        if is_manual:
+            local_fingerprint = await asyncio.to_thread(compute_local_audio_fingerprint, source_audio_path)
 
         if not is_manual:
             # ══════════════════════════════════════════════════════════════════
             # CHẾ ĐỘ 1: QUÉT KÊNH TELEGRAM SIÊU TỐC (is_manual == False)
-            # Tốc độ ~1-2 giây / bài: 1 pass Shazam nhanh mẫu đầu bài + Thẻ ID3/FLAC gốc
+            # Chỉ nghe 10 giây đầu bài: 1 lần giải mã dùng chung cho fingerprint + Shazam.
             # Không chạy rolling scan và không gọi online scraper để tránh nghẽn kênh
             # ══════════════════════════════════════════════════════════════════
             tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             sample_w_path = tmp_wav.name
             tmp_wav.close()
             try:
-                ok = _extract_normalized_segment(
-                    input_audio_path=source_audio_path,
-                    output_wav_path=sample_w_path,
-                    start_sec=0.0,
-                    duration_sec=12.0
+                ok = await asyncio.to_thread(
+                    _extract_normalized_segment,
+                    source_audio_path,
+                    sample_w_path,
+                    0.0,
+                    10.0,
                 )
                 query_target = sample_w_path if (ok and os.path.exists(sample_w_path) and os.path.getsize(sample_w_path) > 4096) else source_audio_path
-                res = await _query_shazam_file(query_target, segment_name="Nhanh", log_callback=log_callback, timeout_sec=6.0)
+
+                if query_target == sample_w_path:
+                    local_fingerprint = await asyncio.to_thread(_hash_normalized_pcm_sample, sample_w_path)
+                    if local_fingerprint:
+                        try:
+                            from Backend.helper.metadata.music_pipeline import music_metadata_pipeline
+
+                            cached = await music_metadata_pipeline.get_cached(
+                                chat_id=target_chat_id,
+                                msg_id=target_msg_id,
+                                fingerprint=local_fingerprint,
+                            )
+                            if cached and cached.get("title"):
+                                LOGGER.info(
+                                    f"[MUSIC FINGERPRINT] Cache hit: {cached.get('artist')} - {cached.get('title')}"
+                                )
+                                if log_callback:
+                                    log_callback("Đã khớp fingerprint từ mẫu 10 giây đầu bài.", "success")
+                                return {
+                                    **cached,
+                                    "fingerprint": local_fingerprint,
+                                    "manual_override": False,
+                                    "layer": "Local Fingerprint Cache",
+                                    "source": "fingerprint",
+                                }
+                        except Exception as exc:
+                            LOGGER.debug(f"[MUSIC FINGERPRINT] Cache lookup failed: {exc}")
+
+                res = await _query_shazam_file(
+                    query_target,
+                    segment_name="10 giây đầu",
+                    log_callback=log_callback,
+                    timeout_sec=6.0,
+                    low_cpu=True,
+                )
                 if res:
                     res["fingerprint"] = local_fingerprint
                     res["confidence"] = 0.95
@@ -1215,7 +1284,10 @@ async def recognize_audio_from_telegram(
         # Rolling scan: tạo nhiều cửa sổ chồng lấn rồi ưu tiên các đoạn có năng lượng
         # âm thanh tốt. Cách này gần với hành vi "nghe tiếp" của ứng dụng Shazam hơn
         # việc chỉ thử một vài mốc cố định trong bài.
-        scan_windows = _build_manual_scan_windows(total_sec)
+        scan_windows = _preselect_manual_scan_windows(
+            _build_manual_scan_windows(total_sec),
+            max_windows=6,
+        )
         shazam_candidates = []
         prepared_windows = []
 
@@ -1225,12 +1297,13 @@ async def recognize_audio_from_telegram(
             tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             sample_w_path = tmp_wav.name
             tmp_wav.close()
-            ok = _extract_normalized_segment(
-                input_audio_path=source_audio_path,
-                output_wav_path=sample_w_path,
-                start_sec=start_s,
-                duration_sec=dur_s,
-                audio_seg_pydub=audio_seg,
+            ok = await asyncio.to_thread(
+                _extract_normalized_segment,
+                source_audio_path,
+                sample_w_path,
+                start_s,
+                dur_s,
+                audio_seg,
             )
             if not ok:
                 LOGGER.warning(
