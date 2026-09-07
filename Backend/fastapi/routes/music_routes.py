@@ -926,7 +926,13 @@ async def _db_save_channels(channels: list):
 
 
 async def _db_update_channel_progress(chat_id: str, last_scanned_id: int, last_scanned_at: str = "", total_tracks: int = 0):
-    channels = await _db_load_channels()
+    global _IN_MEMORY_CHANNELS_CACHE
+
+    # Trong lúc scan, cache này đã được nạp sẵn. Dùng trực tiếp để tránh gọi
+    # lại lớp load/cache ở mỗi checkpoint; chỉ fallback khi chưa có cache.
+    channels = _IN_MEMORY_CHANNELS_CACHE
+    if channels is None:
+        channels = await _db_load_channels()
     target_str = str(chat_id)
     updated = False
     now_str = last_scanned_at or time.strftime("%H:%M %d/%m/%Y")
@@ -2216,6 +2222,8 @@ class MusicScanManager:
                 ch_saved = saved_channels_map.get(self._current_channel_id) or {}
                 last_checkpoint_id = int(ch_saved.get("last_scanned_id", 0) or 0)
                 highest_seen_id = last_checkpoint_id
+                channel_tracks_found = 0
+                messages_since_checkpoint = 0
 
                 latest_msg_id = 0
                 try:
@@ -2539,15 +2547,25 @@ class MusicScanManager:
                                 "era": t_era,
                                 "stream_url": f"/api/music/stream/{resolved_chat_id}/{msg.id}"
                             })
+                            channel_tracks_found += 1
                             self._found_tracks_count = len(all_scanned_tracks)
                         except Exception:
                             continue
 
-                    # Cập nhật số tin nhắn đã quét và checkpoint vào DB
+                    # Chỉ persist checkpoint mỗi 500 message (hoặc batch cuối)
+                    # để giảm ghi JSON + MongoDB. Trước đây mỗi 50 message ghi
+                    # một lần, gây nhiều disk/database I/O khi quét kênh lớn.
                     self._processed_messages += len(sub_ids)
+                    messages_since_checkpoint += len(sub_ids)
                     checkpoint_to_save = max(highest_seen_id, sub_ids[-1])
-                    ch_tracks_total = len([t for t in all_scanned_tracks if str(t.get("chat_id")) == str(resolved_chat_id)])
-                    await _db_update_channel_progress(self._current_channel_id, checkpoint_to_save, total_tracks=ch_tracks_total)
+                    is_last_batch = batch_end > scan_to
+                    if messages_since_checkpoint >= 500 or is_last_batch:
+                        await _db_update_channel_progress(
+                            self._current_channel_id,
+                            checkpoint_to_save,
+                            total_tracks=channel_tracks_found,
+                        )
+                        messages_since_checkpoint = 0
                     await asyncio.sleep(0.02)
 
             if self._cancel_requested:
