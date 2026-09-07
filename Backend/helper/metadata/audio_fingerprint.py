@@ -782,6 +782,31 @@ def _build_manual_scan_windows(total_sec: float) -> list:
     return windows or [("Toàn bộ bài hát", 0.0, min(12.0, total_sec))]
 
 
+def _select_manual_query_windows(prepared_windows: list, max_windows: int = 6) -> list:
+    """Chọn vài mẫu mạnh và phân bố theo thời gian để tránh spam Shazam.
+
+    prepared_windows đã được sắp xếp energy giảm dần. Ưu tiên các đoạn cách
+    nhau >= 9 giây trước, sau đó mới lấp chỗ trống bằng các mẫu mạnh còn lại.
+    """
+    if len(prepared_windows) <= max_windows:
+        return list(prepared_windows)
+
+    chosen = []
+    for item in prepared_windows:
+        start = float(item.get("start") or 0.0)
+        if all(abs(start - float(old.get("start") or 0.0)) >= 9.0 for old in chosen):
+            chosen.append(item)
+            if len(chosen) >= max_windows:
+                return chosen
+
+    for item in prepared_windows:
+        if item not in chosen:
+            chosen.append(item)
+            if len(chosen) >= max_windows:
+                break
+    return chosen
+
+
 def _measure_pcm_wav_energy(file_path: str) -> float:
     """Ước lượng năng lượng của WAV PCM16 mono để ưu tiên đoạn có tín hiệu nhạc rõ."""
     if not file_path or not os.path.exists(file_path):
@@ -1228,9 +1253,23 @@ async def recognize_audio_from_telegram(
             })
 
         prepared_windows.sort(key=lambda item: (item["energy"], -item["index"]), reverse=True)
+
+        # Chỉ gửi một số mẫu mạnh nhất và có độ phủ thời gian tốt. Các file tạm
+        # không được chọn phải xóa ngay vì finally bên dưới chỉ dọn danh sách giữ lại.
+        selected_windows = _select_manual_query_windows(prepared_windows, max_windows=6)
+        selected_paths = {item.get("path") for item in selected_windows}
+        for item in prepared_windows:
+            sample_w_path = item.get("path")
+            if sample_w_path not in selected_paths and sample_w_path and os.path.exists(sample_w_path):
+                try:
+                    os.remove(sample_w_path)
+                except Exception:
+                    pass
+        prepared_windows = selected_windows
+
         if log_callback and prepared_windows:
             log_callback(
-                f"Lớp 1: Đã chuẩn bị {len(prepared_windows)} mẫu rolling; ưu tiên các đoạn có tín hiệu âm thanh rõ nhất...",
+                f"Lớp 1: Chọn {len(prepared_windows)} mẫu rolling tốt nhất; ưu tiên tín hiệu rõ và phân bố đều trong bài...",
                 "info",
             )
 
@@ -1256,7 +1295,7 @@ async def recognize_audio_from_telegram(
                     sample_w_path,
                     segment_name=seg_name,
                     log_callback=log_callback,
-                    timeout_sec=10.0,
+                    timeout_sec=8.0,
                 )
                 if not res:
                     continue

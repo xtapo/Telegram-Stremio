@@ -70,6 +70,10 @@ async def query_shazam_isolated(
             # Phản hồi hợp lệ nhưng không có track chỉ là "no match". Trước đây
             # code gọi lại chính đoạn đó qua subprocess, làm request tăng gấp đôi.
             return out or {}
+        except asyncio.TimeoutError:
+            # Timeout mạng không phải lỗi runtime của shazamio. Không chạy lại
+            # cùng một request qua subprocess vì sẽ nhân đôi thời gian chờ.
+            return {"_error": f"Timeout sau {timeout_sec:.0f}s"}
         except Exception as exc:
             direct_error = f"{type(exc).__name__}: {exc}"
 
@@ -118,6 +122,17 @@ async def query_shazam_isolated(
                 err = f"{direct_error}; {err}"
             return {"_error": err}
     except asyncio.TimeoutError:
+        # communicate() timeout không tự dừng tiến trình con. Dọn worker để
+        # tránh tích tụ nhiều shazam subprocess khi mạng chậm/mất kết nối.
+        try:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=1.5)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+        except Exception:
+            pass
         err = f"Timeout sau {timeout_sec:.0f}s"
         if direct_error:
             err = f"{direct_error}; {err}"
