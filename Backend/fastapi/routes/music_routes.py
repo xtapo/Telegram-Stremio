@@ -7,6 +7,8 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
+import subprocess
 import time
 import unicodedata
 from typing import Any, Dict, List, Optional, Union
@@ -112,22 +114,132 @@ def _format_duration(seconds: int) -> str:
     return f"{m}:{s:02d}"
 
 
+def _safe_int(value: Any) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _format_sample_rate(sample_rate_hz: int) -> str:
+    if sample_rate_hz <= 0:
+        return ""
+    khz = sample_rate_hz / 1000.0
+    if khz.is_integer():
+        return f"{int(khz)} kHz"
+    return f"{khz:g} kHz"
+
+
+def _codec_display_name(codec_name: str, fallback_ext: str = "") -> str:
+    codec = (codec_name or "").strip().lower()
+    aliases = {
+        "flac": "FLAC",
+        "mp3": "MP3",
+        "aac": "AAC",
+        "alac": "ALAC",
+        "opus": "OPUS",
+        "vorbis": "OGG",
+        "ape": "APE",
+        "wavpack": "WV",
+    }
+    if codec in aliases:
+        return aliases[codec]
+    if codec.startswith("pcm_"):
+        return "WAV" if fallback_ext in ("WAV", "WAVE") else "PCM"
+    if codec.startswith("dsd_"):
+        return "DSD"
+    if codec:
+        return codec.upper()
+    return fallback_ext or "AUDIO"
+
+
+def probe_audio_metadata(file_path: str) -> dict:
+    """Read authoritative audio properties from a local file with ffprobe."""
+    if not file_path or not os.path.isfile(file_path):
+        return {}
+
+    ffprobe_bin = shutil.which("ffprobe")
+    if not ffprobe_bin:
+        for candidate in ("/usr/bin/ffprobe", "/usr/local/bin/ffprobe", "/bin/ffprobe"):
+            if os.path.isfile(candidate):
+                ffprobe_bin = candidate
+                break
+
+    if not ffprobe_bin:
+        return {}
+
+    cmd = [
+        ffprobe_bin,
+        "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries",
+        "stream=codec_name,sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate,channels,channel_layout,duration:format=duration,bit_rate",
+        "-of", "json",
+        file_path,
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout:
+            LOGGER.debug("[AUDIO PROBE] ffprobe failed for %s: %s", file_path, result.stderr.strip())
+            return {}
+
+        payload = json.loads(result.stdout)
+        streams = payload.get("streams") or []
+        stream = streams[0] if streams else {}
+        fmt = payload.get("format") or {}
+
+        stream_bitrate = _safe_int(stream.get("bit_rate"))
+        format_bitrate = _safe_int(fmt.get("bit_rate"))
+        stream_duration = _safe_float(stream.get("duration"))
+        format_duration = _safe_float(fmt.get("duration"))
+
+        return {
+            "codec_name": str(stream.get("codec_name") or "").strip().lower(),
+            "sample_rate": _safe_int(stream.get("sample_rate")),
+            "bits_per_raw_sample": _safe_int(stream.get("bits_per_raw_sample")),
+            "bits_per_sample": _safe_int(stream.get("bits_per_sample")),
+            "bit_rate": stream_bitrate or format_bitrate,
+            "channels": _safe_int(stream.get("channels")),
+            "channel_layout": str(stream.get("channel_layout") or "").strip(),
+            "duration": stream_duration or format_duration,
+        }
+    except Exception as exc:
+        LOGGER.debug("[AUDIO PROBE] ffprobe error on %s: %s", file_path, exc)
+        return {}
+
+
 def detect_audio_quality(
     file_name: str = "",
     mime_type: str = "",
     file_size_bytes: int = 0,
     duration_sec: int = 0,
-    caption_text: str = ""
+    caption_text: str = "",
+    probe_data: Optional[dict] = None,
 ) -> tuple[str, str, int]:
     """
-    Phân tích chính xác chất lượng âm thanh dựa trên:
-    - Kích thước file & thời lượng phát (tính Bitrate thực tế kbps)
-    - Tên file & Caption (nhận diện tags 24bit, 96kHz, 192kHz, DSD, 320k, MQA,...)
-    - Định dạng MIME / Extension (FLAC, WAV, ALAC, DSF, MP3, AAC, OPUS,...)
+    Phân tích chất lượng âm thanh, ưu tiên metadata thực từ ffprobe.
+
+    Khi probe_data có dữ liệu, codec/sample-rate/bit-depth/bitrate được lấy từ
+    stream thực. Filename/caption và phép tính file-size/duration chỉ là fallback
+    cho các bài Telegram chưa có file local để probe.
     
     Returns:
         (format_string, quality_tier, bitrate_kbps)
-        format_string: 'FLAC 24-Bit / 96kHz', 'FLAC Lossless 16-Bit', 'MP3 • 320 kbps', 'DSD64 Hi-Res'
+        format_string: 'FLAC • 24-bit / 96 kHz • 2,834 kbps', 'MP3 • 320 kbps'
         quality_tier: 'hi-res' | 'lossless' | 'hq' | 'standard'
     """
     ext = os.path.splitext(file_name)[1].lower().replace(".", "").upper() if file_name else ""
@@ -135,7 +247,54 @@ def detect_audio_quality(
         ext = mime_type.split("/")[-1].upper() if "/" in mime_type else "AUDIO"
     if ext == "MPEG":
         ext = "MP3"
-    
+
+    probe = probe_data if isinstance(probe_data, dict) else {}
+    probe_codec = str(probe.get("codec_name") or "").strip().lower()
+    probe_sample_rate = _safe_int(probe.get("sample_rate"))
+    probe_bit_depth = _safe_int(probe.get("bits_per_raw_sample")) or _safe_int(probe.get("bits_per_sample"))
+    probe_bitrate = _safe_int(probe.get("bit_rate"))
+    probe_duration = _safe_float(probe.get("duration"))
+
+    if probe_codec or probe_sample_rate or probe_bit_depth or probe_bitrate:
+        codec_label = _codec_display_name(probe_codec, ext)
+        bitrate_kbps = int(round(probe_bitrate / 1000)) if probe_bitrate > 0 else 0
+
+        # Some containers/codecs do not expose stream bit_rate. In that case use
+        # the measured file-size/duration ratio, but never infer bit depth from it.
+        measured_duration = probe_duration or float(duration_sec or 0)
+        if bitrate_kbps <= 0 and measured_duration > 0 and file_size_bytes > 0:
+            bitrate_kbps = int(round((file_size_bytes * 8) / (measured_duration * 1000)))
+
+        sample_rate_text = _format_sample_rate(probe_sample_rate)
+        detail_parts = []
+        if probe_bit_depth > 0 and sample_rate_text:
+            detail_parts.append(f"{probe_bit_depth}-bit / {sample_rate_text}")
+        elif probe_bit_depth > 0:
+            detail_parts.append(f"{probe_bit_depth}-bit")
+        elif sample_rate_text:
+            detail_parts.append(sample_rate_text)
+        if bitrate_kbps > 0:
+            detail_parts.append(f"{bitrate_kbps:,} kbps")
+
+        format_string = codec_label
+        if detail_parts:
+            format_string += " • " + " • ".join(detail_parts)
+
+        is_dsd = probe_codec.startswith("dsd_") or codec_label == "DSD"
+        is_lossless = is_dsd or probe_codec in {"flac", "alac", "ape", "wavpack"} or probe_codec.startswith("pcm_")
+        if is_dsd:
+            tier = "hi-res"
+        elif is_lossless:
+            tier = "hi-res" if (probe_bit_depth >= 24 or probe_sample_rate >= 48000) else "lossless"
+        elif probe_codec in {"mp3", "aac"}:
+            tier = "hq" if bitrate_kbps >= 256 else "standard"
+        elif probe_codec in {"opus", "vorbis"}:
+            tier = "hq" if bitrate_kbps >= 160 else "standard"
+        else:
+            tier = "hq" if bitrate_kbps >= 256 else "standard"
+
+        return (format_string, tier, bitrate_kbps)
+
     bitrate_kbps = 0
     if duration_sec > 0 and file_size_bytes > 0:
         bitrate_kbps = int(round((file_size_bytes * 8) / (duration_sec * 1000)))
@@ -180,39 +339,39 @@ def detect_audio_quality(
         if bit_depth and sample_rate:
             is_hires = (bit_depth >= 24) or (sample_rate in ["48kHz", "88.2kHz", "96kHz", "176.4kHz", "192kHz"])
             tier = "hi-res" if is_hires else "lossless"
-            label = "Hi-Res" if is_hires else "Lossless"
-            return (f"{ext} {label} {bit_depth}-Bit / {sample_rate}", tier, bitrate_kbps)
+            br_str = f" • ~{bitrate_kbps:,} kbps" if bitrate_kbps else ""
+            return (f"{ext} • {bit_depth}-bit / {sample_rate.replace('kHz', ' kHz')}{br_str}", tier, bitrate_kbps)
         elif bit_depth in [24, 32]:
-            sr_str = f" / {sample_rate}" if sample_rate else (f" • ~{bitrate_kbps} kbps" if bitrate_kbps else "")
-            return (f"{ext} Hi-Res {bit_depth}-Bit{sr_str}", "hi-res", bitrate_kbps)
+            sr_str = f" / {sample_rate.replace('kHz', ' kHz')}" if sample_rate else ""
+            br_str = f" • ~{bitrate_kbps:,} kbps" if bitrate_kbps else ""
+            return (f"{ext} • {bit_depth}-bit{sr_str}{br_str}", "hi-res", bitrate_kbps)
         elif sample_rate in ["88.2kHz", "96kHz", "176.4kHz", "192kHz"]:
-            return (f"{ext} Hi-Res 24-Bit / {sample_rate}", "hi-res", bitrate_kbps)
-        
-        # Dựa trên Bitrate thực tế tính từ kích thước & thời lượng
-        if bitrate_kbps >= 2200:
-            return (f"{ext} Hi-Res 24-Bit (~{bitrate_kbps} kbps)", "hi-res", bitrate_kbps)
-        elif bitrate_kbps >= 1350:
-            return (f"{ext} Hi-Res (~{bitrate_kbps} kbps)", "hi-res", bitrate_kbps)
-        elif bitrate_kbps > 0:
-            return (f"{ext} Lossless 16-Bit (~{bitrate_kbps} kbps)", "lossless", bitrate_kbps)
-        else:
-            return (f"{ext} Lossless", "lossless", bitrate_kbps)
+            br_str = f" • ~{bitrate_kbps:,} kbps" if bitrate_kbps else ""
+            return (f"{ext} • {sample_rate.replace('kHz', ' kHz')}{br_str}", "hi-res", bitrate_kbps)
+
+        # Container is lossless, but file size alone does not prove bit depth or sample rate.
+        br_str = f" • ~{bitrate_kbps:,} kbps" if bitrate_kbps > 0 else ""
+        return (f"{ext} Lossless{br_str}", "lossless", bitrate_kbps)
 
     # 3. MP3
     if ext == "MP3":
-        effective_br = explicit_br or (bitrate_kbps if bitrate_kbps > 0 else 320)
+        effective_br = explicit_br or bitrate_kbps
+        if effective_br <= 0:
+            return ("MP3", "standard", 0)
         tier = "hq" if effective_br >= 256 else "standard"
-        return (f"MP3 • {effective_br} kbps", tier, effective_br)
+        prefix = "" if explicit_br else "~"
+        return (f"MP3 • {prefix}{effective_br:,} kbps", tier, effective_br)
 
     # 4. AAC / M4A
     if ext in ["AAC", "M4A"]:
         if "alac" in combined or "lossless" in combined or bitrate_kbps >= 650:
-            tier = "hi-res" if bitrate_kbps >= 1350 else "lossless"
-            label = "Hi-Res" if tier == "hi-res" else "Lossless"
-            return (f"ALAC {label} (~{bitrate_kbps} kbps)" if bitrate_kbps else "Apple Lossless (ALAC)", tier, bitrate_kbps)
-        effective_br = explicit_br or (bitrate_kbps if bitrate_kbps > 0 else 256)
+            return (f"ALAC Lossless • ~{bitrate_kbps:,} kbps" if bitrate_kbps else "Apple Lossless (ALAC)", "lossless", bitrate_kbps)
+        effective_br = explicit_br or bitrate_kbps
+        if effective_br <= 0:
+            return ("AAC", "standard", 0)
         tier = "hq" if effective_br >= 256 else "standard"
-        return (f"AAC • {effective_br} kbps", tier, effective_br)
+        prefix = "" if explicit_br else "~"
+        return (f"AAC • {prefix}{effective_br:,} kbps", tier, effective_br)
 
     # 5. OGG / OPUS
     if ext in ["OGG", "OPUS"]:
@@ -220,10 +379,9 @@ def detect_audio_quality(
         tier = "hq" if bitrate_kbps >= 160 else "standard"
         return (f"{ext}{br_str}", tier, bitrate_kbps)
 
-    # 6. Fallback
-    br_str = f" • {bitrate_kbps} kbps" if bitrate_kbps > 0 else ""
-    tier = "hi-res" if bitrate_kbps >= 1350 else ("lossless" if bitrate_kbps >= 600 else "standard")
-    return (f"{ext}{br_str}", tier, bitrate_kbps)
+    # 6. Unknown codecs: bitrate alone cannot prove lossless/Hi-Res quality.
+    br_str = f" • ~{bitrate_kbps:,} kbps" if bitrate_kbps > 0 else ""
+    return (f"{ext}{br_str}", "standard", bitrate_kbps)
 
 
 def detect_audio_quality_from_track_info(track: dict) -> tuple[str, str, int]:
@@ -235,7 +393,8 @@ def detect_audio_quality_from_track_info(track: dict) -> tuple[str, str, int]:
         mime_type="",
         file_size_bytes=size_bytes,
         duration_sec=duration_sec,
-        caption_text=""
+        caption_text="",
+        probe_data=track.get("audioProbe") if isinstance(track.get("audioProbe"), dict) else None,
     )
 
 
@@ -2154,12 +2313,14 @@ class MusicScanManager:
                             raw_artist = getattr(audio_obj, "performer", None) if audio_obj else None
                             raw_album = getattr(audio_obj, "album", None) if audio_obj else None
                             duration_sec = getattr(audio_obj, "duration", 0) if audio_obj else 0
+                            duration_for_quality = duration_sec
                             file_size_bytes = getattr(media, "file_size", 0) or 0
 
                             if not duration_sec and doc_obj:
                                 for attr in getattr(doc_obj, "attributes", []) or []:
                                     if hasattr(attr, "duration") and attr.duration:
                                         duration_sec = int(attr.duration)
+                                        duration_for_quality = duration_sec
                                     if hasattr(attr, "performer") and attr.performer and not raw_artist:
                                         raw_artist = attr.performer
                                     if hasattr(attr, "title") and attr.title and not raw_title:
@@ -2168,6 +2329,21 @@ class MusicScanManager:
                             if not duration_sec and file_size_bytes > 0:
                                 est_kbps = 900 if ("flac" in f_name.lower() or "wav" in f_name.lower()) else 320
                                 duration_sec = max(45, int(file_size_bytes / (est_kbps * 125)))
+
+                            audio_probe = {}
+                            legacy_cache_key = f"{abs(int(resolved_chat_id))}_{int(msg.id)}"
+                            legacy_audio_path = os.path.join(AUDIO_CACHE_DIR, f"{legacy_cache_key}.dat")
+                            if os.path.isfile(legacy_audio_path):
+                                try:
+                                    if not file_size_bytes or os.path.getsize(legacy_audio_path) == file_size_bytes:
+                                        audio_probe = await asyncio.to_thread(probe_audio_metadata, legacy_audio_path)
+                                except OSError:
+                                    audio_probe = {}
+                            if audio_probe:
+                                probed_duration = _safe_float(audio_probe.get("duration"))
+                                if probed_duration > 0:
+                                    duration_sec = int(round(probed_duration))
+                                    duration_for_quality = duration_sec
 
                             p_art, p_tit, p_alb = parse_artist_and_title(raw_title, raw_artist, raw_album, f_name, caption_text)
 
@@ -2220,7 +2396,8 @@ class MusicScanManager:
 
                             audio_fmt, q_tier, calc_br = detect_audio_quality(
                                 file_name=f_name, mime_type=m_type, file_size_bytes=file_size_bytes,
-                                duration_sec=duration_sec, caption_text=caption_text
+                                duration_sec=duration_for_quality, caption_text=caption_text,
+                                probe_data=audio_probe,
                             )
                             has_cover = bool(getattr(media, "thumbs", None))
                             fallback_cover = fingerprint_cover or (f"/api/music/cover/{resolved_chat_id}/{msg.id}" if has_cover else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop")
@@ -2285,6 +2462,7 @@ class MusicScanManager:
                                 "format": audio_fmt,
                                 "qualityTier": q_tier,
                                 "bitrate": calc_br,
+                                "audioProbe": audio_probe,
                                 "file_name": f_name,
                                 "cover_url": t_cover,
                                 "year": t_year,
@@ -2331,6 +2509,7 @@ class MusicScanManager:
                                 "format": t.get("format", a.get("format", "FLAC")),
                                 "qualityTier": t.get("qualityTier", a.get("qualityTier", "lossless")),
                                 "bitrate": t.get("bitrate", "Lossless"),
+                                "audioProbe": t.get("audioProbe") if isinstance(t.get("audioProbe"), dict) else {},
                                 "file_name": "",
                                 "cover_url": t.get("coverUrl", a.get("coverUrl", "")),
                                 "year": a.get("year", "2026"),
@@ -2374,6 +2553,7 @@ class MusicScanManager:
                     "format": tr["format"],
                     "qualityTier": tr["qualityTier"],
                     "bitrate": tr["bitrate"],
+                    "audioProbe": tr.get("audioProbe") if isinstance(tr.get("audioProbe"), dict) else {},
                     "previewUrl": tr["stream_url"],
                     "chatId": tr["chat_id"],
                     "msgId": tr["msg_id"],

@@ -1848,6 +1848,7 @@ class GoogleDriveUploadManager:
                 GLOW_PRESETS,
                 _format_size,
                 _format_duration,
+                probe_audio_metadata,
             )
 
             albums = await _db_load_library()
@@ -1861,12 +1862,18 @@ class GoogleDriveUploadManager:
                 mime_type = getattr(media, "mime_type", "") if media else ""
                 raw_fname = getattr(media, "file_name", "") or os.path.basename(local_fpath)
 
-                format_str, quality_tier, _ = detect_audio_quality(
+                audio_probe = await asyncio.to_thread(probe_audio_metadata, local_fpath)
+                probed_duration = float(audio_probe.get("duration") or 0) if audio_probe else 0
+                if probed_duration > 0:
+                    duration_sec = int(round(probed_duration))
+
+                format_str, quality_tier, bitrate_kbps = detect_audio_quality(
                     file_name=raw_fname,
                     mime_type=mime_type,
                     file_size_bytes=fsize,
                     duration_sec=duration_sec,
-                    caption_text=sent_msg.caption or ""
+                    caption_text=sent_msg.caption or "",
+                    probe_data=audio_probe,
                 )
 
                 final_artist = strip_copy_prefix((artist or "Unknown Artist").strip())
@@ -1884,6 +1891,8 @@ class GoogleDriveUploadManager:
                     "size_bytes": fsize,
                     "format": format_str,
                     "qualityTier": quality_tier,
+                    "bitrate": bitrate_kbps,
+                    "audioProbe": audio_probe,
                     "chatId": str(chat_id),
                     "msgId": sent_msg.id,
                     "previewUrl": f"/api/music/stream/{chat_id}/{sent_msg.id}",
