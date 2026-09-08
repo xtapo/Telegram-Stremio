@@ -47,17 +47,29 @@ async def _migrate_and_import_token(client: Client, migrate_token: LoginTokenMig
         target_dc = current_res.dc_id
         token = current_res.token
         LOGGER.info(f"[QR AUTH] Đang di chuyển client sang DC {target_dc} để hoàn tất ImportLoginToken...")
-        try:
-            await client.disconnect()
-        except Exception:
-            pass
         test_mode = await client.storage.test_mode()
         auth_key = await Auth(client, target_dc, test_mode).create()
-        client.session = Session(client, target_dc, auth_key, test_mode)
+        new_session = Session(client, target_dc, auth_key, test_mode)
+        await new_session.start()
+
+        try:
+            current_res = await new_session.invoke(ImportLoginToken(token=token))
+        except Exception:
+            await new_session.stop()
+            raise
+
+        # Không dùng Client.disconnect() ở đây: sau initialize() PyroFork cấm
+        # disconnect client. Đổi trực tiếp MTProto Session giữ dispatcher sống.
+        old_session = client.session
+        client.session = new_session
         await client.storage.dc_id(target_dc)
         await client.storage.auth_key(auth_key)
-        await client.connect()
-        current_res = await client.invoke(ImportLoginToken(token=token))
+
+        if old_session is not new_session:
+            try:
+                await old_session.stop()
+            except Exception:
+                LOGGER.warning("[QR AUTH] Không thể đóng MTProto session DC cũ", exc_info=True)
     return current_res
 
 
@@ -108,9 +120,12 @@ async def get_user_tg_client(user_id: str) -> Optional[Client]:
 async def close_user_tg_client(user_id: str):
     """Đóng và xóa client khỏi pool khi user logout"""
     client = _USER_CLIENT_POOL.pop(user_id, None)
-    if client and getattr(client, "is_connected", False):
+    if client:
         try:
-            await client.disconnect()
+            if getattr(client, "is_initialized", False):
+                await client.terminate()
+            if getattr(client, "is_connected", False):
+                await client.disconnect()
             LOGGER.info(f"[USER CLIENT POOL] Đã ngắt kết nối Telegram Client của user '{user_id}'")
         except Exception as e:
             LOGGER.warning(f"[USER CLIENT POOL] Lỗi khi disconnect user '{user_id}': {e}")
@@ -128,6 +143,8 @@ async def _cleanup_expired_qr_sessions():
         if sdata and sdata.get("client"):
             try:
                 cl = sdata["client"]
+                if getattr(cl, "is_initialized", False):
+                    await cl.terminate()
                 if getattr(cl, "is_connected", False):
                     await cl.disconnect()
             except Exception:
@@ -166,26 +183,10 @@ async def init_telegram_qr_login():
             )
         )
 
-        # Xử lý nếu Telegram yêu cầu chuyển Data Center (DC)
-        while isinstance(res, LoginTokenMigrateTo):
-            target_dc = res.dc_id
-            LOGGER.info(f"[QR AUTH] Di chuyển MTProto DC sang DC {target_dc}")
-            try:
-                await temp_client.disconnect()
-            except Exception:
-                pass
-            temp_client.storage.dc_id = target_dc
-            temp_client.storage.auth_key = None
-            temp_client.session.dc_id = target_dc
-            temp_client.session.auth_key = None
-            await temp_client.connect()
-            res = await temp_client.invoke(
-                ExportLoginToken(
-                    api_id=Telegram.API_ID,
-                    api_hash=Telegram.API_HASH,
-                    except_ids=[]
-                )
-            )
+        # Telegram có thể yêu cầu chuyển sang DC của tài khoản. Token đã export
+        # phải được import ở DC đích; export token mới sẽ làm sai luồng QR.
+        if isinstance(res, LoginTokenMigrateTo):
+            res = await _migrate_and_import_token(temp_client, res)
 
         if not isinstance(res, LoginToken):
             raise HTTPException(status_code=500, detail="Không nhận được LoginToken từ Telegram.")
@@ -220,13 +221,6 @@ async def init_telegram_qr_login():
                         login_res = await _migrate_and_import_token(client, login_res)
                     if isinstance(login_res, LoginTokenSuccess):
                         auth_user = getattr(login_res.authorization, "user", None)
-                        if auth_user:
-                            try:
-                                client.storage.user_id = auth_user.id
-                                client.storage.is_bot = False
-                                client.storage.is_authorized = True
-                            except Exception:
-                                pass
                         user_data = await _finalize_qr_login(client, auth_user=auth_user)
                         _ACTIVE_QR_SESSIONS[session_id]["status"] = user_data.get("status", "success")
                         _ACTIVE_QR_SESSIONS[session_id]["user_data"] = user_data
@@ -237,6 +231,9 @@ async def init_telegram_qr_login():
                 LOGGER.error(f"[QR RAW UPDATE ERROR] {ex}", exc_info=True)
 
         temp_client.add_handler(RawUpdateHandler(on_qr_raw_update))
+        # connect() chỉ mở MTProto session. initialize() mới khởi động dispatcher
+        # để RawUpdateHandler thực sự nhận UpdateLoginToken sau khi quét QR.
+        await temp_client.initialize()
 
         return {
             "status": "success",
@@ -247,7 +244,11 @@ async def init_telegram_qr_login():
         }
     except FloodWait as fw:
         if temp_client:
-            try: await temp_client.disconnect()
+            try:
+                if getattr(temp_client, "is_initialized", False):
+                    await temp_client.terminate()
+                if getattr(temp_client, "is_connected", False):
+                    await temp_client.disconnect()
             except Exception: pass
         return JSONResponse(
             status_code=429,
@@ -255,7 +256,11 @@ async def init_telegram_qr_login():
         )
     except Exception as e:
         if temp_client:
-            try: await temp_client.disconnect()
+            try:
+                if getattr(temp_client, "is_initialized", False):
+                    await temp_client.terminate()
+                if getattr(temp_client, "is_connected", False):
+                    await temp_client.disconnect()
             except Exception: pass
         LOGGER.error(f"[QR AUTH INIT ERROR] {e}", exc_info=True)
         return JSONResponse(
@@ -277,6 +282,11 @@ async def _finalize_qr_login(user_client: Client, auth_user=None) -> dict:
 
     if not user_me:
         raise ValueError("Không thể lấy thông tin người dùng từ Telegram.")
+
+    # QR raw auth không đi qua Client.sign_in(), nên PyroFork chưa tự ghi
+    # user_id/is_bot vào storage. Hai trường này bắt buộc để export session string.
+    await user_client.storage.user_id(user_me.id)
+    await user_client.storage.is_bot(False)
 
     user_id = f"tg_{user_me.id}"
     first_name = getattr(user_me, "first_name", "") or ""
