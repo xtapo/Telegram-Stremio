@@ -4036,7 +4036,7 @@ class XTAPOMusicApp {
             this.navMusics.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.setActiveNavLink(this.navMusics);
-                this.clearHash();
+                this.saveActiveView({ type: 'main' });
                 [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.favoritesModal, this.lyricsModal].forEach(m => {
                     if (m) m.classList.remove('open');
                 });
@@ -4358,7 +4358,7 @@ class XTAPOMusicApp {
             { id: 'mobileNavAccount', action: () => this.openAuthModal() },
             { id: 'mobileNavMusics', action: () => {
                 this.setActiveNavLink(this.navMusics);
-                this.clearHash();
+                this.saveActiveView({ type: 'main' });
                 [this.albumModal, this.searchModal, this.tgModal, this.playlistModal, this.addToPlaylistModal, this.artistModal, this.genreModal, this.countryModal, this.tracklistModal, this.favoritesModal, this.lyricsModal].forEach(m => {
                     if (m) m.classList.remove('open');
                 });
@@ -4774,7 +4774,13 @@ class XTAPOMusicApp {
                     });
                     if (exactIdx !== -1) return exactIdx;
                 }
-                return fallbackIdx;
+                if (state.trackName && tracks && tracks.length > 0) {
+                    const savedName = String(state.trackName).trim().toLowerCase();
+                    const nameIdx = tracks.findIndex(t => String(t?.name || t?.title || '').trim().toLowerCase() === savedName);
+                    if (nameIdx !== -1) return nameIdx;
+                }
+                if (!tracks || tracks.length === 0) return 0;
+                return Math.max(0, Math.min(fallbackIdx, tracks.length - 1));
             };
 
             if (state.isFavoriteMode && this.favoriteTracks && this.favoriteTracks.length > 0) {
@@ -4856,18 +4862,19 @@ class XTAPOMusicApp {
     restoreActiveView() {
         try {
             let view = null;
-            const raw = localStorage.getItem('xtapo_music_active_view');
-            if (raw) {
-                try { view = JSON.parse(raw); } catch (e) {}
-            }
-
-            // Fallback sang URL hash nếu chưa có trong localStorage
             const rawHash = window.location.hash.replace(/^#/, '');
-            if (!view && rawHash) {
+            // URL hash phản ánh màn hình đang mở gần nhất và phải được ưu tiên hơn
+            // localStorage để Back/Forward, deep-link và reload không bị state cũ ghi đè.
+            if (rawHash) {
                 if (rawHash.startsWith('artist/')) {
                     view = { type: 'artist-detail', name: decodeURIComponent(rawHash.replace('artist/', '')) };
                 } else {
                     view = { type: rawHash };
+                }
+            } else {
+                const raw = localStorage.getItem('xtapo_music_active_view');
+                if (raw) {
+                    try { view = JSON.parse(raw); } catch (e) {}
                 }
             }
 
@@ -5134,9 +5141,25 @@ class XTAPOMusicApp {
 
     closeModal(modal) {
         if (!modal) return;
+        const isPersistentViewModal = [
+            this.albumModal,
+            this.artistModal,
+            this.genreModal,
+            this.countryModal,
+            this.playlistModal,
+            this.favoritesModal,
+            this.tracklistModal,
+            this.searchModal,
+            this.lyricsModal,
+            this.equalizerModal
+        ].includes(modal);
         modal.classList.remove('open');
         this.clearHashIfModalClosed(modal);
-        this.saveActiveView({ type: 'main' });
+        // Modal phụ (đăng nhập, thêm playlist, tải file, hẹn giờ...) không được
+        // xóa trạng thái của trang chính đang nằm phía sau.
+        if (isPersistentViewModal) {
+            this.saveActiveView({ type: 'main' });
+        }
     }
 
     setActiveNavLink(activeLink) {
@@ -6334,7 +6357,7 @@ class XTAPOMusicApp {
     // --- Artists & Genres Feature Methods ---
 
     filterHiresAlbums() {
-        this.setHash('hires');
+        this.saveActiveView({ type: 'hires' });
         const hiresAlbums = this.getBaseAlbums().filter(a => {
             const fmt = (a.format || '').toLowerCase();
             return fmt.includes('flac') || fmt.includes('24-bit') || fmt.includes('hi-res') || fmt.includes('dsd') || fmt.includes('lossless');
@@ -6348,7 +6371,7 @@ class XTAPOMusicApp {
     }
 
     showArtistListView() {
-        this.setHash('artists');
+        this.saveActiveView({ type: 'artists' });
         if (this.artistListView && this.artistProfileView) {
             this.artistListView.style.display = 'flex';
             this.artistProfileView.style.display = 'none';
@@ -6644,7 +6667,7 @@ class XTAPOMusicApp {
     openArtistSpotlight(art) {
         if (!this.artistProfileView || !this.artistListView) return;
 
-        this.setHash(`artist/${encodeURIComponent(art.name)}`);
+        this.saveActiveView({ type: 'artist-detail', name: art.name });
         this.artistListView.style.display = 'none';
         this.artistProfileView.style.display = 'flex';
 
@@ -6764,7 +6787,7 @@ class XTAPOMusicApp {
         }
     }
 
-    playArtistQueue(art, startIndex = 0, isShuffle = false) {
+    playArtistQueue(art, startIndex = 0, isShuffle = false, autoPlay = true) {
         let tracks = [...art.tracks];
         if (isShuffle && tracks.length > 1) {
             for (let i = tracks.length - 1; i > 0; i--) {
@@ -6785,8 +6808,10 @@ class XTAPOMusicApp {
             tracks: tracks
         };
 
-        this.setVirtualAlbum(artistAlbum, startIndex, true);
-        this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${tracks.length} bài)`);
+        this.setVirtualAlbum(artistAlbum, startIndex, autoPlay);
+        if (autoPlay) {
+            this.showToast(`Đang phát tuyển tập ca sĩ "${art.name}" (${tracks.length} bài)`);
+        }
     }
 
     normalizeGenre(rawGenre, track = null) {

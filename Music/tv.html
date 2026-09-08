@@ -1425,6 +1425,8 @@
         let currentQrToken = null;
         let qrPollRequestInFlight = false;
         let authenticatedAppLoadPromise = null;
+        let isRestoringTvState = false;
+        let lastTvStateSaveAt = 0;
 
         // Search State
         let itemSearchQuery = '';
@@ -2298,17 +2300,80 @@
         }
 
         // ─── STATE PERSISTENCE (LƯU & KHÔI PHỤC VỊ TRÍ KHI TẢI LẠI TRANG) ───
+        function getTvTrackIdentity(track) {
+            if (!track) return null;
+            return {
+                chatId: track.chat_id ?? track.chatId ?? null,
+                msgId: track.msg_id ?? track.msgId ?? null,
+                id: track.id ?? null,
+                name: track.name || track.title || '',
+                artist: track.artist || track.performer || ''
+            };
+        }
+
+        function findSavedTrackIndex(list, savedTrack, fallbackIdx = 0) {
+            if (!Array.isArray(list) || list.length === 0) return -1;
+            if (!savedTrack) return Math.max(0, Math.min(list.length - 1, fallbackIdx || 0));
+            const savedChat = savedTrack.chatId != null ? String(savedTrack.chatId) : '';
+            const savedMsg = savedTrack.msgId != null ? String(savedTrack.msgId) : '';
+            if (savedChat && savedMsg) {
+                const exact = list.findIndex(track => {
+                    const chat = track?.chat_id ?? track?.chatId;
+                    const msg = track?.msg_id ?? track?.msgId;
+                    return chat != null && msg != null && String(chat) === savedChat && String(msg) === savedMsg;
+                });
+                if (exact !== -1) return exact;
+            }
+            if (savedTrack.id != null) {
+                const savedId = String(savedTrack.id);
+                const byId = list.findIndex(track => track?.id != null && String(track.id) === savedId);
+                if (byId !== -1) return byId;
+            }
+            const savedName = String(savedTrack.name || '').trim().toLowerCase();
+            const savedArtist = String(savedTrack.artist || '').trim().toLowerCase();
+            if (savedName) {
+                const byName = list.findIndex(track => {
+                    const name = String(track?.name || track?.title || '').trim().toLowerCase();
+                    const artist = String(track?.artist || track?.performer || '').trim().toLowerCase();
+                    return name === savedName && (!savedArtist || !artist || artist === savedArtist);
+                });
+                if (byName !== -1) return byName;
+            }
+            return fallbackIdx >= 0 ? Math.max(0, Math.min(list.length - 1, fallbackIdx)) : -1;
+        }
+
         function saveTvState() {
+            if (isRestoringTvState) return;
             try {
+                const playingTrack = currentlyPlayingTrack || currentlyPlayingList?.[currentlyPlayingIdx] || null;
                 const state = {
+                    version: 2,
                     tab: currentTab,
                     page: currentPage,
                     selectedIdx: selectedItemIdx,
                     activeItemId: currentActiveGroup?.id,
-                    activeItemTitle: currentActiveGroup?.title
+                    activeItemTitle: currentActiveGroup?.title,
+                    trackPage: currentTrackPage,
+                    subgenre: selectedTvSubgenre,
+                    playing: playingTrack ? {
+                        groupId: currentlyPlayingGroup?.id ?? null,
+                        groupTitle: currentlyPlayingGroup?.title || currentlyPlayingGroup?.name || null,
+                        trackIndex: currentlyPlayingIdx,
+                        track: getTvTrackIdentity(playingTrack),
+                        currentTime: audio && Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
+                        wasPlaying: !!(isPlaying && audio && !audio.paused),
+                        volume: audio && Number.isFinite(audio.volume) ? audio.volume : 1
+                    } : null
                 };
                 localStorage.setItem('xtapo_tv_state', JSON.stringify(state));
             } catch(e) {}
+        }
+
+        function saveTvStateThrottled(intervalMs = 1000) {
+            const now = Date.now();
+            if (now - lastTvStateSaveAt < intervalMs) return;
+            lastTvStateSaveAt = now;
+            saveTvState();
         }
 
         function getSavedTvState() {
@@ -2318,6 +2383,66 @@
             } catch(e) {
                 return null;
             }
+        }
+
+        function restoreTvPlaybackState(saved) {
+            const playback = saved?.playing;
+            if (!playback?.track) return false;
+            const candidateGroups = [];
+            const seenGroups = new Set();
+            const addGroup = (group) => {
+                if (!group || !Array.isArray(group.tracks) || group.tracks.length === 0) return;
+                const key = `${String(group.id ?? '')}|${String(group.title || group.name || '')}`;
+                if (seenGroups.has(key)) return;
+                seenGroups.add(key);
+                candidateGroups.push(group);
+            };
+            addGroup(currentActiveGroup);
+            (currentItems || []).forEach(addGroup);
+            (rawAlbums || []).forEach(addGroup);
+            (userPlaylists || []).forEach(pl => addGroup({ ...pl, id: pl.id || pl._id, title: pl.name || pl.title, tracks: pl.tracks || [] }));
+            if (userFavorites && userFavorites.length > 0) addGroup({ id: 'fav', title: 'Bài Hát Yêu Thích', tracks: userFavorites });
+
+            const groupId = playback.groupId != null ? String(playback.groupId) : '';
+            const groupTitle = String(playback.groupTitle || '').trim().toLowerCase();
+            let targetGroup = candidateGroups.find(group => groupId && String(group.id ?? '') === groupId);
+            if (!targetGroup && groupTitle) targetGroup = candidateGroups.find(group => String(group.title || group.name || '').trim().toLowerCase() === groupTitle);
+            let targetIdx = targetGroup ? findSavedTrackIndex(targetGroup.tracks, playback.track, playback.trackIndex || 0) : -1;
+            if (!targetGroup || targetIdx === -1) {
+                for (const group of candidateGroups) {
+                    const idx = findSavedTrackIndex(group.tracks, playback.track, -1);
+                    if (idx !== -1) {
+                        targetGroup = group;
+                        targetIdx = idx;
+                        break;
+                    }
+                }
+            }
+            if (!targetGroup || targetIdx < 0) return false;
+
+            playTrack(targetIdx, targetGroup.tracks, targetGroup, false);
+            if (audio && Number.isFinite(playback.volume)) audio.volume = Math.max(0, Math.min(1, playback.volume));
+            const targetTime = Number(playback.currentTime) || 0;
+            const applyPosition = () => {
+                if (!audio || targetTime <= 0) return;
+                try {
+                    const maxTime = Number.isFinite(audio.duration) && audio.duration > 0 ? Math.max(0, audio.duration - 0.25) : targetTime;
+                    audio.currentTime = Math.min(targetTime, maxTime);
+                    timeCur.textContent = formatTime(audio.currentTime);
+                    if (audio.duration) progressFill.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
+                } catch (e) {}
+            };
+            if (audio?.readyState >= 1) applyPosition();
+            else if (audio) audio.addEventListener('loadedmetadata', applyPosition, { once: true });
+            if (playback.wasPlaying && audio) {
+                const resumePlayback = () => {
+                    const promise = audio.play();
+                    if (promise && typeof promise.catch === 'function') promise.catch(() => { isPlaying = false; updatePlayerUI(); });
+                };
+                if (audio.readyState >= 2) resumePlayback();
+                else audio.addEventListener('canplay', resumePlayback, { once: true });
+            }
+            return true;
         }
 
         // ─── COVER ART LOOKUP (HIỂN THỊ CHÍNH XÁC ẢNH BÌA BÀI HÁT / ALBUM) ───
@@ -2830,6 +2955,7 @@
         audio.addEventListener('play', () => {
             isPlaying = true;
             updatePlayerUI();
+            saveTvState();
         });
 
         audio.addEventListener('playing', () => {
@@ -2841,6 +2967,7 @@
         audio.addEventListener('pause', () => {
             isPlaying = false;
             updatePlayerUI();
+            saveTvState();
         });
 
         audio.addEventListener('waiting', () => {
@@ -2897,10 +3024,12 @@
                 progressFill.style.width = `${pct}%`;
                 timeCur.textContent = formatTime(audio.currentTime);
                 timeDur.textContent = formatTime(audio.duration);
+                saveTvStateThrottled();
             }
         });
 
         audio.addEventListener('ended', () => {
+            saveTvState();
             nextTrack();
         });
 
@@ -3140,9 +3269,12 @@
             }
 
             const saved = getSavedTvState();
+            isRestoringTvState = true;
             const initTab = saved?.tab || 'favorites';
             currentTab = initTab;
             if (saved?.page) currentPage = saved.page;
+            if (saved?.trackPage) currentTrackPage = Math.max(1, saved.trackPage);
+            if (saved?.subgenre) selectedTvSubgenre = saved.subgenre;
             updateSearchPlaceholder();
 
             document.querySelectorAll('.tv-nav-item').forEach(nav => {
@@ -3163,8 +3295,17 @@
 
             renderItems();
             if (currentItems.length > 0) {
-                selectItem(selectedItemIdx);
+                selectItem(selectedItemIdx, !!saved?.subgenre);
             }
+            if (saved?.trackPage) currentTrackPage = Math.max(1, saved.trackPage);
+            if (saved?.subgenre) selectedTvSubgenre = saved.subgenre;
+            if (currentActiveGroup) {
+                renderTvGenreSubfilters(currentActiveGroup);
+                renderTracklist();
+            }
+            restoreTvPlaybackState(saved);
+            isRestoringTvState = false;
+            saveTvState();
 
             setTimeout(() => {
                 const activeCard = document.querySelector('.tv-card-item.active') || document.querySelector('.tv-card-item') || document.querySelector('.tv-nav-item.active');
@@ -3205,6 +3346,7 @@
                 if (currentTrackPage > 1) {
                     currentTrackPage--;
                     renderTracklist();
+                    saveTvState();
                     const first = document.querySelector('.tv-col-right .tv-track-item');
                     if (first) setFocus(first);
                 }
@@ -3217,6 +3359,7 @@
                 if (currentTrackPage < totalTrackPages) {
                     currentTrackPage++;
                     renderTracklist();
+                    saveTvState();
                     const first = document.querySelector('.tv-col-right .tv-track-item');
                     if (first) setFocus(first);
                 }
@@ -4105,6 +4248,12 @@
             }
         });
 
+        window.addEventListener('beforeunload', saveTvState);
+        window.addEventListener('pagehide', saveTvState);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) saveTvState();
+        });
+
         // ═══════════════════════════════════════════════════════════════════════════
         // SPOTIFY CONNECT / ANDROID TV REMOTE SYNC RECEIVER ENGINE
         // ═══════════════════════════════════════════════════════════════════════════
@@ -4369,3 +4518,5 @@
     </script>
 </body>
 </html>
+
+
