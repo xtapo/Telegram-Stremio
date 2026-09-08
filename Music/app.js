@@ -1337,7 +1337,7 @@ class XTAPOMusicApp {
 
     async submitPhone2Fa() {
         if (!this._currentPhoneSessionId || !this.phone2FaInput) return;
-        const password = this.phone2FaInput.value.trim();
+        const password = this.phone2FaInput.value;
         if (!password) return this.showToast("Vui lòng nhập mật khẩu 2FA.");
 
         if (this.btnSubmitPhone2Fa) {
@@ -1557,7 +1557,7 @@ class XTAPOMusicApp {
 
     async submitQr2Fa() {
         if (!this._currentQrSessionId || !this.qr2FaInput) return;
-        const password = this.qr2FaInput.value.trim();
+        const password = this.qr2FaInput.value;
         if (!password) return this.showToast("Vui lòng nhập mật khẩu 2FA.");
 
         if (this.btnSubmit2Fa) this.btnSubmit2Fa.textContent = "Đang xác thực...";

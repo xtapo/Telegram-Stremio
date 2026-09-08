@@ -52,14 +52,9 @@ async def _migrate_and_import_token(client: Client, migrate_token: LoginTokenMig
         new_session = Session(client, target_dc, auth_key, test_mode)
         await new_session.start()
 
-        try:
-            current_res = await new_session.invoke(ImportLoginToken(token=token))
-        except Exception:
-            await new_session.stop()
-            raise
-
-        # Không dùng Client.disconnect() ở đây: sau initialize() PyroFork cấm
-        # disconnect client. Đổi trực tiếp MTProto Session giữ dispatcher sống.
+        # Phải chuyển client sang DC mới TRƯỚC khi ImportLoginToken. Với tài khoản
+        # bật 2FA, ImportLoginToken có thể raise SessionPasswordNeeded; lúc đó
+        # check_password() tiếp theo bắt buộc phải chạy trên chính DC mới này.
         old_session = client.session
         client.session = new_session
         await client.storage.dc_id(target_dc)
@@ -70,6 +65,11 @@ async def _migrate_and_import_token(client: Client, migrate_token: LoginTokenMig
                 await old_session.stop()
             except Exception:
                 LOGGER.warning("[QR AUTH] Không thể đóng MTProto session DC cũ", exc_info=True)
+
+        # Nếu Telegram yêu cầu 2FA, cố ý để SessionPasswordNeeded truyền ra ngoài.
+        # RawUpdateHandler sẽ chuyển trạng thái sang needs_2fa nhưng vẫn giữ client
+        # ở đúng DC để endpoint /qr/2fa gọi check_password() thành công.
+        current_res = await client.invoke(ImportLoginToken(token=token))
     return current_res
 
 
