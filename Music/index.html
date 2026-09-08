@@ -23,7 +23,7 @@
             href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
             rel="stylesheet">
     </noscript>
-    <link rel="stylesheet" href="/music/style.css?v=4.3">
+    <link rel="stylesheet" href="/music/style.css?v=4.4">
     <style>
         @media (max-width: 1024px) {
 
@@ -42,7 +42,7 @@
     <script src="/music/qrcode.min.js?v=1.0" defer></script>
 </head>
 
-<body class="kmusic-body">
+<body class="kmusic-body auth-required">
     <!-- Ambient Dynamic Background Blur (Apple Music Style) -->
     <div class="dynamic-backdrop" id="dynamicBackdrop">
         <div class="backdrop-art-wrapper">
@@ -994,7 +994,6 @@
                 </div>
 
                 <div class="tg-modal-footer">
-                    <button class="tg-demo-btn" id="tgLoadDemoBtn">Dùng Nhạc Mẫu (Demo)</button>
                     <button class="tg-scan-submit-btn" id="tgScanSubmitBtn">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                             <path
@@ -1133,7 +1132,8 @@
     </div>
 
     <!-- Auth Modal (Telegram QR & Internal Login) -->
-    <div class="modal-overlay" id="authModal">
+    <div class="modal-overlay auth-gate-overlay open" id="authModal" role="dialog" aria-modal="true"
+        aria-label="Đăng nhập XTAPO MUSIC">
         <div class="modal-container auth-modal-container">
             <div class="modal-header auth-modal-header">
                 <div class="auth-header-info">
@@ -1147,6 +1147,27 @@
                     <h3 id="authModalTitle">Đăng Nhập Tài Khoản</h3>
                 </div>
                 <button class="modal-close" id="closeAuthModal">&times;</button>
+            </div>
+
+            <div class="auth-gate-intro">
+                <div class="auth-gate-logo">
+                    <span class="auth-gate-logo-ring"></span>
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <circle cx="12" cy="12" r="2.4"></circle>
+                        <path d="M12 3a9 9 0 0 1 9 9"></path>
+                    </svg>
+                </div>
+                <div>
+                    <span class="auth-gate-eyebrow">PRIVATE HI-RES MUSIC CLOUD</span>
+                    <h2>Chào mừng đến XTAPO MUSIC</h2>
+                    <p>Đăng nhập để truy cập thư viện Lossless, playlist cá nhân và đồng bộ thiết bị của bạn.</p>
+                </div>
+                <div class="auth-gate-features" aria-hidden="true">
+                    <span>24-BIT HI-RES</span>
+                    <span>TELEGRAM CLOUD</span>
+                    <span>DEVICE SYNC</span>
+                </div>
             </div>
 
             <!-- Tab Switcher -->
@@ -2282,7 +2303,7 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="none" playsinline webkit-playsinline></audio>
 
-    <script src="/music/app.js?v=6.2"></script>
+    <script src="/music/app.js?v=6.3"></script>
 </body>
 
 </html>

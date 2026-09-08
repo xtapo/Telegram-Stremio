@@ -2904,23 +2904,6 @@ html, body {
     margin-top: 10px;
 }
 
-.tg-demo-btn {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: var(--text-primary);
-    padding: 10px 16px;
-    border-radius: 10px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-}
-
-.tg-demo-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: #ffffff;
-}
-
 .tg-scan-submit-btn {
     background: linear-gradient(135deg, #0088cc 0%, #00a8e8 100%);
     border: none;
@@ -5197,6 +5180,219 @@ html, body {
     box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(0, 136, 204, 0.2);
     overflow: hidden;
     padding: 0 !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FULLSCREEN GLASSMORPHISM LOGIN GATE
+   Guest chỉ nhìn thấy màn hình đăng nhập, không truy cập player.
+   ───────────────────────────────────────────────────────────── */
+body.auth-required {
+    overflow: hidden;
+}
+
+body.auth-required .app-container {
+    pointer-events: none;
+    user-select: none;
+    filter: blur(14px) saturate(0.65);
+    transform: scale(1.015);
+    opacity: 0.22;
+    transition: filter 0.35s ease, transform 0.35s ease, opacity 0.35s ease;
+}
+
+body.auth-required .dynamic-backdrop {
+    opacity: 0.75;
+    filter: saturate(1.15) brightness(0.72);
+}
+
+.auth-gate-overlay {
+    padding: 28px;
+}
+
+body.auth-required .auth-gate-overlay {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at 16% 18%, rgba(56, 189, 248, 0.22), transparent 34%),
+        radial-gradient(circle at 84% 82%, rgba(139, 92, 246, 0.2), transparent 36%),
+        radial-gradient(circle at 68% 18%, rgba(14, 165, 233, 0.1), transparent 26%),
+        rgba(4, 7, 15, 0.72);
+    backdrop-filter: blur(22px) saturate(1.25);
+    -webkit-backdrop-filter: blur(22px) saturate(1.25);
+}
+
+body.auth-required .auth-gate-overlay::before,
+body.auth-required .auth-gate-overlay::after {
+    content: '';
+    position: absolute;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.45;
+    pointer-events: none;
+    animation: authGlassFloat 8s ease-in-out infinite alternate;
+}
+
+body.auth-required .auth-gate-overlay::before {
+    top: -90px;
+    left: -70px;
+    background: rgba(14, 165, 233, 0.42);
+}
+
+body.auth-required .auth-gate-overlay::after {
+    right: -80px;
+    bottom: -110px;
+    background: rgba(124, 58, 237, 0.38);
+    animation-delay: -3s;
+}
+
+body.auth-required .auth-modal-container {
+    width: min(94vw, 540px) !important;
+    max-width: 540px !important;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+    position: relative;
+    z-index: 2;
+    background: linear-gradient(145deg, rgba(18, 24, 39, 0.76), rgba(8, 12, 24, 0.64)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-radius: 30px;
+    box-shadow:
+        0 30px 90px rgba(0, 0, 0, 0.62),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 0 0 1px rgba(56, 189, 248, 0.05),
+        0 0 70px rgba(14, 165, 233, 0.14) !important;
+    backdrop-filter: blur(34px) saturate(1.35) !important;
+    -webkit-backdrop-filter: blur(34px) saturate(1.35) !important;
+    animation: authGlassEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body.auth-required #closeAuthModal {
+    display: none !important;
+}
+
+.auth-gate-intro {
+    padding: 8px 26px 2px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.auth-gate-logo {
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    position: relative;
+    margin-bottom: 14px;
+    color: #7dd3fc;
+    border-radius: 22px;
+    background: linear-gradient(145deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.12));
+    border: 1px solid rgba(125, 211, 252, 0.26);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 12px 30px rgba(14,165,233,0.18);
+}
+
+.auth-gate-logo-ring {
+    position: absolute;
+    inset: -7px;
+    border-radius: 26px;
+    border: 1px solid rgba(125, 211, 252, 0.14);
+}
+
+.auth-gate-eyebrow {
+    display: block;
+    margin-bottom: 7px;
+    color: #7dd3fc;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+}
+
+.auth-gate-intro h2 {
+    margin: 0;
+    color: #fff;
+    font-size: clamp(1.35rem, 3vw, 1.8rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+}
+
+.auth-gate-intro p {
+    max-width: 430px;
+    margin: 9px auto 0;
+    color: rgba(226, 232, 240, 0.72);
+    font-size: 0.82rem;
+    line-height: 1.55;
+}
+
+.auth-gate-features {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 14px;
+}
+
+.auth-gate-features span {
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: rgba(226,232,240,0.7);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+body.auth-required .auth-tabs {
+    background: rgba(2, 6, 23, 0.32);
+    border-color: rgba(255,255,255,0.1);
+    backdrop-filter: blur(16px);
+}
+
+body.auth-required .phone-stage-card,
+body.auth-required .qr-stage-card,
+body.auth-required #pwLoginPane {
+    background: rgba(255,255,255,0.035);
+    border-color: rgba(255,255,255,0.1);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+@keyframes authGlassEnter {
+    from { opacity: 0; transform: translateY(18px) scale(0.965); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes authGlassFloat {
+    from { transform: translate3d(-12px, -6px, 0) scale(0.95); }
+    to { transform: translate3d(18px, 14px, 0) scale(1.08); }
+}
+
+@media (max-width: 600px) {
+    .auth-gate-overlay {
+        padding: 12px;
+    }
+
+    body.auth-required .auth-modal-container {
+        width: 100% !important;
+        max-height: calc(100vh - 24px);
+        border-radius: 24px;
+    }
+
+    .auth-gate-intro {
+        padding-left: 18px;
+        padding-right: 18px;
+    }
+
+    .auth-gate-features {
+        display: none;
+    }
 }
 
 .auth-modal-header {

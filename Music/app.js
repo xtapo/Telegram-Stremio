@@ -3,121 +3,6 @@
  * High-Fidelity Audio Experience & Interactive Vinyl Animation
  */
 
-// --- Albums & Tracks Database ---
-const ALBUMS_DATABASE = [
-    {
-        id: "shania-twain-little-miss-twain",
-        title: "LITTLE MISS TWAIN",
-        artist: "SHANIA TWAIN",
-        year: "2026",
-        format: "FLAC 24-Bit / 96kHz",
-        totalSize: "1.18 GB",
-        publisher: "Republic Records / UMG",
-        country: "Âu Mỹ",
-        isDemo: true,
-        coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
-        glowColors: {
-            glow1: "radial-gradient(circle, #f59e0b 0%, #b45309 60%, transparent 80%)",
-            glow2: "radial-gradient(circle, #ff6dc4 0%, #4338ca 60%, transparent 80%)"
-        },
-        tracks: [
-            { id: 1, name: "Any Man of Mine (Little Miss Twain Edition)", duration: "4:07", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "82.4 MB", country: "Âu Mỹ" },
-            { id: 2, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "79.1 MB", country: "Âu Mỹ" },
-            { id: 3, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "77.8 MB", country: "Âu Mỹ" },
-            { id: 4, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "70.5 MB", country: "Âu Mỹ" },
-            { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "94.2 MB", country: "Âu Mỹ" },
-            { id: 6, name: "Whose Bed Have Your Boots Been Under?", duration: "4:25", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "88.3 MB", country: "Âu Mỹ" },
-            { id: 7, name: "I'm Gonna Getcha Good!", duration: "4:29", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "89.6 MB", country: "Âu Mỹ" },
-            { id: 8, name: "Up! (Red Album Version)", duration: "2:52", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "57.3 MB", country: "Âu Mỹ" },
-            { id: 9, name: "Forever and for Always", duration: "4:47", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "95.5 MB", country: "Âu Mỹ" },
-            { id: 10, name: "Don't Be Stupid (You Know I Love You)", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "71.6 MB", country: "Âu Mỹ" },
-            { id: 11, name: "Party for Two (ft. Billy Currington)", duration: "3:31", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "70.2 MB", country: "Âu Mỹ" },
-            { id: 12, name: "Giddy Up!", duration: "2:42", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "54.1 MB", country: "Âu Mỹ" },
-            { id: 13, name: "Life's About to Get Good", duration: "3:40", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3", size: "73.3 MB", country: "Âu Mỹ" },
-            { id: 14, name: "No One Needs to Know", duration: "3:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3", size: "61.2 MB", country: "Âu Mỹ" },
-            { id: 15, name: "You've Got a Way (Notting Hill Mix)", duration: "3:24", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3", size: "68.0 MB", country: "Âu Mỹ" }
-        ]
-    },
-    {
-        id: "shania-twain-come-on-over",
-        title: "COME ON OVER",
-        artist: "SHANIA TWAIN",
-        year: "1997 / 2024",
-        format: "FLAC 24-Bit / 192kHz",
-        totalSize: "1.45 GB",
-        publisher: "Mercury Nashville / UMG",
-        country: "Âu Mỹ",
-        isDemo: true,
-        coverUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1000&auto=format&fit=crop",
-        glowColors: {
-            glow1: "radial-gradient(circle, #0284c7 0%, #0369a1 60%, transparent 80%)",
-            glow2: "radial-gradient(circle, #f59e0b 0%, #c2410c 60%, transparent 80%)"
-        },
-        tracks: [
-            { id: 1, name: "Man! I Feel Like a Woman!", duration: "3:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "85.2 MB", country: "Âu Mỹ" },
-            { id: 2, name: "I'm Holdin' On to Love (To Save My Life)", duration: "3:30", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "76.4 MB", country: "Âu Mỹ" },
-            { id: 3, name: "Love Gets Me Every Time", duration: "3:33", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "77.5 MB", country: "Âu Mỹ" },
-            { id: 4, name: "Don't Be Stupid", duration: "3:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "78.2 MB", country: "Âu Mỹ" },
-            { id: 5, name: "From This Moment On", duration: "4:43", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "102.1 MB", country: "Âu Mỹ" },
-            { id: 6, name: "Come On Over", duration: "2:55", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "64.3 MB", country: "Âu Mỹ" },
-            { id: 7, name: "When", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "79.8 MB", country: "Âu Mỹ" },
-            { id: 8, name: "Whatever You Do! Don't!", duration: "3:49", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "83.5 MB", country: "Âu Mỹ" },
-            { id: 9, name: "If You Wanna Touch Her, Ask!", duration: "4:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "89.0 MB", country: "Âu Mỹ" },
-            { id: 10, name: "You're Still the One", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "77.0 MB", country: "Âu Mỹ" },
-            { id: 11, name: "Honey, I'm Home", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "79.9 MB", country: "Âu Mỹ" },
-            { id: 12, name: "That Don't Impress Me Much", duration: "3:59", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "87.1 MB", country: "Âu Mỹ" }
-        ]
-    },
-    {
-        id: "taylor-swift-1989-tv",
-        title: "1989 (TAYLOR'S VERSION)",
-        artist: "TAYLOR SWIFT",
-        year: "2023",
-        format: "FLAC 24-Bit / 96kHz",
-        totalSize: "1.32 GB",
-        publisher: "Republic Records",
-        country: "Âu Mỹ",
-        isDemo: true,
-        coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop",
-        glowColors: {
-            glow1: "radial-gradient(circle, #38bdf8 0%, #0284c7 60%, transparent 80%)",
-            glow2: "radial-gradient(circle, #f472b6 0%, #db2777 60%, transparent 80%)"
-        },
-        tracks: [
-            { id: 1, name: "Welcome to New York (Taylor's Version)", duration: "3:32", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", size: "75.4 MB", country: "Âu Mỹ" },
-            { id: 2, name: "Blank Space (Taylor's Version)", duration: "3:51", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", size: "82.3 MB", country: "Âu Mỹ" },
-            { id: 3, name: "Style (Taylor's Version)", duration: "3:51", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", size: "82.1 MB", country: "Âu Mỹ" },
-            { id: 4, name: "Out of the Woods (Taylor's Version)", duration: "3:55", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", size: "83.6 MB", country: "Âu Mỹ" },
-            { id: 5, name: "Shake It Off (Taylor's Version)", duration: "3:39", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", size: "78.0 MB", country: "Âu Mỹ" },
-            { id: 6, name: "Wildest Dreams (Taylor's Version)", duration: "3:40", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", size: "78.5 MB", country: "Âu Mỹ" },
-            { id: 7, name: "Bad Blood (Taylor's Version)", duration: "3:31", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", size: "75.0 MB", country: "Âu Mỹ" }
-        ]
-    },
-    {
-        id: "daft-punk-ram-10th",
-        title: "RANDOM ACCESS MEMORIES",
-        artist: "DAFT PUNK",
-        year: "2013 / 2023",
-        format: "FLAC 24-Bit / 88.2kHz",
-        totalSize: "1.65 GB",
-        publisher: "Columbia Records / Daft Life",
-        country: "Âu Mỹ",
-        isDemo: true,
-        coverUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop",
-        glowColors: {
-            glow1: "radial-gradient(circle, #eab308 0%, #a16207 60%, transparent 80%)",
-            glow2: "radial-gradient(circle, #6366f1 0%, #3730a3 60%, transparent 80%)"
-        },
-        tracks: [
-            { id: 1, name: "Give Life Back to Music", duration: "4:35", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", size: "98.2 MB", country: "Âu Mỹ" },
-            { id: 2, name: "Giorgio by Moroder", duration: "9:04", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", size: "192.4 MB", country: "Âu Mỹ" },
-            { id: 3, name: "Instant Crush (ft. Julian Casablancas)", duration: "5:37", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", size: "119.5 MB", country: "Âu Mỹ" },
-            { id: 4, name: "Lose Yourself to Dance (ft. Pharrell Williams)", duration: "5:53", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3", size: "125.1 MB", country: "Âu Mỹ" },
-            { id: 5, name: "Get Lucky (ft. Pharrell Williams)", duration: "6:09", previewUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3", size: "131.0 MB", country: "Âu Mỹ" }
-        ]
-    }
-];
-
 // --- Equalizer Audiophile Presets (10-Band) ---
 const EQ_PRESETS = {
     flat: { name: "Flat (Chuẩn)", gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], bass: 0, preamp: 0 },
@@ -410,7 +295,8 @@ class XTAPOMusicApp {
         this.mobileSelectAlbumBtn = document.getElementById('mobileSelectAlbumBtn');
 
         // Telegram Storage & Scanner Elements
-        this.albums = [...ALBUMS_DATABASE];
+        // Thư viện chỉ được tải sau khi xác thực thành công.
+        this.albums = [];
         this._searchIndex = null;
         this._searchActiveIndex = -1;
         this.albumCountBadge = document.getElementById('albumCountBadge');
@@ -422,7 +308,6 @@ class XTAPOMusicApp {
         this.tgStatusIndicator = document.getElementById('tgStatusIndicator');
         this.tgStatusMessage = document.getElementById('tgStatusMessage');
         this.tgScanSubmitBtn = document.getElementById('tgScanSubmitBtn');
-        this.tgLoadDemoBtn = document.getElementById('tgLoadDemoBtn');
         this.tgStorageLabel = document.getElementById('tgStorageLabel');
 
         // Playlists Management Elements
@@ -855,40 +740,39 @@ class XTAPOMusicApp {
         this.setupSpatialNavigation();
         this.setupKeyboardShortcuts();
         
-        // Tải song song hai nguồn dữ liệu cần thiết cho màn hình đầu.
-        await Promise.all([
-            this.fetchUserProfile(),
-            this.fetchTelegramAlbums(false)
-        ]);
+        // Xác thực trước. Guest không được tải thư viện nhạc.
+        await this.fetchUserProfile();
+        if (this.currentUser) {
+            await this.fetchTelegramAlbums(false);
+        }
 
         // 2. Khôi phục bài hát & vị trí đang phát dở (Player State) hoặc mở mặc định
         const restored = this.restorePlayerState();
         if (!restored) {
             if (this.currentUser) {
-                // Người dùng đã đăng nhập: KHÔNG tải demo Shania Twain
                 if (this.favoriteTracks && this.favoriteTracks.length > 0) {
                     this.playFavoritesQueue(0, false, false);
                     if (this.navFavorites) this.setActiveNavLink(this.navFavorites);
                 } else if (this.playlists && this.playlists.length > 0 && this.playlists[0].tracks?.length > 0) {
                     this.playPlaylist(this.playlists[0], 0, false);
                     if (this.navPlaylists) this.setActiveNavLink(this.navPlaylists);
-                } else if (this.albums && this.albums.length > 0 && !this.albums[0].isDemo) {
+                } else if (this.albums && this.albums.length > 0) {
                     this.loadAlbum(0, 0, false);
                     this.renderAlbumGrid();
                 } else {
                     this.showEmptyCloudState();
                 }
             } else {
-                // Khách vãng lai (Guest): tải kho demo mẫu
-                this.loadAlbum(0, 0, false);
+                this.albums = [];
                 this.renderAlbumGrid();
+                this.openAuthModal();
             }
         } else {
             this.renderAlbumGrid();
         }
 
         // 5. Khôi phục tab / modal / danh mục đang mở (Active View & URL Hash)
-        this.restoreActiveView();
+        if (this.currentUser) this.restoreActiveView();
 
         // 6. Khôi phục vị trí cuộn trang (Scroll Position)
         try {
@@ -902,10 +786,12 @@ class XTAPOMusicApp {
 
         // Chỉ bắt đầu các request nền sau khi nội dung chính đã sẵn sàng và trình duyệt
         // có cơ hội vẽ frame đầu tiên.
-        this.scheduleBackgroundTask(() => {
-            this.fetchArtistMetadata();
-            this.initMusicSync();
-        });
+        if (this.currentUser) {
+            this.scheduleBackgroundTask(() => {
+                this.fetchArtistMetadata();
+                this.initMusicSync();
+            });
+        }
     }
 
     scheduleBackgroundTask(callback) {
@@ -1002,20 +888,6 @@ class XTAPOMusicApp {
 
     async fetchUserProfile() {
         try {
-            // Khôi phục nhanh thông tin user từ local cache để giao diện hiển thị ngay lập tức (0ms)
-            if (!this.currentUser) {
-                try {
-                    const cachedUserRaw = localStorage.getItem('xtapo_cached_user');
-                    if (cachedUserRaw) {
-                        const cachedUser = JSON.parse(cachedUserRaw);
-                        if (cachedUser && cachedUser.id) {
-                            this.currentUser = cachedUser;
-                            this.updateAuthUI(true);
-                        }
-                    }
-                } catch (e) {}
-            }
-
             const res = await fetch('/api/music/auth/profile');
             const data = await res.json();
             if (data.status === 'authenticated' && data.user) {
@@ -1049,7 +921,11 @@ class XTAPOMusicApp {
                 try {
                     localStorage.removeItem('xtapo_cached_user');
                     localStorage.removeItem('xtapo_cached_favs');
+                    localStorage.removeItem('xtapo_music_player_state');
+                    localStorage.removeItem('xtapo_music_active_view');
                 } catch (e) {}
+                this.albums = [];
+                this.invalidateLibraryIndex();
                 this.stopHeartbeat();
                 this.updateAuthUI(false);
                 const existingBanner = document.getElementById('channelWarningBanner');
@@ -1057,6 +933,11 @@ class XTAPOMusicApp {
             }
         } catch (e) {
             console.error("Lỗi lấy thông tin user:", e);
+            this.currentUser = null;
+            this.albums = [];
+            this.invalidateLibraryIndex();
+            this.stopHeartbeat();
+            this.updateAuthUI(false);
         }
     }
 
@@ -1088,6 +969,16 @@ class XTAPOMusicApp {
     }
 
     updateAuthUI(isLoggedIn) {
+        const authRequired = !(isLoggedIn && this.currentUser);
+        document.body.classList.toggle('auth-required', authRequired);
+        if (this.authModal) {
+            this.authModal.classList.toggle('open', authRequired);
+            this.authModal.setAttribute('aria-hidden', authRequired ? 'false' : 'true');
+        }
+        if (this.closeAuthModal) {
+            this.closeAuthModal.style.display = authRequired ? 'none' : '';
+        }
+
         if (isLoggedIn && this.currentUser) {
             this.userAvatarImg.src = this.currentUser.avatar_url;
             const name = this.currentUser.display_name || this.currentUser.username;
@@ -1105,7 +996,7 @@ class XTAPOMusicApp {
                 this.userDisplayName.title = "Tài khoản Telegram: " + name;
             }
         } else {
-            this.userAvatarImg.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=Guest";
+            this.userAvatarImg.src = "/music/icon-192.png";
             this.userDisplayName.textContent = "Đăng nhập";
             this.userDisplayName.style.color = "";
             this.userDisplayName.title = "Đăng nhập tài khoản";
@@ -1119,6 +1010,7 @@ class XTAPOMusicApp {
             this.openUserProfileModal();
         } else {
             if (this.authModal) {
+                document.body.classList.add('auth-required');
                 this.openModal(this.authModal);
                 this.switchAuthTab('phone');
                 this.stopQrPolling();
@@ -1725,7 +1617,7 @@ class XTAPOMusicApp {
         } else if (this.playlists && this.playlists.length > 0 && this.playlists[0].tracks?.length > 0) {
             this.playPlaylist(this.playlists[0], 0, false);
             if (this.navPlaylists) this.setActiveNavLink(this.navPlaylists);
-        } else if (this.albums && this.albums.length > 0 && !this.albums[0].isDemo) {
+        } else if (this.albums && this.albums.length > 0) {
             this.loadAlbum(0, 0, false);
             this.renderAlbumGrid();
         }
@@ -1755,7 +1647,7 @@ class XTAPOMusicApp {
                 } else if (this.playlists && this.playlists.length > 0 && this.playlists[0].tracks?.length > 0) {
                     this.playPlaylist(this.playlists[0], 0, false);
                     if (this.navPlaylists) this.setActiveNavLink(this.navPlaylists);
-                } else if (this.albums && this.albums.length > 0 && !this.albums[0].isDemo) {
+                } else if (this.albums && this.albums.length > 0) {
                     this.loadAlbum(0, 0, false);
                     this.renderAlbumGrid();
                 } else {
@@ -1773,12 +1665,11 @@ class XTAPOMusicApp {
         try {
             this.stopHeartbeat();
             if (this.userProfileModal) this.closeModal(this.userProfileModal);
-            if (this.authModal) this.closeModal(this.authModal);
             await fetch('/api/music/auth/logout', { method: 'POST' });
             this.showToast("Đã đăng xuất.");
             this.currentUser = null;
             this.playlists = [];
-            this.albums = [...ALBUMS_DATABASE];
+            this.albums = [];
             this.invalidateLibraryIndex();
             this.updateAuthUI(false);
             if (this.playlistGrid) this.playlistGrid.innerHTML = '';
@@ -1786,8 +1677,8 @@ class XTAPOMusicApp {
             localStorage.removeItem('xtapo_music_active_view');
             localStorage.removeItem('xtapo_cached_user');
             localStorage.removeItem('xtapo_cached_favs');
-            this.loadAlbum(0, 0, false);
             this.renderAlbumGrid();
+            this.openAuthModal();
         } catch (e) { }
     }
 
@@ -1815,7 +1706,7 @@ class XTAPOMusicApp {
     getTrackIdentifiers(track) {
         if (!track) return { chatId: null, msgId: null };
         const album = this.currentAlbum;
-        const chatId = track.chatId || (track.meta && track.meta.chat_id) || track.chat_id || (album && (album.chatId || album.chat_id)) || 'demo';
+        const chatId = track.chatId || (track.meta && track.meta.chat_id) || track.chat_id || (album && (album.chatId || album.chat_id || album.id)) || 'unknown';
         const msgId = track.msgId || (track.meta && track.meta.msg_id) || track.msg_id || track.id || track.name;
         return { chatId: String(chatId), msgId: String(msgId) };
     }
@@ -2135,9 +2026,9 @@ class XTAPOMusicApp {
     // --- Current Album & Track Getters ---
     get currentAlbum() {
         if (this.currentUser) {
-            const nonDemoAlbums = (this.albums || []).filter(a => !a.isDemo);
-            if (nonDemoAlbums.length > 0) {
-                return this.albums[this.currentAlbumIndex] || nonDemoAlbums[0];
+            const userAlbums = this.albums || [];
+            if (userAlbums.length > 0) {
+                return this.albums[this.currentAlbumIndex] || userAlbums[0];
             }
             return {
                 id: 'empty-library',
@@ -2149,7 +2040,7 @@ class XTAPOMusicApp {
                 tracks: []
             };
         }
-        return this.albums[this.currentAlbumIndex] || this.albums[0] || ALBUMS_DATABASE[0];
+        return this.albums[this.currentAlbumIndex] || this.albums[0] || null;
     }
 
     get currentTrack() {
@@ -2200,6 +2091,11 @@ class XTAPOMusicApp {
 
     // --- Fetch Telegram Library from Backend ---
     async fetchTelegramAlbums(shouldLoadAlbum = true) {
+        if (!this.currentUser) {
+            this.albums = [];
+            this.invalidateLibraryIndex();
+            return;
+        }
         try {
             const res = await fetch('/api/music/albums');
             if (res.ok) {
@@ -2235,7 +2131,7 @@ class XTAPOMusicApp {
             }
         } catch (err) {
             // Đang mở file tĩnh hoặc backend chưa kết nối
-            console.log('[XTAPO MUSIC] Backend API offline or file mode, using local database.');
+            console.log('[XTAPO MUSIC] Backend API offline or unavailable.');
         }
     }
 
@@ -3334,6 +3230,10 @@ class XTAPOMusicApp {
     }
 
     play() {
+        if (!this.currentUser) {
+            this.openAuthModal();
+            return;
+        }
         if (this.remoteTargetDeviceId) {
             this.isPlaying = true;
             this.updatePlayStateVisuals(true);
@@ -3342,13 +3242,6 @@ class XTAPOMusicApp {
         }
 
         const album = this.currentAlbum;
-        if (album && !album.isDemo && !this.currentUser) {
-            this.authModal.classList.add('open');
-            this.showToast("Vui lòng đăng nhập để nghe nhạc ngoài bản Demo (Guest).");
-            this.pause();
-            return;
-        }
-
         // Khởi động Web Audio API Analyser thật khi người dùng phát nhạc
         this.initWebAudioAnalyser();
         if (this.audioContext && this.audioContext.state === 'suspended') {
@@ -4016,21 +3909,6 @@ class XTAPOMusicApp {
                 this.scanTelegramChannel(chatId, limit);
             });
         }
-        if (this.tgLoadDemoBtn) {
-            this.tgLoadDemoBtn.addEventListener('click', () => {
-                this.albums = [...ALBUMS_DATABASE];
-                this.invalidateLibraryIndex();
-                this.currentAlbumIndex = 0;
-                this.currentTrackIndex = 0;
-                this.loadAlbum(0, 0, false);
-                this.renderAlbumGrid();
-                if (this.albumCountBadge) this.albumCountBadge.textContent = `${this.albums.length} Albums`;
-                if (this.tgStorageLabel) this.tgStorageLabel.textContent = 'Demo Mode';
-                if (this.tgModal) this.closeModal(this.tgModal);
-                this.showToast('ÄÃ£ táº£i láº¡i kho nháº¡c máº«u Demo!');
-            });
-        }
-
         // Nav Links Events
         if (this.navMusics) {
             this.navMusics.addEventListener('click', (e) => {
@@ -4649,7 +4527,7 @@ class XTAPOMusicApp {
 
     // --- State Persistence & URL Deep Linking ---
     savePlayerState() {
-        if (this.isRestoringState) return;
+        if (this.isRestoringState || !this.currentUser) return;
         try {
             const album = this.currentAlbum;
             const track = this.currentTrack;
@@ -4666,7 +4544,6 @@ class XTAPOMusicApp {
                 isMuted: !!this.isMuted,
                 isShuffle: !!this.isShuffle,
                 repeatMode: this.repeatMode || 0,
-                isDemo: !!(album && (album.isDemo || String(album.id || '').startsWith('shania-'))),
                 isFavoriteMode: !!(album && album.id === 'favorites-playlist'),
                 activePlaylistId: this.activePlaylistId || null,
                 activeArtist: this.activeArtist || null,
@@ -4690,29 +4567,28 @@ class XTAPOMusicApp {
     findAlbumIndex(state) {
         if (!this.albums || this.albums.length === 0) return 0;
         if (state.albumId) {
-            const idx = this.albums.findIndex(a => (!this.currentUser || !a.isDemo) && ((a.id && String(a.id) === String(state.albumId)) || a.title === state.albumId));
+            const idx = this.albums.findIndex(a => ((a.id && String(a.id) === String(state.albumId)) || a.title === state.albumId));
             if (idx !== -1) return idx;
         }
         if (state.albumTitle) {
-            const idx = this.albums.findIndex(a => (!this.currentUser || !a.isDemo) && a.title === state.albumTitle);
+            const idx = this.albums.findIndex(a => a.title === state.albumTitle);
             if (idx !== -1) return idx;
         }
         if (state.trackChatId && state.trackMsgId) {
-            const idx = this.albums.findIndex(a => (!this.currentUser || !a.isDemo) && (a.tracks || []).some(t => {
+            const idx = this.albums.findIndex(a => (a.tracks || []).some(t => {
                 const ident = this.getTrackIdentifiers(t);
                 return ident.chatId === String(state.trackChatId) && ident.msgId === String(state.trackMsgId);
             }));
             if (idx !== -1) return idx;
         }
         if (typeof state.albumIndex === 'number' && state.albumIndex >= 0 && state.albumIndex < this.albums.length) {
-            if (!this.currentUser || !this.albums[state.albumIndex]?.isDemo) {
-                return state.albumIndex;
-            }
+            return state.albumIndex;
         }
         return 0;
     }
 
     restorePlayerState() {
+        if (!this.currentUser) return false;
         this.isRestoringState = true;
         try {
             const raw = localStorage.getItem('xtapo_music_player_state');
@@ -4722,12 +4598,6 @@ class XTAPOMusicApp {
             }
             const state = JSON.parse(raw);
             if (!state) {
-                this.isRestoringState = false;
-                return false;
-            }
-
-            // Nếu người dùng đã đăng nhập mà state trước đó là demo, bỏ qua không khôi phục demo
-            if (this.currentUser && (state.isDemo || (state.albumId && String(state.albumId).startsWith('shania-')))) {
                 this.isRestoringState = false;
                 return false;
             }
@@ -5113,6 +4983,10 @@ class XTAPOMusicApp {
 
     openModal(modal) {
         if (!modal) return;
+        if (!this.currentUser && modal !== this.authModal) {
+            this.openAuthModal();
+            return;
+        }
         modal.classList.add('open');
         if (modal === this.albumModal && window.location.hash !== '#hires') {
             this.saveActiveView({ type: 'albums' });
@@ -5141,6 +5015,10 @@ class XTAPOMusicApp {
 
     closeModal(modal) {
         if (!modal) return;
+        if (modal === this.authModal && !this.currentUser) {
+            modal.classList.add('open');
+            return;
+        }
         const isPersistentViewModal = [
             this.albumModal,
             this.artistModal,
@@ -5175,7 +5053,7 @@ class XTAPOMusicApp {
     renderAlbumGrid() {
         if (!this.albumGrid) return;
         this.albumGrid.innerHTML = '';
-        const displayAlbums = this.currentUser ? (this.albums || []).filter(a => !a.isDemo) : (this.albums || []);
+        const displayAlbums = this.albums || [];
         if (displayAlbums.length === 0) {
             this.albumGrid.innerHTML = `
                 <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 50px 20px;">
