@@ -1284,10 +1284,12 @@ async def recognize_audio_from_telegram(
         # Rolling scan: tạo nhiều cửa sổ chồng lấn rồi ưu tiên các đoạn có năng lượng
         # âm thanh tốt. Cách này gần với hành vi "nghe tiếp" của ứng dụng Shazam hơn
         # việc chỉ thử một vài mốc cố định trong bài.
-        scan_windows = _preselect_manual_scan_windows(
-            _build_manual_scan_windows(total_sec),
-            max_windows=6,
-        )
+        # Chế độ thủ công ưu tiên độ chính xác: đo toàn bộ các cửa sổ ứng viên
+        # trước khi chọn mẫu gửi Shazam. Việc cắt xuống 6 cửa sổ trước khi đo
+        # energy khiến các bài không có metadata chỉ được thử tại vài mốc cố
+        # định (ví dụ Rolling 1/4/7/10/13/16), dễ bỏ qua đoạn chorus/hook mà
+        # Shazam nhận diện tốt nhất.
+        scan_windows = _build_manual_scan_windows(total_sec)
         shazam_candidates = []
         prepared_windows = []
 
@@ -1329,7 +1331,7 @@ async def recognize_audio_from_telegram(
 
         # Chỉ gửi một số mẫu mạnh nhất và có độ phủ thời gian tốt. Các file tạm
         # không được chọn phải xóa ngay vì finally bên dưới chỉ dọn danh sách giữ lại.
-        selected_windows = _select_manual_query_windows(prepared_windows, max_windows=6)
+        selected_windows = _select_manual_query_windows(prepared_windows, max_windows=10)
         selected_paths = {item.get("path") for item in selected_windows}
         for item in prepared_windows:
             sample_w_path = item.get("path")

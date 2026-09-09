@@ -662,7 +662,12 @@ def is_generic_music_query(title: str, artist: str = "") -> bool:
     generic_patterns = [
         r'^(track|audio|bai|bai hat|cd|disc|soundtrack|song)?\s*\d*$',
         r'^\d+$',
-        r'^[a-d]\d+$'
+        r'^[a-d]\d+$',
+        # Tên track do CD ripper sinh ra nhưng không có dấu phân cách, ví dụ
+        # 06Track06.wav, 01Track01, Disc1Track03. Đây không phải metadata bài hát
+        # và không nên dùng để tìm Apple Music/Deezer vì dễ tạo false-positive.
+        r'^\d{1,3}\s*track\s*\d{1,3}$',
+        r'^(?:cd|disc)\s*\d{1,3}\s*track\s*\d{1,3}$',
     ]
     is_pattern_generic = any(re.match(p, t) for p in generic_patterns)
     
