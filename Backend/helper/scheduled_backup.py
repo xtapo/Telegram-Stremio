@@ -17,6 +17,7 @@ import httpx
 from Backend import db
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
+import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot
 
 
@@ -279,8 +280,8 @@ class ScheduledBackupManager:
 
     async def _upload(self, destination: str, settings: Dict[str, Any], filename: str, raw: bytes, filepath: str) -> Dict[str, Any]:
         if destination == "telegram":
-            chat_id = self._telegram_chat_id(settings.get("scheduled_backup_telegram_chat_id"))
-            msg = await StreamBot.send_document(
+            client, chat_id = self._telegram_client_and_chat(settings.get("scheduled_backup_telegram_chat_id"))
+            msg = await client.send_document(
                 chat_id=chat_id,
                 document=filepath,
                 caption=f"Scheduled backup\n{filename}\n{round(len(raw) / 1024, 1)} KB",
@@ -295,9 +296,10 @@ class ScheduledBackupManager:
 
     async def _download(self, destination: str, settings: Dict[str, Any], record: Dict[str, Any]) -> bytes:
         if destination == "telegram":
-            chat_id = self._telegram_chat_id(settings.get("scheduled_backup_telegram_chat_id") or record.get("remote_ref"))
-            message = await StreamBot.get_messages(chat_id, int(record["remote_id"]))
-            buf = await StreamBot.download_media(message, in_memory=True)
+            target = record.get("remote_ref") or settings.get("scheduled_backup_telegram_chat_id")
+            client, chat_id = self._telegram_client_and_chat(target)
+            message = await client.get_messages(chat_id, int(record["remote_id"]))
+            buf = await client.download_media(message, in_memory=True)
             if buf is None:
                 raise RuntimeError("Telegram backup could not be downloaded.")
             return buf.getvalue()
@@ -308,8 +310,9 @@ class ScheduledBackupManager:
 
     async def _delete_remote(self, destination: str, settings: Dict[str, Any], record: Dict[str, Any]) -> None:
         if destination == "telegram":
-            chat_id = self._telegram_chat_id(settings.get("scheduled_backup_telegram_chat_id") or record.get("remote_ref"))
-            await StreamBot.delete_messages(chat_id, int(record["remote_id"]))
+            target = record.get("remote_ref") or settings.get("scheduled_backup_telegram_chat_id")
+            client, chat_id = self._telegram_client_and_chat(target)
+            await client.delete_messages(chat_id, int(record["remote_id"]))
         elif destination == "s3":
             await self._s3_request("DELETE", settings, str(record["remote_id"]))
         else:
@@ -347,8 +350,9 @@ class ScheduledBackupManager:
         if not target:
             return
         try:
-            await StreamBot.send_message(
-                self._telegram_chat_id(target),
+            client, chat_id = self._telegram_client_and_chat(target)
+            await client.send_message(
+                chat_id,
                 f"Scheduled backup FAILED\nDestination: {destination}\nError: {error[:1000]}",
             )
         except Exception as exc:
@@ -361,6 +365,18 @@ class ScheduledBackupManager:
             return int(text)
         except ValueError:
             return text
+
+    @classmethod
+    def _telegram_client_and_chat(cls, value: Any):
+        text = str(value or "").strip()
+        if text.casefold() in {"me", "saved messages", "saved_messages"}:
+            client = botmod.Userbot
+            if client is None or not getattr(client, "is_connected", False):
+                raise RuntimeError(
+                    "Telegram User Session is not connected. Sign in a Telegram user session before using 'me' for Saved Messages."
+                )
+            return client, "me"
+        return StreamBot, cls._telegram_chat_id(text)
 
     @staticmethod
     def _s3_key(settings: Dict[str, Any], filename: str) -> str:
