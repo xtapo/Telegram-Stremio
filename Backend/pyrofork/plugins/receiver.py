@@ -199,9 +199,25 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
 
 
 #----- Ingest new channel media into the queue after building metadata
-@Client.on_message(filters.channel & (filters.document | filters.video))
+@Client.on_message(filters.channel & (filters.audio | filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
     if is_skip_channel(message):
+        return
+
+    # Nhạc dùng pipeline thư viện nhạc riêng. Receiver chỉ phát tín hiệu;
+    # manager sẽ kiểm tra cờ auto_sync của đúng kênh rồi quét dải ID mới.
+    audio_obj = getattr(message, "audio", None)
+    document_obj = getattr(message, "document", None)
+    document_name = (getattr(document_obj, "file_name", "") or "").lower() if document_obj else ""
+    document_mime = (getattr(document_obj, "mime_type", "") or "").lower() if document_obj else ""
+    audio_extensions = (".mp3", ".flac", ".m4a", ".wav", ".aac", ".alac", ".ogg", ".opus", ".dsf", ".ape")
+    is_music_file = bool(audio_obj) or document_mime.startswith("audio/") or document_name.endswith(audio_extensions)
+    if is_music_file:
+        try:
+            from Backend.fastapi.routes.music_routes import notify_music_auto_sync
+            await notify_music_auto_sync(message.chat.id, message.id)
+        except Exception as exc:
+            LOGGER.error(f"[MUSIC AUTO SYNC] Không thể nhận bài #{message.id}: {exc}", exc_info=True)
         return
 
     session = Backend.MANUAL_SESSION

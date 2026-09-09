@@ -865,6 +865,7 @@ async def _db_load_channels() -> list:
             item["last_scanned_id"] = int(item.get("last_scanned_id", 0) or 0)
             item["last_scanned_at"] = str(item.get("last_scanned_at", "") or "")
             item["total_tracks"] = int(item.get("total_tracks", 0) or 0)
+            item["auto_sync"] = bool(item.get("auto_sync", False))
         _IN_MEMORY_CHANNELS_CACHE = local_channels
         return local_channels
 
@@ -882,6 +883,7 @@ async def _db_load_channels() -> list:
                         "last_scanned_id": int(d.get("last_scanned_id", 0) or 0),
                         "last_scanned_at": str(d.get("last_scanned_at", "") or ""),
                         "total_tracks": int(d.get("total_tracks", 0) or 0),
+                        "auto_sync": bool(d.get("auto_sync", False)),
                     }
                     for d in docs
                 ]
@@ -912,6 +914,7 @@ async def _db_save_channels(channels: list):
                         "last_scanned_id": int(c.get("last_scanned_id", 0) or 0),
                         "last_scanned_at": str(c.get("last_scanned_at", "") or ""),
                         "total_tracks": int(c.get("total_tracks", 0) or 0),
+                        "auto_sync": bool(c.get("auto_sync", False)),
                     }
                     await coll.update_one(
                         {"_id": ch_id},
@@ -1998,7 +2001,8 @@ async def get_music_channels(_: bool = Depends(require_auth)):
                     "username": "",
                     "last_scanned_id": 0,
                     "last_scanned_at": "",
-                    "total_tracks": 0
+                    "total_tracks": 0,
+                    "auto_sync": False
                 })
         except Exception:
             pass
@@ -2010,6 +2014,7 @@ async def get_music_channels(_: bool = Depends(require_auth)):
         last_scanned_id = int(item.get("last_scanned_id", 0) or 0)
         last_scanned_at = str(item.get("last_scanned_at", "") or "")
         total_tracks = int(item.get("total_tracks", 0) or 0)
+        auto_sync = bool(item.get("auto_sync", False))
 
         if client:
             try:
@@ -2026,7 +2031,8 @@ async def get_music_channels(_: bool = Depends(require_auth)):
             "username": ch_user,
             "last_scanned_id": last_scanned_id,
             "last_scanned_at": last_scanned_at,
-            "total_tracks": total_tracks
+            "total_tracks": total_tracks,
+            "auto_sync": auto_sync
         })
     return {"status": "success", "channels": result}
 
@@ -2067,7 +2073,8 @@ async def add_music_channel(payload: dict, _: bool = Depends(require_auth)):
         "username": ch_user,
         "last_scanned_id": 0,
         "last_scanned_at": "",
-        "total_tracks": 0
+        "total_tracks": 0,
+        "auto_sync": False
     }
     saved.append(new_ch)
     await _db_save_channels(saved)
@@ -2097,6 +2104,49 @@ async def reset_music_channel_progress(chat_id: str, _: bool = Depends(require_a
         await _db_save_channels(saved)
         return {"status": "success", "message": "Đã đặt lại mốc quét cho kênh về 0."}
     raise HTTPException(status_code=404, detail="Không tìm thấy kênh trong danh sách.")
+
+
+async def _get_latest_music_channel_message_id(chat_id: str) -> int:
+    client = _get_active_client()
+    if not client:
+        return 0
+    target = int(chat_id) if str(chat_id).strip().lstrip("-").isdigit() else str(chat_id).strip()
+    try:
+        async for message in client.get_chat_history(target, limit=1):
+            return int(getattr(message, "id", 0) or 0)
+    except Exception as exc:
+        LOGGER.warning(f"[MUSIC AUTO SYNC] Không thể đọc tin nhắn mới nhất của kênh {chat_id}: {exc}")
+    return 0
+
+
+@router.post("/api/music/channels/{chat_id}/auto-sync")
+async def set_music_channel_auto_sync(chat_id: str, payload: dict, _: bool = Depends(require_auth)):
+    enabled = bool(payload.get("enabled", False))
+    saved = await _db_load_channels()
+    target_str = str(chat_id).strip()
+    channel = next((item for item in saved if str(item.get("id")) == target_str), None)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Không tìm thấy kênh trong danh sách.")
+
+    # Nếu kênh chưa quét lần nào, lấy tin nhắn hiện tại làm mốc. Nhờ đó việc
+    # bật auto-sync chỉ nhận nhạc đăng mới, không vô tình quét toàn bộ lịch sử.
+    if enabled and int(channel.get("last_scanned_id", 0) or 0) <= 0:
+        baseline_id = await _get_latest_music_channel_message_id(target_str)
+        if baseline_id > 0:
+            channel["last_scanned_id"] = baseline_id
+            channel["last_scanned_at"] = time.strftime("%H:%M %d/%m/%Y")
+
+    channel["auto_sync"] = enabled
+    await _db_save_channels(saved)
+    if not enabled:
+        await music_auto_sync_manager.drop_channel(target_str)
+
+    return {
+        "status": "success",
+        "enabled": enabled,
+        "last_scanned_id": int(channel.get("last_scanned_id", 0) or 0),
+        "message": "Đã bật tự động đồng bộ." if enabled else "Đã tắt tự động đồng bộ.",
+    }
 
 
 # ── 3.5 Quản lý Playlist (Bị thay thế bởi Playlist Cá Nhân theo User) ─────────
@@ -2801,6 +2851,116 @@ class MusicScanManager:
 
 
 music_scan_manager = MusicScanManager()
+
+
+class MusicAutoSyncManager:
+    """Gom sự kiện nhạc mới theo kênh và quét nối tiếp bằng pipeline hiện có."""
+
+    def __init__(self):
+        self._pending: dict[str, int] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
+        self._lock = asyncio.Lock()
+
+    async def _get_channel(self, chat_id: str) -> Optional[dict]:
+        target = str(chat_id)
+        channels = await _db_load_channels()
+        return next((c for c in channels if str(c.get("id")) == target), None)
+
+    async def notify(self, chat_id: str, msg_id: int) -> bool:
+        channel = await self._get_channel(chat_id)
+        if not channel or not bool(channel.get("auto_sync", False)):
+            return False
+
+        target = str(chat_id)
+        async with self._lock:
+            self._pending[target] = max(int(msg_id), self._pending.get(target, 0))
+            task = self._tasks.get(target)
+            if not task or task.done():
+                self._tasks[target] = asyncio.create_task(self._run_channel(target))
+        LOGGER.info(f"[MUSIC AUTO SYNC] Đã nhận bài mới #{msg_id} từ kênh {target}.")
+        return True
+
+    async def drop_channel(self, chat_id: str) -> None:
+        async with self._lock:
+            self._pending.pop(str(chat_id), None)
+
+    async def _run_channel(self, chat_id: str) -> None:
+        try:
+            # Debounce ngắn để một album được gửi liên tiếp chỉ tạo một lượt scan.
+            await asyncio.sleep(1.5)
+            while True:
+                channel = await self._get_channel(chat_id)
+                if not channel or not bool(channel.get("auto_sync", False)):
+                    return
+
+                async with self._lock:
+                    target_msg_id = int(self._pending.pop(chat_id, 0) or 0)
+                if target_msg_id <= 0:
+                    return
+
+                last_id = int(channel.get("last_scanned_id", 0) or 0)
+                if target_msg_id <= last_id:
+                    continue
+
+                # Không tranh pipeline với lượt quét thủ công hoặc kênh auto-sync khác.
+                while music_scan_manager.get_status().get("status") == "running":
+                    await asyncio.sleep(0.5)
+                    channel = await self._get_channel(chat_id)
+                    if not channel or not bool(channel.get("auto_sync", False)):
+                        return
+
+                result = await music_scan_manager.start(
+                    channels=[chat_id],
+                    limit=0,
+                    resume=False,
+                    mode="append",
+                    auto_scrape=True,
+                    from_msg_id=last_id + 1,
+                    to_msg_id=target_msg_id,
+                )
+                if not result.get("ok"):
+                    async with self._lock:
+                        self._pending[chat_id] = max(target_msg_id, self._pending.get(chat_id, 0))
+                    await asyncio.sleep(1.0)
+                    continue
+
+                LOGGER.info(
+                    f"[MUSIC AUTO SYNC] Đang đồng bộ kênh {chat_id}: "
+                    f"#{last_id + 1} -> #{target_msg_id}."
+                )
+                while music_scan_manager.get_status().get("status") == "running":
+                    await asyncio.sleep(0.5)
+
+                status = music_scan_manager.get_status().get("status")
+                if status == "error":
+                    LOGGER.error(
+                        f"[MUSIC AUTO SYNC] Đồng bộ kênh {chat_id} lỗi: "
+                        f"{music_scan_manager.get_status().get('error_message', '')}"
+                    )
+                    async with self._lock:
+                        self._pending[chat_id] = max(target_msg_id, self._pending.get(chat_id, 0))
+                    await asyncio.sleep(2.0)
+                else:
+                    LOGGER.info(f"[MUSIC AUTO SYNC] Đồng bộ kênh {chat_id} hoàn tất tới #{target_msg_id}.")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            LOGGER.error(f"[MUSIC AUTO SYNC] Worker kênh {chat_id} lỗi: {exc}", exc_info=True)
+        finally:
+            async with self._lock:
+                self._tasks.pop(chat_id, None)
+                if self._pending.get(chat_id, 0) > 0:
+                    channel = await self._get_channel(chat_id)
+                    if channel and bool(channel.get("auto_sync", False)):
+                        self._tasks[chat_id] = asyncio.create_task(self._run_channel(chat_id))
+
+
+music_auto_sync_manager = MusicAutoSyncManager()
+
+
+async def notify_music_auto_sync(chat_id: int, msg_id: int) -> bool:
+    """Entry point cho Telegram receiver khi xuất hiện file nhạc mới."""
+    return await music_auto_sync_manager.notify(str(chat_id), int(msg_id))
 
 
 # ── Async Music Scanner APIs ──────────────────────────────────────────────────
