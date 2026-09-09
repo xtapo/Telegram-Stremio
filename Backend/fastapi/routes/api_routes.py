@@ -30,6 +30,7 @@ from Backend.helper.backup import export_config, import_config
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
+from Backend.helper.observability import metrics_snapshot, recent_errors
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_by_ref
 from Backend.helper.requests_manager import (
     delete_request,
@@ -576,11 +577,28 @@ async def get_admin_stats_api() -> dict:
             "status": status
         })
 
+    scan_status = scan_manager.get_status()
+    try:
+        from Backend.helper.gdrive_uploader import gdrive_upload_manager
+        upload_status = gdrive_upload_manager.get_status()
+    except Exception as exc:
+        LOGGER.warning("get_admin_stats_api: could not load upload status: %s", exc)
+        upload_status = {"status": "unknown", "total_files": 0, "file_index": 0}
+
+    metrics = metrics_snapshot()
+    errors = await recent_errors(25)
+
     return {
         "cache_size": cache_size,
         "total_bots": len(multi_clients),
         "bot_workloads": bot_stats,
         "audio_cache": audio_cache,
+        "operations": {
+            "scan": scan_status,
+            "upload": upload_status,
+        },
+        "metrics": metrics,
+        "recent_errors": errors,
     }
 
 

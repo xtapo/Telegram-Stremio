@@ -14,6 +14,7 @@ from Backend.pyrofork.bot import (
     multi_clients,
     work_loads,
 )
+from Backend.helper.observability import metrics_snapshot, observe_latency
 
 #----- Rough Atlas free-tier (M0) storage ceiling, used only as a usage guide
 _FREE_TIER_BYTES = 512 * 1024 * 1024
@@ -39,7 +40,11 @@ async def _check_databases() -> dict:
     for key, mdb in db.dbs.items():
         entry = {"name": key, "status": "down", "size_mb": 0, "usage_pct": 0, "message": ""}
         try:
+            started = time.perf_counter()
             await asyncio.wait_for(mdb.command("ping"), timeout=6)
+            latency_ms = (time.perf_counter() - started) * 1000
+            observe_latency(f"mongodb.{key}", latency_ms)
+            entry["latency_ms"] = round(latency_ms, 1)
             entry["status"] = "ok"
             try:
                 stats = await asyncio.wait_for(mdb.command("dbstats"), timeout=6)
@@ -122,4 +127,5 @@ async def run_health_checks(force: bool = False) -> dict:
         "generated_at": datetime.utcnow().isoformat(),
         "overall": overall,
         "sections": [databases, bots, tmdb, base_url],
+        "metrics": metrics_snapshot(),
     }

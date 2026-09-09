@@ -81,6 +81,8 @@ class Database:
                 await tracking["custom_catalogs"].create_index(
                     [("items.tmdb_id", ASCENDING), ("items.media_type", ASCENDING)]
                 )
+                await tracking["error_history"].create_index([("created_at", DESCENDING)])
+                await tracking["error_history"].create_index([("category", ASCENDING), ("created_at", DESCENDING)])
                 await self._ensure_subtitle_indexes(tracking)
             except Exception as e:
                 LOGGER.error(f"Failed creating tracking indexes: {e}")

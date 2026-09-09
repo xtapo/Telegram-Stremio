@@ -17,6 +17,13 @@ import httpx
 from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
+from Backend.helper.observability import (
+    correlation_context,
+    new_id,
+    record_error,
+    record_flood_wait,
+    set_gauge,
+)
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot
 from Backend.helper.metadata.music_scraper import (
@@ -625,6 +632,7 @@ class GoogleDriveUploadManager:
         self._client_type: str = "bot"
         self._uploaded_tracks: List[dict] = []
         self._channel_id: str = ""
+        self._job_id: str = ""
 
     def get_status(self) -> dict:
         elapsed = 0
@@ -649,6 +657,7 @@ class GoogleDriveUploadManager:
             "elapsed_seconds": elapsed,
             "client_type": self._client_type,
             "uploaded_count": len(self._uploaded_tracks),
+            "job_id": self._job_id,
             "logs": self._logs[-30:],
         }
 
@@ -700,22 +709,25 @@ class GoogleDriveUploadManager:
         self._logs = []
         self._uploaded_tracks = []
         self._channel_id = str(target_channel_id)
+        self._job_id = new_id("upload")
+        set_gauge("queue.upload.pending", len(parsed_links))
 
         client_label = "⚡ User Session (Tốc độ tối đa)" if client_type == "user_session" else "🤖 StreamBot"
         self._log(f"Bắt đầu upload lên kênh {target_channel_id} sử dụng {client_label}", "info")
         self._log(f"Phát hiện {len(parsed_links)} liên kết/thư mục cần xử lý.", "info")
 
-        self._task = asyncio.create_task(
-            self._run_upload_pipeline(
-                raw_url=url,
-                parsed_links=parsed_links,
-                target_channel_id=target_channel_id,
-                default_artist=default_artist,
-                default_album=default_album,
-                auto_scrape=auto_scrape,
-                send_as_document=send_as_document,
+        with correlation_context(job=self._job_id):
+            self._task = asyncio.create_task(
+                self._run_upload_pipeline(
+                    raw_url=url,
+                    parsed_links=parsed_links,
+                    target_channel_id=target_channel_id,
+                    default_artist=default_artist,
+                    default_album=default_album,
+                    auto_scrape=auto_scrape,
+                    send_as_document=send_as_document,
+                )
             )
-        )
         return {
             "ok": True,
             "message": f"Đã khởi chạy tiến trình tải & upload {len(parsed_links)} liên kết/thư mục bằng {client_label}.",
@@ -1282,6 +1294,7 @@ class GoogleDriveUploadManager:
             # một mục kế tiếp. Cách này tận dụng đồng thời download Google Drive và
             # upload Telegram nhưng không mở quá nhiều kết nối gây quota/FloodWait.
             for q_idx, q_item in enumerate(items_queue, 1):
+                set_gauge("queue.upload.pending", max(0, total_queue_items - q_idx + 1))
                 if self._cancel_requested:
                     break
 
@@ -1726,6 +1739,7 @@ class GoogleDriveUploadManager:
 
                         except FloodWait as fw:
                             self._log(f"Telegram yêu cầu chờ FloodWait {fw.value}s — đang tự động tạm dừng...", "warn")
+                            record_flood_wait("upload.telegram", fw.value, self._client_type)
                             await asyncio.sleep(fw.value + 1)
                         except (OSError, ConnectionError, Exception) as upload_err:
                             if attempt < max_attempts and not self._cancel_requested:
@@ -1790,17 +1804,27 @@ class GoogleDriveUploadManager:
             self._stage = f"Hoàn tất upload toàn bộ {len(self._uploaded_tracks)} bài hát!"
             self._end_time = time.time()
             self._log(f"🎉 Hoàn tất toàn bộ tiến trình! Đã tải và upload thành công {len(self._uploaded_tracks)} bài hát từ {total_queue_items} mục.", "success")
+            set_gauge("queue.upload.pending", 0)
 
         except asyncio.CancelledError:
             self._status = "cancelled"
             self._end_time = time.time()
             self._log("Tiến trình đã bị dừng.", "warn")
+            set_gauge("queue.upload.pending", 0)
         except Exception as exc:
             self._status = "error"
             self._error_message = str(exc)
             self._end_time = time.time()
             self._log(f"Lỗi: {exc}", "error")
             LOGGER.error(f"[GDRIVE UPLOAD PIPELINE ERROR] {exc}", exc_info=True)
+            set_gauge("queue.upload.pending", 0)
+            await record_error(
+                "upload",
+                exc,
+                operation="gdrive.upload_pipeline",
+                details={"channel": target_channel_id, "current_file": self._current_file},
+                job=self._job_id,
+            )
         finally:
             if prefetch_task is not None:
                 if not prefetch_task.done():

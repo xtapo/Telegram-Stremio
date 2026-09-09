@@ -413,6 +413,31 @@
         </div>
     </div>
 
+    <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
+        <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface">
+            <h2 class="section-title text-xl sm:text-2xl">Operations Monitoring</h2>
+            <p class="muted text-sm mt-1">Queue state, Telegram FloodWait, MongoDB latency and recent operational errors.</p>
+        </div>
+        <div class="p-4 sm:p-5 lg:p-6">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                <div class="ins-stat"><div class="ins-v" id="ops-queue">—</div><div class="ins-l">Pending Jobs</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ops-flood">—</div><div class="ins-l">FloodWait / 1h</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ops-mongo">—</div><div class="ins-l">Mongo p95</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ops-errors">—</div><div class="ins-l">Recent Errors</div></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="ins-col">
+                    <h3 class="ins-h">Queue &amp; Jobs</h3>
+                    <div id="ops-job-detail" class="ins-list"><div class="ins-empty">Loading…</div></div>
+                </div>
+                <div class="ins-col">
+                    <h3 class="ins-h">Recent Errors</h3>
+                    <div id="ops-error-list" class="ins-list"><div class="ins-empty">Loading…</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <style>
       .hz-badge { padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
       .s-ok { background: #22c55e22; color: #22c55e; }
@@ -591,6 +616,35 @@
             document.getElementById('stat-cache-hit-rate').textContent = `${Number(ac.hit_rate || 0).toFixed(1)}%`;
             document.getElementById('stat-cache-hit-detail').textContent = `${ac.hits || 0} hit · ${ac.misses || 0} miss`;
             document.getElementById('stat-cache-saved').textContent = `Telegram saved ${fmtBytes(ac.bandwidth_saved_bytes || 0)}`;
+
+            const metrics = data.metrics || {};
+            const gauges = metrics.gauges || {};
+            const flood = metrics.flood_wait || {};
+            const mongoLatencies = Object.entries(metrics.latencies || {}).filter(([k]) => k.startsWith('mongodb.'));
+            const mongoP95 = mongoLatencies.length ? Math.max(...mongoLatencies.map(([,v]) => Number(v.p95_ms || 0))) : 0;
+            const scanPending = Number(gauges['queue.scan.pending'] || 0);
+            const uploadPending = Number(gauges['queue.upload.pending'] || 0);
+            const recentErrors = data.recent_errors || [];
+            insText('ops-queue', scanPending + uploadPending);
+            insText('ops-flood', flood.last_hour || 0);
+            insText('ops-mongo', mongoP95 ? mongoP95.toFixed(1) + ' ms' : '—');
+            insText('ops-errors', recentErrors.length);
+
+            const operations = data.operations || {};
+            const scan = operations.scan || {};
+            const upload = operations.upload || {};
+            document.getElementById('ops-job-detail').innerHTML = [
+                insRow(`Scan · ${scan.status || 'idle'}`, `${scanPending} pending · ${scan.progress || 0}%`, Math.min(1, Number(scan.progress || 0) / 100)),
+                insRow(`Upload · ${upload.status || 'idle'}`, `${uploadPending} pending · ${upload.file_index || 0}/${upload.total_files || 0}`, upload.total_files ? Number(upload.file_index || 0) / Number(upload.total_files) : 0),
+                insRow('Telegram FloodWait', `${flood.total || 0} total · ${flood.seconds_total || 0}s`, Math.min(1, Number(flood.last_hour || 0) / 10)),
+            ].join('');
+
+            document.getElementById('ops-error-list').innerHTML = recentErrors.length
+                ? recentErrors.slice(0, 8).map(e => {
+                    const ids = [e.request_id && `req ${e.request_id}`, e.job_id && e.job_id !== '-' && `job ${e.job_id}`].filter(Boolean).join(' · ');
+                    return `<div class="hz-item"><div class="lbl"><span class="mini-dot" style="background:#ef4444"></span><span>${escapeHtml(e.category || 'error')} · ${escapeHtml(e.operation || '')}</span></div><div class="meta" title="${escapeHtml(e.message || '')}">${escapeHtml((e.message || '').slice(0, 80))}${ids ? '<br>' + escapeHtml(ids) : ''}</div></div>`;
+                }).join('')
+                : '<div class="ins-empty">No recent operational errors.</div>';
 
             const workloadsWrap = document.getElementById('stat-workloads');
             const bots = data.bot_workloads || [];

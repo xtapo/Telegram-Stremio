@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from Backend import __version__
 from Backend.logger import LOGGER
+from Backend.helper.observability import correlation_context, new_id, observe_latency
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
     add_subscription_plan_api,
@@ -158,6 +160,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+@app.middleware("http")
+async def correlation_middleware(request: Request, call_next):
+    req_id = request.headers.get("x-request-id") or new_id("req")
+    started = time.perf_counter()
+    with correlation_context(request=req_id):
+        try:
+            response = await call_next(request)
+        finally:
+            observe_latency("http.request", (time.perf_counter() - started) * 1000)
+    response.headers["X-Request-ID"] = req_id
+    return response
 
 try:
     app.mount("/static", StaticFiles(directory="Backend/fastapi/static"), name="static")

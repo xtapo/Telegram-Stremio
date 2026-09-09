@@ -13,6 +13,13 @@ from Backend.helper.pyro import clean_filename, finalize_media_name, get_readabl
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
 from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
+from Backend.helper.observability import (
+    correlation_context,
+    new_id,
+    record_error,
+    record_flood_wait,
+    set_gauge,
+)
 
 SCAN_BATCH_SIZE = 200          
 SCAN_MAX_EMPTY_BATCHES = 10    
@@ -82,6 +89,7 @@ class ScanManager:
             "updated_at": 0.0,
             "finished_at": 0.0,
             "error": None,
+            "job_id": "",
         }
 
     @staticmethod
@@ -236,10 +244,12 @@ class ScanManager:
             self.state["error"] = None
             self.state["finished_at"] = 0.0
             self.state["started_at"] = _now()
+            self.state["job_id"] = new_id("scan")
             self._cancel = False
             await self._persist()
 
-            self._task = asyncio.create_task(self._run(client))
+            with correlation_context(job=self.state["job_id"]):
+                self._task = asyncio.create_task(self._run(client))
             return {"ok": True, "message": f"{'Rescan' if mode == 'rescan' else 'Scan'} started.",
                     "status": self.get_status()}
 
@@ -250,6 +260,7 @@ class ScanManager:
         return {"ok": True, "message": "Stop requested — the scan will pause after the current batch."}
 
     async def _run(self, client) -> None:
+        set_gauge("queue.scan.pending", len(self.state.get("pending") or []))
         try:
             while self.state["pending"] and not self._cancel:
                 ch = self.state["pending"][0]
@@ -267,6 +278,7 @@ class ScanManager:
                 if completed:
                     if self.state["pending"] and self.state["pending"][0] == ch:
                         self.state["pending"].pop(0)
+                    set_gauge("queue.scan.pending", len(self.state.get("pending") or []))
                     await self._persist()
 
             if self._cancel:
@@ -285,6 +297,7 @@ class ScanManager:
             self.state["error"] = f"Access denied to channel — make sure the bot is an admin. ({e})"
             self.state["finished_at"] = _now()
             LOGGER.error(f"[ScanManager] {self.state['error']}")
+            await record_error("scan", e, operation="scan.channel_access", details={"channel": self.state.get("current_channel")})
             await self._persist()
         except asyncio.CancelledError:
             await self._persist()
@@ -294,7 +307,10 @@ class ScanManager:
             self.state["error"] = str(e)
             self.state["finished_at"] = _now()
             LOGGER.error(f"[ScanManager] Unexpected error: {e}")
+            await record_error("scan", e, operation="scan.run", details={"channel": self.state.get("current_channel")})
             await self._persist()
+        finally:
+            set_gauge("queue.scan.pending", len(self.state.get("pending") or []))
 
     async def _scan_channel(self, client, chat_id: int, ch_key: str) -> bool:
         s = self.state
@@ -342,11 +358,13 @@ class ScanManager:
                 messages = await client.get_messages(chat_id, batch_ids)
             except FloodWait as e:
                 LOGGER.info(f"[ScanManager] FloodWait {e.value}s — sleeping…")
+                record_flood_wait("scan.batch", e.value)
                 await asyncio.sleep(e.value)
                 try:
                     messages = await client.get_messages(chat_id, batch_ids)
                 except Exception as ex:
                     LOGGER.error(f"[ScanManager] Retry failed at {current}: {ex}")
+                    await record_error("scan", ex, operation="scan.batch_retry", details={"channel": chat_id, "message_id": current})
                     s["counters"]["errors"] += 1
                     current = upper
                     empty_streak += 1
@@ -355,6 +373,7 @@ class ScanManager:
                     continue
             except Exception as e:
                 LOGGER.error(f"[ScanManager] Batch fetch error at {current}: {e}")
+                await record_error("scan", e, operation="scan.batch_fetch", details={"channel": chat_id, "message_id": current})
                 s["counters"]["errors"] += 1
                 current = upper
                 empty_streak += 1
@@ -408,6 +427,7 @@ class ScanManager:
             probe = await client.send_message(chat_id, SCAN_PROBE_TEXT)
         except FloodWait as e:
             LOGGER.info(f"[ScanManager] FloodWait {e.value}s during probe — sleeping…")
+            record_flood_wait("scan.probe", e.value)
             await asyncio.sleep(e.value)
             try:
                 probe = await client.send_message(chat_id, SCAN_PROBE_TEXT)
@@ -482,6 +502,7 @@ class ScanManager:
             )
         except Exception as e:
             LOGGER.warning(f"[ScanManager] Metadata exception for msg {msg_id}: {e}")
+            await record_error("metadata", e, operation="scan.metadata", details={"channel": channel_int, "message_id": msg_id, "title": title})
             metadata_info = None
 
         if metadata_info is None:
@@ -515,6 +536,7 @@ class ScanManager:
                 s["counters"]["skipped_meta"] += 1
         except Exception as e:
             LOGGER.error(f"[ScanManager] DB insert error msg {msg_id}: {e}")
+            await record_error("scan", e, operation="scan.db_insert", details={"channel": channel_int, "message_id": msg_id, "title": title})
             s["counters"]["errors"] += 1
 
     #----- ── Purge (rescan helper) ────────────────────────────────────────────────

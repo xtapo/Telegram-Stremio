@@ -35,6 +35,7 @@ from Backend.helper.metadata.resolvers import (
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
+from Backend.helper.observability import record_error
 
 
 def _is_anime_channel(channel) -> bool:
@@ -77,6 +78,7 @@ async def metadata(
         parsed = parse_media_name(parse_target)
     except Exception as e:
         LOGGER.error(f"Parsing failed for {filename}: {e}\n{traceback.format_exc()}")
+        await record_error("metadata", e, operation="metadata.parse", details={"filename": filename, "channel": channel, "message_id": msg_id})
         return None
 
     combined = parse_combined_episodes(parse_target)
@@ -223,6 +225,7 @@ async def metadata(
         return result
     except Exception as e:
         LOGGER.error(f"Error while fetching metadata for {filename}: {e}\n{traceback.format_exc()}")
+        await record_error("metadata", e, operation="metadata.resolve", details={"filename": filename, "channel": channel, "message_id": msg_id})
         return None
 
 
