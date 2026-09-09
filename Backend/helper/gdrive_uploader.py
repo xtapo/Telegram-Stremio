@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import html
 import os
 import re
 import shutil
@@ -317,6 +318,50 @@ def parse_gdrive_urls(raw_text: str) -> List[Tuple[str, str, str]]:
             results.append((l_type, r_id, t))
 
     return results
+
+
+def _is_mediafire_page_url(url: str) -> bool:
+    """Return True for MediaFire share/download pages that need resolving first."""
+    try:
+        host = (urllib.parse.urlparse(url).hostname or "").lower()
+        return host == "mediafire.com" or host.endswith(".mediafire.com")
+    except Exception:
+        return False
+
+
+async def _resolve_mediafire_download_url(client: httpx.AsyncClient, url: str) -> str:
+    """Resolve a public MediaFire page to its temporary direct-download URL."""
+    if not _is_mediafire_page_url(url):
+        return url
+
+    response = await client.get(url)
+    if response.status_code != 200:
+        raise ValueError(f"MediaFire trả về HTTP {response.status_code} khi mở trang tải.")
+
+    content_type = (response.headers.get("content-type") or "").lower()
+    if "text/html" not in content_type:
+        return str(response.url)
+
+    page = response.text
+    patterns = (
+        r'href=["\']([^"\']+)["\'][^>]*\bid=["\']downloadButton["\']',
+        r'\bid=["\']downloadButton["\'][^>]*href=["\']([^"\']+)["\']',
+    )
+    direct_url = ""
+    for pattern in patterns:
+        match = re.search(pattern, page, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            direct_url = html.unescape(match.group(1).strip())
+            break
+
+    if not direct_url:
+        raise ValueError("Không tìm thấy nút tải trực tiếp trên trang MediaFire. Link có thể đã hết hạn hoặc bị giới hạn.")
+
+    parsed = urllib.parse.urlparse(direct_url)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in ("http", "https") or not host.endswith("mediafire.com"):
+        raise ValueError("MediaFire trả về URL tải không hợp lệ.")
+    return direct_url
 
 
 def _sync_list_gdrive_folder(folder_url_or_id: str) -> List[dict]:
@@ -1096,7 +1141,21 @@ class GoogleDriveUploadManager:
         }
         try:
             async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-                async with client.stream("GET", url, headers=headers) as stream_resp:
+                download_url = url
+                if _is_mediafire_page_url(url):
+                    self._stage = "Đang phân tích liên kết MediaFire..."
+                    self._log("Đang lấy liên kết tải trực tiếp từ MediaFire...", "info")
+                    try:
+                        download_url = await _resolve_mediafire_download_url(client, url)
+                        resolved_name = os.path.basename(urllib.parse.urlparse(download_url).path)
+                        if resolved_name:
+                            base_fn = urllib.parse.unquote(resolved_name)
+                        self._log(f"✅ Đã resolve MediaFire: {base_fn}", "success")
+                    except ValueError as exc:
+                        self._log(str(exc), "error")
+                        return None
+
+                async with client.stream("GET", download_url, headers=headers) as stream_resp:
                     if stream_resp.status_code != 200:
                         self._log(f"Lỗi HTTP {stream_resp.status_code} khi tải link trực tiếp", "error")
                         return None

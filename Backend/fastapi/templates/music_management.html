@@ -721,8 +721,8 @@
                     <i class="fa-brands fa-google-drive"></i>
                 </div>
                 <div>
-                    <h3 class="text-lg font-extrabold text-text">Upload Nhạc từ Google Drive</h3>
-                    <p class="text-xs text-text-secondary">Tải file/thư mục Google Drive và upload lên kênh Telegram bằng User Session</p>
+                    <h3 class="text-lg font-extrabold text-text">Upload Nhạc từ Link / Google Drive</h3>
+                    <p class="text-xs text-text-secondary">Hỗ trợ Google Drive, MediaFire và link tải trực tiếp, sau đó upload lên Telegram bằng User Session</p>
                 </div>
             </div>
             <button onclick="closeGDriveUploadModal()" class="w-8 h-8 rounded-full hover:bg-surface-2 flex items-center justify-center text-text-secondary hover:text-text transition">
@@ -757,7 +757,7 @@
             <div>
                 <div class="flex items-center justify-between mb-1">
                     <label class="block text-xs font-bold uppercase text-text-secondary">
-                        <i class="fa-solid fa-link text-primary mr-1"></i> Link Google Drive hoặc Link Tải (1 hoặc nhiều link):
+                        <i class="fa-solid fa-link text-primary mr-1"></i> Link Google Drive, MediaFire hoặc Link Tải (1 hoặc nhiều link):
                     </label>
                     <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                         <i class="fa-solid fa-folder-open mr-1"></i> Hỗ trợ Thư mục & Đa Link
@@ -765,7 +765,7 @@
                 </div>
                 <div class="relative">
                     <textarea id="gdrive-url-input" rows="3"
-                              placeholder="Dán 1 hoặc nhiều link Google Drive (Mỗi link 1 dòng)...&#10;Ví dụ: https://drive.google.com/drive/folders/... hoặc https://drive.google.com/file/d/..."
+                              placeholder="Dán 1 hoặc nhiều link (mỗi link 1 dòng)...&#10;Ví dụ: Google Drive hoặc https://www.mediafire.com/file/.../file"
                               class="w-full pl-3 pr-10 py-2 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary focus:border-primary font-mono resize-y"></textarea>
                     <button type="button" onclick="pasteClipboardToGDriveUrl()" title="Dán từ Clipboard"
                             class="absolute right-2.5 top-3 text-text-secondary hover:text-primary text-xs p-1">
@@ -773,7 +773,7 @@
                     </button>
                 </div>
                 <p class="text-[11px] text-text-secondary mt-1">
-                    💡 Hỗ trợ: <b>Thư mục Google Drive (Folder)</b>, file đơn lẻ, file nén <code>.zip/.rar/.7z</code>, và nhập <b>nhiều liên kết cùng lúc</b> (mỗi link 1 dòng).
+                    💡 Hỗ trợ: <b>Google Drive</b>, <b>MediaFire</b>, link tải trực tiếp, file nén <code>.zip/.rar/.7z</code>, và <b>nhiều liên kết cùng lúc</b> (mỗi link 1 dòng).
                 </p>
             </div>
 
@@ -6662,4 +6662,3 @@ async function submitRestoreUpload() {
 }
 </script>
 {% endblock %}
-
