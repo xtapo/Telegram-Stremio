@@ -1393,7 +1393,13 @@ async def _db_load_library(force_reload: bool = False) -> list:
     return []
 
 
-async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remote: bool = True):
+async def _db_save_library(
+    albums: list,
+    *,
+    wait_remote: bool = True,
+    sync_remote: bool = True,
+    remote_album_ids: set[str] | None = None,
+):
     global _IN_MEMORY_LIBRARY_CACHE
     _IN_MEMORY_LIBRARY_CACHE = albums
     _invalidate_artists_cache()
@@ -1413,15 +1419,27 @@ async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remot
         # 2. Lưu bản nén Gzip lên MongoDB (nhanh nhất & nhẹ nhất)
         await _save_compressed_mongo_library(albums, force=True)
 
-        # 3. Lưu theo per-album schema mới
+        # 3. Lưu theo per-album schema mới. Khi remote_album_ids được truyền vào
+        # (scan append), chỉ thay các album thực sự bị ảnh hưởng thay vì xóa và
+        # ghi lại toàn bộ hàng chục nghìn document.
         coll = _get_albums_collection()
         if coll is not None:
             try:
-                await coll.delete_many({})
-                if albums:
+                albums_to_write = albums
+                if remote_album_ids is None:
+                    await coll.delete_many({})
+                else:
+                    albums_to_write = [
+                        alb for alb in albums
+                        if (alb.get("id") or "").strip() in remote_album_ids
+                    ]
+                    if remote_album_ids:
+                        await coll.delete_many({"_id": {"$in": list(remote_album_ids)}})
+
+                if albums_to_write:
                     seen_ids = set()
                     batch = []
-                    for idx, alb in enumerate(albums):
+                    for idx, alb in enumerate(albums_to_write):
                         album_id = (alb.get("id") or "").strip()
                         if not album_id:
                             title = alb.get("title", "unknown")
@@ -1436,7 +1454,7 @@ async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remot
                         seen_ids.add(album_id)
 
                         batch.append({**alb, "_id": album_id})
-                        if len(batch) < 100:
+                        if len(batch) < 1000:
                             continue
                         try:
                             await coll.insert_many(batch, ordered=False)
@@ -1452,7 +1470,13 @@ async def _db_save_library(albums: list, *, wait_remote: bool = True, sync_remot
                             if "duplicate" not in str(e).lower() and "E11000" not in str(e):
                                 LOGGER.warning(f"[MUSIC DB] Save batch warning: {e}")
 
-                LOGGER.info(f"[MUSIC DB] Đã lưu {len(albums)} albums (per-album schema).")
+                if remote_album_ids is None:
+                    LOGGER.info(f"[MUSIC DB] Đã lưu {len(albums_to_write)} albums (per-album schema).")
+                else:
+                    LOGGER.info(
+                        f"[MUSIC DB] Đã cập nhật {len(albums_to_write)} albums thay đổi "
+                        f"trên per-album schema."
+                    )
             except Exception as e:
                 LOGGER.warning(f"[MUSIC DB] Could not save to per-album collection: {e}")
 
@@ -2742,8 +2766,21 @@ class MusicScanManager:
             )
             self._current_track = "Đang lưu thư viện..."
             save_started = time.time()
-            await _db_save_library(final_albums)
-            await music_metadata_pipeline.save_many(combined_pool)
+            changed_album_ids = None
+            metadata_to_save = combined_pool
+            if mode == "append":
+                changed_album_names = {
+                    tr.get("album") for tr in all_scanned_tracks if tr.get("album")
+                }
+                changed_album_ids = {
+                    (albums_dict[name].get("id") or "").strip()
+                    for name in changed_album_names
+                    if name in albums_dict and (albums_dict[name].get("id") or "").strip()
+                }
+                metadata_to_save = all_scanned_tracks
+
+            await _db_save_library(final_albums, remote_album_ids=changed_album_ids)
+            await music_metadata_pipeline.save_many(metadata_to_save, batch_size=1000)
 
             self._status = "completed"
             self._end_time = time.time()
