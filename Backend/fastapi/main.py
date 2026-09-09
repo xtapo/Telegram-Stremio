@@ -174,6 +174,11 @@ async def _startup():
         asyncio.create_task(_startup_preload_library())
     except Exception:
         pass
+    try:
+        from Backend.helper.scheduled_backup import scheduled_backup_manager
+        scheduled_backup_manager.start()
+    except Exception as e:
+        LOGGER.warning(f"[Scheduled Backup] Could not start scheduler: {e}")
 
 
 #----- Streaming and Stremio routers
@@ -756,6 +761,32 @@ async def admin_backup_export(_: bool = Depends(require_auth)):
 @app.post("/api/admin/backup/import")
 async def admin_backup_import(payload: dict, _: bool = Depends(require_auth)):
     return await import_config_api(payload)
+
+
+@app.get("/api/admin/scheduled-backup/status")
+async def scheduled_backup_status(_: bool = Depends(require_auth)):
+    from Backend.helper.scheduled_backup import scheduled_backup_manager
+    return scheduled_backup_manager.status()
+
+
+@app.post("/api/admin/scheduled-backup/run")
+async def scheduled_backup_run(_: bool = Depends(require_auth)):
+    from fastapi.responses import JSONResponse
+    from Backend.helper.scheduled_backup import scheduled_backup_manager
+    try:
+        return await scheduled_backup_manager.run_backup(reason="manual")
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(exc)})
+
+
+@app.post("/api/admin/scheduled-backup/test-restore")
+async def scheduled_backup_test_restore(_: bool = Depends(require_auth)):
+    from fastapi.responses import JSONResponse
+    from Backend.helper.scheduled_backup import scheduled_backup_manager
+    try:
+        return await scheduled_backup_manager.test_restore()
+    except Exception as exc:
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(exc)})
 
 @app.get("/api/admin/logs")
 async def admin_logs(lines: int = Query(300, ge=1, le=2000), _: bool = Depends(require_auth)):

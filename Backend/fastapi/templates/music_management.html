@@ -1069,6 +1069,44 @@
 
         <!-- TAB 1: BACKUP -->
         <div id="bk-view-backup" class="flex-1 overflow-y-auto pr-1 space-y-4">
+            <div class="p-4 rounded-2xl bg-surface/50 border border-hairline space-y-4">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <h4 class="text-xs font-bold uppercase text-text tracking-wider">Scheduled Backup Ngoài Server</h4>
+                        <p class="text-[11px] text-text-secondary">Tự động backup lên Telegram, S3 hoặc Google Drive, kèm retention và kiểm tra restore</p>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-xs font-bold text-text cursor-pointer shrink-0">
+                        <input id="sb-enabled" type="checkbox" class="w-4 h-4 accent-primary"> Bật lịch
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <label class="text-[11px] text-text-secondary">Tần suất
+                        <select id="sb-frequency" onchange="toggleScheduledBackupFields()" class="mt-1 w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><option value="daily">Hàng ngày</option><option value="weekly">Hàng tuần</option></select>
+                    </label>
+                    <label class="text-[11px] text-text-secondary">Giờ chạy<input id="sb-time" type="time" value="03:00" class="mt-1 w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"></label>
+                    <label id="sb-weekday-wrap" class="text-[11px] text-text-secondary hidden">Ngày trong tuần
+                        <select id="sb-weekday" class="mt-1 w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><option value="0">Thứ Hai</option><option value="1">Thứ Ba</option><option value="2">Thứ Tư</option><option value="3">Thứ Năm</option><option value="4">Thứ Sáu</option><option value="5">Thứ Bảy</option><option value="6">Chủ Nhật</option></select>
+                    </label>
+                    <label class="text-[11px] text-text-secondary">Retention<select id="sb-retention" class="mt-1 w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><option value="7">7 ngày</option><option value="30">30 ngày</option></select></label>
+                    <label class="text-[11px] text-text-secondary">Múi giờ<input id="sb-timezone" value="Asia/Ho_Chi_Minh" class="mt-1 w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"></label>
+                    <label class="text-[11px] text-text-secondary">Đích lưu trữ<select id="sb-destination" onchange="toggleScheduledBackupFields()" class="mt-1 w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><option value="telegram">Telegram</option><option value="s3">S3 / S3-compatible</option><option value="gdrive">Google Drive</option></select></label>
+                    <label class="text-[11px] text-text-secondary sm:col-span-2">Chat ID nhận thông báo lỗi (tùy chọn)<input id="sb-notify-chat" placeholder="-100xxxxxxxxxx" class="mt-1 w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"></label>
+                </div>
+                <div id="sb-provider-telegram"><input id="sb-telegram-chat" placeholder="Telegram Channel / Chat ID lưu backup" class="w-full rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"></div>
+                <div id="sb-provider-s3" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <input id="sb-s3-endpoint" placeholder="S3 endpoint" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><input id="sb-s3-region" value="us-east-1" placeholder="Region" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><input id="sb-s3-bucket" placeholder="Bucket" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><input id="sb-s3-prefix" value="telegram-stremio-backups" placeholder="Prefix" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><input id="sb-s3-access" placeholder="Access key" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><input id="sb-s3-secret" type="password" placeholder="Secret key" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text">
+                </div>
+                <div id="sb-provider-gdrive" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <input id="sb-gdrive-folder" placeholder="Google Drive Folder ID" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text sm:col-span-2"><input id="sb-gdrive-client" placeholder="OAuth Client ID" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><input id="sb-gdrive-secret" type="password" placeholder="OAuth Client Secret" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text"><input id="sb-gdrive-refresh" type="password" placeholder="OAuth Refresh Token" class="rounded-xl bg-surface border border-hairline px-3 py-2 text-xs text-text sm:col-span-2">
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="saveScheduledBackupSettings()" class="px-3 py-2 rounded-xl bg-primary text-white text-xs font-bold"><i class="fa-solid fa-floppy-disk mr-1"></i>Lưu cấu hình</button>
+                    <button type="button" onclick="runScheduledBackupNow()" class="px-3 py-2 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold"><i class="fa-solid fa-play mr-1"></i>Backup ngay</button>
+                    <button type="button" onclick="testScheduledBackupRestore()" class="px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold"><i class="fa-solid fa-vial-circle-check mr-1"></i>Test restore</button>
+                    <span id="sb-status" class="text-[11px] text-text-secondary ml-auto"></span>
+                </div>
+            </div>
+
             <!-- Download Options Box -->
             <div class="p-4 rounded-2xl bg-surface/50 border border-hairline space-y-3">
                 <div class="flex items-center justify-between">
@@ -6340,6 +6378,7 @@ function openBackupModal() {
     initRestoreDropzone();
     switchBackupSubTab('backup');
     loadBackupSnapshots();
+    loadScheduledBackupSettings();
 }
 
 function closeBackupModal() {
@@ -6491,6 +6530,39 @@ async function createBackupSnapshot() {
             btn.innerHTML = '<i class="fa-solid fa-plus text-[10px]"></i> Tạo Snapshot Mới';
         }
     }
+}
+
+function toggleScheduledBackupFields() {
+    document.getElementById('sb-weekday-wrap')?.classList.toggle('hidden', document.getElementById('sb-frequency')?.value !== 'weekly');
+    const destination = document.getElementById('sb-destination')?.value || 'telegram';
+    ['telegram', 's3', 'gdrive'].forEach(name => document.getElementById(`sb-provider-${name}`)?.classList.toggle('hidden', destination !== name));
+}
+
+async function loadScheduledBackupSettings() {
+    try {
+        const [settingsRes, statusRes] = await Promise.all([fetch('/api/admin/settings', {cache:'no-store'}), fetch('/api/admin/scheduled-backup/status', {cache:'no-store'})]);
+        const s = (await settingsRes.json()).settings || {};
+        const status = await statusRes.json();
+        const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
+        const enabled = document.getElementById('sb-enabled'); if (enabled) enabled.checked = !!s.scheduled_backup_enabled;
+        set('sb-frequency', s.scheduled_backup_frequency || 'daily'); set('sb-time', s.scheduled_backup_time || '03:00'); set('sb-weekday', s.scheduled_backup_weekday ?? 0); set('sb-retention', s.scheduled_backup_retention_days || 7); set('sb-timezone', s.scheduled_backup_timezone || 'Asia/Ho_Chi_Minh'); set('sb-destination', s.scheduled_backup_destination || 'telegram'); set('sb-notify-chat', s.scheduled_backup_notification_chat_id || ''); set('sb-telegram-chat', s.scheduled_backup_telegram_chat_id || ''); set('sb-s3-endpoint', s.scheduled_backup_s3_endpoint || ''); set('sb-s3-region', s.scheduled_backup_s3_region || 'us-east-1'); set('sb-s3-bucket', s.scheduled_backup_s3_bucket || ''); set('sb-s3-prefix', s.scheduled_backup_s3_prefix || 'telegram-stremio-backups'); set('sb-s3-access', s.scheduled_backup_s3_access_key || ''); set('sb-s3-secret', s.scheduled_backup_s3_secret_key || ''); set('sb-gdrive-folder', s.scheduled_backup_gdrive_folder_id || ''); set('sb-gdrive-client', s.scheduled_backup_gdrive_client_id || ''); set('sb-gdrive-secret', s.scheduled_backup_gdrive_client_secret || ''); set('sb-gdrive-refresh', s.scheduled_backup_gdrive_refresh_token || '');
+        toggleScheduledBackupFields();
+        const el = document.getElementById('sb-status'); if (el) el.textContent = status.running ? 'Đang backup…' : (status.next_run_at ? `Lần kế: ${new Date(status.next_run_at).toLocaleString()}` : 'Chưa lên lịch');
+    } catch (e) { const el = document.getElementById('sb-status'); if (el) el.textContent = 'Không tải được trạng thái'; }
+}
+
+async function saveScheduledBackupSettings() {
+    const val = id => document.getElementById(id)?.value || '';
+    const payload = {scheduled_backup_enabled:!!document.getElementById('sb-enabled')?.checked, scheduled_backup_frequency:val('sb-frequency'), scheduled_backup_time:val('sb-time'), scheduled_backup_weekday:parseInt(val('sb-weekday')||'0',10), scheduled_backup_retention_days:parseInt(val('sb-retention')||'7',10), scheduled_backup_timezone:val('sb-timezone'), scheduled_backup_destination:val('sb-destination'), scheduled_backup_notification_chat_id:val('sb-notify-chat'), scheduled_backup_telegram_chat_id:val('sb-telegram-chat'), scheduled_backup_s3_endpoint:val('sb-s3-endpoint'), scheduled_backup_s3_region:val('sb-s3-region'), scheduled_backup_s3_bucket:val('sb-s3-bucket'), scheduled_backup_s3_prefix:val('sb-s3-prefix'), scheduled_backup_s3_access_key:val('sb-s3-access'), scheduled_backup_s3_secret_key:val('sb-s3-secret'), scheduled_backup_gdrive_folder_id:val('sb-gdrive-folder'), scheduled_backup_gdrive_client_id:val('sb-gdrive-client'), scheduled_backup_gdrive_client_secret:val('sb-gdrive-secret'), scheduled_backup_gdrive_refresh_token:val('sb-gdrive-refresh')};
+    try { const res=await fetch('/api/admin/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const data=await res.json(); if(!res.ok) throw new Error(data.detail||data.message||'Không lưu được cấu hình'); alertToast('✅ Đã lưu cấu hình Scheduled Backup.'); await loadScheduledBackupSettings(); } catch(e){ alertToast('❌ '+e.message); }
+}
+
+async function runScheduledBackupNow() {
+    try { const el=document.getElementById('sb-status'); if(el) el.textContent='Đang backup…'; const res=await fetch('/api/admin/scheduled-backup/run',{method:'POST'}); const data=await res.json(); if(!res.ok||data.status!=='success') throw new Error(data.message||'Backup thất bại'); alertToast(`✅ ${data.message}`); } catch(e){ alertToast('❌ Backup thất bại: '+e.message); } finally { await loadScheduledBackupSettings(); }
+}
+
+async function testScheduledBackupRestore() {
+    try { const res=await fetch('/api/admin/scheduled-backup/test-restore',{method:'POST'}); const data=await res.json(); if(!res.ok||data.status!=='success') throw new Error(data.message||'Restore test thất bại'); const d=data.details||{}; alertToast(`✅ Restore test OK: ${d.albums||0} album, ${d.tracks||0} bài, ${d.channels||0} kênh. Dữ liệu thật không bị thay đổi.`); } catch(e){ alertToast('❌ Restore test thất bại: '+e.message); }
 }
 
 async function restoreSnapshot(filename) {

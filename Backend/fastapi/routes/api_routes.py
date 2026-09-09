@@ -1793,7 +1793,7 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster", "scheduled_backup_enabled"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])
@@ -1829,6 +1829,39 @@ async def update_settings_api(payload: dict) -> dict:
             raise HTTPException(status_code=400, detail="'audio_cache_size_gb' must be 2, 5, 10, or 20.")
         if payload["audio_cache_size_gb"] not in (2, 5, 10, 20):
             raise HTTPException(status_code=400, detail="'audio_cache_size_gb' must be 2, 5, 10, or 20.")
+
+    if "scheduled_backup_retention_days" in payload:
+        try:
+            payload["scheduled_backup_retention_days"] = int(payload["scheduled_backup_retention_days"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="scheduled_backup_retention_days must be an integer.")
+        if payload["scheduled_backup_retention_days"] not in (7, 30):
+            raise HTTPException(status_code=400, detail="Retention must be 7 or 30 days.")
+
+    if "scheduled_backup_weekday" in payload:
+        try:
+            payload["scheduled_backup_weekday"] = int(payload["scheduled_backup_weekday"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="scheduled_backup_weekday must be 0-6.")
+        if payload["scheduled_backup_weekday"] not in range(7):
+            raise HTTPException(status_code=400, detail="scheduled_backup_weekday must be 0-6.")
+
+    if "scheduled_backup_frequency" in payload:
+        payload["scheduled_backup_frequency"] = str(payload["scheduled_backup_frequency"] or "daily").lower()
+        if payload["scheduled_backup_frequency"] not in ("daily", "weekly"):
+            raise HTTPException(status_code=400, detail="Backup frequency must be daily or weekly.")
+
+    if "scheduled_backup_destination" in payload:
+        payload["scheduled_backup_destination"] = str(payload["scheduled_backup_destination"] or "telegram").lower()
+        if payload["scheduled_backup_destination"] not in ("telegram", "s3", "gdrive"):
+            raise HTTPException(status_code=400, detail="Backup destination must be telegram, s3, or gdrive.")
+
+    if "scheduled_backup_time" in payload:
+        value = str(payload["scheduled_backup_time"] or "").strip()
+        import re as _re
+        if not _re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise HTTPException(status_code=400, detail="Backup time must be HH:MM.")
+        payload["scheduled_backup_time"] = value
 
     if len([k for k in ("better_poster_enabled", "rpdb_enabled", "fanart_enabled") if payload.get(k)]) > 1:
         raise HTTPException(status_code=400, detail="Enable only one poster provider at a time")
@@ -1950,7 +1983,12 @@ async def update_settings_api(payload: dict) -> dict:
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "mediaflow_password", "payment_instructions", "payment_qr_url",
-                "announcement_channel", "skip_channel"):
+                "announcement_channel", "skip_channel", "scheduled_backup_timezone",
+                "scheduled_backup_notification_chat_id", "scheduled_backup_telegram_chat_id",
+                "scheduled_backup_s3_endpoint", "scheduled_backup_s3_region", "scheduled_backup_s3_bucket",
+                "scheduled_backup_s3_prefix", "scheduled_backup_s3_access_key", "scheduled_backup_s3_secret_key",
+                "scheduled_backup_gdrive_folder_id", "scheduled_backup_gdrive_client_id",
+                "scheduled_backup_gdrive_client_secret", "scheduled_backup_gdrive_refresh_token"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
 
@@ -1959,6 +1997,12 @@ async def update_settings_api(payload: dict) -> dict:
 
     try:
         reinit_results = await SettingsManager.update(db, payload)
+        if any(str(k).startswith("scheduled_backup_") for k in payload):
+            try:
+                from Backend.helper.scheduled_backup import scheduled_backup_manager
+                scheduled_backup_manager.reschedule()
+            except Exception as exc:
+                LOGGER.warning(f"Could not reschedule backups after settings update: {exc}")
         if "audio_cache_size_gb" in payload:
             from Backend.helper.music_cache import smart_audio_cache
             await asyncio.to_thread(smart_audio_cache.cleanup)
