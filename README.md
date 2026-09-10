@@ -759,7 +759,18 @@ Your server runs at ➡️ `http://<your-vps-ip>:8000`
 
 ⚡ The config file is mounted, so you **don't need to rebuild** — changes apply on restart.
 
-**RAR music uploads (`Unsupported Method`):** The image includes the official
+**Password-protected music archives:** Enter the archive password in the optional
+**Mật khẩu giải nén** field below the links before starting an upload. The same
+password applies to all archives in that upload, including files inside a Drive
+folder. Submit separate uploads for archives with different passwords. Spaces
+are preserved. The password field clears after the upload starts successfully;
+the password is not included in upload status or logs.
+
+For missing or incorrect passwords, enter the correct password and retry. An
+`Unsupported Method` error alone does not prove that the RAR codec is missing.
+If the password is correct, also check the archive and extraction tool.
+
+**Updating the extraction tools:** The image includes the official
 7-Zip standalone binary with RAR support for amd64 and arm64. Debian's `7zip`
 package alone may lack the RAR decoder. After updating the code, rebuild and
 recreate the container (a restart alone keeps the old extraction tools):

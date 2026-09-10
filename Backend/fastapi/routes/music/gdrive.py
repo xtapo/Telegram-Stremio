@@ -77,6 +77,9 @@ async def start_gdrive_upload(payload: dict, _: bool = Depends(require_auth)):
     default_album = payload.get("default_album", "").strip()
     auto_scrape = payload.get("auto_scrape", True)
     send_as_document = payload.get("send_as_document", False)
+    archive_password = payload.get("archive_password", "")
+    if not isinstance(archive_password, str) or "\x00" in archive_password:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Mật khẩu giải nén không hợp lệ."})
 
     if not url:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Vui lòng nhập URL Google Drive hoặc link tải."})
@@ -96,7 +99,8 @@ async def start_gdrive_upload(payload: dict, _: bool = Depends(require_auth)):
         default_artist=default_artist,
         default_album=default_album,
         auto_scrape=auto_scrape,
-        send_as_document=send_as_document
+        send_as_document=send_as_document,
+        archive_password=archive_password,
     )
 
     if not res.get("ok"):

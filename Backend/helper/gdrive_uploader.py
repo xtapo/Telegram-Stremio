@@ -78,7 +78,7 @@ def _find_7z_binary() -> Optional[str]:
     return None
 
 
-def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:
+def _sync_extract_archive(archive_path: str, extract_dir: str, archive_password: str = "") -> Tuple[bool, str]:
     """
     Hàm giải nén đồng bộ (chạy trong worker thread):
     Thử lần lượt tất cả các công cụ 7-Zip, WinRAR, UnRAR, Python zip/7z/tar.
@@ -87,6 +87,42 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
     import subprocess
     os.makedirs(extract_dir, exist_ok=True)
     ext = os.path.splitext(archive_path)[1].lower()
+    password_message = (
+        "Mật khẩu giải nén không đúng. Vui lòng kiểm tra mật khẩu và thử lại."
+        if archive_password else
+        "File nén có mật khẩu. Vui lòng nhập mật khẩu giải nén ở phần nhập link và thử lại."
+    )
+    password_error = False
+
+    def safe_error(error) -> str:
+        nonlocal password_error
+        # Subprocess exceptions include argv, which now contains the password.
+        if isinstance(error, subprocess.TimeoutExpired):
+            return "Quá thời gian giải nén (300 giây)."
+        if isinstance(error, subprocess.SubprocessError):
+            return f"Công cụ giải nén gặp lỗi ({type(error).__name__})."
+        detail = str(error)
+        if re.search(
+            r"wrong password|bad password|incorrect password|passwordrequired|"
+            r"password.*(?:required|incorrect|wrong)|(?:requires?|enter|need).*password",
+            f"{type(error).__name__}: {detail}", re.I,
+        ):
+            password_error = True
+        if archive_password:
+            detail = detail.replace(archive_password, "[redacted]")
+            detail = detail.replace(repr(archive_password)[1:-1], "[redacted]")
+        return detail
+
+    # RAR headers can identify encryption even when an older CLI only reports
+    # Unsupported Method. Do not infer a missing codec from that message alone.
+    if ext == ".rar" and not archive_password:
+        try:
+            import rarfile
+            with rarfile.RarFile(archive_path) as rf:
+                if rf.needs_password():
+                    return False, password_message
+        except Exception:
+            pass  # Keep CLI fallbacks available if this parser cannot read it.
 
     archiver_candidates = []
     for p in [
@@ -105,9 +141,9 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         shutil.which("unrar-free"),
         "/usr/bin/unrar",
         "/usr/bin/unrar-free",
-        r"C:\Program Files\WinRAR\WinRAR.exe",
         r"C:\Program Files\WinRAR\UnRAR.exe",
         r"C:\Program Files (x86)\WinRAR\UnRAR.exe",
+        r"C:\Program Files\WinRAR\WinRAR.exe",
         shutil.which("rar"),
     ]:
         if p and os.path.exists(p) and p not in archiver_candidates:
@@ -122,9 +158,13 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         try:
             is_winrar = "winrar" in archiver.lower() or "unrar" in archiver.lower()
             if is_winrar:
-                cmd = [archiver, "x", "-y", archive_path, extract_dir]
+                password_arg = f"-p{archive_password}" if archive_password else "-p-"
+                cmd = [archiver, "x", "-y", password_arg, archive_path, os.path.join(extract_dir, "")]
             else:
-                cmd = [archiver, "x", "-y", f"-o{extract_dir}", archive_path]
+                cmd = [archiver, "x", "-y", f"-o{extract_dir}"]
+                if archive_password:
+                    cmd.append(f"-p{archive_password}")
+                cmd.append(archive_path)
 
             # Một số bản unrar/unrar-free trên Linux ghi tên file theo codepage cũ
             # (không phải UTF-8). Nếu dùng text=True mặc định, Python có thể ném
@@ -133,6 +173,7 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
             # dữ liệu/tên file mà công cụ giải nén ghi xuống đĩa.
             res = subprocess.run(
                 cmd,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -143,7 +184,9 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 LOGGER.info(f"[EXTRACT SUCCESS] Extracted with {os.path.basename(archiver)}: {archive_path}")
                 return True, f"Đã giải nén thành công bằng {os.path.basename(archiver)}"
             else:
-                err_text = (res.stderr or res.stdout or "").strip()
+                err_text = safe_error("\n".join(part for part in (res.stderr, res.stdout) if part).strip())
+                if is_winrar and res.returncode == 11:
+                    password_error = True
                 err_lines = [
                     l.strip() for l in err_text.splitlines() 
                     if l.strip() and not l.startswith("7-Zip") 
@@ -166,8 +209,10 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 except Exception:
                     pass
         except Exception as e:
-            last_error = f"{os.path.basename(archiver)}: {e}"
-            LOGGER.warning(f"[EXTRACT CLI ERROR] {e}")
+            last_error = f"{os.path.basename(archiver)}: {safe_error(e)}"
+            LOGGER.warning(f"[EXTRACT CLI ERROR] {last_error}")
+            shutil.rmtree(extract_dir, ignore_errors=True)
+            os.makedirs(extract_dir, exist_ok=True)
 
     # 2. Thử thư viện Python rarfile cho file .rar
     if ext == ".rar":
@@ -182,31 +227,36 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 rarfile.UNRAR_TOOL = archiver
                 try:
                     with rarfile.RarFile(archive_path) as rf:
-                        rf.extractall(path=extract_dir)
+                        if archive_password:
+                            rf.setpassword(archive_password)
+                        rf.extractall(path=extract_dir, pwd=archive_password or None)
                     return True, f"Đã giải nén thành công bằng rarfile ({os.path.basename(archiver)})"
                 except Exception as ex_rf:
-                    LOGGER.debug(f"rarfile with {archiver} note: {ex_rf}")
+                    LOGGER.debug(f"rarfile with {archiver} note: {safe_error(ex_rf)}")
         except Exception as e:
-            if not last_error: last_error = f"rarfile: {e}"
+            detail = safe_error(e)
+            if not last_error: last_error = f"rarfile: {detail}"
 
     # 3. Python zipfile (.zip)
     if ext == ".zip":
         try:
             with zipfile.ZipFile(archive_path, 'r') as zf:
-                zf.extractall(extract_dir)
+                zf.extractall(extract_dir, pwd=archive_password.encode("utf-8") if archive_password else None)
             return True, "Đã giải nén thành công bằng Python ZipFile"
         except Exception as e:
-            if not last_error: last_error = f"ZipFile: {e}"
+            detail = safe_error(e)
+            if not last_error: last_error = f"ZipFile: {detail}"
 
     # 4. Python py7zr (.7z)
     if ext == ".7z":
         try:
             import py7zr
-            with py7zr.SevenZipFile(archive_path, mode='r') as z:
+            with py7zr.SevenZipFile(archive_path, mode='r', password=archive_password or None) as z:
                 z.extractall(path=extract_dir)
             return True, "Đã giải nén thành công bằng py7zr"
         except Exception as e:
-            if not last_error: last_error = f"py7zr: {e}"
+            detail = safe_error(e)
+            if not last_error: last_error = f"py7zr: {detail}"
 
     # 5. Python tarfile (.tar, .tar.gz, .tgz, .bz2, .xz)
     if ext in (".tar", ".tar.gz", ".tgz", ".bz2", ".xz"):
@@ -215,20 +265,27 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 tf.extractall(extract_dir)
             return True, "Đã giải nén thành công bằng Python TarFile"
         except Exception as e:
-            if not last_error: last_error = f"TarFile: {e}"
+            if not last_error: last_error = f"TarFile: {safe_error(e)}"
 
+    if password_error:
+        return False, password_message
     if ext == ".rar" and (unsupported_method_error or not archiver_candidates):
         detail = unsupported_method_error or "Không tìm thấy công cụ giải nén RAR."
         return False, (
-            f"{detail} Cần công cụ hỗ trợ giải mã RAR: cài 7-Zip chính thức (7zz) "
-            "hoặc UnRAR. Nếu chạy Docker, hãy build lại image và tạo lại container."
+            f"{detail} Hãy kiểm tra mật khẩu của file nén. Nếu mật khẩu đúng, "
+            "kiểm tra file có bị hỏng hoặc công cụ giải nén có hỗ trợ phương thức nén này không."
+        )
+    if archive_password and ext in (".rar", ".zip", ".7z"):
+        return False, (
+            f"{last_error or 'Không giải nén được file.'} "
+            "Vui lòng kiểm tra lại mật khẩu và tính toàn vẹn của file nén."
         )
     return False, last_error or f"Không có công cụ nào giải nén được file {ext} này hoặc file bị hỏng / có mật khẩu."
 
 
-async def _extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, str]:
+async def _extract_archive(archive_path: str, extract_dir: str, archive_password: str = "") -> Tuple[bool, str]:
     """Chạy giải nén trong threadpool tránh block event loop và tránh lỗi event loop trên Windows"""
-    return await asyncio.to_thread(_sync_extract_archive, archive_path, extract_dir)
+    return await asyncio.to_thread(_sync_extract_archive, archive_path, extract_dir, archive_password)
 
 
 def _cleanup_old_temp_files(max_age_seconds: int = 3600):
@@ -753,6 +810,7 @@ class GoogleDriveUploadManager:
         default_album: str = "",
         auto_scrape: bool = True,
         send_as_document: bool = False,
+        archive_password: str = "",
     ) -> dict:
         if self._status in ("downloading", "uploading", "indexing") and self._task and not self._task.done():
             return {"ok": False, "message": "Đang có tiến trình upload khác đang chạy!"}
@@ -800,6 +858,7 @@ class GoogleDriveUploadManager:
                     default_album=default_album,
                     auto_scrape=auto_scrape,
                     send_as_document=send_as_document,
+                    archive_password=archive_password,
                 )
             )
         return {
@@ -1293,6 +1352,7 @@ class GoogleDriveUploadManager:
         default_album: str,
         auto_scrape: bool,
         send_as_document: bool,
+        archive_password: str = "",
     ):
         work_dir = tempfile.mkdtemp(prefix="gdrive_upload_", dir=TEMP_UPLOAD_DIR)
         prefetch_task: Optional[asyncio.Task] = None
@@ -1454,7 +1514,7 @@ class GoogleDriveUploadManager:
                 if ext in ARCHIVE_EXTENSIONS:
                     self._stage = f"[{q_idx}/{total_queue_items}] Đang giải nén tập tin album: {os.path.basename(dl_path)}..."
                     self._log(f"Phát hiện file nén ({ext}), đang giải nén trích xuất danh sách bài hát...", "info")
-                    success, extract_msg = await _extract_archive(dl_path, sub_extract_dir)
+                    success, extract_msg = await _extract_archive(dl_path, sub_extract_dir, archive_password)
                     if success:
                         self._log(f"✅ {extract_msg}", "success")
                         files_to_upload = self._collect_audio_files(sub_extract_dir)

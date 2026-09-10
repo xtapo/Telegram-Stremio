@@ -777,6 +777,19 @@
                 </p>
             </div>
 
+            <div>
+                <label for="gdrive-archive-password" class="block text-xs font-bold uppercase text-text-secondary mb-1">
+                    <i class="fa-solid fa-lock text-primary mr-1"></i> Mật khẩu giải nén (tuỳ chọn):
+                </label>
+                <input type="password" id="gdrive-archive-password" autocomplete="new-password"
+                       placeholder="Để trống nếu file nén không có mật khẩu"
+                       aria-describedby="gdrive-password-hint"
+                       class="w-full px-3 py-2.5 rounded-xl bg-background text-text border border-border text-xs focus:ring-2 focus:ring-primary">
+                <p id="gdrive-password-hint" class="text-[11px] text-text-secondary mt-1">
+                    Áp dụng cho các file nén trong lần upload này. Nếu các link có mật khẩu khác nhau, hãy upload từng lượt.
+                </p>
+            </div>
+
             <!-- Target Telegram Channel Selector -->
             <div>
                 <div class="flex items-center justify-between mb-1">
@@ -5918,6 +5931,7 @@ async function startGDriveUpload() {
     const defaultAlbum = (document.getElementById('gdrive-default-album')?.value || '').trim();
     const autoScrape = document.getElementById('gdrive-auto-scrape')?.checked ?? true;
     const sendAsDocument = document.getElementById('gdrive-as-document')?.checked ?? false;
+    const archivePassword = document.getElementById('gdrive-archive-password')?.value || '';
 
     if (!url) {
         alertToast('Vui lòng nhập Link Google Drive hoặc link tải âm thanh.');
@@ -5945,13 +5959,15 @@ async function startGDriveUpload() {
                 default_artist: defaultArtist,
                 default_album: defaultAlbum,
                 auto_scrape: autoScrape,
-                send_as_document: sendAsDocument
+                send_as_document: sendAsDocument,
+                archive_password: archivePassword
             })
         });
 
         const data = await res.json();
 
         if (res.ok && data.status === 'success') {
+            document.getElementById('gdrive-archive-password').value = '';
             gdriveStartTime = Date.now();
             switchToGDriveProgressView();
             startPollingGDriveUpload();

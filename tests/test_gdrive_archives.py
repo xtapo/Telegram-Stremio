@@ -4,6 +4,7 @@ Import the real uploader with application startup/services stubbed so these test
 never create Telegram sessions or require MongoDB credentials.
 """
 import importlib.util
+import ast
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +13,8 @@ import tempfile
 import types
 import unittest
 import zipfile
+import shutil
+from contextlib import nullcontext
 from unittest.mock import AsyncMock, Mock, patch
 
 
@@ -99,6 +102,43 @@ class ExtractionTests(unittest.TestCase):
         uploader._sync_extract_archive(self.archive, self.destination)
         self.assertFalse(any(call.args[0][0] == "apt-get" for call in self.run.call_args_list))
 
+    def test_password_is_passed_as_one_argument_without_trimming(self):
+        password = " album pass;$' "
+        self.run.side_effect = lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, "", "")
+        success, _ = uploader._sync_extract_archive(self.archive, self.destination, password)
+        self.assertTrue(success)
+        self.assertIn(f"-p{password}", self.run.call_args.args[0])
+        self.assertEqual(self.run.call_args.kwargs["stdin"], subprocess.DEVNULL)
+
+    def test_password_error_is_not_replaced_by_unsupported_method(self):
+        def run(cmd, **kwargs):
+            detail = "Wrong password" if cmd[0].endswith("/7z") else "Unsupported Method"
+            return subprocess.CompletedProcess(cmd, 2, "", detail)
+        self.run.side_effect = run
+        success, message = uploader._sync_extract_archive(self.archive, self.destination, "wrong")
+        self.assertFalse(success)
+        self.assertIn("Mật khẩu giải nén không đúng", message)
+        self.assertNotIn("cài 7-Zip", message)
+
+    def test_missing_password_requests_password_instead_of_codec(self):
+        self.run.side_effect = lambda cmd, **kwargs: subprocess.CompletedProcess(
+            cmd, 2, "", "Wrong password"
+        )
+        success, message = uploader._sync_extract_archive(self.archive, self.destination)
+        self.assertFalse(success)
+        self.assertIn("Vui lòng nhập mật khẩu", message)
+
+    def test_timeout_does_not_expose_password_in_logs_or_error(self):
+        password = " secret' pass "
+        self.run.side_effect = lambda cmd, **kwargs: (_ for _ in ()).throw(
+            subprocess.TimeoutExpired(cmd, 300)
+        )
+        uploader.LOGGER.reset_mock()
+        success, message = uploader._sync_extract_archive(self.archive, self.destination, password)
+        self.assertFalse(success)
+        self.assertNotIn(password, message)
+        self.assertNotIn("secret", str(uploader.LOGGER.mock_calls))
+
     def test_official_7zz_is_used_before_legacy_tools(self):
         previous_exists = uploader.os.path.exists.side_effect
         with patch.object(uploader.os.path, "exists", side_effect=lambda p:
@@ -136,6 +176,22 @@ class ExtractionTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_start_forwards_password_without_exposing_it_in_status(self):
+        manager = uploader.GoogleDriveUploadManager()
+        manager._run_upload_pipeline = AsyncMock()
+        password = " album pass;$ "
+        with (
+            patch.object(uploader, "_get_upload_client", AsyncMock(return_value=(Mock(), "bot"))),
+            patch.object(uploader, "correlation_context", return_value=nullcontext()),
+        ):
+            result = await manager.start(
+                "https://example.com/album.rar", "-100123", archive_password=password
+            )
+            await manager._task
+        self.assertTrue(result["ok"])
+        self.assertEqual(manager._run_upload_pipeline.call_args.kwargs["archive_password"], password)
+        self.assertNotIn(password, str(manager.get_status()))
+
     async def test_failed_extraction_reports_error_and_preserves_download_cache(self):
         with tempfile.TemporaryDirectory() as temp:
             cache = Path(temp) / "cache"
@@ -148,12 +204,14 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(uploader, "TEMP_UPLOAD_DIR", temp),
                 patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)),
                 patch.object(uploader, "_get_upload_client", AsyncMock(return_value=(Mock(), "bot"))),
-                patch.object(uploader, "_extract_archive", AsyncMock(return_value=(False, "Unsupported Method"))),
+                patch.object(uploader, "_extract_archive", AsyncMock(return_value=(False, "Unsupported Method"))) as extract,
                 patch.object(uploader, "_cleanup_old_temp_files"),
             ):
                 await manager._run_upload_pipeline(
-                    "source", [("file", "file123", "source")], "-100123", "", "", False, False
+                    "source", [("file", "file123", "source")], "-100123", "", "", False, False,
+                    archive_password=" album pass;$ ",
                 )
+                self.assertEqual(extract.call_args.args[2], " album pass;$ ")
             self.assertEqual(manager._status, "error")
             self.assertIn("Unsupported Method", manager._error_message)
             self.assertFalse(any("🎉" in entry["msg"] for entry in manager._logs))
@@ -233,6 +291,104 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(manager._status, "cancelled")
         self.assertTrue(cached["audio"])
         client.send_audio.assert_not_awaited()
+
+
+class EncryptedArchiveIntegrationTests(unittest.TestCase):
+    """Real encrypted files; the RAR test uses a locally available console archiver."""
+
+    def test_rar5_passwords_with_real_archiver(self):
+        archiver = next((p for p in (
+            shutil.which("7zz"), shutil.which("unrar"),
+            r"C:\Program Files\WinRAR\UnRAR.exe", shutil.which("7z"),
+        ) if p and os.path.isfile(p)), None)
+        if not archiver:
+            self.skipTest("Install 7-Zip or UnRAR to run the real RAR5 test")
+        fixture = ROOT / "tests/fixtures/password-album.rar"
+        actual_exists = os.path.exists
+        with tempfile.TemporaryDirectory() as temp, (
+            patch.object(uploader.shutil, "which", side_effect=lambda name:
+                         archiver if name == Path(archiver).stem else None)
+        ), patch.object(uploader.os.path, "exists", side_effect=lambda p:
+                        str(p) == archiver or (str(p).startswith(temp) and actual_exists(p))):
+            for password in ("", "wrong password", " album pass;$ "):
+                with self.subTest(password_case="correct" if password.startswith(" ") else "missing/wrong"):
+                    destination = str(Path(temp) / str(len(password)))
+                    success, message = uploader._sync_extract_archive(str(fixture), destination, password)
+                    if password.startswith(" "):
+                        self.assertTrue(success, message)
+                        self.assertEqual(
+                            (Path(destination) / "track.wav").read_bytes(),
+                            b"RIFF" + b"archive password regression test\n" * 4,
+                        )
+                    else:
+                        self.assertFalse(success)
+                        self.assertIn("mật khẩu", message.lower())
+
+    def test_7z_password_with_real_python_backend(self):
+        import py7zr
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "track.wav"
+            source.write_bytes(b"test audio")
+            archive = Path(temp) / "album.7z"
+            with py7zr.SevenZipFile(archive, "w", password=" album pass;$ ", header_encryption=True) as output:
+                output.write(source, "track.wav")
+            actual_exists = os.path.exists
+            with (
+                patch.object(uploader.shutil, "which", return_value=None),
+                patch.object(uploader.os.path, "exists", side_effect=lambda p:
+                             str(p).startswith(temp) and actual_exists(p)),
+            ):
+                success, message = uploader._sync_extract_archive(str(archive), str(Path(temp) / "missing"))
+                self.assertFalse(success)
+                self.assertIn("Vui lòng nhập mật khẩu", message)
+                success, message = uploader._sync_extract_archive(
+                    str(archive), str(Path(temp) / "wrong"), "wrong password"
+                )
+                self.assertFalse(success)
+                self.assertIn("mật khẩu", message.lower())
+                destination = str(Path(temp) / "correct")
+                success, message = uploader._sync_extract_archive(str(archive), destination, " album pass;$ ")
+                self.assertTrue(success, message)
+                self.assertEqual((Path(destination) / "track.wav").read_bytes(), b"test audio")
+
+
+class UploadEndpointTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Execute the actual endpoint body without unrelated app startup imports.
+        from fastapi.responses import JSONResponse
+        source = ROOT / "Backend/fastapi/routes/music/gdrive.py"
+        endpoint = next(node for node in ast.parse(source.read_text(encoding="utf-8")).body
+                        if isinstance(node, ast.AsyncFunctionDef) and node.name == "start_gdrive_upload")
+        endpoint.decorator_list = []
+        namespace = {"Depends": lambda dependency: None, "require_auth": Mock(), "JSONResponse": JSONResponse}
+        exec(compile(ast.Module(body=[endpoint], type_ignores=[]), str(source), "exec"), namespace)
+        self.endpoint = namespace["start_gdrive_upload"]
+
+    async def test_endpoint_forwards_optional_password_exactly(self):
+        modules = {name: types.ModuleType(name) for name in (
+            "Backend", "Backend.helper", "Backend.helper.gdrive_uploader"
+        )}
+        manager = Mock()
+        manager.start = AsyncMock(return_value={"ok": True, "message": "started"})
+        manager.get_status.return_value = {"status": "downloading"}
+        modules["Backend.helper.gdrive_uploader"].gdrive_upload_manager = manager
+        for value in (None, " pass with spaces;$ "):
+            payload = {"url": "https://example.com/album.rar", "channel_id": "-100123"}
+            if value is not None:
+                payload["archive_password"] = value
+            with patch.dict(sys.modules, modules), patch("importlib.reload", side_effect=lambda module: module):
+                response = await self.endpoint(payload)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(manager.start.call_args.kwargs["archive_password"], value or "")
+            self.assertNotIn(b"archive_password", response.body)
+
+    async def test_endpoint_rejects_invalid_password_without_echoing_it(self):
+        for value in (123, None, ["secret"], "secret\x00"):
+            response = await self.endpoint({
+                "url": "https://example.com/album.rar", "channel_id": "-100123", "archive_password": value,
+            })
+            self.assertEqual(response.status_code, 400)
+            self.assertNotIn(b"secret", response.body)
 
 
 if __name__ == "__main__":
