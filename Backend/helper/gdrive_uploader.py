@@ -129,7 +129,19 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
             else:
                 cmd = [archiver, "x", "-y", f"-o{extract_dir}", archive_path]
 
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            # Một số bản unrar/unrar-free trên Linux ghi tên file theo codepage cũ
+            # (không phải UTF-8). Nếu dùng text=True mặc định, Python có thể ném
+            # UnicodeDecodeError dù tiến trình giải nén thực tế vẫn chạy thành công.
+            # errors="backslashreplace" chỉ ảnh hưởng phần log stdout/stderr, không ảnh hưởng
+            # dữ liệu/tên file mà công cụ giải nén ghi xuống đĩa.
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="backslashreplace",
+                timeout=300,
+            )
             if res.returncode == 0:
                 LOGGER.info(f"[EXTRACT SUCCESS] Extracted with {os.path.basename(archiver)}: {archive_path}")
                 return True, f"Đã giải nén thành công bằng {os.path.basename(archiver)}"
