@@ -27,6 +27,7 @@ config.env
 # Music data, covers & caches
 Music/data/
 Music/cache/
+Music/tools/
 Music/covers/
 Music/telegram_library.json
 Music/telegram_playlists.json

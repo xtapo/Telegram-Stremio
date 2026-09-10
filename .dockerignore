@@ -1,6 +1,7 @@
 .git
 .github
 .venv
+Music/tools/
 android
 ios
 __pycache__

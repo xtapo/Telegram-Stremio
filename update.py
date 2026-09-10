@@ -89,8 +89,6 @@ if UPSTREAM_REPO:
         if commit_check.returncode == 0:
             log_info(f"Latest commit ID: {commit_check.stdout.strip()}")
 
-        # Tự động cài đặt gói hệ thống nếu cần
-        _ensure_linux_packages()
     else:
         log_error("❌ Update failed! Retry or ask for support.")
 
@@ -104,7 +102,7 @@ def _ensure_linux_packages():
 
         if shutil.which("apt-get"):
             missing = []
-            if not (shutil.which("7z") or shutil.which("unrar") or ospath.exists("/usr/bin/7z")):
+            if not any(shutil.which(tool) for tool in ("7zz", "7zzs", "7z", "7za", "unrar", "unrar-free")):
                 missing.extend(["p7zip-full", "unrar-free"])
             if not (shutil.which("ffmpeg") or ospath.exists("/usr/bin/ffmpeg") or ospath.exists("/usr/local/bin/ffmpeg")):
                 missing.append("ffmpeg")

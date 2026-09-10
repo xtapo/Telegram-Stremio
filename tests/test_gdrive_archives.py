@@ -68,6 +68,13 @@ class ExtractionTests(unittest.TestCase):
         self.archive = str(Path(self.temp.name) / "album.rar")
         Path(self.archive).write_bytes(b"RAR fixture handled by mocked CLI")
         self.destination = str(Path(self.temp.name) / "extracted")
+        fake_os = types.SimpleNamespace(**vars(os))
+        fake_os.path = types.SimpleNamespace(**vars(os.path))
+        fake_os.name = "posix"
+        self.enterContext(patch.object(uploader, "os", fake_os))
+        self.portable = self.enterContext(patch.object(
+            uploader, "ensure_portable_7zip", side_effect=RuntimeError("offline")
+        ))
         actual_exists = os.path.exists
         self.enterContext(patch.object(
             uploader.os.path, "exists",
@@ -80,9 +87,6 @@ class ExtractionTests(unittest.TestCase):
                 "7z": "/usr/bin/7z", "7za": "/usr/bin/7za", "apt-get": "/usr/bin/apt-get"
             }.get(name),
         ))
-        fake_os = types.SimpleNamespace(**vars(os))
-        fake_os.name = "posix"
-        self.enterContext(patch.object(uploader, "os", fake_os))
 
         def run(cmd, **kwargs):
             if cmd[0] == "apt-get":
@@ -128,6 +132,24 @@ class ExtractionTests(unittest.TestCase):
         self.assertFalse(success)
         self.assertIn("Vui lòng nhập mật khẩu", message)
 
+    def test_missing_archiver_is_not_reported_as_password_problem(self):
+        with patch.object(uploader.os.path, "exists", return_value=False):
+            success, message = uploader._sync_extract_archive(self.archive, self.destination, "provided")
+        self.assertFalse(success)
+        self.assertIn("Không tìm thấy công cụ", message)
+        self.assertNotIn("kiểm tra mật khẩu", message)
+
+    def test_missing_archiver_recovers_and_uses_password_in_same_request(self):
+        self.portable.side_effect = None
+        self.portable.return_value = "/app/Music/tools/7zz"
+        self.run.side_effect = lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, "", "")
+        with patch.object(uploader.os.path, "exists", return_value=False):
+            success, message = uploader._sync_extract_archive(self.archive, self.destination, "provided")
+        self.assertTrue(success, message)
+        self.assertEqual(self.run.call_args.args[0][0], "/app/Music/tools/7zz")
+        self.assertIn("-pprovided", self.run.call_args.args[0])
+        self.portable.assert_called_once()
+
     def test_timeout_does_not_expose_password_in_logs_or_error(self):
         password = " secret' pass "
         self.run.side_effect = lambda cmd, **kwargs: (_ for _ in ()).throw(
@@ -167,8 +189,7 @@ class ExtractionTests(unittest.TestCase):
         archive = str(Path(self.temp.name) / "album.zip")
         with zipfile.ZipFile(archive, "w") as output:
             output.writestr("album/track.wav", b"audio bytes")
-        with patch.object(uploader.os.path, "exists", side_effect=lambda p:
-                          str(p).startswith(self.temp.name) and Path(p).exists()):
+        with patch.object(uploader.os.path, "exists", return_value=False):
             success, _ = uploader._sync_extract_archive(archive, self.destination)
         self.assertTrue(success)
         self.assertEqual((Path(self.destination) / "album/track.wav").read_bytes(), b"audio bytes")
@@ -303,18 +324,23 @@ class EncryptedArchiveIntegrationTests(unittest.TestCase):
         ) if p and os.path.isfile(p)), None)
         if not archiver:
             self.skipTest("Install 7-Zip or UnRAR to run the real RAR5 test")
-        fixture = ROOT / "tests/fixtures/password-album.rar"
         actual_exists = os.path.exists
         with tempfile.TemporaryDirectory() as temp, (
             patch.object(uploader.shutil, "which", side_effect=lambda name:
                          archiver if name == Path(archiver).stem else None)
         ), patch.object(uploader.os.path, "exists", side_effect=lambda p:
                         str(p) == archiver or (str(p).startswith(temp) and actual_exists(p))):
-            for password in ("", "wrong password", " album pass;$ "):
-                with self.subTest(password_case="correct" if password.startswith(" ") else "missing/wrong"):
+            for filename, password, expected_success in (
+                ("password-album.rar", "", False),
+                ("password-album.rar", "wrong password", False),
+                ("password-album.rar", " album pass;$ ", True),
+                ("plain-album.rar", "", True),
+            ):
+                fixture = ROOT / "tests/fixtures" / filename
+                with self.subTest(archive=filename, expected_success=expected_success):
                     destination = str(Path(temp) / str(len(password)))
                     success, message = uploader._sync_extract_archive(str(fixture), destination, password)
-                    if password.startswith(" "):
+                    if expected_success:
                         self.assertTrue(success, message)
                         self.assertEqual(
                             (Path(destination) / "track.wav").read_bytes(),

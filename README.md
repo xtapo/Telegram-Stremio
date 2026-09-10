@@ -786,6 +786,15 @@ until the normal cache expiry; a partially successful queue reports its uploaded
 track count alongside the error. For installations without Docker, install
 the official 7-Zip or UnRAR separately; uploads do not install system packages.
 
+**Older Linux containers / code-only updates:** If no archive tool is found, RAR
+uploads automatically download the official 7-Zip binary, verify its SHA-256,
+and cache it under `Music/tools/7zip`. This requires network access to GitHub
+and write access to `Music`, but no root privileges. Existing tools remain in
+use; Docker images also retain `p7zip-full` and `unrar-free` as fallbacks. If
+automatic setup fails, the error identifies the missing tool instead of asking
+for a different archive password. Google Drive and MediaFire use the same
+extraction path.
+
 #### 🔵 Option 2 — Plain Docker (manual)
 
 ```bash

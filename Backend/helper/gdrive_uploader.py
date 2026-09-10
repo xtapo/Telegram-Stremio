@@ -18,6 +18,7 @@ import httpx
 from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
+from Backend.helper.archive_tools import ensure_portable_7zip
 from Backend.helper.observability import (
     correlation_context,
     new_id,
@@ -149,8 +150,19 @@ def _sync_extract_archive(archive_path: str, extract_dir: str, archive_password:
         if p and os.path.exists(p) and p not in archiver_candidates:
             archiver_candidates.append(p)
 
-    # Install archivers at image build time. Debian's 7zip package alone can
-    # lack the non-free RAR codec, regardless of version or executable name.
+    # Code-only updates do not install the tools added by a newer Dockerfile.
+    # Keep existing backends; recover missing RAR tools without requiring root.
+    if ext == ".rar" and not archiver_candidates:
+        try:
+            LOGGER.info("[EXTRACT SETUP] Không tìm thấy công cụ RAR; đang chuẩn bị 7-Zip dự phòng...")
+            archiver_candidates.append(ensure_portable_7zip())
+        except Exception as exc:
+            LOGGER.warning(f"[EXTRACT SETUP] Không thể chuẩn bị công cụ RAR: {exc}")
+            return False, (
+                "Không tìm thấy công cụ giải nén RAR và không thể tự chuẩn bị 7-Zip. "
+                "Hãy kiểm tra quyền ghi/kết nối tải công cụ, cài 7-Zip hoặc UnRAR, "
+                "hoặc build lại image Docker."
+            )
     last_error = ""
     unsupported_method_error = ""
     # 1. Thử tất cả các công cụ CLI đã tìm thấy
@@ -269,8 +281,8 @@ def _sync_extract_archive(archive_path: str, extract_dir: str, archive_password:
 
     if password_error:
         return False, password_message
-    if ext == ".rar" and (unsupported_method_error or not archiver_candidates):
-        detail = unsupported_method_error or "Không tìm thấy công cụ giải nén RAR."
+    if ext == ".rar" and unsupported_method_error:
+        detail = unsupported_method_error
         return False, (
             f"{detail} Hãy kiểm tra mật khẩu của file nén. Nếu mật khẩu đúng, "
             "kiểm tra file có bị hỏng hoặc công cụ giải nén có hỗ trợ phương thức nén này không."
