@@ -759,6 +759,22 @@ Your server runs at ➡️ `http://<your-vps-ip>:8000`
 
 ⚡ The config file is mounted, so you **don't need to rebuild** — changes apply on restart.
 
+**RAR music uploads (`Unsupported Method`):** The image includes the official
+7-Zip standalone binary with RAR support for amd64 and arm64. Debian's `7zip`
+package alone may lack the RAR decoder. After updating the code, rebuild and
+recreate the container (a restart alone keeps the old extraction tools):
+
+```bash
+docker compose up -d --build telegram-stremio
+docker compose exec telegram-stremio 7zz i
+```
+
+The format list should contain `Rar` and `Rar5`. Retry the upload afterward.
+Failed uploads now report an error and retain their download cache for retry
+until the normal cache expiry; a partially successful queue reports its uploaded
+track count alongside the error. For installations without Docker, install
+the official 7-Zip or UnRAR separately; uploads do not install system packages.
+
 #### 🔵 Option 2 — Plain Docker (manual)
 
 ```bash

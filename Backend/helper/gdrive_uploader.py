@@ -63,8 +63,8 @@ def _find_7z_binary() -> Optional[str]:
         shutil.which("7zz"),
         shutil.which("7z"),
         shutil.which("7za"),
-        "/usr/bin/7zz",
         "/usr/local/bin/7zz",
+        "/usr/bin/7zz",
         r"C:\Windows\system32\7z.EXE",
         r"C:\Program Files\WinRAR\WinRAR.exe",
         r"C:\Program Files\WinRAR\UnRAR.exe",
@@ -93,8 +93,8 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         r"C:\Program Files\7-Zip\7z.exe",
         r"C:\Program Files (x86)\7-Zip\7z.exe",
         shutil.which("7zz"),
-        "/usr/bin/7zz",
         "/usr/local/bin/7zz",
+        "/usr/bin/7zz",
         shutil.which("7z"),
         shutil.which("7za"),
         r"C:\Windows\system32\7z.EXE",
@@ -113,34 +113,10 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         if p and os.path.exists(p) and p not in archiver_candidates:
             archiver_candidates.append(p)
 
-    # Trên Linux/Docker ưu tiên 7zip hiện đại (binary 7zz). p7zip-full 16.x và
-    # unrar-free có thể vẫn tồn tại nhưng không giải được RAR5/newer compression
-    # methods (thường báo "Unsupported Method"). Vì vậy vẫn thử cài 7zz nếu chỉ
-    # phát hiện các backend cũ, giúp cả container cũ tự phục hồi mà không bắt buộc
-    # phải đợi rebuild image.
-    has_modern_7zip = any(os.path.basename(p).lower() == "7zz" for p in archiver_candidates)
-    if os.name != "nt" and not has_modern_7zip and shutil.which("apt-get"):
-        try:
-            LOGGER.info("[AUTO INSTALL] Modern 7zip/7zz not found. Installing it for RAR5 support...")
-            subprocess.run(["apt-get", "update", "-qq"], timeout=60)
-            install_res = subprocess.run(
-                ["apt-get", "install", "-y", "-qq", "--no-install-recommends", "7zip"],
-                timeout=120,
-            )
-            if install_res.returncode != 0:
-                LOGGER.warning("[AUTO INSTALL] Package 7zip unavailable on this Linux image")
-                if not archiver_candidates:
-                    subprocess.run(
-                        ["apt-get", "install", "-y", "-qq", "--no-install-recommends", "p7zip-full", "unrar-free"],
-                        timeout=120,
-                    )
-            for p in ["/usr/bin/7zz", "/usr/local/bin/7zz", "/usr/bin/7z", "/usr/bin/7za", "/usr/bin/unrar", "/usr/bin/unrar-free"]:
-                if os.path.exists(p) and p not in archiver_candidates:
-                    archiver_candidates.append(p)
-        except Exception as e:
-            LOGGER.warning(f"[AUTO INSTALL ERROR] {e}")
-
+    # Install archivers at image build time. Debian's 7zip package alone can
+    # lack the non-free RAR codec, regardless of version or executable name.
     last_error = ""
+    unsupported_method_error = ""
     # 1. Thử tất cả các công cụ CLI đã tìm thấy
     for archiver in archiver_candidates:
         try:
@@ -179,6 +155,8 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 ]
                 err_detail = " | ".join(err_lines[:2]) if err_lines else f"Exit code {res.returncode}"
                 last_error = f"{os.path.basename(archiver)}: {err_detail}"
+                if "unsupported method" in err_text.lower() and not unsupported_method_error:
+                    unsupported_method_error = last_error
                 LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_text}")
                 # Trình giải nén có thể đã tạo file/thư mục rỗng trước khi fail.
                 # Dọn sạch trước khi thử tool kế tiếp để fallback không bị nhiễu.
@@ -239,6 +217,12 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         except Exception as e:
             if not last_error: last_error = f"TarFile: {e}"
 
+    if ext == ".rar" and (unsupported_method_error or not archiver_candidates):
+        detail = unsupported_method_error or "Không tìm thấy công cụ giải nén RAR."
+        return False, (
+            f"{detail} Cần công cụ hỗ trợ giải mã RAR: cài 7-Zip chính thức (7zz) "
+            "hoặc UnRAR. Nếu chạy Docker, hãy build lại image và tạo lại container."
+        )
     return False, last_error or f"Không có công cụ nào giải nén được file {ext} này hoặc file bị hỏng / có mật khẩu."
 
 
@@ -1393,6 +1377,7 @@ class GoogleDriveUploadManager:
             self._log(f"🚀 Bắt đầu xử lý hàng đợi gồm {total_queue_items} mục (tập tin/album)...", "info")
             uploaded_messages_all = []
             album_tracklist_cache = {}
+            item_errors = []
 
             # 2. Pipeline 2 tầng: trong lúc upload/xử lý mục hiện tại, tải trước đúng
             # một mục kế tiếp. Cách này tận dụng đồng thời download Google Drive và
@@ -1428,6 +1413,7 @@ class GoogleDriveUploadManager:
                     dl_path = await _download_queue_item(q_item, item_download_dir, background=False)
 
                 if not dl_path or not os.path.exists(dl_path):
+                    item_errors.append(f"Tải về thất bại: {q_label}")
                     self._log(f"⚠️ Bỏ qua mục [{q_idx}/{total_queue_items}] do tải về thất bại: {q_label}", "warn")
                     continue
 
@@ -1507,7 +1493,9 @@ class GoogleDriveUploadManager:
                                 except Exception as ex_alb:
                                     LOGGER.debug(f"Album tracklist fetch note: {ex_alb}")
                     else:
-                        self._log(f"⚠️ Lỗi giải nén {os.path.basename(dl_path)}: {extract_msg}", "warn")
+                        item_errors.append(f"Lỗi giải nén {os.path.basename(dl_path)}: {extract_msg}")
+                        self._log(f"❌ {item_errors[-1]}", "error")
+                        continue
                 elif ext in AUDIO_EXTENSIONS:
                     files_to_upload = [dl_path]
 
@@ -1538,7 +1526,8 @@ class GoogleDriveUploadManager:
                         )
 
                 if not files_to_upload:
-                    self._log(f"⚠️ Không tìm thấy bài hát nào trong {os.path.basename(dl_path)}", "warn")
+                    item_errors.append(f"Không tìm thấy bài hát nào trong {os.path.basename(dl_path)}")
+                    self._log(f"⚠️ {item_errors[-1]}", "warn")
                     continue
 
                 self._log(f"Tìm thấy {len(files_to_upload)} bài hát trong mục [{q_idx}/{total_queue_items}]. Đang upload lên Telegram...", "info")
@@ -1881,9 +1870,16 @@ class GoogleDriveUploadManager:
                     except Exception:
                         pass
 
-                # Xóa file cache của mục này sau khi đã hoàn thành upload
+                item_complete = len(uploaded_messages_item) == len(files_to_upload)
+                if not item_complete:
+                    item_errors.append(
+                        f"{os.path.basename(dl_path)}: chỉ upload được "
+                        f"{len(uploaded_messages_item)}/{len(files_to_upload)} bài hát"
+                    )
+
+                # Chỉ xóa cache khi tất cả bài hát của mục này đã upload thành công.
                 try:
-                    if os.path.exists(CACHE_DOWNLOAD_DIR):
+                    if item_complete and os.path.exists(CACHE_DOWNLOAD_DIR):
                         for fname in os.listdir(CACHE_DOWNLOAD_DIR):
                             if fname.startswith(f"{q_res_id}_"):
                                 c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
@@ -1904,10 +1900,20 @@ class GoogleDriveUploadManager:
                 except Exception as sync_exc:
                     LOGGER.warning(f"[GDRIVE INDEX] Không thể khởi chạy đồng bộ MongoDB nền: {sync_exc}")
 
-            self._status = "completed"
-            self._stage = f"Hoàn tất upload toàn bộ {len(self._uploaded_tracks)} bài hát!"
             self._end_time = time.time()
-            self._log(f"🎉 Hoàn tất toàn bộ tiến trình! Đã tải và upload thành công {len(self._uploaded_tracks)} bài hát từ {total_queue_items} mục.", "success")
+            if self._cancel_requested:
+                self._status = "cancelled"
+                self._stage = "Tiến trình đã bị dừng."
+                self._log(self._stage, "warn")
+            elif item_errors or not self._uploaded_tracks:
+                self._status = "error"
+                self._error_message = " | ".join(item_errors) or "Không upload được bài hát nào."
+                self._stage = f"Đã upload {len(self._uploaded_tracks)} bài hát; tiến trình có lỗi."
+                self._log(f"❌ {self._stage} {self._error_message}", "error")
+            else:
+                self._status = "completed"
+                self._stage = f"Hoàn tất upload toàn bộ {len(self._uploaded_tracks)} bài hát!"
+                self._log(f"🎉 Hoàn tất toàn bộ tiến trình! Đã tải và upload thành công {len(self._uploaded_tracks)} bài hát từ {total_queue_items} mục.", "success")
             set_gauge("queue.upload.pending", 0)
 
         except asyncio.CancelledError:
