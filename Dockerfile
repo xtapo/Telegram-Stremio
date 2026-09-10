@@ -13,6 +13,7 @@ RUN apt-get update && \
         git \
         curl \
         ffmpeg \
+        7zip \
         p7zip-full \
         unrar-free \
         pkg-config \

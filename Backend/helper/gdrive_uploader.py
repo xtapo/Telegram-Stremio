@@ -60,8 +60,11 @@ def _find_7z_binary() -> Optional[str]:
     candidates = [
         r"C:\Program Files\7-Zip\7z.exe",
         r"C:\Program Files (x86)\7-Zip\7z.exe",
+        shutil.which("7zz"),
         shutil.which("7z"),
         shutil.which("7za"),
+        "/usr/bin/7zz",
+        "/usr/local/bin/7zz",
         r"C:\Windows\system32\7z.EXE",
         r"C:\Program Files\WinRAR\WinRAR.exe",
         r"C:\Program Files\WinRAR\UnRAR.exe",
@@ -89,6 +92,9 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
     for p in [
         r"C:\Program Files\7-Zip\7z.exe",
         r"C:\Program Files (x86)\7-Zip\7z.exe",
+        shutil.which("7zz"),
+        "/usr/bin/7zz",
+        "/usr/local/bin/7zz",
         shutil.which("7z"),
         shutil.which("7za"),
         r"C:\Windows\system32\7z.EXE",
@@ -107,13 +113,28 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
         if p and os.path.exists(p) and p not in archiver_candidates:
             archiver_candidates.append(p)
 
-    # Nếu đang chạy trong Linux/Docker mà chưa cài 7z, tự động cài đặt ngầm p7zip-full
-    if os.name != "nt" and not archiver_candidates and shutil.which("apt-get"):
+    # Trên Linux/Docker ưu tiên 7zip hiện đại (binary 7zz). p7zip-full 16.x và
+    # unrar-free có thể vẫn tồn tại nhưng không giải được RAR5/newer compression
+    # methods (thường báo "Unsupported Method"). Vì vậy vẫn thử cài 7zz nếu chỉ
+    # phát hiện các backend cũ, giúp cả container cũ tự phục hồi mà không bắt buộc
+    # phải đợi rebuild image.
+    has_modern_7zip = any(os.path.basename(p).lower() == "7zz" for p in archiver_candidates)
+    if os.name != "nt" and not has_modern_7zip and shutil.which("apt-get"):
         try:
-            LOGGER.info("[AUTO INSTALL] Linux archiver not found in Docker. Installing p7zip-full...")
+            LOGGER.info("[AUTO INSTALL] Modern 7zip/7zz not found. Installing it for RAR5 support...")
             subprocess.run(["apt-get", "update", "-qq"], timeout=60)
-            subprocess.run(["apt-get", "install", "-y", "-qq", "--no-install-recommends", "p7zip-full", "unrar-free"], timeout=120)
-            for p in ["/usr/bin/7z", "/usr/bin/7za", "/usr/bin/unrar", "/usr/bin/unrar-free"]:
+            install_res = subprocess.run(
+                ["apt-get", "install", "-y", "-qq", "--no-install-recommends", "7zip"],
+                timeout=120,
+            )
+            if install_res.returncode != 0:
+                LOGGER.warning("[AUTO INSTALL] Package 7zip unavailable on this Linux image")
+                if not archiver_candidates:
+                    subprocess.run(
+                        ["apt-get", "install", "-y", "-qq", "--no-install-recommends", "p7zip-full", "unrar-free"],
+                        timeout=120,
+                    )
+            for p in ["/usr/bin/7zz", "/usr/local/bin/7zz", "/usr/bin/7z", "/usr/bin/7za", "/usr/bin/unrar", "/usr/bin/unrar-free"]:
                 if os.path.exists(p) and p not in archiver_candidates:
                     archiver_candidates.append(p)
         except Exception as e:
@@ -159,6 +180,13 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
                 err_detail = " | ".join(err_lines[:2]) if err_lines else f"Exit code {res.returncode}"
                 last_error = f"{os.path.basename(archiver)}: {err_detail}"
                 LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_text}")
+                # Trình giải nén có thể đã tạo file/thư mục rỗng trước khi fail.
+                # Dọn sạch trước khi thử tool kế tiếp để fallback không bị nhiễu.
+                try:
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                    os.makedirs(extract_dir, exist_ok=True)
+                except Exception:
+                    pass
         except Exception as e:
             last_error = f"{os.path.basename(archiver)}: {e}"
             LOGGER.warning(f"[EXTRACT CLI ERROR] {e}")
@@ -167,7 +195,12 @@ def _sync_extract_archive(archive_path: str, extract_dir: str) -> Tuple[bool, st
     if ext == ".rar":
         try:
             import rarfile
-            for archiver in archiver_candidates:
+            # rarfile expects an UnRAR-compatible CLI; do not point it at 7z/7zz.
+            rar_backends = [
+                p for p in archiver_candidates
+                if "unrar" in os.path.basename(p).lower() or "winrar" in os.path.basename(p).lower()
+            ]
+            for archiver in rar_backends:
                 rarfile.UNRAR_TOOL = archiver
                 try:
                     with rarfile.RarFile(archive_path) as rf:
