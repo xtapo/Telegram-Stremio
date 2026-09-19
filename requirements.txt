@@ -1,4 +1,5 @@
 aiofiles
+charset-normalizer>=3.4.0
 fastapi
 guessit
 httpx

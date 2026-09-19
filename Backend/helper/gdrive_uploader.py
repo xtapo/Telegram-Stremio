@@ -15,6 +15,7 @@ from difflib import SequenceMatcher
 from typing import Dict, List, Optional, Tuple
 
 import httpx
+from charset_normalizer import from_bytes
 from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
@@ -647,21 +648,67 @@ def read_audio_metadata_from_file(file_path: str) -> dict:
     return tags
 
 
+def _decode_cue_text(raw: bytes) -> str:
+    """Decode CUE text without mistaking Chinese legacy encodings for CP1258."""
+    if not raw:
+        return ""
+
+    # UTF-8 is by far the most common modern case and should stay deterministic.
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
+
+    # GBK/GB18030 Chinese text is commonly stored as dense two-byte sequences.
+    # Detect that byte shape before generic charset detection, which can confuse
+    # short GBK strings with Big5.  Requiring several valid pairs avoids treating
+    # ordinary CP1258 Vietnamese accents (usually isolated high bytes) as Chinese.
+    high_bytes = sum(1 for b in raw if b >= 0x80)
+    gbk_pair_bytes = 0
+    idx = 0
+    while idx + 1 < len(raw):
+        lead, trail = raw[idx], raw[idx + 1]
+        if 0x81 <= lead <= 0xFE and 0x40 <= trail <= 0xFE and trail != 0x7F:
+            gbk_pair_bytes += 2
+            idx += 2
+            continue
+        idx += 1
+    if high_bytes >= 6 and gbk_pair_bytes / high_bytes >= 0.80:
+        try:
+            return raw.decode("gb18030")
+        except UnicodeDecodeError:
+            pass
+
+    # Legacy CUE sheets are commonly saved as GBK/GB18030, Big5 or Windows
+    # codepages.  charset-normalizer compares candidates instead of accepting
+    # the first codec that happens to decode every byte (the old CP1258 loop
+    # turned GBK `未知艺术家` into `Î´Öª̉ƠÊơ¼̉`).
+    try:
+        match = from_bytes(raw).best()
+        if match is not None:
+            detected = str(match)
+            if detected:
+                return detected
+    except Exception as exc:
+        LOGGER.debug(f"CUE encoding detection note: {exc}")
+
+    # Conservative fallback if detection is unavailable/ambiguous.
+    for enc in ("gb18030", "gbk", "big5", "cp1258", "windows-1252", "latin1"):
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
 def parse_cue_file(cue_path: str) -> dict:
     """Trích xuất danh sách bài hát từ file CUE sheet nếu có trong thư mục giải nén."""
     tracks_info = {}
     if not cue_path or not os.path.exists(cue_path):
         return tracks_info
     try:
-        content = ""
-        for enc in ['utf-8', 'utf-8-sig', 'cp1258', 'windows-1252', 'latin1']:
-            try:
-                with open(cue_path, 'r', encoding=enc) as f:
-                    content = f.read()
-                if content:
-                    break
-            except Exception:
-                continue
+        with open(cue_path, "rb") as f:
+            content = _decode_cue_text(f.read())
         if not content:
             return tracks_info
 

@@ -23,11 +23,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def load_uploader():
     modules = {}
-    for name in ("Backend", "Backend.helper", "Backend.pyrofork", "Backend.helper.metadata"):
+    for name in ("Backend", "Backend.helper", "Backend.pyrofork", "Backend.helper.metadata", "pyrogram"):
         module = types.ModuleType(name)
         module.__path__ = [str(ROOT.joinpath(*name.split(".")))]
         modules[name] = module
     for name, attributes in {
+        "pyrogram.errors": {"FloodWait": type("FloodWait", (Exception,), {})},
         "Backend.logger": {"LOGGER": Mock()},
         "Backend.pyrofork.bot": {"StreamBot": Mock()},
         "Backend.helper.observability": {
@@ -59,6 +60,30 @@ def load_uploader():
 
 
 uploader = load_uploader()
+
+
+class CueEncodingTests(unittest.TestCase):
+    def test_gbk_cue_keeps_chinese_artist_and_title(self):
+        artist = "\u672a\u77e5\u827a\u672f\u5bb6"
+        title = "\u6d4b\u8bd5\u6b4c\u66f2"
+        album = "\u6d4b\u8bd5\u4e13\u8f91"
+        cue_text = (
+            f'PERFORMER "{artist}"\n'
+            f'TITLE "{album}"\n'
+            'FILE "Track02.flac" WAVE\n'
+            '  TRACK 02 AUDIO\n'
+            f'    TITLE "{title}"\n'
+            f'    PERFORMER "{artist}"\n'
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            cue_path = Path(temp) / "album.cue"
+            cue_path.write_bytes(cue_text.encode("gbk"))
+            tracks = uploader.parse_cue_file(str(cue_path))
+
+        self.assertEqual(tracks[2]["artist"], artist)
+        self.assertEqual(tracks[2]["title"], title)
+        self.assertEqual(tracks[2]["album"], album)
+        self.assertEqual(tracks[2]["file_name"], "Track02.flac")
 
 
 class ExtractionTests(unittest.TestCase):
