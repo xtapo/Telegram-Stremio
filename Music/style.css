@@ -1242,6 +1242,62 @@ html, body {
 }
 
 /* Album Selection Grid */
+.album-picker-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+}
+
+.album-picker-search:focus-within {
+    border-color: var(--accent-gold);
+}
+
+.album-picker-search input {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: 0;
+    outline: 0;
+    color: #ffffff;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+}
+
+.album-picker-search input::placeholder {
+    color: var(--text-muted);
+}
+
+.album-picker-search-clear {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.album-picker-search-clear.visible {
+    display: inline-flex;
+}
+
+.album-picker-search-clear:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.14);
+}
+
 .album-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

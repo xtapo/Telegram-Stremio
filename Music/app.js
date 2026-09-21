@@ -268,6 +268,8 @@ class XTAPOMusicApp {
         this.albumModal = document.getElementById('albumModal');
         this.closeAlbumModal = document.getElementById('closeAlbumModal');
         this.albumGrid = document.getElementById('albumGrid');
+        this.albumSearchInput = document.getElementById('albumSearchInput');
+        this.clearAlbumSearch = document.getElementById('clearAlbumSearch');
 
         this.searchBtn = document.getElementById('searchBtn');
         this.searchModal = document.getElementById('searchModal');
@@ -3747,6 +3749,27 @@ class XTAPOMusicApp {
         // Album Picker
         if (this.albumPickerBtn) this.albumPickerBtn.addEventListener('click', () => this.openModal(this.albumModal));
         if (this.closeAlbumModal) this.closeAlbumModal.addEventListener('click', () => this.closeModal(this.albumModal));
+        if (this.albumSearchInput) {
+            let isAlbumSearchComposing = false;
+            this.albumSearchInput.addEventListener('compositionstart', () => { isAlbumSearchComposing = true; });
+            this.albumSearchInput.addEventListener('compositionend', () => {
+                isAlbumSearchComposing = false;
+                this.renderAlbumGrid();
+            });
+            this.albumSearchInput.addEventListener('input', (e) => {
+                if (isAlbumSearchComposing || e.isComposing) return;
+                this.renderAlbumGrid();
+            });
+        }
+        if (this.clearAlbumSearch) {
+            this.clearAlbumSearch.addEventListener('click', () => {
+                if (this.albumSearchInput) {
+                    this.albumSearchInput.value = '';
+                    this.albumSearchInput.focus();
+                }
+                this.renderAlbumGrid();
+            });
+        }
         if (this.mobileSelectAlbumBtn) {
             this.mobileSelectAlbumBtn.addEventListener('click', () => {
                 this.closeMobileDrawer();
@@ -5053,13 +5076,22 @@ class XTAPOMusicApp {
     renderAlbumGrid() {
         if (!this.albumGrid) return;
         this.albumGrid.innerHTML = '';
-        const displayAlbums = this.albums || [];
+        const query = this.normalizeSearchText(this.albumSearchInput ? this.albumSearchInput.value : '');
+        const allAlbums = this.albums || [];
+        const displayAlbums = query
+            ? allAlbums.filter(album => this.normalizeSearchText(album.title).includes(query))
+            : allAlbums;
+
+        if (this.clearAlbumSearch) {
+            this.clearAlbumSearch.classList.toggle('visible', Boolean(query));
+        }
+
         if (displayAlbums.length === 0) {
             this.albumGrid.innerHTML = `
                 <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 50px 20px;">
-                    <div style="font-size: 2rem; margin-bottom: 8px;">☁️</div>
-                    <div style="font-weight: 700; color: #fff; margin-bottom: 6px;">Chưa có Album nào</div>
-                    <div style="font-size: 0.85rem;">Quét nhạc từ Telegram hoặc tạo Playlist để thêm nhạc vào thư viện của bạn!</div>
+                    <div style="font-size: 2rem; margin-bottom: 8px;">${query ? '🔎' : '☁️'}</div>
+                    <div style="font-weight: 700; color: #fff; margin-bottom: 6px;">${query ? 'Không tìm thấy Album' : 'Chưa có Album nào'}</div>
+                    <div style="font-size: 0.85rem;">${query ? 'Không có album nào khớp với tên bạn đang tìm.' : 'Quét nhạc từ Telegram hoặc tạo Playlist để thêm nhạc vào thư viện của bạn!'}</div>
                 </div>
             `;
             return;
@@ -5077,8 +5109,9 @@ class XTAPOMusicApp {
 
             for (let idx = renderedCount; idx < limit; idx++) {
                 const album = displayAlbums[idx];
+                const realIdx = this.albums.findIndex(a => a.id === album.id || a.title === album.title);
                 const card = document.createElement('div');
-                card.className = `album-card ${idx === this.currentAlbumIndex ? 'active' : ''}`;
+                card.className = `album-card ${realIdx === this.currentAlbumIndex ? 'active' : ''}`;
                 card.innerHTML = `
                     <img src="${album.coverUrl}" loading="lazy" class="album-card-img" alt="${this.escapeHtml ? this.escapeHtml(album.title) : album.title}" onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop'">
                     <div class="album-card-info">
@@ -5089,7 +5122,6 @@ class XTAPOMusicApp {
                 `;
 
                 card.addEventListener('click', () => {
-                    const realIdx = this.albums.findIndex(a => a.id === album.id || a.title === album.title);
                     this.loadAlbum(realIdx !== -1 ? realIdx : idx, 0, true);
                     this.closeModal(this.albumModal);
                     this.showToast(`Đã chuyển sang album: ${album.title}`);
