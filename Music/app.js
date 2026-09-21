@@ -3754,14 +3754,19 @@ class XTAPOMusicApp {
         if (this.closeAlbumModal) this.closeAlbumModal.addEventListener('click', () => this.closeModal(this.albumModal));
         if (this.albumSearchInput) {
             let isAlbumSearchComposing = false;
+            let albumSearchTimer = null;
+            const refreshAlbumSearch = () => {
+                clearTimeout(albumSearchTimer);
+                albumSearchTimer = setTimeout(() => this.renderAlbumGrid(), 100);
+            };
             this.albumSearchInput.addEventListener('compositionstart', () => { isAlbumSearchComposing = true; });
             this.albumSearchInput.addEventListener('compositionend', () => {
                 isAlbumSearchComposing = false;
-                this.renderAlbumGrid();
+                refreshAlbumSearch();
             });
             this.albumSearchInput.addEventListener('input', (e) => {
                 if (isAlbumSearchComposing || e.isComposing) return;
-                this.renderAlbumGrid();
+                refreshAlbumSearch();
             });
         }
         if (this.clearAlbumSearch) {
@@ -5120,9 +5125,16 @@ class XTAPOMusicApp {
                 ? `Album Mới Thêm (${allAlbums.length})`
                 : (this.albumViewMode === 'hires' ? `Album Hi-Res Lossless (${allAlbums.length})` : 'Chọn Album Nghe Nhạc');
         }
-        const displayAlbums = query
-            ? allAlbums.filter(album => this.normalizeSearchText(album.title).includes(query))
-            : allAlbums;
+        const matchesAlbumSearch = (album) => {
+            if (!query) return true;
+            const albumFields = [album.title, album.artist, album.publisher];
+            if (albumFields.some(value => this.normalizeSearchText(value).includes(query))) return true;
+            return (album.tracks || []).some(track => {
+                const trackFields = [track.name, track.title, track.artist];
+                return trackFields.some(value => this.normalizeSearchText(value).includes(query));
+            });
+        };
+        const displayAlbums = query ? allAlbums.filter(matchesAlbumSearch) : allAlbums;
 
         if (this.clearAlbumSearch) {
             this.clearAlbumSearch.classList.toggle('visible', Boolean(query));
@@ -5133,7 +5145,7 @@ class XTAPOMusicApp {
                 <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 50px 20px;">
                     <div style="font-size: 2rem; margin-bottom: 8px;">${query ? '🔎' : '☁️'}</div>
                     <div style="font-weight: 700; color: #fff; margin-bottom: 6px;">${query ? 'Không tìm thấy Album' : 'Chưa có Album nào'}</div>
-                    <div style="font-size: 0.85rem;">${query ? 'Không có album nào khớp với tên bạn đang tìm.' : 'Quét nhạc từ Telegram hoặc tạo Playlist để thêm nhạc vào thư viện của bạn!'}</div>
+                    <div style="font-size: 0.85rem;">${query ? 'Không có album, ca sĩ hoặc bài hát nào khớp từ khóa.' : 'Quét nhạc từ Telegram hoặc tạo Playlist để thêm nhạc vào thư viện của bạn!'}</div>
                 </div>
             `;
             return;

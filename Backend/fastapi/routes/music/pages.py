@@ -118,7 +118,15 @@ async def get_music_static_file(filename: str):
     if os.path.exists(file_path) and os.path.isfile(file_path):
         mime_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
         ext = os.path.splitext(file_path)[1].lower()
-        if ext in [".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot"]:
+        # CSS/JS thay đổi thường xuyên và HTML dùng cache-buster theo phiên bản.
+        # Luôn revalidate hai loại này để một lần quên tăng phiên bản không khiến
+        # trình duyệt ghép HTML mới với asset cũ và làm vỡ giao diện/tính năng.
+        if ext in [".css", ".js"]:
+            headers = {
+                "Cache-Control": "no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            }
+        elif ext in [".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot"]:
             headers = {"Cache-Control": "public, max-age=604800, stale-while-revalidate=86400"}
         else:
             headers = {"Cache-Control": "public, max-age=3600"}
