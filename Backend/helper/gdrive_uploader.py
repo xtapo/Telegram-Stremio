@@ -166,8 +166,20 @@ def _sync_extract_archive(archive_path: str, extract_dir: str, archive_password:
             )
     last_error = ""
     unsupported_method_error = ""
-    # 1. Thử tất cả các công cụ CLI đã tìm thấy
-    for archiver in archiver_candidates:
+    attempted_archivers = set()
+
+    def _reset_extract_dir():
+        # Trình giải nén có thể đã tạo file/thư mục rỗng trước khi fail.
+        # Dọn sạch trước khi thử tool kế tiếp để fallback không bị nhiễu.
+        try:
+            shutil.rmtree(extract_dir, ignore_errors=True)
+            os.makedirs(extract_dir, exist_ok=True)
+        except Exception:
+            pass
+
+    def _run_cli_archiver(archiver):
+        nonlocal last_error, password_error, unsupported_method_error
+        attempted_archivers.add(os.path.normcase(os.path.abspath(archiver)))
         try:
             is_winrar = "winrar" in archiver.lower() or "unrar" in archiver.lower()
             if is_winrar:
@@ -196,36 +208,50 @@ def _sync_extract_archive(archive_path: str, extract_dir: str, archive_password:
             if res.returncode == 0:
                 LOGGER.info(f"[EXTRACT SUCCESS] Extracted with {os.path.basename(archiver)}: {archive_path}")
                 return True, f"Đã giải nén thành công bằng {os.path.basename(archiver)}"
-            else:
-                err_text = safe_error("\n".join(part for part in (res.stderr, res.stdout) if part).strip())
-                if is_winrar and res.returncode == 11:
-                    password_error = True
-                err_lines = [
-                    l.strip() for l in err_text.splitlines() 
-                    if l.strip() and not l.startswith("7-Zip") 
-                    and not l.startswith("Scanning") 
-                    and not l.startswith("Path =") 
-                    and not l.startswith("Type =") 
-                    and not l.startswith("Physical Size")
-                    and not l.startswith("Everything is Ok")
-                ]
-                err_detail = " | ".join(err_lines[:2]) if err_lines else f"Exit code {res.returncode}"
-                last_error = f"{os.path.basename(archiver)}: {err_detail}"
-                if "unsupported method" in err_text.lower() and not unsupported_method_error:
-                    unsupported_method_error = last_error
-                LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_text}")
-                # Trình giải nén có thể đã tạo file/thư mục rỗng trước khi fail.
-                # Dọn sạch trước khi thử tool kế tiếp để fallback không bị nhiễu.
-                try:
-                    shutil.rmtree(extract_dir, ignore_errors=True)
-                    os.makedirs(extract_dir, exist_ok=True)
-                except Exception:
-                    pass
+
+            err_text = safe_error("\n".join(part for part in (res.stderr, res.stdout) if part).strip())
+            if is_winrar and res.returncode == 11:
+                password_error = True
+            err_lines = [
+                l.strip() for l in err_text.splitlines()
+                if l.strip() and not l.startswith("7-Zip")
+                and not l.startswith("Scanning")
+                and not l.startswith("Path =")
+                and not l.startswith("Type =")
+                and not l.startswith("Physical Size")
+                and not l.startswith("Everything is Ok")
+            ]
+            err_detail = " | ".join(err_lines[:2]) if err_lines else f"Exit code {res.returncode}"
+            last_error = f"{os.path.basename(archiver)}: {err_detail}"
+            if "unsupported method" in err_text.lower() and not unsupported_method_error:
+                unsupported_method_error = last_error
+            LOGGER.warning(f"[EXTRACT WARN] {archiver} failed ({res.returncode}): {err_text}")
         except Exception as e:
             last_error = f"{os.path.basename(archiver)}: {safe_error(e)}"
             LOGGER.warning(f"[EXTRACT CLI ERROR] {last_error}")
-            shutil.rmtree(extract_dir, ignore_errors=True)
-            os.makedirs(extract_dir, exist_ok=True)
+        _reset_extract_dir()
+        return None
+
+    # 1. Thử tất cả các công cụ CLI đã tìm thấy
+    for archiver in archiver_candidates:
+        result = _run_cli_archiver(archiver)
+        if result:
+            return result
+
+    # p7zip của Debian có thể nhận diện RAR5 nhưng thiếu codec cho các method mới.
+    # Khi đó danh sách tool không rỗng nên nhánh cài dự phòng phía trên không chạy.
+    # Tải 7zz chính thức và thử lại ngay trong cùng request thay vì báo nhầm mật khẩu.
+    if ext == ".rar" and unsupported_method_error:
+        try:
+            portable_7zz = ensure_portable_7zip()
+            portable_key = os.path.normcase(os.path.abspath(portable_7zz))
+            if portable_key not in attempted_archivers:
+                LOGGER.info("[EXTRACT SETUP] 7z hiện tại thiếu phương thức RAR; đang thử 7zz chính thức...")
+                result = _run_cli_archiver(portable_7zz)
+                if result:
+                    return result
+        except Exception as exc:
+            LOGGER.warning(f"[EXTRACT SETUP] Không thể chuẩn bị 7zz hỗ trợ RAR mới: {exc}")
 
     # 2. Thử thư viện Python rarfile cho file .rar
     if ext == ".rar":

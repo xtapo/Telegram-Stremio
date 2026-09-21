@@ -127,6 +127,25 @@ class ExtractionTests(unittest.TestCase):
         self.assertFalse(success)
         self.assertIn("Unsupported Method", message)
 
+    def test_unsupported_legacy_7z_installs_and_retries_official_7zz(self):
+        portable = "/app/Music/tools/7zz"
+        self.portable.side_effect = None
+        self.portable.return_value = portable
+
+        def run(cmd, **kwargs):
+            if cmd[0] == portable:
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            detail = ("ERROR: Unsupported Method : album/track.wav"
+                      if cmd[0].endswith("/7z") else "ERROR: Cannot open the file as archive")
+            return subprocess.CompletedProcess(cmd, 2, "", detail)
+
+        self.run.side_effect = run
+        success, message = uploader._sync_extract_archive(self.archive, self.destination)
+
+        self.assertTrue(success, message)
+        self.portable.assert_called_once()
+        self.assertEqual(self.run.call_args_list[-1].args[0][0], portable)
+
     def test_does_not_install_same_codec_less_package_during_upload(self):
         uploader._sync_extract_archive(self.archive, self.destination)
         self.assertFalse(any(call.args[0][0] == "apt-get" for call in self.run.call_args_list))
