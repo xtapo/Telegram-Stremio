@@ -206,8 +206,64 @@ html, body {
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 28px;
+    gap: 22px;
     list-style: none;
+}
+
+.nav-more-menu {
+    position: relative;
+}
+
+.nav-more-toggle {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.nav-more-dropdown {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    min-width: 190px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: rgba(15, 17, 24, 0.98);
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(18px);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    pointer-events: none;
+    transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
+    z-index: 80;
+}
+
+.nav-more-menu:hover .nav-more-dropdown,
+.nav-more-menu:focus-within .nav-more-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.nav-sub-link {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 10px;
+    white-space: nowrap;
+    font-size: 0.82rem;
+    letter-spacing: 0.7px;
+}
+
+.nav-sub-link:hover,
+.nav-sub-link.active {
+    background: rgba(252, 191, 71, 0.12);
+    color: var(--accent-gold);
+}
+
+.nav-sub-link.active::after {
+    display: none;
 }
 
 .nav-link {
@@ -1847,7 +1903,15 @@ html, body {
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 6px;
+}
+
+.mobile-nav-section {
+    margin: 14px 12px 4px;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
 }
 
 .mobile-nav-item {

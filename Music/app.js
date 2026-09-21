@@ -299,6 +299,8 @@ class XTAPOMusicApp {
         // Telegram Storage & Scanner Elements
         // Thư viện chỉ được tải sau khi xác thực thành công.
         this.albums = [];
+        this.albumViewMode = 'all';
+        this.recentAlbumLimit = 24;
         this._searchIndex = null;
         this._searchActiveIndex = -1;
         this.albumCountBadge = document.getElementById('albumCountBadge');
@@ -333,6 +335,7 @@ class XTAPOMusicApp {
 
         // Nav Links
         this.navMusics = document.getElementById('navMusics');
+        this.navRecent = document.getElementById('navRecent');
         this.navHires = document.getElementById('navHires');
         this.navAlbums = document.getElementById('navAlbums');
         this.navArtists = document.getElementById('navArtists');
@@ -3747,7 +3750,7 @@ class XTAPOMusicApp {
         }
 
         // Album Picker
-        if (this.albumPickerBtn) this.albumPickerBtn.addEventListener('click', () => this.openModal(this.albumModal));
+        if (this.albumPickerBtn) this.albumPickerBtn.addEventListener('click', () => this.openAlbumBrowser('all'));
         if (this.closeAlbumModal) this.closeAlbumModal.addEventListener('click', () => this.closeModal(this.albumModal));
         if (this.albumSearchInput) {
             let isAlbumSearchComposing = false;
@@ -3773,7 +3776,7 @@ class XTAPOMusicApp {
         if (this.mobileSelectAlbumBtn) {
             this.mobileSelectAlbumBtn.addEventListener('click', () => {
                 this.closeMobileDrawer();
-                this.openModal(this.albumModal);
+                this.openAlbumBrowser('all');
             });
         }
 
@@ -3953,11 +3956,19 @@ class XTAPOMusicApp {
             });
         }
 
+        if (this.navRecent) {
+            this.navRecent.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setActiveNavLink(this.navRecent);
+                this.openAlbumBrowser('recent');
+            });
+        }
+
         if (this.navAlbums) {
             this.navAlbums.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.setActiveNavLink(this.navAlbums);
-                this.openModal(this.albumModal);
+                this.openAlbumBrowser('all');
             });
         }
 
@@ -4266,7 +4277,8 @@ class XTAPOMusicApp {
                 this.showToast('Đang phát kho nhạc chính');
             } },
             { id: 'mobileNavHires', action: () => this.filterHiresAlbums() },
-            { id: 'mobileNavAlbums', action: () => this.openModal(this.albumModal) },
+            { id: 'mobileNavRecent', action: () => this.openAlbumBrowser('recent') },
+            { id: 'mobileNavAlbums', action: () => this.openAlbumBrowser('all') },
             { id: 'mobileNavArtists', action: () => { this.showArtistListView(); this.openModal(this.artistModal); requestAnimationFrame(() => this.renderArtistGrid()); } },
             { id: 'mobileNavGenres', action: () => { this.openModal(this.genreModal); requestAnimationFrame(() => this.renderGenreGrid()); } },
             { id: 'mobileNavCountries', action: () => { this.openModal(this.countryModal); requestAnimationFrame(() => this.renderCountryGrid()); } },
@@ -4777,7 +4789,10 @@ class XTAPOMusicApp {
 
             if (view.type === 'albums') {
                 this.setActiveNavLink(this.navAlbums);
-                this.openModal(this.albumModal);
+                this.openAlbumBrowser('all');
+            } else if (view.type === 'recent') {
+                this.setActiveNavLink(this.navRecent);
+                this.openAlbumBrowser('recent');
             } else if (view.type === 'hires') {
                 this.setActiveNavLink(this.navHires);
                 this.filterHiresAlbums();
@@ -4840,7 +4855,7 @@ class XTAPOMusicApp {
             this.clearHash();
             return;
         }
-        if (modal === this.albumModal && (currentHash === 'albums' || currentHash === 'hires')) {
+        if (modal === this.albumModal && (currentHash === 'albums' || currentHash === 'recent' || currentHash === 'hires')) {
             this.clearHash();
             return;
         }
@@ -5011,8 +5026,11 @@ class XTAPOMusicApp {
             return;
         }
         modal.classList.add('open');
-        if (modal === this.albumModal && window.location.hash !== '#hires') {
-            this.saveActiveView({ type: 'albums' });
+        if (modal === this.albumModal) {
+            const albumViewType = this.albumViewMode === 'recent'
+                ? 'recent'
+                : (this.albumViewMode === 'hires' ? 'hires' : 'albums');
+            this.saveActiveView({ type: albumViewType });
         } else if (modal === this.artistModal) {
             if (!window.location.hash.startsWith('#artist/')) {
                 this.saveActiveView({ type: 'artists' });
@@ -5073,11 +5091,35 @@ class XTAPOMusicApp {
         if (this.mobileMenuDrawer) this.mobileMenuDrawer.classList.remove('open');
     }
 
+    openAlbumBrowser(mode = 'all') {
+        this.albumViewMode = mode;
+        if (this.albumSearchInput) this.albumSearchInput.value = '';
+        this.renderAlbumGrid();
+        this.openModal(this.albumModal);
+    }
+
     renderAlbumGrid() {
         if (!this.albumGrid) return;
         this.albumGrid.innerHTML = '';
         const query = this.normalizeSearchText(this.albumSearchInput ? this.albumSearchInput.value : '');
-        const allAlbums = this.albums || [];
+        const baseAlbums = this.getBaseAlbums();
+        let allAlbums = baseAlbums;
+
+        if (this.albumViewMode === 'recent') {
+            allAlbums = baseAlbums.slice(0, this.recentAlbumLimit);
+        } else if (this.albumViewMode === 'hires') {
+            allAlbums = baseAlbums.filter(a => {
+                const fmt = (a.format || '').toLowerCase();
+                return fmt.includes('flac') || fmt.includes('24-bit') || fmt.includes('hi-res') || fmt.includes('dsd') || fmt.includes('lossless');
+            });
+        }
+
+        const albumModalTitle = document.getElementById('albumModalTitle');
+        if (albumModalTitle) {
+            albumModalTitle.textContent = this.albumViewMode === 'recent'
+                ? `Album Mới Thêm (${allAlbums.length})`
+                : (this.albumViewMode === 'hires' ? `Album Hi-Res Lossless (${allAlbums.length})` : 'Chọn Album Nghe Nhạc');
+        }
         const displayAlbums = query
             ? allAlbums.filter(album => this.normalizeSearchText(album.title).includes(query))
             : allAlbums;
@@ -6267,13 +6309,12 @@ class XTAPOMusicApp {
     // --- Artists & Genres Feature Methods ---
 
     filterHiresAlbums() {
-        this.saveActiveView({ type: 'hires' });
         const hiresAlbums = this.getBaseAlbums().filter(a => {
             const fmt = (a.format || '').toLowerCase();
             return fmt.includes('flac') || fmt.includes('24-bit') || fmt.includes('hi-res') || fmt.includes('dsd') || fmt.includes('lossless');
         });
         if (hiresAlbums.length > 0) {
-            this.openModal(this.albumModal);
+            this.openAlbumBrowser('hires');
             this.showToast(`Tìm thấy ${hiresAlbums.length} Album chất lượng Hi-Res Lossless!`);
         } else {
             this.showToast('Tất cả các bài nhạc đều hỗ trợ phát Lossless!');

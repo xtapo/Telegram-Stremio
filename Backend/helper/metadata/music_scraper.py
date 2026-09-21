@@ -801,8 +801,10 @@ async def fetch_music_metadata(
                         score_title = token_similarity(title, cand_title)
                         score_artist = token_similarity(artist, cand_artist) if artist else 0.0
                         
+                        reverse_title_score = token_similarity(artist, cand_title) if (artist and title) else 0.0
+                        reverse_artist_score = token_similarity(title, cand_artist) if (artist and title) else 0.0
                         match_fwd = (score_artist * 0.5 + score_title * 0.5) if (artist and title) else 0.0
-                        match_rev = (token_similarity(artist, cand_title) * 0.5 + token_similarity(title, cand_artist) * 0.5) if (artist and title) else 0.0
+                        match_rev = (reverse_title_score * 0.5 + reverse_artist_score * 0.5) if (artist and title) else 0.0
                         
                         final_score = max(score_full, score_title * 0.8, match_fwd, match_rev)
                         full_raw_text = (file_name + ' ' + caption + ' ' + raw_title + ' ' + raw_artist).lower()
@@ -819,11 +821,15 @@ async def fetch_music_metadata(
                             else:
                                 continue
                         else:
-                            artist_score_fwd = score_artist
-                            artist_score_rev = token_similarity(title, cand_artist)
-                            if max(artist_score_fwd, artist_score_rev) < 0.35 and cand_artist.lower() not in full_raw_text:
-                                continue
-                            if score_title < 0.55:
+                            # Chấp nhận cả hai quy ước tên file phổ biến:
+                            #   Artist - Title  và  Title - Artist.
+                            # Trước đây nhánh này chỉ bắt buộc title khớp theo chiều thuận,
+                            # nên file dạng "40 - Mai Le Huyen.wav" bị giữ ngược metadata.
+                            forward_pair_ok = score_title >= 0.55 and (
+                                score_artist >= 0.35 or cand_artist.lower() in full_raw_text
+                            )
+                            reverse_pair_ok = reverse_title_score >= 0.55 and reverse_artist_score >= 0.35
+                            if not (forward_pair_ok or reverse_pair_ok):
                                 continue
 
                             final_score = min(1.0, final_score + 0.25)

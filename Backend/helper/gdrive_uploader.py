@@ -1887,6 +1887,22 @@ class GoogleDriveUploadManager:
                                     if scraped_artist and not artist_is_weak
                                     else 1.0
                                 )
+                                reverse_title_match = (
+                                    token_similarity(artist_candidate, scraped_title)
+                                    if scraped_title and artist_candidate
+                                    else 0.0
+                                )
+                                reverse_artist_match = (
+                                    token_similarity(title_candidate, scraped_artist)
+                                    if scraped_artist and title_candidate
+                                    else 0.0
+                                )
+                                catalog_reversed = (
+                                    is_catalog_match
+                                    and scraped_score >= 0.70
+                                    and reverse_title_match >= 0.55
+                                    and reverse_artist_match >= 0.45
+                                )
                                 catalog_confident = (
                                     is_catalog_match
                                     and scraped_score >= 0.70
@@ -1895,14 +1911,21 @@ class GoogleDriveUploadManager:
                                 )
                                 trusted_identity = has_solid_cue or has_solid_local_tags or fingerprint_confirmed
 
-                                if catalog_confident and not trusted_identity:
+                                if (catalog_confident or catalog_reversed) and not trusted_identity:
                                     if scraped.get("title"):
                                         title_candidate = strip_copy_prefix(scraped["title"])
                                     if scraped.get("artist"):
                                         artist_candidate = strip_copy_prefix(scraped["artist"])
 
+                                    if catalog_reversed and not catalog_confident:
+                                        self._log(
+                                            f"🔄 Phát hiện metadata bị đảo Tên bài/Ca sĩ từ tên file '{raw_filename}'; "
+                                            f"đã sửa thành {artist_candidate} - {title_candidate}.",
+                                            "info"
+                                        )
+
                                 # CUE/ID3/Shazam xác nhận danh tính bài hát; catalog chỉ bổ sung album/cover.
-                                if catalog_confident:
+                                if catalog_confident or catalog_reversed:
                                     if scraped.get("album") and not (item_default_album or default_album):
                                         album_candidate = strip_copy_prefix(scraped["album"])
                                     if scraped.get("cover_url"):

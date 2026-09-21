@@ -74,20 +74,26 @@
             <nav class="nav-center">
                 <ul class="nav-links">
                     <li><a href="#" class="nav-link active" id="navMusics">MUSICS</a></li>
-                    <li><a href="#" class="nav-link" id="navHires">HI-RES</a></li>
+                    <li><a href="#" class="nav-link" id="navRecent">MỚI THÊM</a></li>
                     <li><a href="#" class="nav-link" id="navAlbums">ALBUMS</a></li>
-                    <li><a href="#" class="nav-link" id="navArtists">ARTISTS</a></li>
-                    <li><a href="#" class="nav-link" id="navGenres">GENRES</a></li>
-                    <li><a href="#" class="nav-link" id="navCountries">COUNTRIES</a></li>
                     <li><a href="#" class="nav-link" id="navPlaylists">PLAYLISTS</a></li>
-                    <li><a href="#" class="nav-link" id="navEqualizer"
-                            onclick="event.preventDefault(); window.xtapoApp?.openEqualizerModal();">EQUALIZER</a></li>
                     <li><a href="#" class="nav-link" id="navFavorites"><svg viewBox="0 0 24 24" width="13" height="13"
                                 fill="currentColor" style="color: #ef4444; margin-right: 4px; vertical-align: -1px;">
                                 <path
                                     d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
                                 </path>
                             </svg>YÊU THÍCH</a></li>
+                    <li class="nav-more-menu">
+                        <button type="button" class="nav-link nav-more-toggle" aria-haspopup="true" aria-expanded="false">KHÁM PHÁ ▾</button>
+                        <div class="nav-more-dropdown">
+                            <a href="#" class="nav-link nav-sub-link" id="navHires">⚡ HI-RES</a>
+                            <a href="#" class="nav-link nav-sub-link" id="navArtists">🎙️ ARTISTS</a>
+                            <a href="#" class="nav-link nav-sub-link" id="navGenres">🏷️ GENRES</a>
+                            <a href="#" class="nav-link nav-sub-link" id="navCountries">🗺️ COUNTRIES</a>
+                            <a href="#" class="nav-link nav-sub-link" id="navEqualizer"
+                                onclick="event.preventDefault(); window.xtapoApp?.openEqualizerModal();">🎛️ EQUALIZER</a>
+                        </div>
+                    </li>
                 </ul>
             </nav>
 
@@ -470,7 +476,7 @@
     <div class="modal-overlay" id="albumModal">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>Chọn Album Nghe Nhạc</h3>
+                <h3 id="albumModalTitle">Chọn Album Nghe Nhạc</h3>
                 <button class="modal-close" id="closeAlbumModal">&times;</button>
             </div>
             <div class="album-picker-search">
@@ -1595,14 +1601,18 @@
             <ul class="mobile-nav-list">
                 <li><a href="#" class="mobile-nav-item" id="mobileNavAccount"
                         style="color: #f59e0b; font-weight: 700;">👤 TÀI KHOẢN CỦA TÔI</a></li>
+                <li class="mobile-nav-section">THƯ VIỆN</li>
                 <li><a href="#" class="mobile-nav-item active" id="mobileNavMusics">🎵 TẤT CẢ BÀI HÁT</a></li>
-                <li><a href="#" class="mobile-nav-item" id="mobileNavHires">⚡ HI-RES LOSSLESS</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavRecent">🆕 ALBUM MỚI THÊM</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavAlbums">💿 ALBUMS</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavPlaylists">📑 PLAYLISTS CỦA TÔI</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavFavorites">❤️ BÀI HÁT YÊU THÍCH</a></li>
+                <li class="mobile-nav-section">KHÁM PHÁ</li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavArtists">🎙️ CA SĨ / NGHỆ SĨ</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavGenres">🏷️ THỂ LOẠI (GENRES)</a></li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavCountries">🗺️ QUỐC GIA (COUNTRIES)</a></li>
-                <li><a href="#" class="mobile-nav-item" id="mobileNavPlaylists">📑 PLAYLISTS CỦA TÔI</a></li>
-                <li><a href="#" class="mobile-nav-item" id="mobileNavFavorites">❤️ BÀI HÁT YÊU THÍCH</a></li>
+                <li><a href="#" class="mobile-nav-item" id="mobileNavHires">⚡ HI-RES LOSSLESS</a></li>
+                <li class="mobile-nav-section">CÔNG CỤ</li>
                 <li><a href="#" class="mobile-nav-item" id="mobileNavDevices"
                         onclick="event.preventDefault(); window.xtapoApp?.openDevicesModal();">📻 KẾT NỐI THIẾT BỊ PHÁT
                         (TV/PC)</a></li>
