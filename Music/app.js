@@ -5811,7 +5811,7 @@ class XTAPOMusicApp {
         }
     }
 
-    renderPlaylists() {
+    renderPlaylists(openPlaylistId = null) {
         if (!this.playlistGrid) return;
         this.playlistGrid.innerHTML = '';
         if (this.playlists.length === 0) {
@@ -5889,10 +5889,13 @@ class XTAPOMusicApp {
                 if (pl.tracks && pl.tracks.length > 0) {
                     pl.tracks.forEach((track, tIdx) => {
                         const trRow = document.createElement('div');
-                        trRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.02); margin-bottom: 4px; transition: all 0.2s;';
+                        trRow.className = 'playlist-track-sort-row';
+                        trRow.draggable = !pl.source_share_id;
+                        trRow.dataset.trackIndex = String(tIdx);
                         trRow.innerHTML = `
                             <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
-                                <span style="font-size: 0.72rem; color: var(--text-muted); width: 20px;">${tIdx + 1}</span>
+                                ${pl.source_share_id ? '' : '<span class="playlist-track-drag-handle" title="Kéo để đổi thứ tự">☰</span>'}
+                                <span class="playlist-track-order-number">${tIdx + 1}</span>
                                 <div style="font-size: 0.82rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                     ${this.escapeHtml(track.name)} 
                                     <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">• ${this.escapeHtml(track.artist || '')}</span>
@@ -5900,14 +5903,50 @@ class XTAPOMusicApp {
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 0.72rem; color: var(--text-muted);">${this.escapeHtml(track.duration || '')}</span>
+                                ${pl.source_share_id ? '' : `
+                                    <button class="pl-track-order-btn pl-track-up-btn" title="Đưa bài hát lên" ${tIdx === 0 ? 'disabled' : ''}>↑</button>
+                                    <button class="pl-track-order-btn pl-track-down-btn" title="Đưa bài hát xuống" ${tIdx === pl.tracks.length - 1 ? 'disabled' : ''}>↓</button>
+                                `}
                                 <button class="pl-single-track-del-btn" title="Xóa bài hát này khỏi playlist" style="background: transparent; border: none; color: #f87171; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px;">
                                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                                 </button>
                             </div>
                         `;
 
-                        trRow.onmouseenter = () => trRow.style.background = 'rgba(255,255,255,0.06)';
-                        trRow.onmouseleave = () => trRow.style.background = 'rgba(255,255,255,0.02)';
+                        if (!pl.source_share_id) {
+                            trRow.addEventListener('dragstart', (e) => {
+                                trRow.classList.add('dragging');
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', String(tIdx));
+                            });
+                            trRow.addEventListener('dragover', (e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                trRow.classList.add('drag-over');
+                            });
+                            trRow.addEventListener('dragleave', () => trRow.classList.remove('drag-over'));
+                            trRow.addEventListener('drop', async (e) => {
+                                e.preventDefault();
+                                trRow.classList.remove('drag-over');
+                                const fromIndex = Number(e.dataTransfer.getData('text/plain'));
+                                if (Number.isInteger(fromIndex) && fromIndex !== tIdx) {
+                                    await this.reorderPlaylistTracks(pl.id, fromIndex, tIdx);
+                                }
+                            });
+                            trRow.addEventListener('dragend', () => {
+                                trRow.classList.remove('dragging');
+                                tracksDrawer.querySelectorAll('.drag-over').forEach(row => row.classList.remove('drag-over'));
+                            });
+
+                            trRow.querySelector('.pl-track-up-btn')?.addEventListener('click', async (e) => {
+                                e.stopPropagation();
+                                await this.reorderPlaylistTracks(pl.id, tIdx, tIdx - 1);
+                            });
+                            trRow.querySelector('.pl-track-down-btn')?.addEventListener('click', async (e) => {
+                                e.stopPropagation();
+                                await this.reorderPlaylistTracks(pl.id, tIdx, tIdx + 1);
+                            });
+                        }
 
                         const singleDelBtn = trRow.querySelector('.pl-single-track-del-btn');
                         if (pl.source_share_id) singleDelBtn?.remove();
@@ -5920,6 +5959,11 @@ class XTAPOMusicApp {
 
                         tracksDrawer.appendChild(trRow);
                     });
+                }
+
+                if (openPlaylistId === pl.id) {
+                    tracksDrawer.style.display = 'block';
+                    toggleTracksBtn.innerHTML = 'Thu gọn ▴';
                 }
             }
 
@@ -5999,6 +6043,56 @@ class XTAPOMusicApp {
             }
         } catch (e) {
             this.showToast('Lỗi khi xóa bài hát khỏi playlist');
+        }
+    }
+
+    async reorderPlaylistTracks(playlistId, fromIndex, toIndex) {
+        const targetPl = this.playlists.find(p => p.id === playlistId || `pl-${p.id}` === playlistId);
+        if (!targetPl || !Array.isArray(targetPl.tracks)) return false;
+        if (targetPl.source_share_id) {
+            this.showToast('Playlist được chia sẻ không cho phép đổi thứ tự bài hát.');
+            return false;
+        }
+
+        const length = targetPl.tracks.length;
+        if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex < 0 || toIndex < 0 || fromIndex >= length || toIndex >= length || fromIndex === toIndex) {
+            return false;
+        }
+
+        const newTracks = [...targetPl.tracks];
+        const [movedTrack] = newTracks.splice(fromIndex, 1);
+        newTracks.splice(toIndex, 0, movedTrack);
+        const activeTrack = this.currentAlbum?.id === `pl-${targetPl.id}`
+            ? this.currentAlbum.tracks?.[this.currentTrackIndex]
+            : null;
+
+        try {
+            const res = await fetch(`/api/music/user/playlists/${targetPl.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tracks: newTracks })
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                this.showToast(data.message || data.detail || 'Không thể lưu thứ tự playlist.');
+                return false;
+            }
+
+            targetPl.tracks = newTracks;
+            if (this.currentAlbum?.id === `pl-${targetPl.id}`) {
+                this.currentAlbum.tracks = newTracks;
+                if (activeTrack) {
+                    const nextIndex = newTracks.indexOf(activeTrack);
+                    if (nextIndex >= 0) this.currentTrackIndex = nextIndex;
+                }
+                this.renderTracklist();
+            }
+            this.renderPlaylists(targetPl.id);
+            this.showToast('Đã lưu thứ tự playlist.');
+            return true;
+        } catch (e) {
+            this.showToast('Lỗi kết nối khi lưu thứ tự playlist.');
+            return false;
         }
     }
 

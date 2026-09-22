@@ -83,7 +83,8 @@ async function run() {
     const method = (start, end) => appSource.slice(appSource.indexOf(start), appSource.indexOf(end, appSource.indexOf(start)));
     const playerMethods = [
         method('    isSharedFavorite(', '    updateFavoriteBtnState('),
-        method('    async removeTrackFromPlaylist(', '    async handleCreatePlaylist('),
+        method('    async removeTrackFromPlaylist(', '    async reorderPlaylistTracks('),
+        method('    async reorderPlaylistTracks(', '    async handleCreatePlaylist('),
         method('    async deletePlaylist(', '    playPlaylist('),
         method('    async addTrackToPlaylist(', '    async addTracksToPlaylist('),
     ].join('\n');
@@ -96,6 +97,8 @@ async function run() {
     player.getTrackIdentifiers = track => ({ chatId: String(track.chatId || ''), msgId: String(track.msgId || '') });
     player.showToast = () => {};
     player.renderAddToPlaylistOptions = () => {};
+    player.renderPlaylists = () => {};
+    player.renderTracklist = () => {};
     player.currentAlbum = { artist: 'Artist', coverUrl: '' };
     let writes = 0;
     context.fetch = async () => { writes++; return { ok: true }; };
@@ -109,6 +112,22 @@ async function run() {
     assert.equal(writes, 1, 'new songs can still be appended');
     assert.equal(shared.tracks.length, 2);
     assert.equal(shared.tracks[0], track, 'existing track is retained');
+
+    const owned = { id: 'pl_owned', name: 'Owned', tracks: [{ name: 'A' }, { name: 'B' }, { name: 'C' }] };
+    player.playlists = [owned];
+    context.fetch = async (url, options) => {
+        writes++;
+        assert.equal(url, '/api/music/user/playlists/pl_owned');
+        assert.equal(JSON.parse(options.body).tracks.map(item => item.name).join(','), 'B,C,A');
+        return { ok: true, json: async () => ({ status: 'success' }) };
+    };
+    assert.equal(await player.reorderPlaylistTracks('pl_owned', 0, 2), true);
+    assert.equal(owned.tracks.map(item => item.name).join(','), 'B,C,A');
+
+    player.playlists = [shared];
+    const writesBeforeSharedReorder = writes;
+    assert.equal(await player.reorderPlaylistTracks(shared.id, 0, 1), false);
+    assert.equal(writes, writesBeforeSharedReorder, 'shared playlist reorder never sends a mutation');
     const tvSource = fs.readFileSync(path.join(__dirname, '../Music/tv.html'), 'utf8');
     for (const script of tvSource.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) {
         new vm.Script(script[1]);
