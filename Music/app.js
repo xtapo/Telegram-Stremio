@@ -1719,8 +1719,19 @@ class XTAPOMusicApp {
         return { chatId: String(chatId), msgId: String(msgId) };
     }
 
+    isSharedFavorite(track) {
+        if (!track) return false;
+        const { chatId, msgId } = this.getTrackIdentifiers(track);
+        return (this.favoriteTracks || []).some(f => f.source_share_id && (
+            chatId && msgId
+                ? String(f.chat_id || f.chatId) === chatId && String(f.msg_id || f.msgId) === msgId
+                : (f.title || f.name) === (track.title || track.name) && (f.artist || '') === (track.artist || '')
+        ));
+    }
+
     updateFavoriteBtnState() {
         if (!this.favoriteBtn) return;
+        this.favoriteBtn.disabled = false;
         const track = this.currentTrack;
         if (!track) {
             this.favoriteBtn.style.color = 'var(--text-muted)';
@@ -1738,6 +1749,10 @@ class XTAPOMusicApp {
         if (isFav) {
             this.favoriteBtn.style.color = '#ef4444'; // Red
             this.favoriteBtn.title = 'Đã yêu thích (Bấm để bỏ thích)';
+            if (this.isSharedFavorite(track)) {
+                this.favoriteBtn.disabled = true;
+                this.favoriteBtn.title = 'Bài hát được chia sẻ — không được xóa';
+            }
             this.favoriteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
         } else {
             this.favoriteBtn.style.color = 'var(--text-muted)';
@@ -1754,6 +1769,7 @@ class XTAPOMusicApp {
         
         const track = this.currentTrack;
         if (!track) return;
+        if (this.isSharedFavorite(track)) return this.showToast('Bạn không có quyền xóa bài hát được chia sẻ.');
         const { chatId, msgId } = this.getTrackIdentifiers(track);
         if (!chatId || !msgId) return this.showToast("Không tìm thấy thông tin bài hát để yêu thích");
 
@@ -1915,7 +1931,8 @@ class XTAPOMusicApp {
 
             // Remove button
             const removeBtn = row.querySelector('.fav-remove-btn');
-            if (removeBtn) {
+            if (track.favoriteSource?.source_share_id) removeBtn?.remove();
+            else if (removeBtn) {
                 removeBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     const cid = removeBtn.getAttribute('data-chat-id');
@@ -1930,6 +1947,9 @@ class XTAPOMusicApp {
     }
 
     async removeFavoriteItem(chatId, msgId, trackName = '') {
+        if (this.isSharedFavorite({ chatId, msgId, name: trackName })) {
+            return this.showToast('Bạn không có quyền xóa bài hát được chia sẻ.');
+        }
         try {
             const res = await fetch('/api/music/user/favorites/toggle', {
                 method: 'POST',
@@ -2502,13 +2522,14 @@ class XTAPOMusicApp {
             </button>
         `;
 
-        if (isCustomPlaylist) {
+        const activePlaylist = (this.playlists || []).find(p => p.id === this.activePlaylistId || `pl-${p.id}` === this.currentAlbum?.id);
+        if (isCustomPlaylist && !activePlaylist?.source_share_id && !this.currentAlbum?.source_share_id) {
             actionBtnHtml = `
                 <button class="track-remove-from-pl-btn" title="Xóa bài này khỏi Playlist" style="background: transparent; border: none; color: #f87171; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                 </button>
             `;
-        } else if (isFavQueue) {
+        } else if (isFavQueue && !this.isSharedFavorite(track)) {
             actionBtnHtml = `
                 <button class="track-remove-fav-btn" title="Bỏ khỏi danh sách yêu thích" style="background: transparent; border: none; color: #ef4444; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
@@ -5816,7 +5837,7 @@ class XTAPOMusicApp {
                         <div class="playlist-icon-badge">🎵</div>
                         <div class="playlist-card-info">
                             <h4>${this.escapeHtml(pl.name)}</h4>
-                            <p>${trackCount} bài hát • Tạo lúc ${new Date((pl.created_at || Date.now()/1000) * 1000).toLocaleDateString('vi-VN')}</p>
+                            <p>${trackCount} bài hát • ${pl.source_share_id ? 'Được chia sẻ · Chỉ thêm bài mới' : `Tạo lúc ${new Date((pl.created_at || Date.now()/1000) * 1000).toLocaleDateString('vi-VN')}`}</p>
                         </div>
                     </div>
                     <div class="playlist-card-actions">
@@ -5889,7 +5910,8 @@ class XTAPOMusicApp {
                         trRow.onmouseleave = () => trRow.style.background = 'rgba(255,255,255,0.02)';
 
                         const singleDelBtn = trRow.querySelector('.pl-single-track-del-btn');
-                        if (singleDelBtn) {
+                        if (pl.source_share_id) singleDelBtn?.remove();
+                        else if (singleDelBtn) {
                             singleDelBtn.addEventListener('click', async (e) => {
                                 e.stopPropagation();
                                 await this.removeTrackFromPlaylist(pl.id, track, tIdx);
@@ -5920,7 +5942,8 @@ class XTAPOMusicApp {
             }
 
             const delBtn = item.querySelector('.btn-delete-playlist');
-            if (delBtn) {
+            if (pl.source_share_id) delBtn?.remove();
+            else if (delBtn) {
                 delBtn.addEventListener('click', async () => {
                     if (confirm(`Bạn có chắc muốn xóa playlist "${pl.name}" không?`)) {
                         await this.deletePlaylist(pl.id);
@@ -5936,6 +5959,7 @@ class XTAPOMusicApp {
         if (!playlistId) return;
         const targetPl = this.playlists.find(p => p.id === playlistId || `pl-${p.id}` === playlistId);
         if (!targetPl) return;
+        if (targetPl.source_share_id) return this.showToast('Playlist được chia sẻ chỉ cho phép thêm bài mới.');
 
         const currentTracks = targetPl.tracks || [];
         const newTracks = currentTracks.filter((t, i) => {
@@ -6006,6 +6030,9 @@ class XTAPOMusicApp {
     }
 
     async deletePlaylist(playlistId) {
+        if (this.playlists.find(p => p.id === playlistId)?.source_share_id) {
+            return this.showToast('Bạn không có quyền xóa playlist được chia sẻ.');
+        }
         try {
             const res = await fetch(`/api/music/user/playlists/${playlistId}`, {
                 method: 'DELETE'
@@ -6029,6 +6056,7 @@ class XTAPOMusicApp {
         }
 
         const playlistAlbum = {
+            source_share_id: playlist.source_share_id,
             id: `pl-${playlist.id}`,
             title: `Playlist: ${playlist.name}`,
             artist: 'Danh Sách Cá Nhân',
@@ -6183,8 +6211,8 @@ class XTAPOMusicApp {
         
         let newTracks;
         if (isAlreadyIn) {
+            if (targetPl.source_share_id) return this.showToast('Bài hát đã có trong playlist được chia sẻ. Chỉ được thêm bài mới.');
             newTracks = currentTracks.filter(t => !((t.msgId && t.msgId === track.msgId) || (t.name === track.name)));
-            this.showToast(`Đã xóa "${track.name}" khỏi playlist "${targetPl.name}"`);
         } else {
             const trackToAdd = {
                 ...track,
@@ -6192,7 +6220,6 @@ class XTAPOMusicApp {
                 coverUrl: track.coverUrl || this.currentAlbum.coverUrl
             };
             newTracks = [...currentTracks, trackToAdd];
-            this.showToast(`Đã thêm "${track.name}" vào playlist "${targetPl.name}"!`);
         }
 
         try {
@@ -6204,6 +6231,10 @@ class XTAPOMusicApp {
             if (res.ok) {
                 targetPl.tracks = newTracks;
                 this.renderAddToPlaylistOptions();
+                this.showToast(isAlreadyIn ? `Đã xóa "${track.name}" khỏi playlist "${targetPl.name}"` : `Đã thêm "${track.name}" vào playlist "${targetPl.name}"!`);
+            } else {
+                const data = await res.json();
+                this.showToast(data.message || data.detail || 'Không thể cập nhật playlist. Vui lòng tải lại.');
             }
         } catch (e) {
             this.showToast('Lỗi khi cập nhật bài hát vào playlist');
@@ -6246,6 +6277,9 @@ class XTAPOMusicApp {
                 targetPl.tracks = newTracks;
                 this.renderAddToPlaylistOptions();
                 this.showToast(`✨ Đã thêm ${toAdd.length} bài hát vào playlist "${targetPl.name}"!`);
+            } else {
+                const data = await res.json();
+                this.showToast(data.message || data.detail || 'Không thể thêm bài. Vui lòng tải lại playlist.');
             }
         } catch (e) {
             this.showToast('Lỗi khi thêm bài hát vào playlist');

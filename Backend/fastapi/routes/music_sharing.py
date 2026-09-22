@@ -182,7 +182,7 @@ async def import_music_share(share_id: str, payload: ImportRequest, user_id: str
             {"_id": user_id, "playlists.source_share_id": {"$ne": share_id}},
             {"$push": {"playlists": playlist}},
         )
-        return {"status": "success", "message": "Đã lưu thành playlist riêng." if result.modified_count else "Playlist này đã được lưu."}
+        return {"status": "success", "message": "Đã lưu playlist được chia sẻ. Bạn có thể thêm bài mới." if result.modified_count else "Playlist này đã được lưu."}
 
     # Compare-and-swap preserves favorites added/removed while this import is in flight.
     for _ in range(5):
@@ -198,6 +198,7 @@ async def import_music_share(share_id: str, payload: ImportRequest, user_id: str
             additions.append({
                 **track, "chat_id": track["chatId"], "msg_id": track["msgId"],
                 "title": track["name"], "cover_url": track["coverUrl"], "added_at": time.time(),
+                "source_share_id": share_id,
             })
         if not additions:
             return {"status": "success", "message": "Các bài hát đã có trong danh sách yêu thích.", "added_count": 0}
@@ -212,7 +213,5 @@ async def import_music_share(share_id: str, payload: ImportRequest, user_id: str
 
 @router.delete("/{share_id}")
 async def dismiss_music_share(share_id: str, user_id: str = Depends(require_music_auth)):
-    result = await db.dbs["tracking"]["music_user_shares"].delete_one({"_id": share_id, "recipient_id": user_id})
-    if not result.deleted_count:
-        raise HTTPException(404, "Không tìm thấy nội dung được chia sẻ.")
-    return {"status": "success", "message": "Đã bỏ khỏi mục được chia sẻ."}
+    await _received_share(share_id, user_id)
+    raise HTTPException(403, "Người nhận không có quyền xóa nội dung được chia sẻ.")

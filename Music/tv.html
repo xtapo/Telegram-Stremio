@@ -1625,17 +1625,30 @@
             return userFavorites.some(f => (f.title || f.name || '').trim().toLowerCase() === name);
         }
 
+        function isSharedFavorite(track) {
+            if (!track) return false;
+            const cid = track.chat_id || track.chatId;
+            const mid = track.msg_id || track.msgId || track.id;
+            return (userFavorites || []).some(f => f.source_share_id && (
+                cid && mid ? String(f.chat_id || f.chatId) === String(cid) && String(f.msg_id || f.msgId) === String(mid)
+                    : (f.title || f.name) === (track.title || track.name) && (f.artist || '') === (track.artist || '')
+            ));
+        }
+
         function updatePlayerFavButton() {
             const currentTrack = currentlyPlayingTrack || currentTracklist?.[currentPlayingTrackIdx];
             const isFav = isTrackInFavorites(currentTrack);
             if (btnPlayerFav) {
                 btnPlayerFav.textContent = isFav ? '❤️' : '🤍';
                 btnPlayerFav.title = isFav ? 'Đã yêu thích (Bấm để bỏ thích)' : 'Bấm để thêm vào yêu thích';
+                btnPlayerFav.disabled = isSharedFavorite(currentTrack);
+                if (btnPlayerFav.disabled) btnPlayerFav.title = 'Bài hát được chia sẻ — không được xóa';
             }
             if (btnShowcaseFav) {
                 const showcaseTr = currentTracklist?.[0] || currentActiveGroup;
                 const isShowcaseFav = isTrackInFavorites(showcaseTr);
                 btnShowcaseFav.textContent = isShowcaseFav ? '❤️ Đã Thích' : '🤍 Yêu Thích';
+                btnShowcaseFav.disabled = isSharedFavorite(showcaseTr);
             }
         }
 
@@ -1644,6 +1657,7 @@
                 track = currentlyPlayingTrack || currentTracklist?.[currentPlayingTrackIdx];
             }
             if (!track) return;
+            if (isSharedFavorite(track)) return showToast('Bạn không có quyền xóa bài hát được chia sẻ.');
 
             let cid = track.chat_id;
             let mid = track.msg_id || track.id;
@@ -1814,6 +1828,7 @@
 
         async function deleteCurrentPlaylist() {
             if (!currentActiveGroup || currentActiveGroup.type !== 'playlist') return;
+            if (currentActiveGroup.source_share_id) return showToast('Bạn không có quyền xóa playlist được chia sẻ.');
             const plId = currentActiveGroup.id;
             const plName = currentActiveGroup.title;
 
@@ -2007,6 +2022,7 @@
             } else if (currentTab === 'playlists') {
                 if (userPlaylists && userPlaylists.length > 0) {
                     currentItems = userPlaylists.map(pl => ({
+                        source_share_id: pl.source_share_id,
                         type: 'playlist',
                         id: pl.id || pl._id,
                         title: pl.name || 'Playlist',
@@ -2504,7 +2520,7 @@
             showcaseBadge.textContent = item.badge || 'LOSSLESS';
 
             if (btnShowcaseDeletePl) {
-                btnShowcaseDeletePl.style.display = (item.type === 'playlist' && item.id !== '__empty_pl__') ? 'inline-flex' : 'none';
+                btnShowcaseDeletePl.style.display = (item.type === 'playlist' && item.id !== '__empty_pl__' && !item.source_share_id) ? 'inline-flex' : 'none';
             }
             if (btnShowcaseCreatePl) {
                 btnShowcaseCreatePl.style.display = (currentTab === 'playlists') ? 'inline-flex' : 'inline-flex';

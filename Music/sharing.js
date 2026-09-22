@@ -218,7 +218,7 @@ class MusicSharingController {
         };
         addAction('Phát', async () => {
             const { share: detail } = await this.request(path);
-            this.app.playPlaylist({ id: `received_${share.id}`, name: detail.title, tracks: detail.tracks });
+            this.app.playPlaylist({ id: `received_${share.id}`, source_share_id: share.id, name: detail.title, tracks: detail.tracks });
             this.close(this.inboxModal);
             this.app.closeModal(this.app.playlistModal);
             this.app.closeModal(this.app.favoritesModal);
@@ -251,12 +251,10 @@ class MusicSharingController {
                 }
             });
         }
-        addAction('Bỏ khỏi danh sách', async () => {
-            if (!confirm(`Bỏ "${share.title}" khỏi mục được chia sẻ? Playlist và yêu thích đã lưu vẫn được giữ.`)) return;
-            await this.request(path, { method: 'DELETE' });
-            // Reload so subsequent pagination cannot skip a row after deletion.
-            await this.loadInbox(true);
-        });
+        const permissions = document.createElement('p');
+        permissions.className = 'music-share-help';
+        permissions.textContent = 'Chỉ được thêm bài mới. Lưu playlist để thêm bài; không được xóa nội dung đã chia sẻ.';
+        item.appendChild(permissions);
         this.list.appendChild(item);
     }
 }

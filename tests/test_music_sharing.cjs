@@ -78,6 +78,42 @@ async function run() {
     assert.equal(controller.refreshButton.disabled, false);
     assert.equal(controller.sendButton.disabled, false);
     console.log('PASS: favorite selection, duplicate-submit guard, errors/retry, auth, and stale-account isolation');
+
+    const appSource = fs.readFileSync(path.join(__dirname, '../Music/app.js'), 'utf8');
+    const method = (start, end) => appSource.slice(appSource.indexOf(start), appSource.indexOf(end, appSource.indexOf(start)));
+    const playerMethods = [
+        method('    isSharedFavorite(', '    updateFavoriteBtnState('),
+        method('    async removeTrackFromPlaylist(', '    async handleCreatePlaylist('),
+        method('    async deletePlaylist(', '    playPlaylist('),
+        method('    async addTrackToPlaylist(', '    async addTracksToPlaylist('),
+    ].join('\n');
+    const Player = vm.runInContext(`(class { ${playerMethods} })`, context);
+    const player = new Player();
+    const track = { name: 'Shared song', chatId: '-100', msgId: '42' };
+    const shared = { id: 'pl_shared', source_share_id: 'share1', name: 'Shared playlist', tracks: [track] };
+    player.playlists = [shared];
+    player.favoriteTracks = [{ title: 'Shared song', chat_id: -100, msg_id: 42, source_share_id: 'share1' }];
+    player.getTrackIdentifiers = track => ({ chatId: String(track.chatId || ''), msgId: String(track.msgId || '') });
+    player.showToast = () => {};
+    player.renderAddToPlaylistOptions = () => {};
+    player.currentAlbum = { artist: 'Artist', coverUrl: '' };
+    let writes = 0;
+    context.fetch = async () => { writes++; return { ok: true }; };
+    assert.equal(player.isSharedFavorite(track), true);
+    assert.equal(player.isSharedFavorite({ ...track, chatId: '-200' }), false);
+    await player.removeTrackFromPlaylist(shared.id, track, 0);
+    await player.deletePlaylist(shared.id);
+    await player.addTrackToPlaylist(shared.id, track);
+    assert.equal(writes, 0, 'shared playlist delete and duplicate toggle never send a mutation');
+    await player.addTrackToPlaylist(shared.id, { name: 'New song', chatId: '-100', msgId: '43' });
+    assert.equal(writes, 1, 'new songs can still be appended');
+    assert.equal(shared.tracks.length, 2);
+    assert.equal(shared.tracks[0], track, 'existing track is retained');
+    const tvSource = fs.readFileSync(path.join(__dirname, '../Music/tv.html'), 'utf8');
+    for (const script of tvSource.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) {
+        new vm.Script(script[1]);
+    }
+    console.log('PASS: shared playlist UI permits additions and blocks removals; TV scripts compile');
 }
 
 run().catch(error => { console.error(error); process.exitCode = 1; });

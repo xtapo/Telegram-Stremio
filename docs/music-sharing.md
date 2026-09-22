@@ -7,9 +7,9 @@ Trên giao diện `/music/` (máy tính hoặc điện thoại):
 3. Người nhận mở **Được chia sẻ** trong PLAYLISTS hoặc YÊU THÍCH. Bấm **Làm mới** để nhận danh sách mới nhất.
 4. Chọn **Phát**, **Xem bài hát**, **Lưu playlist** hoặc **Thêm vào yêu thích**.
 
-Chia sẻ lưu bản sao tại thời điểm gửi; thay đổi sau đó ở danh sách gốc không cập nhật bản đã gửi. Lưu playlist tạo bản riêng có thể chỉnh sửa. Lưu cùng một chia sẻ nhiều lần không tạo thêm playlist hoặc thêm trùng bài yêu thích. **Bỏ khỏi danh sách** xóa mục nhận chia sẻ, giữ lại playlist và yêu thích đã lưu.
+Chia sẻ lưu bản sao tại thời điểm gửi; thay đổi sau đó ở danh sách gốc không cập nhật bản đã gửi. Người nhận lưu playlist để thêm bài mới, nhưng không được xóa playlist, đổi tên, xóa/sửa/đổi thứ tự bài đã có (kể cả bài người nhận thêm sau đó). Bài yêu thích được thêm từ chia sẻ không được bỏ thích. Những bài người nhận đã tự yêu thích trước đó vẫn là bài cá nhân. Lưu cùng một chia sẻ nhiều lần không tạo thêm playlist hoặc thêm trùng bài yêu thích. Người nhận không được xóa mục trong **Được chia sẻ**.
 
-Chỉ tài khoản nhận đang đăng nhập và hoạt động mới đọc, lưu hoặc bỏ mục chia sẻ. Người gửi chỉ chọn được playlist/yêu thích của mình. Tên đăng nhập không phân biệt chữ hoa/thường; không gửi cho chính mình hoặc tài khoản bị khóa. Mỗi lần gửi tối đa 2.000 bài có đường dẫn phát hợp lệ. Chia sẻ không cấp thêm quyền truy cập kênh Telegram; bài trong kênh riêng vẫn cần quyền phát hợp lệ của người nhận.
+Chỉ tài khoản nhận đang đăng nhập và hoạt động mới đọc hoặc lưu mục chia sẻ. Người gửi chỉ chọn được playlist/yêu thích của mình. Quyền chỉ thêm được kiểm tra tại API, không chỉ ẩn nút xóa. Playlist tự tạo vẫn được sửa/xóa bình thường. Tên đăng nhập không phân biệt chữ hoa/thường; không gửi cho chính mình hoặc tài khoản bị khóa. Mỗi lần gửi tối đa 2.000 bài có đường dẫn phát hợp lệ. Chia sẻ không cấp thêm quyền truy cập kênh Telegram; bài trong kênh riêng vẫn cần quyền phát hợp lệ của người nhận.
 
 ## Lưu trữ và kiểm thử
 

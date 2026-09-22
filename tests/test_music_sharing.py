@@ -83,7 +83,7 @@ class Collection:
     async def update_one(self, query, update, upsert=False):
         doc = next((d for d in self.documents if self.matches(d, query)), None)
         if doc is None and not upsert:
-            return types.SimpleNamespace(modified_count=0)
+            return types.SimpleNamespace(modified_count=0, matched_count=0)
         if doc is None:
             doc = {"_id": query["_id"], **copy.deepcopy(update.get("$setOnInsert", {}))}
             self.documents.append(doc)
@@ -91,7 +91,7 @@ class Collection:
         doc.update(copy.deepcopy(update.get("$set", {})))
         for key, value in update.get("$push", {}).items():
             doc.setdefault(key, []).append(copy.deepcopy(value))
-        return types.SimpleNamespace(modified_count=int(previous != doc))
+        return types.SimpleNamespace(modified_count=int(previous != doc), matched_count=1)
 
     async def delete_one(self, query):
         count = len(self.documents)
@@ -146,7 +146,7 @@ def fixture():
     app.include_router(sharing.router)
     # Only these existing library routes are needed in the isolated UI fixture.
     for route in auth.auth_router.routes:
-        if route.path in ("/api/music/user/favorites", "/api/music/user/playlists"):
+        if route.path.startswith(("/api/music/user/favorites", "/api/music/user/playlists")):
             app.router.routes.append(route)
 
     @app.get("/api/music/auth/profile")
@@ -184,6 +184,9 @@ def fixture():
 
 class MusicSharingTests(unittest.TestCase):
     def setUp(self):
+        cache_module = types.ModuleType("Backend.helper.music_cache")
+        cache_module.smart_audio_cache = Mock()
+        self.enterContext(patch.dict(sys.modules, {cache_module.__name__: cache_module}))
         self.app, self.db, self.routes = fixture()
         self.client = TestClient(self.app)
         self.addCleanup(self.client.close)
@@ -263,10 +266,62 @@ class MusicSharingTests(unittest.TestCase):
             self.assertEqual(result.json()["added_count"], expected)
         self.assertEqual(len(bob["favorites"]), 2)
         self.assertEqual(bob["favorites"][0]["title"], "Keep me")
-        self.assertEqual(self.call("DELETE", f"/{share_id}", user="bob").status_code, 200)
+        self.assertEqual(self.call("DELETE", f"/{share_id}", user="bob").status_code, 403)
         self.assertEqual(len(bob["playlists"]), 2)
         self.assertEqual(len(bob["favorites"]), 2)
-        self.assertEqual(self.call("GET", f"/{share_id}", user="bob").status_code, 404)
+        self.assertEqual(self.call("GET", f"/{share_id}", user="bob").status_code, 200)
+
+    def test_recipient_can_only_append_to_imported_playlist(self):
+        share_id = self.send().json()["share_id"]
+        self.call("POST", f"/{share_id}/import", user="bob", json={"destination": "playlist"})
+        playlist = self.data.documents[1]["playlists"][1]
+        path = f'/api/music/user/playlists/{playlist["id"]}'
+        original = copy.deepcopy(playlist["tracks"])
+        headers = {"x-test-user": "bob"}
+        for payload in ({"tracks": []}, {"tracks": [], "source_share_id": None}, {"name": "Renamed"}, {"tracks": [{**original[0], "previewUrl": "/different"}]}):
+            self.assertEqual(self.client.put(path, headers=headers, json=payload).status_code, 403)
+        self.assertEqual(self.client.delete(path, headers=headers).status_code, 403)
+        addition = {"name": "New song", "chatId": "-100123", "msgId": "99"}
+        response = self.client.put(path, headers=headers, json={"tracks": original + [addition]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["playlist"]["tracks"], original + [addition])
+        self.assertEqual(self.client.put(path, headers=headers, json={"tracks": original}).status_code, 403)
+        self.assertEqual(self.client.put(path, headers=headers, json={"tracks": [addition] + original}).status_code, 403)
+
+    def test_shared_favorites_cannot_be_removed_but_personal_ones_can(self):
+        share_id = self.send().json()["share_id"]
+        self.call("POST", f"/{share_id}/import", user="bob", json={"destination": "favorites"})
+        path = "/api/music/user/favorites/toggle"
+        headers = {"x-test-user": "bob"}
+        for payload in ({"chat_id": "-100123", "msg_id": "42"}, {"name": "Bình minh"}, {"msg_id": 42}):
+            self.assertEqual(self.client.post(path, headers=headers, json=payload).status_code, 403)
+        personal = {"chat_id": "-100123", "msg_id": "99", "name": "My own favorite"}
+        self.assertTrue(self.client.post(path, headers=headers, json=personal).json()["is_favorite"])
+        self.assertFalse(self.client.post(path, headers=headers, json=personal).json()["is_favorite"])
+        self.assertEqual(len(self.data.documents[1]["favorites"]), 1)
+
+    def test_owners_keep_edit_and_delete_permissions(self):
+        headers = {"x-test-user": "alice"}
+        self.send()
+        response = self.client.put("/api/music/user/playlists/pl_alice", headers=headers, json={"tracks": [], "name": "New name"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.client.delete("/api/music/user/playlists/pl_alice", headers=headers).status_code, 200)
+
+    def test_stale_playlist_write_cannot_remove_a_concurrent_addition(self):
+        share_id = self.send().json()["share_id"]
+        self.call("POST", f"/{share_id}/import", user="bob", json={"destination": "playlist"})
+        playlist = self.data.documents[1]["playlists"][1]
+        old_tracks = copy.deepcopy(playlist["tracks"])
+        update = self.data.update_one
+        concurrent = {"name": "Concurrent song", "chatId": "-100123", "msgId": "101"}
+        async def race(query, changes, upsert=False):
+            if "playlists" in query:
+                playlist["tracks"].append(concurrent)
+            return await update(query, changes, upsert)
+        with patch.object(self.data, "update_one", race):
+            response = self.client.put(f'/api/music/user/playlists/{playlist["id"]}', headers={"x-test-user": "bob"}, json={"tracks": old_tracks + [{"name": "New", "chatId": "-100123", "msgId": "102"}]})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn(concurrent, playlist["tracks"])
 
     def test_favorite_import_retries_concurrent_change(self):
         share_id = self.send().json()["share_id"]

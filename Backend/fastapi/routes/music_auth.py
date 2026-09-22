@@ -1,6 +1,7 @@
 import re
 import time
 import secrets
+from copy import deepcopy
 from fastapi import APIRouter, Request, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse, Response as PlainResponse
 from Backend import db
@@ -460,7 +461,7 @@ async def get_user_favorites(user_id: str = Depends(require_music_auth)):
         raw_favs = doc.get("favorites", []) if doc else []
         favorites = _dedup_favorites(raw_favs)
         if len(favorites) != len(raw_favs) and doc:
-            await coll.update_one({"_id": user_id}, {"$set": {"favorites": favorites}})
+            await coll.update_one({"_id": user_id, "favorites": raw_favs}, {"$set": {"favorites": favorites}})
         return {"status": "success", "favorites": favorites}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -500,6 +501,8 @@ async def toggle_user_favorite(payload: dict, user_id: str = Depends(require_mus
         
         is_favorite = False
         if target:
+            if any(f.get("source_share_id") and matches(f) for f in favorites):
+                return JSONResponse(status_code=403, content={"status": "error", "message": "Bài hát được chia sẻ không được phép xóa khỏi yêu thích."})
             favorites = [f for f in favorites if not matches(f)]
         else:
             cid = int(chat_id) if str(chat_id).lstrip('-').isdigit() else str(chat_id) if chat_id else ""
@@ -516,7 +519,12 @@ async def toggle_user_favorite(payload: dict, user_id: str = Depends(require_mus
             })
             is_favorite = True
             
-        await coll.update_one({"_id": user_id}, {"$set": {"favorites": favorites}})
+        result = await coll.update_one(
+            {"_id": user_id, "favorites": doc.get("favorites", []) if "favorites" in doc else {"$exists": False}},
+            {"$set": {"favorites": favorites}},
+        )
+        if not result.matched_count:
+            return JSONResponse(status_code=409, content={"status": "error", "message": "Danh sách yêu thích vừa thay đổi. Vui lòng tải lại."})
         if chat_id is not None and msg_id is not None:
             try:
                 from Backend.helper.music_cache import smart_audio_cache
@@ -542,6 +550,7 @@ async def get_user_playlists(user_id: str = Depends(require_music_auth)):
         playlists = doc.get("playlists", []) if doc else []
         
         # Auto-dedup tracks inside each playlist
+        original_playlists = deepcopy(playlists)
         changed = False
         for p in playlists:
             raw_tr = p.get("tracks", [])
@@ -550,7 +559,7 @@ async def get_user_playlists(user_id: str = Depends(require_music_auth)):
                 p["tracks"] = deduped_tr
                 changed = True
         if changed and doc:
-            await coll.update_one({"_id": user_id}, {"$set": {"playlists": playlists}})
+            await coll.update_one({"_id": user_id, "playlists": original_playlists}, {"$set": {"playlists": playlists}})
             
         return {"status": "success", "playlists": playlists}
     except Exception as e:
@@ -578,9 +587,7 @@ async def create_user_playlist(payload: dict, user_id: str = Depends(require_mus
             "tracks": _dedup_tracks(raw_tracks),
             "created_at": time.time()
         }
-        playlists.append(new_playlist)
-        
-        await coll.update_one({"_id": user_id}, {"$set": {"playlists": playlists}}, upsert=True)
+        await coll.update_one({"_id": user_id}, {"$push": {"playlists": new_playlist}}, upsert=True)
         return {"status": "success", "message": f"Đã tạo playlist '{name}'.", "playlist": new_playlist}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -598,13 +605,24 @@ async def update_user_playlist(playlist_id: str, payload: dict, user_id: str = D
         target = next((p for p in playlists if p.get("id") == playlist_id), None)
         if not target:
             return JSONResponse(status_code=404, content={"status": "error", "message": "Không tìm thấy playlist."})
-            
+
+        original_playlists = deepcopy(playlists)
+        if target.get("source_share_id"):
+            old_tracks = target.get("tracks", [])
+            # Keep all existing entries and metadata in place: recipients may only append.
+            if (name is not None and name != target.get("name")) or (
+                tracks is not None and (not isinstance(tracks, list) or tracks[:len(old_tracks)] != old_tracks)
+            ):
+                return JSONResponse(status_code=403, content={"status": "error", "message": "Playlist được chia sẻ chỉ cho phép thêm bài mới, không được xóa hoặc sửa bài đã có."})
+
         if tracks is not None:
             target["tracks"] = _dedup_tracks(tracks)
         if name is not None:
             target["name"] = name.strip()
             
-        await coll.update_one({"_id": user_id}, {"$set": {"playlists": playlists}})
+        result = await coll.update_one({"_id": user_id, "playlists": original_playlists}, {"$set": {"playlists": playlists}})
+        if not result.matched_count:
+            return JSONResponse(status_code=409, content={"status": "error", "message": "Playlist vừa thay đổi. Vui lòng tải lại trước khi thêm bài."})
         return {"status": "success", "message": "Đã cập nhật playlist.", "playlist": target}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -615,9 +633,14 @@ async def delete_user_playlist(playlist_id: str, user_id: str = Depends(require_
         coll = db.dbs["tracking"]["music_user_data"]
         doc = await coll.find_one({"_id": user_id})
         playlists = doc.get("playlists", []) if doc else []
-        
+        target = next((p for p in playlists if p.get("id") == playlist_id), None)
+        if target and target.get("source_share_id"):
+            return JSONResponse(status_code=403, content={"status": "error", "message": "Bạn không có quyền xóa playlist được chia sẻ."})
+        original_playlists = deepcopy(playlists)
         playlists = [p for p in playlists if p.get("id") != playlist_id]
-        await coll.update_one({"_id": user_id}, {"$set": {"playlists": playlists}})
+        result = await coll.update_one({"_id": user_id, "playlists": original_playlists}, {"$set": {"playlists": playlists}})
+        if doc and not result.matched_count:
+            return JSONResponse(status_code=409, content={"status": "error", "message": "Playlist vừa thay đổi. Vui lòng tải lại."})
         return {"status": "success", "message": "Đã xóa playlist."}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
