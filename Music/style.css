@@ -7987,6 +7987,136 @@ body.tv-lite .tv-focused {
     }
 }
 
+/* Sharing dialogs sit above the playlist/favorites view that opened them. */
+.music-sharing-overlay {
+    z-index: 150;
+}
+
+.music-share-dialog {
+    max-width: 480px;
+}
+
+.music-shares-dialog {
+    max-width: 720px;
+    max-height: 85dvh;
+    overflow-y: auto;
+}
+
+.music-share-toolbar,
+.music-share-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.music-share-title,
+.music-share-card h4,
+.music-share-tracks li {
+    overflow-wrap: anywhere;
+}
+
+.music-share-title {
+    color: var(--accent-gold);
+    font-weight: 700;
+    margin: 0 0 18px;
+}
+
+#musicShareForm label {
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+
+#musicShareRecipient {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary, #fff);
+    font: inherit;
+}
+
+.music-sharing-overlay button:focus-visible,
+#musicShareRecipient:focus-visible {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: 3px;
+}
+
+.music-share-help,
+.music-share-card p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.music-share-error {
+    color: #f87171;
+    font-size: 0.85rem;
+    min-height: 1.4em;
+}
+
+.music-share-card {
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.music-share-card h4 {
+    margin: 0;
+}
+
+.music-share-actions {
+    margin: 12px 0 0;
+}
+
+.music-share-tracks {
+    max-height: 240px;
+    overflow-y: auto;
+    padding-left: 24px;
+    font-size: 0.85rem;
+    line-height: 1.8;
+}
+
+#musicSharesMore[hidden] {
+    display: none;
+}
+
+.music-sharing-overlay button:disabled,
+#btnFavShare:disabled,
+.btn-share-playlist:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@media (max-width: 540px) {
+    .fav-track-row {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .fav-track-row > div:first-child {
+        flex: 1 1 100% !important;
+    }
+
+    .fav-track-row > div:last-child {
+        margin-left: auto !important;
+    }
+
+    .music-share-card {
+        padding: 12px;
+    }
+
+    .music-share-actions button {
+        min-height: 36px;
+    }
+}
+
 /* --- Reduce motion cho người dùng cần accessibility --- */
 @media (prefers-reduced-motion: reduce) {
     *,

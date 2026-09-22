@@ -9,8 +9,8 @@ const indexSource = fs.readFileSync(path.join(__dirname, '../Music/index.html'),
 const styleSource = fs.readFileSync(path.join(__dirname, '../Music/style.css'), 'utf8');
 const pagesSource = fs.readFileSync(path.join(__dirname, '../Backend/fastapi/routes/music/pages.py'), 'utf8');
 
-assert.match(indexSource, /style\.css\?v=4\.5/);
-assert.match(indexSource, /app\.js\?v=6\.4/);
+assert.match(indexSource, /style\.css\?v=4\.6/);
+assert.match(indexSource, /app\.js\?v=6\.5/);
 assert.match(styleSource, /\.nav-more-dropdown\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?visibility:\s*hidden;/);
 assert.match(styleSource, /\.nav-more-menu:hover \.nav-more-dropdown/);
 assert.match(pagesSource, /if ext in \["\.css", "\.js"\]:[\s\S]*?must-revalidate/);

@@ -726,6 +726,7 @@ class XTAPOMusicApp {
         this.setupAudioEvents();
         this.setupControlEvents();
         this.setupModalEvents();
+        this.musicSharing = new MusicSharingController(this);
         this.setupLyricsEvents();
         this.setupSleepTimerEvents();
         this.setupEqualizerEvents();
@@ -896,6 +897,7 @@ class XTAPOMusicApp {
             const res = await fetch('/api/music/auth/profile');
             const data = await res.json();
             if (data.status === 'authenticated' && data.user) {
+                if (this.currentUser?._id !== data.user._id) this.musicSharing?.reset();
                 this.currentUser = data.user;
                 try { localStorage.setItem('xtapo_cached_user', JSON.stringify(data.user)); } catch (e) {}
                 this.updateAuthUI(true);
@@ -1006,6 +1008,7 @@ class XTAPOMusicApp {
             this.userDisplayName.style.color = "";
             this.userDisplayName.title = "Đăng nhập tài khoản";
             this.favoriteTracks = [];
+            this.musicSharing?.reset();
             this.updateFavoriteBtnState();
         }
     }
@@ -1818,6 +1821,8 @@ class XTAPOMusicApp {
         this.favoritesList.innerHTML = '';
 
         const totalFavs = this.favoriteTracks ? this.favoriteTracks.length : 0;
+        const shareFavoritesButton = document.getElementById('btnFavShare');
+        if (shareFavoritesButton) shareFavoritesButton.disabled = totalFavs === 0;
         if (this.favModalCount) {
             this.favModalCount.textContent = `${totalFavs} bài hát`;
         }
@@ -1845,13 +1850,14 @@ class XTAPOMusicApp {
             const key = `${String(fav.chat_id)}_${String(fav.msg_id)}`;
             const libTrack = allTracksMap.get(key);
             return {
+                favoriteSource: fav,
                 id: idx + 1,
                 name: (libTrack && libTrack.name) || fav.title || `Bài hát ${fav.msg_id}`,
                 artist: (libTrack && libTrack.artist) || fav.artist || 'XTAPO Artist',
                 duration: (libTrack && libTrack.duration) || '--:--',
                 format: (libTrack && libTrack.format) || 'FLAC Hi-Res',
                 coverUrl: (libTrack && (libTrack.coverUrl || libTrack.albumCover)) || fav.cover_url || this.albums[0]?.coverUrl,
-                previewUrl: (libTrack && libTrack.previewUrl) || `/api/music/stream/${fav.chat_id}/${fav.msg_id}`,
+                previewUrl: (libTrack && libTrack.previewUrl) || fav.previewUrl || `/api/music/stream/${fav.chat_id}/${fav.msg_id}`,
                 chatId: fav.chat_id,
                 msgId: fav.msg_id
             };
@@ -1877,17 +1883,18 @@ class XTAPOMusicApp {
             row.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1;">
                     <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); width: 22px; text-align: center;">${index + 1}</span>
-                    <img src="${track.coverUrl}" loading="lazy" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex-shrink: 0;" alt="Cover">
+                    <img src="${this.escapeHtml(track.coverUrl)}" loading="lazy" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex-shrink: 0;" alt="Cover">
                     <div style="min-width: 0; flex: 1;">
                         <div style="font-size: 0.85rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.name)}</div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.artist)} • <span style="color: var(--accent-gold);">${track.format}</span></div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(track.artist)} • <span style="color: var(--accent-gold);">${this.escapeHtml(track.format)}</span></div>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px; margin-left: 10px;">
-                    <span style="font-size: 0.75rem; color: var(--text-muted);">${track.duration}</span>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">${this.escapeHtml(track.duration)}</span>
                     <button class="nav-btn icon-btn" style="width: 30px; height: 30px; border-radius: 50%; background: var(--color-primary); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Phát bài này">
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     </button>
+                    <button type="button" class="pl-action-badge blue-badge fav-share-btn" title="Chia sẻ bài hát này">Chia sẻ</button>
                     <button class="fav-remove-btn" title="Bỏ khỏi yêu thích (Xóa bài này)" data-chat-id="${track.chatId || ''}" data-msg-id="${track.msgId || ''}" data-name="${this.escapeHtml(track.name)}">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="color: #ef4444;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                     </button>
@@ -1896,9 +1903,14 @@ class XTAPOMusicApp {
 
             // Click row to play
             row.addEventListener('click', (e) => {
-                if (e.target.closest('.fav-remove-btn')) return; // Ignore if clicked remove
+                if (e.target.closest('.fav-remove-btn, .fav-share-btn')) return;
                 this.closeModal(this.favoritesModal);
                 this.playFavoritesQueue(index, false);
+            });
+
+            row.querySelector('.fav-share-btn').addEventListener('click', event => {
+                event.stopPropagation();
+                this.musicSharing.openFavorites(track.favoriteSource);
             });
 
             // Remove button
@@ -1965,7 +1977,7 @@ class XTAPOMusicApp {
                 duration: (libTrack && libTrack.duration) || '3:30',
                 format: (libTrack && libTrack.format) || 'FLAC Hi-Res',
                 coverUrl: (libTrack && (libTrack.coverUrl || libTrack.albumCover)) || fav.cover_url || this.albums[0]?.coverUrl,
-                previewUrl: (libTrack && libTrack.previewUrl) || `/api/music/stream/${fav.chat_id}/${fav.msg_id}`,
+                previewUrl: (libTrack && libTrack.previewUrl) || fav.previewUrl || `/api/music/stream/${fav.chat_id}/${fav.msg_id}`,
                 chatId: fav.chat_id,
                 msgId: fav.msg_id
             };
@@ -2519,7 +2531,7 @@ class XTAPOMusicApp {
             </div>
             <div class="track-item-right" style="display: flex; align-items: center; gap: 8px;">
                 ${actionBtnHtml}
-                <span class="track-duration">${track.duration || '--:--'}</span>
+                <span class="track-duration">${this.escapeHtml(track.duration || '--:--')}</span>
             </div>
         `;
 
@@ -5273,7 +5285,7 @@ class XTAPOMusicApp {
             row.innerHTML = `
                 <div class="file-info">
                     <div class="file-title">${idx + 1}. ${this.escapeHtml(track.name || 'Không có tên')}</div>
-                    <div class="file-meta">${this.escapeHtml(track.artist || album.artist || '')} • ${this.escapeHtml(track.format || album.format || 'Lossless')} • ${track.duration || ''}</div>
+                    <div class="file-meta">${this.escapeHtml(track.artist || album.artist || '')} • ${this.escapeHtml(track.format || album.format || 'Lossless')} • ${this.escapeHtml(track.duration || '')}</div>
                 </div>
                 <div class="file-actions">
                     <button class="file-action-btn download-btn">Phát Ngay</button>
@@ -5808,6 +5820,7 @@ class XTAPOMusicApp {
                         </div>
                     </div>
                     <div class="playlist-card-actions">
+                        <button type="button" class="pl-action-badge blue-badge btn-share-playlist" ${trackCount === 0 ? 'disabled' : ''} title="Chia sẻ playlist cho người dùng khác">Chia sẻ</button>
                         <button class="pl-action-badge gold-badge btn-play-playlist" ${trackCount === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} title="Phát playlist">
                             <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                             <span>Phát</span>
@@ -5835,6 +5848,7 @@ class XTAPOMusicApp {
             `;
 
             const playBtn = item.querySelector('.btn-play-playlist');
+            item.querySelector('.btn-share-playlist').addEventListener('click', () => this.musicSharing.openPlaylist(pl));
             if (playBtn && trackCount > 0) {
                 playBtn.addEventListener('click', () => {
                     this.playPlaylist(pl);
@@ -5864,7 +5878,7 @@ class XTAPOMusicApp {
                                 </div>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 0.72rem; color: var(--text-muted);">${track.duration || ''}</span>
+                                <span style="font-size: 0.72rem; color: var(--text-muted);">${this.escapeHtml(track.duration || '')}</span>
                                 <button class="pl-single-track-del-btn" title="Xóa bài hát này khỏi playlist" style="background: transparent; border: none; color: #f87171; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px;">
                                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                                 </button>
@@ -7714,7 +7728,7 @@ class XTAPOMusicApp {
                 name: (libTrack && libTrack.name) || fav.title || `Bài hát ${fav.msg_id}`,
                 artist: (libTrack && libTrack.artist) || fav.artist || 'XTAPO Artist',
                 duration: (libTrack && libTrack.duration) || fav.duration || '03:30',
-                previewUrl: (libTrack && libTrack.previewUrl) || `/api/music/stream/${fav.chat_id}/${fav.msg_id}`,
+                previewUrl: (libTrack && libTrack.previewUrl) || fav.previewUrl || `/api/music/stream/${fav.chat_id}/${fav.msg_id}`,
                 coverUrl: (libTrack && libTrack.coverUrl) || fav.cover_url || '',
                 format: (libTrack && libTrack.format) || 'FLAC Hi-Res'
             };

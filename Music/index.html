@@ -23,7 +23,7 @@
             href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
             rel="stylesheet">
     </noscript>
-    <link rel="stylesheet" href="/music/style.css?v=4.5">
+    <link rel="stylesheet" href="/music/style.css?v=4.6">
     <style>
         @media (max-width: 1024px) {
 
@@ -534,6 +534,9 @@
                 <button class="modal-close" id="closePlaylistModal">&times;</button>
             </div>
 
+            <div class="music-share-toolbar">
+                <button type="button" class="pl-action-badge blue-badge" data-open-music-shares>Được chia sẻ</button>
+            </div>
             <!-- Create Playlist Bar -->
             <div class="playlist-create-bar" style="display: flex; gap: 10px; margin-bottom: 20px;">
                 <input type="text" id="newPlaylistName"
@@ -553,6 +556,39 @@
                 style="display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; padding-right: 4px;">
                 <!-- Populated dynamically -->
             </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay music-sharing-overlay" id="musicShareModal" role="dialog" aria-modal="true" aria-labelledby="musicShareHeading">
+        <div class="modal-card music-share-dialog">
+            <div class="modal-header">
+                <h3 id="musicShareHeading">Chia sẻ cho người dùng</h3>
+                <button type="button" class="modal-close" aria-label="Đóng chia sẻ">&times;</button>
+            </div>
+            <p id="musicShareTitle" class="music-share-title"></p>
+            <form id="musicShareForm">
+                <label for="musicShareRecipient">Tên đăng nhập người nhận</label>
+                <input id="musicShareRecipient" name="recipient" type="text" placeholder="Ví dụ: nguyenvan hoặc @nguyenvan" maxlength="128" autocomplete="off" autocapitalize="none" spellcheck="false" required aria-describedby="musicShareHelp musicShareError">
+                <p id="musicShareHelp" class="music-share-help">Người nhận sẽ thấy danh sách trong “Được chia sẻ” và có thể nghe hoặc lưu vào tài khoản của họ.</p>
+                <p id="musicShareError" class="music-share-error" role="alert"></p>
+                <button id="musicShareSend" type="submit" class="primary-btn">Gửi chia sẻ</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay music-sharing-overlay" id="musicSharesModal" role="dialog" aria-modal="true" aria-labelledby="musicSharesHeading">
+        <div class="modal-card music-shares-dialog">
+            <div class="modal-header">
+                <h3 id="musicSharesHeading">Được chia sẻ với bạn</h3>
+                <button type="button" class="modal-close" aria-label="Đóng danh sách được chia sẻ">&times;</button>
+            </div>
+            <div class="music-share-toolbar">
+                <button id="musicSharesRefresh" type="button" class="pl-action-badge blue-badge">Làm mới</button>
+                <span class="music-share-help">Playlist và nhạc yêu thích từ bạn bè</span>
+            </div>
+            <p id="musicSharesStatus" class="music-share-help" role="status"></p>
+            <div id="musicSharesList"></div>
+            <button id="musicSharesMore" type="button" class="pl-action-badge blue-badge" hidden>Xem thêm</button>
         </div>
     </div>
 
@@ -1431,6 +1467,8 @@
             <div id="favoritesActions"
                 style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button id="btnFavShare" type="button" class="pl-action-badge blue-badge">Chia sẻ tất cả</button>
+                    <button type="button" class="pl-action-badge blue-badge" data-open-music-shares>Được chia sẻ</button>
                     <button id="btnFavPlayAll" class="primary-btn"
                         style="padding: 8px 16px; border-radius: 12px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
@@ -2322,7 +2360,8 @@ Ví dụ chuẩn LRC:
     <!-- Hidden HTML5 Audio Element (iOS Background & Lock Screen Enabled) -->
     <audio id="mainAudio" preload="none" playsinline webkit-playsinline></audio>
 
-    <script src="/music/app.js?v=6.4"></script>
+    <script src="/music/sharing.js?v=1.0"></script>
+    <script src="/music/app.js?v=6.5"></script>
 </body>
 
 </html>

@@ -83,6 +83,9 @@ class Database:
                 )
                 await tracking["error_history"].create_index([("created_at", DESCENDING)])
                 await tracking["error_history"].create_index([("category", ASCENDING), ("created_at", DESCENDING)])
+                await tracking["music_user_shares"].create_index(
+                    [("recipient_id", ASCENDING), ("created_at", DESCENDING), ("_id", DESCENDING)]
+                )
                 await self._ensure_subtitle_indexes(tracking)
             except Exception as e:
                 LOGGER.error(f"Failed creating tracking indexes: {e}")
