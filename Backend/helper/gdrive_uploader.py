@@ -363,6 +363,14 @@ def _cleanup_old_temp_files(max_age_seconds: int = 3600):
         LOGGER.debug(f"[CLEANUP ERROR] {e}")
 
 
+def _download_cache_prefix(link_type: str, resource_id: str) -> str:
+    """Return the filename prefix used by the download cache for a source."""
+    if link_type == "direct":
+        resource_hash = hashlib.md5(resource_id.encode()).hexdigest()[:12]
+        return f"{resource_hash}_"
+    return f"{resource_id}_"
+
+
 def parse_gdrive_url(url: str) -> Tuple[str, str]:
     """
     Phân tích URL Google Drive và trả về:
@@ -2048,8 +2056,9 @@ class GoogleDriveUploadManager:
                 # Chỉ xóa cache khi tất cả bài hát của mục này đã upload thành công.
                 try:
                     if item_complete and os.path.exists(CACHE_DOWNLOAD_DIR):
+                        cache_prefix = _download_cache_prefix(q_link_type, q_res_id)
                         for fname in os.listdir(CACHE_DOWNLOAD_DIR):
-                            if fname.startswith(f"{q_res_id}_"):
+                            if fname.startswith(cache_prefix):
                                 c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
                                 if os.path.isfile(c_file):
                                     os.remove(c_file)
@@ -2123,9 +2132,13 @@ class GoogleDriveUploadManager:
             if self._status == "completed":
                 try:
                     if os.path.exists(CACHE_DOWNLOAD_DIR) and parsed_links:
-                        target_prefixes = tuple(f"{p_id}_" for _, p_id, _ in parsed_links)
+                        target_prefixes = tuple(
+                            _download_cache_prefix(link_type, resource_id)
+                            for link_type, resource_id, _ in parsed_links
+                            if link_type in ("file", "direct")
+                        )
                         for fname in os.listdir(CACHE_DOWNLOAD_DIR):
-                            if fname.startswith(target_prefixes):
+                            if target_prefixes and fname.startswith(target_prefixes):
                                 c_file = os.path.join(CACHE_DOWNLOAD_DIR, fname)
                                 if os.path.isfile(c_file):
                                     os.remove(c_file)

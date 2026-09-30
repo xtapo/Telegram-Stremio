@@ -345,6 +345,45 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(manager._uploaded_tracks), 1)
         self.assertFalse(cached["audio"])
 
+    async def test_successful_direct_url_upload_removes_hashed_cache(self):
+        with tempfile.TemporaryDirectory() as temp:
+            cache = Path(temp) / "cache"
+            cache.mkdir()
+            url = "https://www.mediafire.com/file/example/track.wav/file"
+            url_hash = uploader.hashlib.md5(url.encode()).hexdigest()[:12]
+            cached_file = cache / f"{url_hash}_track.wav"
+            cached_file.write_bytes(b"downloaded content")
+
+            manager = uploader.GoogleDriveUploadManager()
+            manager._download_direct_url = AsyncMock(return_value=str(cached_file))
+            manager._index_uploaded_tracks = AsyncMock()
+            client = Mock(is_connected=True)
+            client.send_audio = AsyncMock(return_value=types.SimpleNamespace(id=123))
+            music_routes = types.ModuleType("Backend.fastapi.routes.music_routes")
+            music_routes._db_load_library = AsyncMock(return_value=[])
+            music_routes._db_save_library = AsyncMock()
+
+            with (
+                patch.object(uploader, "TEMP_UPLOAD_DIR", temp),
+                patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)),
+                patch.object(uploader, "_get_upload_client", AsyncMock(return_value=(client, "bot"))),
+                patch.object(uploader, "_cleanup_old_temp_files"),
+                patch.object(uploader, "read_audio_metadata_from_file", return_value={
+                    "title": "Song", "artist": "Singer", "album": "Album"
+                }),
+                patch.object(uploader, "strip_copy_prefix", side_effect=lambda value: value),
+                patch.object(uploader, "is_generic_music_query", return_value=False),
+                patch.object(uploader.asyncio, "sleep", AsyncMock()),
+                patch.object(uploader, "record_error", AsyncMock()),
+                patch.dict(sys.modules, {music_routes.__name__: music_routes}),
+            ):
+                await manager._run_upload_pipeline(
+                    url, [("direct", url, url)], "-100123", "", "", False, False
+                )
+
+            self.assertEqual(manager._status, "completed")
+            self.assertFalse(cached_file.exists())
+
     async def test_failed_telegram_upload_is_error_and_keeps_cache(self):
         manager, cached, client = await self.run_audio_queue(send_failure=True)
         self.assertEqual(manager._status, "error")
