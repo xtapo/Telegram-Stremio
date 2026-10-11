@@ -5,6 +5,7 @@ never create Telegram sessions or require MongoDB credentials.
 """
 import importlib.util
 import ast
+import binascii
 import hashlib
 import json
 import os
@@ -263,7 +264,32 @@ class DirectDownloadTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(manager._download_percent, 50)
 
 
-def create_audio_nrg(path, *, legacy=False, layout="DAO", subchannel=False, short_legacy=False):
+def make_cdtext_packs(info, *, encoding="latin-1", block=0, double_byte=False):
+    """Build CD-TEXT with strings sharing packs, continuation positions and CRC."""
+    packs = []
+    unit = 2 if double_byte else 1
+    last_track = max(info)
+    for kind, key in ((0x80, "title"), (0x81, "artist")):
+        values = [info.get(number, {}).get(key, "").encode(encoding) + b"\0" * unit
+                  for number in range(last_track + 1)]
+        joined = b"".join(values)
+        for offset in range(0, len(joined), 12):
+            track, start = 0, 0
+            while track < last_track and start + len(values[track]) <= offset:
+                start += len(values[track])
+                track += 1
+            position = min(15, (offset - start) // unit)
+            header = bytes((kind, track, len(packs), (block << 4) | position | (0x80 if double_byte else 0)))
+            data = header + joined[offset:offset + 12].ljust(12, b"\0")
+            packs.append(data + struct.pack(">H", binascii.crc_hqx(data, 0) ^ 0xffff))
+    charset = 0x80 if encoding == "shift_jis" else 0
+    data = bytes((0x8f, 0, len(packs), block << 4)) + bytes((charset, 1, last_track)) + bytes(9)
+    packs.append(data + struct.pack(">H", binascii.crc_hqx(data, 0) ^ 0xffff))
+    return b"".join(packs)
+
+
+def create_audio_nrg(path, *, legacy=False, layout="DAO", subchannel=False, short_legacy=False,
+                     cdtext=None, cdtext_encoding="latin-1"):
     """Create a small real-layout NRG with two distinguishable CD-DA tracks."""
     sector_size = 2448 if subchannel else 2352
     disc = b"".join(
@@ -297,7 +323,11 @@ def create_audio_nrg(path, *, legacy=False, layout="DAO", subchannel=False, shor
     else:
         payload = b"".join(tracks)
         kind = b"ETNF" if legacy else b"ETN2"
-    metadata = kind + struct.pack(">I", len(payload)) + payload + b"END!" + struct.pack(">I", 0)
+    metadata = kind + struct.pack(">I", len(payload)) + payload
+    if cdtext:
+        data = cdtext if isinstance(cdtext, bytes) else make_cdtext_packs(cdtext, encoding=cdtext_encoding)
+        metadata += b"CDTX" + struct.pack(">I", len(data)) + data
+    metadata += b"END!" + struct.pack(">I", 0)
     footer = (b"NERO" + struct.pack(">I", len(disc)) if legacy
               else b"NER5" + struct.pack(">Q", len(disc)))
     Path(path).write_bytes(disc + metadata + footer)
@@ -305,6 +335,134 @@ def create_audio_nrg(path, *, legacy=False, layout="DAO", subchannel=False, shor
 
 
 class NrgAudioTests(unittest.TestCase):
+    def test_wav_keeps_utf8_tags_readable_without_ffprobe(self):
+        module = ast.parse((ROOT / "Backend/helper/metadata/audio_fingerprint.py").read_text(encoding="utf-8"))
+        reader = next(node for node in module.body if isinstance(node, ast.FunctionDef)
+                      and node.name == "extract_embedded_audio_tags")
+        namespace = {"LOGGER": Mock()}
+        exec(compile(ast.Module(body=[reader], type_ignores=[]), "riff_reader", "exec"), namespace)
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "disc.nrg"
+            create_audio_nrg(image, cdtext_encoding="utf-8", cdtext={
+                0: {"title": "Khúc Tình Xưa", "artist": "Lệ Quyên"},
+                1: {"title": "Đắm Trong Cuộc Tình"},
+                2: {"title": "Yêu Người Con Gái"},
+            })
+            tracks = uploader.extract_nrg_audio(str(image), str(Path(temp) / "tracks"))
+            tags = namespace["extract_embedded_audio_tags"](Path(tracks[0]).read_bytes())
+            self.assertEqual(tags, {"title": "Đắm Trong Cuộc Tình", "artist": "Lệ Quyên",
+                                    "album": "Khúc Tình Xưa", "track": "1"})
+            with (patch.object(uploader.subprocess, "run", side_effect=FileNotFoundError()),
+                  patch.object(uploader, "extract_embedded_audio_tags", namespace["extract_embedded_audio_tags"])):
+                self.assertEqual(uploader.read_audio_metadata_from_file(tracks[0]), tags)
+            with wave.open(tracks[0], "rb") as wav:
+                self.assertEqual(wav.readframes(wav.getnframes()), b"\x01" * 4704)
+
+    @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe not installed")
+    def test_wav_cdtext_tags_readable_by_real_ffprobe(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "disc.nrg"
+            create_audio_nrg(image, cdtext_encoding="utf-8", cdtext={
+                0: {"title": "Khúc Tình Xưa", "artist": "Lệ Quyên"},
+                1: {"title": "Đắm Trong Cuộc Tình"},
+            })
+            tracks = uploader.extract_nrg_audio(str(image), str(Path(temp) / "tracks"))
+            result = subprocess.run(["ffprobe", "-v", "error", "-show_format", "-show_streams",
+                                     "-of", "json", tracks[0]], capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["format"]["tags"]["title"], "Đắm Trong Cuộc Tình")
+            self.assertEqual(data["format"]["tags"]["artist"], "Lệ Quyên")
+            self.assertEqual(data["format"]["tags"]["album"], "Khúc Tình Xưa")
+            self.assertEqual(data["streams"][0]["codec_name"], "pcm_s16le")
+            self.assertEqual(data["streams"][0]["sample_rate"], "44100")
+
+    def test_bad_crc_rejects_damaged_text_without_losing_audio(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "disc.nrg"
+            payload = bytearray(make_cdtext_packs({1: {"title": "Song One That Is Long"}, 2: {"title": "Song Two"}}))
+            payload[5] ^= 1
+            create_audio_nrg(image, cdtext=bytes(payload))
+            tracks = uploader.extract_nrg_audio(str(image), str(Path(temp) / "tracks"))
+            self.assertEqual(Path(tracks[0]).name, "Track 01.wav")
+            self.assertEqual(Path(tracks[1]).name, "02 - Song Two.wav")
+
+    def test_vietnamese_cdtext_across_pack_boundaries_and_legacy_footer(self):
+        for legacy in (False, True):
+            with self.subTest(legacy=legacy), tempfile.TemporaryDirectory() as temp:
+                image = Path(temp) / "album.nrg"
+                create_audio_nrg(image, legacy=legacy, cdtext_encoding="utf-8", cdtext={
+                    0: {"title": "Khúc Tình Xưa 6", "artist": "Lệ Quyên"},
+                    1: {"title": "Đắm Trong Cuộc Tình"},
+                    2: {"title": "Yêu Người Con Gái"},
+                })
+                tracks = uploader.extract_nrg_audio(str(image), str(Path(temp) / "tracks"))
+                self.assertEqual([Path(p).name for p in tracks], [
+                    "01 - Đắm Trong Cuộc Tình.wav", "02 - Yêu Người Con Gái.wav"
+                ])
+                info = uploader.read_nrg_cdtext(str(image))
+                self.assertEqual(info[2]["artist"], "Lệ Quyên")
+                self.assertEqual(info[1]["album"], "Khúc Tình Xưa 6")
+
+    def test_cdtext_language_blocks_and_double_byte_repeat_artist(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "album.nrg"
+            packs = make_cdtext_packs({
+                0: {"title": "音楽アルバム", "artist": "歌手"},
+                1: {"title": "最初の歌", "artist": "歌手"},
+                2: {"title": "次の歌", "artist": "\t\t"},
+            }, encoding="shift_jis", block=1, double_byte=True)
+            create_audio_nrg(image, cdtext=packs)
+            info = uploader.read_nrg_cdtext(str(image))
+            self.assertEqual(info[1]["title"], "最初の歌")
+            self.assertEqual(info[2]["artist"], "歌手")
+            self.assertEqual(info[2]["album"], "音楽アルバム")
+
+    def test_missing_continuation_pack_does_not_create_a_partial_title(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "album.nrg"
+            payload = make_cdtext_packs({1: {"title": "A very long title that spans several packs"},
+                                         2: {"title": "Song Two", "artist": "Singer"}})
+            # Remove a middle title pack while retaining the rest of the disc.
+            create_audio_nrg(image, cdtext=payload[:18] + payload[36:])
+            info = uploader.read_nrg_cdtext(str(image))
+            self.assertFalse(info.get(1, {}).get("title"))
+            self.assertEqual(info[2]["title"], "Song Two")
+
+    def test_album_only_and_malformed_cdtext_preserve_playable_audio(self):
+        for payload in (make_cdtext_packs({0: {"title": "Album", "artist": "Singer"}}), b"bad CDTX"):
+            with self.subTest(payload=payload[:18]), tempfile.TemporaryDirectory() as temp:
+                image = Path(temp) / "disc.nrg"
+                create_audio_nrg(image, cdtext=payload)
+                tracks = uploader.extract_nrg_audio(str(image), str(Path(temp) / "tracks"))
+                self.assertEqual([Path(p).name for p in tracks], ["Track 01.wav", "Track 02.wav"])
+                if len(payload) % 18 == 0:
+                    info = uploader.read_nrg_cdtext(str(image))
+                    self.assertEqual(info[1]["album"], "Album")
+                    self.assertEqual(info[2]["artist"], "Singer")
+                    self.assertFalse(info[1].get("title"))
+                else:
+                    self.assertEqual(uploader.read_nrg_cdtext(str(image)), {})
+
+    def test_cdtext_renames_tracks_and_reads_album_and_artist(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "album.nrg"
+            create_audio_nrg(image, cdtext={
+                0: {"title": "Khuc Tinh Xua", "artist": "Le Quyen"},
+                1: {"title": "Dam Trong Cuoc Tinh", "artist": "Le Quyen"},
+                2: {"title": "Yeu / Nguoi: Con Gai", "artist": "Ca Si Khac"},
+            })
+            info = uploader.read_nrg_cdtext(str(image))
+            self.assertEqual(info[1], {"track": "1", "title": "Dam Trong Cuoc Tinh",
+                                       "artist": "Le Quyen", "album": "Khuc Tinh Xua"})
+            self.assertEqual(info[2]["artist"], "Ca Si Khac")
+            tracks = uploader.extract_nrg_audio(str(image), str(Path(temp) / "tracks"))
+            self.assertEqual([Path(p).name for p in tracks], [
+                "01 - Dam Trong Cuoc Tinh.wav", "02 - Yeu Nguoi Con Gai.wav"
+            ])
+            with wave.open(tracks[0], "rb") as wav:
+                self.assertEqual(wav.readframes(588 * 2), b"\x01" * (2352 * 2))
+
     def test_dao_legacy_and_track_at_once_are_lossless(self):
         for legacy, layout, short in ((False, "DAO", False), (True, "DAO", False),
                                      (True, "DAO", True), (False, "ETN", False),
@@ -359,6 +517,27 @@ class NrgAudioTests(unittest.TestCase):
 
 
 class CueEncodingTests(unittest.TestCase):
+    def test_cue_relative_image_path_is_preserved_for_matching(self):
+        with tempfile.TemporaryDirectory() as temp:
+            cue_path = Path(temp) / "disc.cue"
+            cue_path.write_text('FILE "CD2\\disc.nrg" BINARY\n  TRACK 01 AUDIO\n'
+                                '    TITLE "Song"\n', encoding="utf-8")
+            tracks = uploader.parse_cue_file(str(cue_path))
+            self.assertEqual(tracks[1]["file_name"], "disc.nrg")
+            self.assertTrue(uploader._cue_matches_nrg(str(cue_path), str(Path(temp) / "CD2/disc.nrg"), tracks))
+            self.assertFalse(uploader._cue_matches_nrg(str(cue_path), str(Path(temp) / "CD1/disc.nrg"), tracks))
+            self.assertFalse(uploader._cue_matches_nrg(str(cue_path), str(Path(temp) / "disc.nrg"), tracks))
+
+    def test_track_title_and_artist_do_not_become_album_when_header_absent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            cue_path = Path(temp) / "disc.cue"
+            cue_path.write_text('FILE "disc.nrg" BINARY\n  TRACK 01 AUDIO\n'
+                                '    TITLE "Tên Bài"\n    PERFORMER "Ca Sĩ"\n', encoding="utf-8")
+            track = uploader.parse_cue_file(str(cue_path))[1]
+            self.assertEqual(track["title"], "Tên Bài")
+            self.assertEqual(track["artist"], "Ca Sĩ")
+            self.assertEqual(track["album"], "")
+
     def test_gbk_cue_keeps_chinese_artist_and_title(self):
         artist = "\u672a\u77e5\u827a\u672f\u5bb6"
         title = "\u6d4b\u8bd5\u6b4c\u66f2"
@@ -537,6 +716,134 @@ class ExtractionTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.IsolatedAsyncioTestCase):
+    async def run_nrg_package(self, source, temp, *, as_document=False):
+        client = Mock(is_connected=True)
+        client.send_audio = AsyncMock(return_value=types.SimpleNamespace(id=401))
+        client.send_document = AsyncMock(return_value=types.SimpleNamespace(id=402))
+        manager = uploader.GoogleDriveUploadManager()
+        manager._download_direct_url = AsyncMock(return_value=str(source))
+        manager._index_uploaded_tracks = AsyncMock()
+        music_routes = types.ModuleType("Backend.fastapi.routes.music_routes")
+        music_routes._db_load_library = AsyncMock(return_value=[])
+        music_routes._db_save_library = AsyncMock()
+        fingerprint = AsyncMock(return_value=None)
+        with (
+            patch.object(uploader, "TEMP_UPLOAD_DIR", temp),
+            patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(Path(temp) / "cache")),
+            patch.object(uploader, "_get_upload_client", AsyncMock(return_value=(client, "bot"))),
+            patch.object(uploader, "_cleanup_old_temp_files"),
+            patch.object(uploader, "extract_context_from_text", return_value=("", "")),
+            patch.object(uploader, "read_audio_metadata_from_file", return_value={}),
+            patch.object(uploader, "clean_audio_filename", side_effect=lambda name: Path(name).stem),
+            patch.object(uploader, "parse_artist_and_title", return_value=("", "", "")),
+            patch.object(uploader, "recognize_audio_from_local_file", fingerprint),
+            patch.object(uploader, "strip_copy_prefix", side_effect=lambda value: value),
+            patch.object(uploader, "is_generic_music_query", side_effect=lambda title, *args: title.startswith("Track")),
+            patch.object(uploader.asyncio, "sleep", AsyncMock()),
+            patch.dict(sys.modules, {music_routes.__name__: music_routes}),
+        ):
+            await manager._run_upload_pipeline(
+                "url", [("direct", "https://example.com/album", "url")],
+                "-100123", "", "", False, as_document,
+            )
+        self.assertEqual(manager._status, "completed", manager._error_message)
+        return client, manager, fingerprint
+
+    async def test_multiple_nrgs_keep_own_album_and_cue_for_missing_cdtext(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "collection.zip"
+            first = Path(temp) / "disc1.nrg"
+            second = Path(temp) / "disc2.nrg"
+            create_audio_nrg(first, cdtext_encoding="utf-8", cdtext={
+                0: {"title": "Album Một", "artist": "Ca Sĩ Một"},
+                1: {"title": "Bài Một"}, 2: {"title": "Bài Hai"},
+            })
+            create_audio_nrg(second)
+            with zipfile.ZipFile(source, "w") as zipped:
+                # The same disc name in separate folders must not mix CUEs.
+                zipped.write(first, "disc1/disc.nrg")
+                zipped.write(second, "disc2/disc.nrg")
+                for name, album, artist, titles in (
+                    ("disc1", "Wrong Album", "Wrong Artist", ("Wrong One", "Wrong Two")),
+                    ("disc2", "Album Hai", "Ca Sĩ Hai", ("Bài Ba", "Bài Bốn")),
+                ):
+                    zipped.writestr(f"{name}/disc.cue", f'TITLE "{album}"\nPERFORMER "{artist}"\n'
+                                    'FILE "disc.nrg" BINARY\n'
+                                    f'  TRACK 01 AUDIO\n    TITLE "{titles[0]}"\n'
+                                    f'  TRACK 02 AUDIO\n    TITLE "{titles[1]}"\n')
+            client, manager, fingerprint = await self.run_nrg_package(source, temp)
+            self.assertEqual([call.kwargs["title"] for call in client.send_audio.call_args_list],
+                             ["Bài Một", "Bài Hai", "Bài Ba", "Bài Bốn"])
+            self.assertEqual([track["album"] for track in manager._uploaded_tracks],
+                             ["Album Một"] * 2 + ["Album Hai"] * 2)
+            self.assertEqual([track["artist"] for track in manager._uploaded_tracks],
+                             ["Ca Sĩ Một"] * 2 + ["Ca Sĩ Hai"] * 2)
+            fingerprint.assert_not_awaited()
+
+    async def test_document_upload_uses_cdtext_filename_and_caption(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "disc.nrg"
+            create_audio_nrg(image, cdtext_encoding="utf-8", cdtext={
+                0: {"title": "Album", "artist": "Ca Sĩ"},
+                1: {"title": "Bài Một"}, 2: {"title": "Bài Hai"},
+            })
+            client, _, fingerprint = await self.run_nrg_package(image, temp, as_document=True)
+            client.send_audio.assert_not_awaited()
+            self.assertEqual([Path(call.kwargs["document"]).name for call in client.send_document.call_args_list],
+                             ["01 - Bài Một.wav", "02 - Bài Hai.wav"])
+            self.assertIn("Ca Sĩ", client.send_document.call_args_list[0].kwargs["caption"])
+            fingerprint.assert_not_awaited()
+
+    async def test_cdtext_titles_and_artists_used_for_telegram_direct_and_zip(self):
+        for compressed in (False, True):
+            with self.subTest(compressed=compressed), tempfile.TemporaryDirectory() as temp:
+                image = Path(temp) / "disc.nrg"
+                create_audio_nrg(image, cdtext={
+                    0: {"title": "Ten Album", "artist": "Ca Si"},
+                    1: {"title": "Bai Hat Mot", "artist": "Ca Si"},
+                    2: {"title": "Bai Hat Hai", "artist": "Khach Moi"},
+                })
+                source = image
+                if compressed:
+                    source = Path(temp) / "album.zip"
+                    with zipfile.ZipFile(source, "w") as zipped:
+                        zipped.write(image, "disc.nrg")
+                client = Mock(is_connected=True)
+                client.send_audio = AsyncMock(side_effect=[
+                    types.SimpleNamespace(id=301), types.SimpleNamespace(id=302)
+                ])
+                manager = uploader.GoogleDriveUploadManager()
+                manager._download_direct_url = AsyncMock(return_value=str(source))
+                manager._index_uploaded_tracks = AsyncMock()
+                music_routes = types.ModuleType("Backend.fastapi.routes.music_routes")
+                music_routes._db_load_library = AsyncMock(return_value=[])
+                music_routes._db_save_library = AsyncMock()
+                with (
+                    patch.object(uploader, "TEMP_UPLOAD_DIR", temp),
+                    patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(Path(temp) / "cache")),
+                    patch.object(uploader, "_get_upload_client", AsyncMock(return_value=(client, "bot"))),
+                    patch.object(uploader, "_cleanup_old_temp_files"),
+                    patch.object(uploader, "extract_context_from_text", return_value=("", "")),
+                    patch.object(uploader, "read_audio_metadata_from_file", return_value={}),
+                    patch.object(uploader, "clean_audio_filename", side_effect=lambda name: Path(name).stem),
+                    patch.object(uploader, "strip_copy_prefix", side_effect=lambda value: value),
+                    patch.object(uploader, "is_generic_music_query", side_effect=lambda title, *args: title.startswith("Track")),
+                    patch.object(uploader.asyncio, "sleep", AsyncMock()),
+                    patch.dict(sys.modules, {music_routes.__name__: music_routes}),
+                ):
+                    await manager._run_upload_pipeline(
+                        "url", [("direct", "https://example.com/album", "url")],
+                        "-100123", "", "", False, False,
+                    )
+                self.assertEqual(manager._status, "completed", manager._error_message)
+                calls = client.send_audio.call_args_list
+                self.assertEqual([call.kwargs["title"] for call in calls], ["Bai Hat Mot", "Bai Hat Hai"])
+                self.assertEqual([call.kwargs["performer"] for call in calls], ["Ca Si", "Khach Moi"])
+                self.assertEqual([Path(call.kwargs["audio"]).name for call in calls], [
+                    "01 - Bai Hat Mot.wav", "02 - Bai Hat Hai.wav"
+                ])
+                self.assertEqual([item["album"] for item in manager._uploaded_tracks], ["Ten Album"] * 2)
+
     async def test_nrg_from_direct_link_or_zip_uploads_each_wav_track(self):
         for compressed in (False, True):
             with self.subTest(compressed=compressed), tempfile.TemporaryDirectory() as temp:

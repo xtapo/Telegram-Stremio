@@ -20,7 +20,7 @@ from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
 from Backend.helper.archive_tools import ensure_portable_7zip
-from Backend.helper.nrg_audio import NRGError, extract_nrg_audio
+from Backend.helper.nrg_audio import NRGError, extract_nrg_audio, read_nrg_cdtext
 from Backend.helper.observability import (
     correlation_context,
     new_id,
@@ -689,10 +689,9 @@ def read_audio_metadata_from_file(file_path: str) -> dict:
             with open(file_path, "rb") as f:
                 header_bytes = f.read(131072)
             emb = extract_embedded_audio_tags(header_bytes)
-            if emb.get("title") and "title" not in tags: tags["title"] = emb["title"]
-            if emb.get("artist") and "artist" not in tags: tags["artist"] = emb["artist"]
-            if emb.get("album") and "album" not in tags: tags["album"] = emb["album"]
-            if emb.get("genre") and "genre" not in tags: tags["genre"] = emb["genre"]
+            for key in ("title", "artist", "album", "genre", "track", "year"):
+                if emb.get(key) and key not in tags:
+                    tags[key] = emb[key]
         except Exception:
             pass
 
@@ -766,6 +765,7 @@ def parse_cue_file(cue_path: str) -> dict:
         album_artist = ""
         album_title = ""
         cur_file = ""
+        cur_file_path = ""
         cur_track_num = 0
 
         for line in content.splitlines():
@@ -773,16 +773,17 @@ def parse_cue_file(cue_path: str) -> dict:
             if not line:
                 continue
             m_alb_art = re.match(r'^PERFORMER\s+"([^"]+)"', line, re.I)
-            if m_alb_art and not album_artist:
+            if m_alb_art and cur_track_num == 0:
                 album_artist = m_alb_art.group(1).strip()
                 continue
             m_alb_tit = re.match(r'^TITLE\s+"([^"]+)"', line, re.I)
-            if m_alb_tit and not album_title:
+            if m_alb_tit and cur_track_num == 0:
                 album_title = m_alb_tit.group(1).strip()
                 continue
             m_file = re.match(r'^FILE\s+"([^"]+)"', line, re.I)
             if m_file:
-                cur_file = os.path.basename(m_file.group(1).strip())
+                cur_file_path = m_file.group(1).strip().replace("\\", "/")
+                cur_file = os.path.basename(cur_file_path)
                 continue
             m_track = re.match(r'^TRACK\s+(\d+)\s+AUDIO', line, re.I)
             if m_track:
@@ -792,7 +793,8 @@ def parse_cue_file(cue_path: str) -> dict:
                         "track_num": cur_track_num,
                         "album": album_title,
                         "artist": album_artist,
-                        "file_name": cur_file
+                        "file_name": cur_file,
+                        "file_path": cur_file_path,
                     }
                 continue
             m_tr_tit = re.match(r'^\s*TITLE\s+"([^"]+)"', line, re.I)
@@ -806,6 +808,23 @@ def parse_cue_file(cue_path: str) -> dict:
     except Exception as e:
         LOGGER.debug(f"[CUE PARSER] Lỗi đọc CUE: {e}")
     return tracks_info
+
+
+def _cue_matches_nrg(cue_path: str, image_path: str, tracks: dict) -> bool:
+    """Match CUEs by source path, including archives with repeated disc names."""
+    image_key = os.path.normcase(os.path.abspath(image_path))
+    cue_dir = os.path.dirname(os.path.abspath(cue_path))
+    references = [str(info.get("file_path") or info.get("file_name", "")).replace("\\", "/")
+                  for info in tracks.values()]
+    nrg_references = [path for path in references if path.casefold().endswith(".nrg")]
+    if nrg_references:
+        return any(os.path.normcase(os.path.abspath(os.path.join(cue_dir, path))) == image_key
+                   for path in nrg_references)
+    if (os.path.normcase(cue_dir) == os.path.dirname(image_key)
+            and os.path.splitext(os.path.basename(cue_path))[0].casefold()
+            == os.path.splitext(os.path.basename(image_path))[0].casefold()):
+        return True
+    return False
 
 
 _UPLOAD_USERBOT_INDEX = 0
@@ -1737,6 +1756,20 @@ class GoogleDriveUploadManager:
                 item_default_artist = default_artist
                 item_default_album = default_album
                 cue_track_map = {}
+                nrg_track_metadata = {}
+                nrg_cue_metadata = {}
+                nrg_sources = []
+                all_nrg_titles_known = False
+
+                async def register_nrg_tracks(image_path: str, image_dir: str) -> None:
+                    track_data = await asyncio.to_thread(read_nrg_cdtext, image_path)
+                    nrg_sources.append((image_path, image_dir))
+                    for track_path in self._collect_audio_files(image_dir):
+                        number = _track_number_hint(os.path.basename(track_path), {})
+                        # Keep empty entries too, to scope CUE matching for NRGs
+                        # without CD-TEXT in archives with several disc images.
+                        nrg_track_metadata[os.path.normcase(os.path.abspath(track_path))] = track_data.get(number, {})
+
                 drive_folder_context = _drive_album_context(q_folder_path, q_folder_name)
                 if drive_folder_context and not item_default_album:
                     inf_art, inf_alb = extract_context_from_text(drive_folder_context)
@@ -1758,16 +1791,18 @@ class GoogleDriveUploadManager:
                     success, extract_msg = await _extract_archive(dl_path, sub_extract_dir, archive_password)
                     if success:
                         self._log(f"✅ {extract_msg}", "success")
+                        if ext == ".nrg":
+                            await register_nrg_tracks(dl_path, sub_extract_dir)
                         # RAR/ZIP/7Z frequently contain a Nero disc image rather
                         # than individual music files. Extract each NRG into its
                         # own folder before collecting the resulting WAV tracks.
                         if ext != ".nrg":
-                            embedded_images = [
+                            embedded_images = sorted([
                                 os.path.join(root, name)
                                 for root, _, names in os.walk(sub_extract_dir)
                                 for name in sorted(names)
                                 if name.lower().endswith(".nrg")
-                            ]
+                            ])
                             for image_idx, image_path in enumerate(embedded_images, 1):
                                 if self._cancel_requested:
                                     break
@@ -1776,10 +1811,15 @@ class GoogleDriveUploadManager:
                                 nrg_ok, nrg_msg = await _extract_archive(image_path, image_dir)
                                 if nrg_ok:
                                     self._log(f"✅ {os.path.basename(image_path)}: {nrg_msg}", "success")
+                                    await register_nrg_tracks(image_path, image_dir)
                                 else:
                                     item_errors.append(f"Lỗi xử lý NRG {os.path.basename(image_path)}: {nrg_msg}")
                                     self._log(f"❌ {item_errors[-1]}", "error")
                         files_to_upload = self._collect_audio_files(sub_extract_dir)
+                        named_nrg_tracks = sum(bool(info.get("title")) for info in nrg_track_metadata.values())
+                        all_nrg_titles_known = bool(nrg_track_metadata) and named_nrg_tracks == len(files_to_upload)
+                        if named_nrg_tracks:
+                            self._log(f"💿 Đọc CD-TEXT trong NRG: nhận diện tên bài của {named_nrg_tracks} track.", "success")
 
                         # Trích xuất gợi ý Ca sĩ / Album từ tên file nén nếu người dùng chưa nhập
                         archive_stem = os.path.splitext(os.path.basename(dl_path))[0]
@@ -1796,14 +1836,25 @@ class GoogleDriveUploadManager:
 
                         # Tìm file .cue trong thư mục giải nén
                         if os.path.exists(sub_extract_dir):
-                            cue_files = [os.path.join(root, f) for root, _, files in os.walk(sub_extract_dir) for f in files if f.lower().endswith('.cue')]
+                            cue_files = sorted(os.path.join(root, f) for root, _, files in os.walk(sub_extract_dir) for f in files if f.lower().endswith('.cue'))
                             if cue_files:
-                                cue_track_map = parse_cue_file(cue_files[0])
+                                parsed_cues = {path: parse_cue_file(path) for path in cue_files}
+                                cue_track_map = parsed_cues[cue_files[0]]
                                 if cue_track_map:
                                     self._log(f"📑 Phát hiện CUE Sheet '{os.path.basename(cue_files[0])}' ({len(cue_track_map)} bài) — áp dụng danh sách tên bài gốc!", "success")
+                                for image_path, image_dir in nrg_sources:
+                                    candidates = [info for cue_path, info in parsed_cues.items()
+                                                  if _cue_matches_nrg(cue_path, image_path, info)]
+                                    if not candidates and len(nrg_sources) == 1 and len(parsed_cues) == 1:
+                                        candidates = list(parsed_cues.values())
+                                    if len(candidates) == 1:
+                                        for track_path in self._collect_audio_files(image_dir):
+                                            number = _track_number_hint(os.path.basename(track_path), {})
+                                            if number in candidates[0]:
+                                                nrg_cue_metadata[os.path.normcase(os.path.abspath(track_path))] = candidates[0][number]
 
                         # Nếu không có CUE Sheet, tự động tra cứu Danh mục Album (Album Tracklist Resolver) từ Apple Music / Deezer
-                        if not cue_track_map and (item_default_album or item_default_artist):
+                        if not cue_track_map and not all_nrg_titles_known and len(nrg_sources) <= 1 and (item_default_album or item_default_artist):
                             has_generic = any(is_generic_music_query(clean_audio_filename(os.path.basename(f))) for f in files_to_upload)
                             if has_generic and item_default_album:
                                 self._log(f"🔍 Không có CUE Sheet. Đang tự động tra cứu Danh mục Album '{item_default_album}' ({item_default_artist or ''}) từ Apple Music & Deezer...", "info")
@@ -1824,7 +1875,8 @@ class GoogleDriveUploadManager:
                 # Với file audio nằm trực tiếp trong Google Drive Folder, tên thư mục là
                 # ngữ cảnh album mạnh. Tra tracklist một lần rồi cache để các file kế tiếp
                 # cùng album không phải gọi Apple Music/Deezer lặp lại.
-                if not cue_track_map and files_to_upload and drive_folder_context and item_default_album:
+                if (not cue_track_map and not all_nrg_titles_known and len(nrg_sources) <= 1
+                        and files_to_upload and drive_folder_context and item_default_album):
                     cache_key = f"{item_default_artist or ''}|{item_default_album}".casefold().strip()
                     if cache_key not in album_tracklist_cache:
                         self._log(
@@ -1884,8 +1936,10 @@ class GoogleDriveUploadManager:
                     local_meta = read_audio_metadata_from_file(file_path)
 
                     # Khớp thông tin từ CUE Sheet hoặc Album Tracklist (nếu có)
-                    cue_info = {}
-                    if cue_track_map:
+                    track_key = os.path.normcase(os.path.abspath(file_path))
+                    cue_info = nrg_cue_metadata.get(track_key, {})
+                    allow_common_cue = track_key not in nrg_track_metadata or len(nrg_sources) <= 1
+                    if cue_track_map and not cue_info and allow_common_cue:
                         for c_idx, c_data in cue_track_map.items():
                             if c_data.get("file_name") and c_data["file_name"].lower() == raw_filename.lower():
                                 cue_info = c_data
@@ -1905,7 +1959,18 @@ class GoogleDriveUploadManager:
                                 "success"
                             )
 
-                    # Ưu tiên dữ liệu: CUE Sheet/Album Tracklist > Thẻ nhúng cục bộ > Parser tiêu đề > Tên sạch
+                    # CD-TEXT có trong chính NRG xác định track và ca sĩ của
+                    # từng ảnh đĩa, kể cả khi một RAR có nhiều NRG trùng số track.
+                    nrg_info = nrg_track_metadata.get(track_key, {})
+                    if nrg_info:
+                        cue_info = {**cue_info, **{key: value for key, value in nrg_info.items() if value}}
+                        self._log(
+                            f"💿 CD-TEXT #{nrg_info.get('track', track_idx)}: "
+                            f"{cue_info.get('artist', '')} - {cue_info.get('title', '')}",
+                            "success"
+                        )
+
+                    # CD-TEXT > CUE/Album Tracklist > Thẻ nhúng > Tên file.
                     artist_candidate = (
                         (cue_info.get("artist") if cue_info else "") or
                         local_meta.get("artist", "") or

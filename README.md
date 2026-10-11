@@ -799,9 +799,17 @@ extraction path.
 paste a public Google Drive, MediaFire, or direct download URL to a `.nrg` image,
 or to a `.zip` / `.rar` / `.7z` archive containing `.nrg` files. The uploader
 automatically detects standard Nero DAOI/DAOX and ETNF/ETN2 audio tracks,
-extracts each as lossless 44.1 kHz / 16-bit stereo `Track NN.wav`, and uploads
-the tracks individually to Telegram. The existing CUE/metadata matching and
-album indexing then run as usual. Extraction is streamed in bounded chunks and
+extracts each as lossless 44.1 kHz / 16-bit stereo WAV, and uploads
+the tracks individually to Telegram. When the image contains CD-TEXT (`CDTX`),
+the uploader reads the track titles, performers and album from the disc, names
+each file `NN - Title.wav`, and embeds the metadata in the WAV's RIFF INFO tags.
+Vietnamese UTF-8 text written by compatible image software, Latin-1 and declared
+Shift-JIS text are supported. Telegram audio titles, document filenames and
+album indexing use this information. CD-TEXT takes priority over CUE/catalog
+guesses; accompanying CUE sheets are matched to each source image so multiple
+discs with the same track numbers keep their own titles and albums.
+Missing, damaged or unsupported CD-TEXT falls back to `Track NN.wav` and the
+existing CUE/metadata recognition flow. Extraction is streamed in bounded chunks and
 requires no additional Python packages. Unrecognized NRG layouts and data-only
 disc images fall back to the existing system archive tools; if no playable
 audio can be found, the upload reports an error instead of claiming success.
