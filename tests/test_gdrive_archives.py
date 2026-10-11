@@ -5,6 +5,8 @@ never create Telegram sessions or require MongoDB credentials.
 """
 import importlib.util
 import ast
+import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -16,6 +18,7 @@ import zipfile
 import shutil
 import struct
 import wave
+import httpx
 from contextlib import nullcontext
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -62,6 +65,202 @@ def load_uploader():
 
 
 uploader = load_uploader()
+
+
+class DirectDownloadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_mediafire_resumes_after_interrupted_stream(self):
+        first_half = b"a" * (256 * 1024)
+        second_half = b"b" * (256 * 1024)
+
+        class BrokenStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield first_half
+                raise httpx.ReadError("connection dropped")
+
+            async def aclose(self):
+                pass
+
+        class GoodStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield second_half
+
+            async def aclose(self):
+                pass
+
+        page_url = "https://www.mediafire.com/file/test/sample.rar"
+        direct_url = "https://download.mediafire.com/file/sample.rar"
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if str(request.url) == page_url:
+                return httpx.Response(200, headers={"Content-Type": "text/html"},
+                                      text=f'<a id="downloadButton" href="{direct_url}">Download</a>')
+            if len([item for item in requests if str(item.url) == direct_url]) == 1:
+                self.assertIsNone(request.headers.get("Range"))
+                return httpx.Response(200, headers={"Content-Length": "524288", "ETag": '"v1"'},
+                                      stream=BrokenStream())
+            self.assertEqual(request.headers.get("Range"), "bytes=262144-")
+            self.assertEqual(request.headers.get("If-Range"), '"v1"')
+            return httpx.Response(206, headers={"Content-Range": "bytes 262144-524287/524288",
+                                                "Content-Length": "262144", "ETag": '"v1"'},
+                                  stream=GoodStream())
+
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "cache"
+            cache.mkdir()
+            work = Path(folder) / "work"
+            work.mkdir()
+            client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+            manager = uploader.GoogleDriveUploadManager()
+            with patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)), patch.object(
+                    uploader.httpx, "AsyncClient", return_value=client):
+                result = await manager._download_direct_url(page_url, str(work))
+            self.assertIsNotNone(result, manager._logs)
+            self.assertEqual(Path(result).read_bytes(), first_half + second_half)
+            self.assertEqual(manager._download_percent, 100)
+            self.assertEqual(manager._download_bytes, 524288)
+            self.assertEqual(len([req for req in requests if str(req.url) == page_url]), 2)
+            self.assertTrue(list(cache.glob("*.complete.json")))
+            self.assertFalse(list(cache.glob("*.part")))
+
+    async def test_partial_legacy_cache_is_not_reused(self):
+        url = "https://files.example.com/song.rar"
+        requests = []
+
+        class GoodStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b"good"
+
+            async def aclose(self):
+                pass
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, headers={"Content-Length": "4"}, stream=GoodStream())
+
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "cache"
+            cache.mkdir()
+            url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+            (cache / f"{url_hash}_song.rar").write_bytes(b"x" * 8192)
+            client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+            manager = uploader.GoogleDriveUploadManager()
+            with patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)), patch.object(
+                    uploader.httpx, "AsyncClient", return_value=client):
+                result = await manager._download_direct_url(url, folder)
+            self.assertIsNotNone(result, manager._logs)
+            self.assertEqual(Path(result).read_bytes(), b"good")
+            self.assertEqual(len(requests), 1)
+
+    async def test_server_ignores_range_and_restarts_download(self):
+        url = "https://files.example.com/album.rar"
+        requests = []
+
+        class GoodStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b"abcdefgh"
+
+            async def aclose(self):
+                pass
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, headers={"Content-Length": "8"}, stream=GoodStream())
+
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "cache"
+            cache.mkdir()
+            url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+            (cache / f"{url_hash}.download.part").write_bytes(b"abcd")
+            (cache / f"{url_hash}.download.meta.json").write_text(
+                json.dumps({"url": url, "filename": "album.rar", "total": 8, "etag": '"x"'}),
+                encoding="utf-8")
+            client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+            manager = uploader.GoogleDriveUploadManager()
+            with patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)), patch.object(
+                    uploader.httpx, "AsyncClient", return_value=client):
+                result = await manager._download_direct_url(url, folder)
+            self.assertEqual(requests[0].headers.get("Range"), "bytes=4-")
+            self.assertIsNotNone(result, manager._logs)
+            self.assertEqual(Path(result).read_bytes(), b"abcdefgh")
+
+    async def test_invalid_content_range_discards_partial_and_retries(self):
+        url = "https://files.example.com/range.rar"
+        requests = []
+
+        class GoodStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b"abcdefgh"
+
+            async def aclose(self):
+                pass
+
+        def handler(request):
+            requests.append(request)
+            if len(requests) == 1:
+                return httpx.Response(206, headers={"Content-Range": "bytes 0-7/8",
+                                                   "Content-Length": "8"}, stream=GoodStream())
+            return httpx.Response(200, headers={"Content-Length": "8"}, stream=GoodStream())
+
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "cache"
+            cache.mkdir()
+            url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+            (cache / f"{url_hash}.download.part").write_bytes(b"old-")
+            (cache / f"{url_hash}.download.meta.json").write_text(
+                json.dumps({"url": url, "filename": "range.rar", "total": 8}), encoding="utf-8")
+            client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+            manager = uploader.GoogleDriveUploadManager()
+            with patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)), patch.object(
+                    uploader.httpx, "AsyncClient", return_value=client):
+                result = await manager._download_direct_url(url, folder)
+            self.assertEqual(requests[0].headers.get("Range"), "bytes=4-")
+            self.assertIsNone(requests[1].headers.get("Range"))
+            self.assertIsNotNone(result, manager._logs)
+            self.assertEqual(Path(result).read_bytes(), b"abcdefgh")
+
+    async def test_verified_cache_is_reused_without_network(self):
+        url = "https://files.example.com/cached.rar"
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "cache"
+            cache.mkdir()
+            url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+            cached_file = cache / f"{url_hash}_cached.rar"
+            cached_file.write_bytes(b"correct")
+            Path(f"{cached_file}.complete.json").write_text(
+                json.dumps({"url_hash": url_hash, "size": 7}), encoding="utf-8")
+            manager = uploader.GoogleDriveUploadManager()
+            with patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)), patch.object(
+                    uploader.httpx, "AsyncClient", side_effect=AssertionError("unexpected network")):
+                result = await manager._download_direct_url(url, folder)
+            self.assertEqual(Path(result).read_bytes(), b"correct")
+            self.assertEqual(manager._download_percent, 100)
+
+    async def test_truncated_response_never_becomes_valid_cache(self):
+        url = "https://files.example.com/short.rar"
+
+        class ShortStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b"abcd"
+
+            async def aclose(self):
+                pass
+
+        def handler(request):
+            return httpx.Response(200, headers={"Content-Length": "8"}, stream=ShortStream())
+
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "cache"
+            cache.mkdir()
+            client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+            manager = uploader.GoogleDriveUploadManager()
+            with patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(cache)), patch.object(
+                    uploader.httpx, "AsyncClient", return_value=client):
+                result = await manager._download_direct_url(url, folder)
+            self.assertIsNone(result)
+            self.assertFalse(list(cache.glob("*.complete.json")))
+            self.assertEqual(manager._download_percent, 50)
 
 
 def create_audio_nrg(path, *, legacy=False, layout="DAO", subchannel=False, short_legacy=False):

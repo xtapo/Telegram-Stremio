@@ -1310,113 +1310,244 @@ class GoogleDriveUploadManager:
                         pass
 
     async def _download_direct_url(self, url: str, work_dir: str, background: bool = False) -> Optional[str]:
-        """Tải file từ link HTTP/HTTPS trực tiếp với bộ nhớ đệm"""
-        import hashlib
+        """Download HTTP/MediaFire files safely; resume interrupted downloads."""
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
-        base_fn = os.path.basename(urllib.parse.urlparse(url).path) or f"download_{url_hash}"
+        base_fn = urllib.parse.unquote(os.path.basename(urllib.parse.urlparse(url).path)) or f"download_{url_hash}"
+        part_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}.download.part")
+        meta_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}.download.meta.json")
+
+        def discard_partial() -> None:
+            for path in (part_path, meta_path):
+                try:
+                    os.remove(path)
+                except FileNotFoundError:
+                    pass
+
+        def log(message: str, kind: str = "info") -> None:
+            if background:
+                LOGGER.info(f"[DIRECT PREFETCH] {message}")
+            else:
+                self._log(message, kind)
+
+        def place_file(cache_path: str, filename: str) -> str:
+            out_path = os.path.join(work_dir, filename)
+            if os.path.abspath(cache_path) == os.path.abspath(out_path):
+                return cache_path
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+                os.link(cache_path, out_path)
+                return out_path
+            except (OSError, NotImplementedError):
+                try:
+                    shutil.copy2(cache_path, out_path)
+                    return out_path
+                except OSError:
+                    return cache_path
 
         try:
             for fname in os.listdir(CACHE_DOWNLOAD_DIR):
-                if fname.startswith(f"{url_hash}_") or (base_fn and fname.endswith(base_fn)):
-                    c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
-                    if os.path.isfile(c_path) and os.path.getsize(c_path) > 4096:
-                        cached_sz = os.path.getsize(c_path)
-                        cached_fn = fname.split("_", 1)[-1] if "_" in fname else fname
-                        if not background:
-                            self._log(f"⚡ Phát hiện file trong bộ nhớ đệm (Cache): '{cached_fn}' ({round(cached_sz/(1024*1024), 2)} MB). Bỏ qua tải trực tiếp!", "success")
-                            self._download_percent = 100
-                        out_path = os.path.join(work_dir, cached_fn)
-                        try:
-                            shutil.copy2(c_path, out_path)
-                            return out_path
-                        except Exception:
-                            return c_path
+                if not fname.startswith(f"{url_hash}_") or fname.endswith(".complete.json"):
+                    continue
+                c_path = os.path.join(CACHE_DOWNLOAD_DIR, fname)
+                marker_path = f"{c_path}.complete.json"
+                if not os.path.isfile(c_path) or not os.path.isfile(marker_path):
+                    continue
+                with open(marker_path, encoding="utf-8") as marker_file:
+                    marker = json.load(marker_file)
+                size = os.path.getsize(c_path)
+                if size <= 0 or size != marker.get("size") or marker.get("url_hash") != url_hash:
+                    continue
+                filename = fname[len(url_hash) + 1:]
+                if not background:
+                    self._download_total = self._download_bytes = size
+                    self._download_percent = 100
+                    self._current_file = filename
+                log(f"⚡ Sử dụng cache đã kiểm tra: {filename} ({size / (1024 * 1024):.1f} MB)", "success")
+                return place_file(c_path, filename)
         except Exception:
             pass
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Encoding": "identity",
         }
+        timeout = httpx.Timeout(connect=30.0, read=45.0, write=30.0, pool=30.0)
         try:
-            async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-                download_url = url
-                if _is_mediafire_page_url(url):
-                    self._stage = "Đang phân tích liên kết MediaFire..."
-                    self._log("Đang lấy liên kết tải trực tiếp từ MediaFire...", "info")
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                mediafire = _is_mediafire_page_url(url)
+                for attempt in range(1, 5):
+                    if self._cancel_requested:
+                        return None
                     try:
-                        download_url = await _resolve_mediafire_download_url(client, url)
-                        resolved_name = os.path.basename(urllib.parse.urlparse(download_url).path)
-                        if resolved_name:
-                            base_fn = urllib.parse.unquote(resolved_name)
-                        self._log(f"✅ Đã resolve MediaFire: {base_fn}", "success")
-                    except ValueError as exc:
-                        self._log(str(exc), "error")
-                        return None
-
-                async with client.stream("GET", download_url, headers=headers) as stream_resp:
-                    if stream_resp.status_code != 200:
-                        self._log(f"Lỗi HTTP {stream_resp.status_code} khi tải link trực tiếp", "error")
-                        return None
-
-                    header_fn = _extract_filename_from_headers(stream_resp.headers, "")
-                    final_filename = header_fn or base_fn
-
-                    content_len = stream_resp.headers.get("content-length")
-                    total_bytes = int(content_len) if content_len and content_len.isdigit() else 0
-
-                    if not background:
-                        self._download_total = total_bytes
-                        self._download_bytes = 0
-                        self._current_file = final_filename
-                        self._stage = f"Đang tải về: {final_filename}"
-                        self._log(f"Bắt đầu tải trực tiếp: {final_filename} ({round(total_bytes/(1024*1024), 1) if total_bytes else '?'} MB)", "info")
-
-                    cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}_{final_filename}")
-                    out_path = os.path.join(work_dir, final_filename)
-                    start_dl = time.time()
-                    last_update = 0
-
-                    downloaded_bytes = 0
-                    with open(cache_path, "wb") as f_out:
-                        async for chunk in stream_resp.aiter_bytes(chunk_size=4 * 1024 * 1024):
-                            if self._cancel_requested:
-                                return None
-                            f_out.write(chunk)
-                            downloaded_bytes += len(chunk)
+                        download_url = url
+                        if mediafire:
                             if not background:
-                                self._download_bytes = downloaded_bytes
+                                self._stage = "Đang phân tích liên kết MediaFire..."
+                            if attempt == 1:
+                                log("Đang lấy liên kết tải trực tiếp từ MediaFire...")
+                            download_url = await _resolve_mediafire_download_url(client, url)
+                            resolved_name = os.path.basename(urllib.parse.urlparse(download_url).path)
+                            if resolved_name:
+                                base_fn = urllib.parse.unquote(resolved_name)
+                            if attempt == 1:
+                                log(f"✅ Đã resolve MediaFire: {base_fn}", "success")
 
-                            now = time.time()
-                            if not background and now - last_update > 0.5:
-                                last_update = now
-                                if total_bytes > 0:
-                                    self._download_percent = min(100, int((downloaded_bytes / total_bytes) * 100))
-                                elapsed_dl = now - start_dl
-                                if elapsed_dl > 0:
-                                    mbps = (downloaded_bytes / (1024 * 1024)) / elapsed_dl
-                                    self._speed_str = f"{mbps:.2f} MB/s"
+                        meta = {}
+                        try:
+                            with open(meta_path, encoding="utf-8") as meta_file:
+                                meta = json.load(meta_file)
+                        except (OSError, ValueError):
+                            pass
+                        if meta.get("url") != url or not isinstance(meta.get("filename"), str):
+                            meta = {}
+                        offset = os.path.getsize(part_path) if meta and os.path.isfile(part_path) else 0
+                        expected_total = meta.get("total", 0) if meta else 0
+                        if not isinstance(expected_total, int) or expected_total < 0 or (expected_total and offset > expected_total):
+                            offset = 0
+                            meta = {}
 
-                    dl_sz = os.path.getsize(cache_path) if os.path.exists(cache_path) else 0
-                    if not background:
-                        self._download_percent = 100
-                        self._log(f"✅ Tải thành công: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)", "success")
-                    else:
-                        LOGGER.info(f"[GDRIVE PREFETCH] Đã tải trước link trực tiếp: {final_filename} ({round(dl_sz/(1024*1024), 2)} MB)")
-                    try:
-                        if hasattr(os, "link"):
+                        request_headers = dict(headers)
+                        if offset:
+                            request_headers["Range"] = f"bytes={offset}-"
+                            validator = meta.get("etag") or meta.get("last_modified")
+                            if validator:
+                                request_headers["If-Range"] = validator
+
+                        async with client.stream("GET", download_url, headers=request_headers) as response:
+                            if response.status_code == 416 and offset:
+                                discard_partial()
+                                raise IOError("Máy chủ từ chối Range; tải lại từ đầu")
+                            if response.status_code not in (200, 206):
+                                raise IOError(f"HTTP {response.status_code} khi tải trực tiếp")
+                            if "text/html" in response.headers.get("content-type", "").lower():
+                                raise IOError("Máy chủ trả về HTML thay vì nội dung file")
+                            if response.headers.get("content-encoding", "identity").lower() != "identity":
+                                raise IOError("Máy chủ nén dữ liệu khi tải file; không thể kiểm tra byte chính xác")
+
+                            header_name = _extract_filename_from_headers(response.headers, "")
+                            final_filename = os.path.basename(header_name or base_fn) or f"download_{url_hash}"
+                            if offset and meta.get("filename") != final_filename:
+                                # Keep a consistent name if a temporary URL changes its headers.
+                                final_filename = meta["filename"]
+                            content_length = response.headers.get("content-length", "")
+                            length = int(content_length) if content_length.isdigit() else 0
+                            etag = response.headers.get("etag", "")
+                            last_modified = response.headers.get("last-modified", "")
+                            if offset and response.status_code == 206:
+                                match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+|\*)", response.headers.get("content-range", ""))
+                                if not match or int(match.group(1)) != offset:
+                                    discard_partial()
+                                    raise IOError("Máy chủ trả về Content-Range không đúng vị trí tải tiếp")
+                                range_end = int(match.group(2))
+                                reported_total = int(match.group(3)) if match.group(3) != "*" else 0
+                                if range_end < offset or (length and length != range_end - offset + 1):
+                                    discard_partial()
+                                    raise IOError("Content-Range/Content-Length không hợp lệ")
+                                if expected_total and reported_total and reported_total != expected_total:
+                                    discard_partial()
+                                    raise IOError("Kích thước file trên máy chủ đã thay đổi")
+                                if meta.get("etag") and etag and etag != meta["etag"]:
+                                    discard_partial()
+                                    raise IOError("ETag thay đổi trong lúc tải tiếp")
+                                if not meta.get("etag") and meta.get("last_modified") and last_modified and last_modified != meta["last_modified"]:
+                                    discard_partial()
+                                    raise IOError("Ngày sửa file trên máy chủ đã thay đổi")
+                                total_bytes = reported_total or expected_total
+                                if not total_bytes:
+                                    discard_partial()
+                                    raise IOError("Không xác định được kích thước đầy đủ để tải tiếp")
+                                log(f"↪ Tiếp tục tải từ {offset / (1024 * 1024):.1f} MB (lần {attempt}/4)")
+                            else:
+                                if response.status_code == 206:
+                                    raise IOError("Máy chủ trả về dữ liệu một phần khi chưa yêu cầu Range")
+                                # HTTP 200 means Range was ignored: overwrite the old partial file.
+                                offset = 0
+                                total_bytes = length
+                                # Truncate before writing new metadata: a crash cannot revive stale bytes.
+                                with open(part_path, "wb"):
+                                    pass
+                                if not background:
+                                    log(f"Bắt đầu tải trực tiếp: {final_filename} ({total_bytes / (1024 * 1024):.1f} MB)" if total_bytes else f"Bắt đầu tải trực tiếp: {final_filename} (chưa rõ dung lượng)")
+
+                            if not background:
+                                self._current_file = final_filename
+                                self._download_total = total_bytes
+                                self._download_bytes = offset
+                                self._download_percent = min(99, int(offset * 100 / total_bytes)) if total_bytes else 0
+                                self._stage = f"Đang tải về: {final_filename}"
+
+                            with open(meta_path, "w", encoding="utf-8") as meta_file:
+                                json.dump({"url": url, "filename": final_filename, "total": total_bytes,
+                                           "etag": etag or meta.get("etag", ""),
+                                           "last_modified": last_modified or meta.get("last_modified", "")}, meta_file)
+
+                            async def stream_to_disk() -> None:
+                                downloaded = offset
+                                last_update = 0.0
+                                with open(part_path, "ab" if offset else "wb") as output:
+                                    async for chunk in response.aiter_raw(chunk_size=256 * 1024):
+                                        if self._cancel_requested:
+                                            raise asyncio.CancelledError()
+                                        output.write(chunk)
+                                        downloaded += len(chunk)
+                                        now = time.monotonic()
+                                        if not background and now - last_update >= 0.5:
+                                            last_update = now
+                                            self._download_bytes = downloaded
+                                            if total_bytes:
+                                                self._download_percent = min(99, int(downloaded * 100 / total_bytes))
+                                            elapsed = max(now - transfer_started, 0.01)
+                                            self._speed_str = f"{((downloaded - offset) / (1024 * 1024)) / elapsed:.2f} MB/s"
+                                            self._stage = f"Đang tải: {downloaded / (1024 * 1024):.1f}/{total_bytes / (1024 * 1024):.1f} MB" if total_bytes else f"Đang tải: {downloaded / (1024 * 1024):.1f} MB"
+
+                            transfer_started = time.monotonic()
+                            transfer = asyncio.create_task(stream_to_disk())
                             try:
-                                if os.path.exists(out_path):
-                                    os.remove(out_path)
-                                os.link(cache_path, out_path)
-                                return out_path
-                            except (OSError, NotImplementedError):
-                                pass
-                        shutil.copy2(cache_path, out_path)
-                        return out_path
-                    except Exception:
-                        return cache_path
+                                while True:
+                                    done, _ = await asyncio.wait({transfer}, timeout=20.0)
+                                    if done:
+                                        await transfer
+                                        break
+                                    if not self._cancel_requested:
+                                        received = os.path.getsize(part_path) if os.path.exists(part_path) else 0
+                                        log(f"⏳ Đang tải/chờ dữ liệu: {received / (1024 * 1024):.1f} MB đã nhận, lần {attempt}/4")
+                            finally:
+                                if not transfer.done():
+                                    transfer.cancel()
+                                    await asyncio.gather(transfer, return_exceptions=True)
+
+                            actual_size = os.path.getsize(part_path)
+                            if not actual_size or (total_bytes and actual_size != total_bytes):
+                                raise IOError(f"File tải chưa đủ: {actual_size}/{total_bytes} bytes")
+                            cache_path = os.path.join(CACHE_DOWNLOAD_DIR, f"{url_hash}_{final_filename}")
+                            os.replace(part_path, cache_path)
+                            marker_path = f"{cache_path}.complete.json"
+                            marker_tmp = f"{marker_path}.tmp"
+                            with open(marker_tmp, "w", encoding="utf-8") as marker_file:
+                                json.dump({"url_hash": url_hash, "size": actual_size}, marker_file)
+                            os.replace(marker_tmp, marker_path)
+                            if os.path.exists(meta_path):
+                                os.remove(meta_path)
+                            if not background:
+                                self._download_bytes = actual_size
+                                self._download_percent = 100
+                            log(f"✅ Tải thành công: {final_filename} ({actual_size / (1024 * 1024):.2f} MB)", "success")
+                            return place_file(cache_path, final_filename)
+                    except (httpx.HTTPError, OSError, ValueError) as exc:
+                        if self._cancel_requested:
+                            return None
+                        log(f"⚠️ Tải trực tiếp thất bại lần {attempt}/4: {exc}", "warn")
+                        if attempt < 4:
+                            await asyncio.sleep(min(2 ** attempt, 8))
+                log("❌ Tải trực tiếp thất bại sau 4 lần thử; giữ file .part để tải tiếp.", "error")
+                return None
+        except asyncio.CancelledError:
+            if self._cancel_requested:
+                return None
+            raise
         except Exception as e:
-            self._log(f"Lỗi khi tải trực tiếp: {e}", "error")
+            log(f"Lỗi khi tải trực tiếp: {e}", "error")
             return None
 
     def _collect_audio_files(self, extract_dir: str) -> List[str]:
