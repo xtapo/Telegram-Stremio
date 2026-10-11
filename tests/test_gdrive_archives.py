@@ -14,6 +14,8 @@ import types
 import unittest
 import zipfile
 import shutil
+import struct
+import wave
 from contextlib import nullcontext
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -60,6 +62,101 @@ def load_uploader():
 
 
 uploader = load_uploader()
+
+
+def create_audio_nrg(path, *, legacy=False, layout="DAO", subchannel=False, short_legacy=False):
+    """Create a small real-layout NRG with two distinguishable CD-DA tracks."""
+    sector_size = 2448 if subchannel else 2352
+    disc = b"".join(
+        (bytes([track]) * 2352 + (b"S" * 96 if subchannel else b"")) * 2
+        for track in (1, 2)
+    )
+    tracks = []
+    for idx, track in enumerate((1, 2)):
+        start = idx * sector_size * 2
+        end = start + sector_size * 2
+        if layout == "DAO" and legacy:
+            tracks.append(
+                bytes(12) + (
+                    struct.pack(">HHHIII", sector_size, 0x0700, 1, start, start, end)
+                    if short_legacy else struct.pack(">IIIII", sector_size, 7, start, start, end)
+                )
+            )
+        elif layout == "DAO":
+            mode = 0x1000 if subchannel else 0x0700
+            tracks.append(bytes(12) + struct.pack(">HHHQQQ", sector_size, mode, 1, start, start, end))
+        elif legacy:
+            tracks.append(struct.pack(">IIIII", start, end - start, 7, 0, 0))
+        else:
+            tracks.append(struct.pack(">QQIIII", start, end - start, 7, 0, 0, 2))
+    if layout == "DAO":
+        payload = (struct.pack(">I", 0) + bytes(14)
+                   + (struct.pack(">IBB", 0, 1, 2) if legacy and not short_legacy
+                      else struct.pack(">HBB", 0, 1, 2))
+                   + b"".join(tracks))
+        kind = b"DAOI" if legacy else b"DAOX"
+    else:
+        payload = b"".join(tracks)
+        kind = b"ETNF" if legacy else b"ETN2"
+    metadata = kind + struct.pack(">I", len(payload)) + payload + b"END!" + struct.pack(">I", 0)
+    footer = (b"NERO" + struct.pack(">I", len(disc)) if legacy
+              else b"NER5" + struct.pack(">Q", len(disc)))
+    Path(path).write_bytes(disc + metadata + footer)
+    return disc
+
+
+class NrgAudioTests(unittest.TestCase):
+    def test_dao_legacy_and_track_at_once_are_lossless(self):
+        for legacy, layout, short in ((False, "DAO", False), (True, "DAO", False),
+                                     (True, "DAO", True), (False, "ETN", False),
+                                     (True, "ETN", False)):
+            with self.subTest(legacy=legacy, layout=layout, short=short), tempfile.TemporaryDirectory() as temp:
+                image = Path(temp) / "album.nrg"
+                create_audio_nrg(image, legacy=legacy, layout=layout, short_legacy=short)
+                output = Path(temp) / "tracks"
+                ok, msg = uploader._sync_extract_archive(str(image), str(output))
+                self.assertTrue(ok, msg)
+                self.assertEqual(sorted(f.name for f in output.iterdir()), ["Track 01.wav", "Track 02.wav"])
+                for index in (1, 2):
+                    with wave.open(str(output / f"Track {index:02d}.wav"), "rb") as track:
+                        self.assertEqual((track.getnchannels(), track.getsampwidth(), track.getframerate()), (2, 2, 44100))
+                        self.assertEqual(track.readframes(588 * 2), bytes([index]) * (2352 * 2))
+
+    def test_subchannel_bytes_are_not_written_into_audio(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "album.nrg"
+            create_audio_nrg(image, subchannel=True)
+            ok, msg = uploader._sync_extract_archive(str(image), str(Path(temp) / "tracks"))
+            self.assertTrue(ok, msg)
+            with wave.open(str(Path(temp) / "tracks/Track 01.wav"), "rb") as track:
+                self.assertEqual(track.getnframes(), 588 * 2)
+                self.assertNotIn(b"S" * 16, track.readframes(588 * 2))
+
+    def test_invalid_track_bounds_leave_no_partial_wavs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "album.nrg"
+            create_audio_nrg(image)
+            data = bytearray(image.read_bytes())
+            # DAOX first track index-1 at payload offset 22 + 26.
+            first_track_start = len(data) - 12 - 8 - (8 + 22 + 42 * 2) + 8 + 22 + 26
+            data[first_track_start:first_track_start + 8] = struct.pack(">Q", 10**12)
+            image.write_bytes(data)
+            with self.assertRaises(uploader.NRGError):
+                uploader.extract_nrg_audio(str(image), str(Path(temp) / "tracks"))
+            self.assertFalse(list(Path(temp).rglob("*.wav")))
+
+    def test_nrg_extracted_from_zip_is_detected_as_audio(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "disc.nrg"
+            create_audio_nrg(image)
+            package = Path(temp) / "album.zip"
+            with zipfile.ZipFile(package, "w") as zipped:
+                zipped.write(image, "music/disc.nrg")
+            extracted = Path(temp) / "extracted"
+            self.assertTrue(uploader._sync_extract_archive(str(package), str(extracted))[0])
+            self.assertTrue(uploader._sync_extract_archive(
+                str(extracted / "music/disc.nrg"), str(extracted / "_nrg_tracks_001"))[0])
+            self.assertEqual(len(uploader.GoogleDriveUploadManager()._collect_audio_files(str(extracted))), 2)
 
 
 class CueEncodingTests(unittest.TestCase):
@@ -241,6 +338,49 @@ class ExtractionTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_nrg_from_direct_link_or_zip_uploads_each_wav_track(self):
+        for compressed in (False, True):
+            with self.subTest(compressed=compressed), tempfile.TemporaryDirectory() as temp:
+                image = Path(temp) / "album.nrg"
+                create_audio_nrg(image)
+                source = image
+                if compressed:
+                    source = Path(temp) / "album.zip"
+                    with zipfile.ZipFile(source, "w") as zipped:
+                        zipped.write(image, "album/disc.nrg")
+                client = Mock(is_connected=True)
+                client.send_audio = AsyncMock(side_effect=[
+                    types.SimpleNamespace(id=201), types.SimpleNamespace(id=202)
+                ])
+                manager = uploader.GoogleDriveUploadManager()
+                manager._download_direct_url = AsyncMock(return_value=str(source))
+                manager._index_uploaded_tracks = AsyncMock()
+                music_routes = types.ModuleType("Backend.fastapi.routes.music_routes")
+                music_routes._db_load_library = AsyncMock(return_value=[])
+                music_routes._db_save_library = AsyncMock()
+                with (
+                    patch.object(uploader, "TEMP_UPLOAD_DIR", temp),
+                    patch.object(uploader, "CACHE_DOWNLOAD_DIR", str(Path(temp) / "cache")),
+                    patch.object(uploader, "_get_upload_client", AsyncMock(return_value=(client, "bot"))),
+                    patch.object(uploader, "_cleanup_old_temp_files"),
+                    patch.object(uploader, "extract_context_from_text", return_value=("", "")),
+                    patch.object(uploader, "read_audio_metadata_from_file", return_value={
+                        "title": "Recorded song", "artist": "Artist", "album": "Album"
+                    }),
+                    patch.object(uploader, "strip_copy_prefix", side_effect=lambda value: value),
+                    patch.object(uploader, "is_generic_music_query", return_value=False),
+                    patch.object(uploader.asyncio, "sleep", AsyncMock()),
+                    patch.dict(sys.modules, {music_routes.__name__: music_routes}),
+                ):
+                    await manager._run_upload_pipeline(
+                        "url", [("direct", "https://example.com/album", "url")],
+                        "-100123", "Artist", "Album", False, False,
+                    )
+                self.assertEqual(manager._status, "completed", manager._error_message)
+                self.assertEqual(client.send_audio.await_count, 2)
+                sent_files = [Path(call.kwargs["audio"]).name for call in client.send_audio.call_args_list]
+                self.assertEqual(sent_files, ["Track 01.wav", "Track 02.wav"])
+
     async def test_start_forwards_password_without_exposing_it_in_status(self):
         manager = uploader.GoogleDriveUploadManager()
         manager._run_upload_pipeline = AsyncMock()

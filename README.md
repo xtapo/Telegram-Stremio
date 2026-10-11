@@ -795,6 +795,17 @@ automatic setup fails, the error identifies the missing tool instead of asking
 for a different archive password. Google Drive and MediaFire use the same
 extraction path.
 
+**Nero NRG Audio CD imports:** In **Music Management → Upload Google Drive**,
+paste a public Google Drive, MediaFire, or direct download URL to a `.nrg` image,
+or to a `.zip` / `.rar` / `.7z` archive containing `.nrg` files. The uploader
+automatically detects standard Nero DAOI/DAOX and ETNF/ETN2 audio tracks,
+extracts each as lossless 44.1 kHz / 16-bit stereo `Track NN.wav`, and uploads
+the tracks individually to Telegram. The existing CUE/metadata matching and
+album indexing then run as usual. Extraction is streamed in bounded chunks and
+requires no additional Python packages. Unrecognized NRG layouts and data-only
+disc images fall back to the existing system archive tools; if no playable
+audio can be found, the upload reports an error instead of claiming success.
+
 #### 🔵 Option 2 — Plain Docker (manual)
 
 ```bash

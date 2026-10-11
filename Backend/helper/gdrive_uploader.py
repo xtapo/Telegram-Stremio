@@ -20,6 +20,7 @@ from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
 from Backend.helper.archive_tools import ensure_portable_7zip
+from Backend.helper.nrg_audio import NRGError, extract_nrg_audio
 from Backend.helper.observability import (
     correlation_context,
     new_id,
@@ -48,7 +49,7 @@ AUDIO_EXTENSIONS = (
     ".mp3", ".flac", ".m4a", ".wav", ".aac", 
     ".alac", ".ogg", ".opus", ".dsf", ".dff", ".ape", ".aiff"
 )
-ARCHIVE_EXTENSIONS = (".zip", ".rar", ".7z", ".tar", ".tar.gz", ".tgz", ".bz2", ".xz", ".iso")
+ARCHIVE_EXTENSIONS = (".zip", ".rar", ".7z", ".tar", ".tar.gz", ".tgz", ".bz2", ".xz", ".iso", ".nrg")
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 TEMP_UPLOAD_DIR = os.path.abspath(os.path.join("Music", "temp_uploads"))
@@ -89,6 +90,17 @@ def _sync_extract_archive(archive_path: str, extract_dir: str, archive_password:
     import subprocess
     os.makedirs(extract_dir, exist_ok=True)
     ext = os.path.splitext(archive_path)[1].lower()
+    nrg_error = ""
+    if ext == ".nrg":
+        try:
+            tracks = extract_nrg_audio(archive_path, extract_dir)
+            if tracks:
+                return True, f"Đã trích xuất {len(tracks)} track Audio CD từ NRG sang WAV lossless"
+            nrg_error = "Ảnh đĩa NRG không chứa track Audio CD được hỗ trợ."
+        except (NRGError, OSError) as exc:
+            nrg_error = str(exc)
+        # Data-only NRG images may contain files rather than CD-DA tracks.
+        # Let the existing archive backends attempt to read those files.
     password_message = (
         "Mật khẩu giải nén không đúng. Vui lòng kiểm tra mật khẩu và thử lại."
         if archive_password else
@@ -318,6 +330,11 @@ def _sync_extract_archive(archive_path: str, extract_dir: str, archive_password:
         return False, (
             f"{last_error or 'Không giải nén được file.'} "
             "Vui lòng kiểm tra lại mật khẩu và tính toàn vẹn của file nén."
+        )
+    if ext == ".nrg":
+        return False, (
+            f"Không thể trích xuất nhạc từ NRG: {nrg_error} "
+            f"Trình đọc ảnh đĩa dự phòng: {last_error or 'không có công cụ hỗ trợ'}"
         )
     return False, last_error or f"Không có công cụ nào giải nén được file {ext} này hoặc file bị hỏng / có mật khẩu."
 
@@ -1610,6 +1627,27 @@ class GoogleDriveUploadManager:
                     success, extract_msg = await _extract_archive(dl_path, sub_extract_dir, archive_password)
                     if success:
                         self._log(f"✅ {extract_msg}", "success")
+                        # RAR/ZIP/7Z frequently contain a Nero disc image rather
+                        # than individual music files. Extract each NRG into its
+                        # own folder before collecting the resulting WAV tracks.
+                        if ext != ".nrg":
+                            embedded_images = [
+                                os.path.join(root, name)
+                                for root, _, names in os.walk(sub_extract_dir)
+                                for name in sorted(names)
+                                if name.lower().endswith(".nrg")
+                            ]
+                            for image_idx, image_path in enumerate(embedded_images, 1):
+                                if self._cancel_requested:
+                                    break
+                                image_dir = os.path.join(sub_extract_dir, f"_nrg_tracks_{image_idx:03d}")
+                                self._stage = f"[{q_idx}/{total_queue_items}] Đang trích xuất Audio CD: {os.path.basename(image_path)}"
+                                nrg_ok, nrg_msg = await _extract_archive(image_path, image_dir)
+                                if nrg_ok:
+                                    self._log(f"✅ {os.path.basename(image_path)}: {nrg_msg}", "success")
+                                else:
+                                    item_errors.append(f"Lỗi xử lý NRG {os.path.basename(image_path)}: {nrg_msg}")
+                                    self._log(f"❌ {item_errors[-1]}", "error")
                         files_to_upload = self._collect_audio_files(sub_extract_dir)
 
                         # Trích xuất gợi ý Ca sĩ / Album từ tên file nén nếu người dùng chưa nhập
