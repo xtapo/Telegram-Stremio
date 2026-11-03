@@ -184,6 +184,8 @@ class XTAPOMusicApp {
     constructor() {
         this.currentAlbumIndex = 0;
         this.currentTrackIndex = 0;
+        this.tracklistPageSize = 60;
+        this.mobileTracklistPageSize = 50;
         this.isPlaying = false;
         this.isShuffle = false;
         this.repeatMode = 0; // 0: off, 1: repeat all, 2: repeat one
@@ -912,6 +914,7 @@ class XTAPOMusicApp {
                 await Promise.all([
                     this.fetchUserFavorites(),
                     this.loadPlaylists(),
+                    this.fetchMusicPlayerSettings(),
                     ...(loadLibrary ? [this.fetchTelegramAlbums(false)] : [])
                 ]);
 
@@ -2147,6 +2150,33 @@ class XTAPOMusicApp {
         }
     }
 
+    async fetchMusicPlayerSettings() {
+        try {
+            const response = await fetch('/api/music/player-settings', { cache: 'no-store' });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data.status === 'success' && data.settings) {
+                this.tracklistPageSize = data.settings.music_tracklist_page_size;
+                this.mobileTracklistPageSize = data.settings.music_mobile_tracklist_page_size;
+            }
+        } catch (error) {
+            // Older/offline servers retain the bounded defaults.
+            console.log('[XTAPO MUSIC] Player settings unavailable; using existing page sizes.');
+        }
+    }
+
+    getTracklistPageSize(isModal = false) {
+        const mobileView = isModal || (typeof window !== 'undefined'
+            && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches);
+        const size = Number(mobileView ? this.mobileTracklistPageSize : this.tracklistPageSize);
+        return Number.isInteger(size) && size >= 10 && size <= 200 ? size : (mobileView ? 50 : 60);
+    }
+
+    getTracklistWindowStart(index, isModal = false) {
+        const before = Math.min(isModal ? 15 : 20, Math.floor(this.getTracklistPageSize(isModal) / 3));
+        return Math.max(0, index - before);
+    }
+
     // --- Fetch Telegram Library from Backend ---
     async fetchTelegramAlbums(shouldLoadAlbum = true) {
         if (!this.currentUser) {
@@ -2438,7 +2468,7 @@ class XTAPOMusicApp {
         // A late selection must render its neighborhood, never all preceding rows.
         // Filtering the mobile modal should not rebuild the main player list.
         if (filterQuery === null) {
-            this.renderMainTracklistWindow(Math.max(0, this.currentTrackIndex - 20));
+            this.renderMainTracklistWindow(this.getTracklistWindowStart(this.currentTrackIndex));
         }
 
         if (this.modalTracklistEl) {
@@ -2463,7 +2493,7 @@ class XTAPOMusicApp {
                     </div>
                 `;
             } else {
-                this.renderModalTracklistWindow(Math.max(0, activePosition - 15));
+                this.renderModalTracklistWindow(this.getTracklistWindowStart(activePosition, true));
             }
         }
     }
@@ -2502,7 +2532,7 @@ class XTAPOMusicApp {
 
     renderMainTracklistWindow(start = 0) {
         const tracks = (this.currentAlbum && this.currentAlbum.tracks) || [];
-        this.renderTracklistPage(this.tracklistEl, tracks.length, start, 60,
+        this.renderTracklistPage(this.tracklistEl, tracks.length, start, this.getTracklistPageSize(),
             idx => this.createTrackListItem(tracks[idx], idx, false),
             nextStart => this.renderMainTracklistWindow(nextStart));
     }
@@ -2510,7 +2540,7 @@ class XTAPOMusicApp {
     renderModalTracklistWindow(start = 0) {
         const tracks = (this.currentAlbum && this.currentAlbum.tracks) || [];
         const filtered = this._modalFilteredTracks;
-        this.renderTracklistPage(this.modalTracklistEl, filtered ? filtered.length : tracks.length, start, 50,
+        this.renderTracklistPage(this.modalTracklistEl, filtered ? filtered.length : tracks.length, start, this.getTracklistPageSize(true),
             position => {
                 const { track, idx } = filtered ? filtered[position] : { track: tracks[position], idx: position };
                 return this.createTrackListItem(track, idx, true);
@@ -2690,7 +2720,7 @@ class XTAPOMusicApp {
 
         if (this.tracklistEl) {
             if (!this.tracklistEl.querySelector(`.track-item[data-index="${this.currentTrackIndex}"]`)) {
-                this.renderMainTracklistWindow(Math.max(0, this.currentTrackIndex - 20));
+                this.renderMainTracklistWindow(this.getTracklistWindowStart(this.currentTrackIndex));
             }
 
             const prevActive = this.tracklistEl.querySelector('.track-item.active');

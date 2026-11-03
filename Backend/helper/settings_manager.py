@@ -54,6 +54,8 @@ _DEFAULTS: Dict[str, Any] = {
     "fanart_shuffle_interval": 5,
     "fanart_low_res_poster": True,
     "audio_cache_size_gb": 2,
+    "music_tracklist_page_size": 60,
+    "music_mobile_tracklist_page_size": 50,
     "scheduled_backup_enabled": False,
     "scheduled_backup_frequency": "daily",
     "scheduled_backup_time": "03:00",
@@ -284,6 +286,24 @@ class Settings:
         except (ValueError, TypeError):
             value = 2
         return value if value in (2, 5, 10, 20) else 2
+
+    def _music_page_size(self, key: str, default: int) -> int:
+        raw = self._d.get(key, default)
+        if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+            return default
+        try:
+            value = int(raw)
+        except (ValueError, TypeError):
+            return default
+        return value if 10 <= value <= 200 else default
+
+    @property
+    def music_tracklist_page_size(self) -> int:
+        return self._music_page_size("music_tracklist_page_size", 60)
+
+    @property
+    def music_mobile_tracklist_page_size(self) -> int:
+        return self._music_page_size("music_mobile_tracklist_page_size", 50)
 
     #----- Lists
     @property

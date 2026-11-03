@@ -1848,6 +1848,19 @@ async def update_settings_api(payload: dict) -> dict:
         if payload["audio_cache_size_gb"] not in (2, 5, 10, 20):
             raise HTTPException(status_code=400, detail="'audio_cache_size_gb' must be 2, 5, 10, or 20.")
 
+    for key in ("music_tracklist_page_size", "music_mobile_tracklist_page_size"):
+        if key in payload:
+            raw = payload[key]
+            if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+                raise HTTPException(status_code=400, detail="Số bài mỗi trang phải là số nguyên từ 10 đến 200.")
+            try:
+                value = int(raw)
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Số bài mỗi trang phải là số nguyên từ 10 đến 200.")
+            if not 10 <= value <= 200:
+                raise HTTPException(status_code=400, detail="Số bài mỗi trang phải là số nguyên từ 10 đến 200.")
+            payload[key] = value
+
     if "scheduled_backup_retention_days" in payload:
         try:
             payload["scheduled_backup_retention_days"] = int(payload["scheduled_backup_retention_days"])

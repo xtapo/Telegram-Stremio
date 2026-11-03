@@ -20,6 +20,7 @@ from Backend.fastapi.routes.music.catalog import (
 from Backend.fastapi.routes.music.gdrive import router as gdrive_router
 from Backend.fastapi.routes.music.lyrics import router as lyrics_router
 from Backend.fastapi.routes.music.pages import router as pages_router
+from Backend.fastapi.routes.music.settings import router as settings_router
 from Backend.fastapi.routes.music.playlists import (
     _build_m3u8_content, _get_request_base_url, _load_playlists_file, _safe_content_disposition,
     _save_playlists_file, router as playlists_router,
@@ -36,7 +37,7 @@ from Backend.fastapi.routes.music.streaming import router as streaming_router
 
 router = APIRouter(tags=["Music Player & Telegram Storage"])
 for domain_router in (
-    pages_router, playlists_router, scan_router, streaming_router, catalog_router,
+    pages_router, settings_router, playlists_router, scan_router, streaming_router, catalog_router,
     lyrics_router, gdrive_router, backup_router,
 ):
     router.include_router(domain_router)

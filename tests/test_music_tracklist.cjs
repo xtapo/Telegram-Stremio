@@ -155,6 +155,34 @@ duplicates.at(-1).click();
 assert.equal(app.currentAlbum.id, 'large', 'duplicate album titles cannot redirect a search result');
 assert.equal(app.currentTrack, tracks[77284], 'duplicate song names cannot redirect a search result');
 
+// Admin sizes apply to both lists, including the minimum where fixed overscan would hide the selection.
+for (const [desktopSize, mobileSize] of [[10, 10], [30, 20], [200, 100]]) {
+    app.tracklistPageSize = desktopSize;
+    app.mobileTracklistPageSize = mobileSize;
+    app.loadAlbum(1, 77284, false);
+    assert.equal(app.tracklistEl.querySelectorAll('.track-item').length, desktopSize);
+    assert.equal(app.modalTracklistEl.querySelectorAll('.track-item').length, mobileSize);
+    assert.equal(app.tracklistEl.querySelector('.track-item.active').dataset.index, '77284');
+    assert.equal(app.modalTracklistEl.querySelector('.track-item.active').dataset.index, '77284');
+    pageButton(app.tracklistEl, 'next').click();
+    assert.equal(app.tracklistEl.querySelectorAll('.track-item').length, desktopSize);
+    pageButton(app.modalTracklistEl, 'next').click();
+    assert.equal(app.modalTracklistEl.querySelectorAll('.track-item').length, mobileSize);
+}
+app.tracklistPageSize = 100000;
+app.mobileTracklistPageSize = 0;
+app.loadAlbum(1, 77284, false);
+assert.equal(app.tracklistEl.querySelectorAll('.track-item').length, 60, 'invalid server sizes cannot create an unbounded list');
+assert.equal(app.modalTracklistEl.querySelectorAll('.track-item').length, 50);
+
+context.window = { matchMedia: () => ({ matches: true }) };
+app.tracklistPageSize = 30;
+app.mobileTracklistPageSize = 20;
+app.renderTracklist();
+assert.equal(app.tracklistEl.querySelectorAll('.track-item').length, 20, 'phone layout applies the mobile size to the main list too');
+assert.equal(app.modalTracklistEl.querySelectorAll('.track-item').length, 20);
+delete context.window;
+
 app.albums.push({ id: 'empty', title: 'Empty', tracks: [] });
 app.loadAlbum(app.albums.length - 1, 100000, false);
 assert.equal(app.currentTrackIndex, 0);

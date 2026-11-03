@@ -120,6 +120,16 @@ async function run() {
     assert.equal(metadataApp.getGenreGroups().genreMaps.get('all').has('V-Pop / Nhạc Trẻ'), true,
         'background artist metadata invalidates country-dependent genres');
 
+    context.fetch = async url => {
+        assert.equal(url, '/api/music/player-settings');
+        return { ok: true, json: async () => ({ status: 'success', settings: {
+            music_tracklist_page_size: 30, music_mobile_tracklist_page_size: 20,
+        } }) };
+    };
+    await app.fetchMusicPlayerSettings();
+    assert.equal(app.getTracklistPageSize(), 30);
+    assert.equal(app.getTracklistPageSize(true), 20);
+
     // Profile verification still gates library loading, but personal lists must not delay it.
     const authApp = fixture([]);
     let releaseLists;
