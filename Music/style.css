@@ -513,6 +513,39 @@ html, body {
     padding-right: 6px;
 }
 
+.tracklist-page-summary {
+    padding: 6px 12px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    list-style: none;
+}
+
+.tracklist-page-control {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0;
+    list-style: none;
+}
+
+.tracklist-page-btn {
+    min-height: 36px;
+    padding: 6px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface-glass);
+    color: var(--accent-gold);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.tracklist-page-btn:hover,
+.tracklist-page-btn:focus-visible {
+    background: var(--bg-surface-hover);
+    outline: 2px solid var(--accent-gold);
+    outline-offset: 2px;
+}
+
 .track-item {
     display: flex;
     align-items: center;

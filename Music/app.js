@@ -2361,6 +2361,12 @@ class XTAPOMusicApp {
     loadAlbum(albumIndex, trackIndex = 0, autoPlay = true) {
         this.currentAlbumIndex = albumIndex;
         const album = this.currentAlbum;
+        if (!album) return;
+        const tracks = album.tracks || [];
+        this.currentTrackIndex = Math.max(0, Math.min(
+            Number.isInteger(trackIndex) ? trackIndex : 0, Math.max(0, tracks.length - 1)
+        ));
+        trackIndex = this.currentTrackIndex;
 
         if (album && album.id && String(album.id).startsWith('pl-')) {
             this.activePlaylistId = String(album.id).replace('pl-', '');
@@ -2412,11 +2418,12 @@ class XTAPOMusicApp {
         this.updateDrawerInfo();
 
         // Load Track
-        this.loadTrack(trackIndex, autoPlay);
+        this.loadTrack(this.currentTrackIndex, autoPlay);
     }
 
-    renderTracklist(filterQuery = '') {
+    renderTracklist(filterQuery = null) {
         const album = this.currentAlbum;
+        if (!album) return;
         const tracks = album.tracks || [];
         if (this.mobileTrackCount) {
             this.mobileTrackCount.textContent = tracks.length;
@@ -2428,93 +2435,86 @@ class XTAPOMusicApp {
             this.tracklistModalArtist.textContent = `${album.artist} • ${tracks.length} bài hát`;
         }
 
-        // Render Main Tracklist with Lazy Infinite Scroll Chunking
-        if (this.tracklistEl) {
-            this.tracklistEl.innerHTML = '';
-            this._mainTracklistRenderedCount = 0;
-            const targetInitial = Math.min(tracks.length, Math.max(60, this.currentTrackIndex + 20));
-            this.appendMainTracklistBatch(targetInitial);
-
-            // Bind scroll listener for main tracklist if not already bound
-            if (!this._mainTracklistScrollBound) {
-                this._mainTracklistScrollBound = true;
-                this.tracklistEl.addEventListener('scroll', () => {
-                    const el = this.tracklistEl;
-                    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) {
-                        const albumTracks = (this.currentAlbum && this.currentAlbum.tracks) || [];
-                        if (this._mainTracklistRenderedCount < albumTracks.length) {
-                            this.appendMainTracklistBatch(50);
-                        }
-                    }
-                }, { passive: true });
-            }
+        // A late selection must render its neighborhood, never all preceding rows.
+        // Filtering the mobile modal should not rebuild the main player list.
+        if (filterQuery === null) {
+            this.renderMainTracklistWindow(Math.max(0, this.currentTrackIndex - 20));
         }
 
-        // Render Modal Tracklist with Progressive Filter Chunking
         if (this.modalTracklistEl) {
-            this.modalTracklistEl.innerHTML = '';
-            const q = (filterQuery || '').toLowerCase().trim();
-            this._modalFilteredTracks = tracks
-                .map((track, idx) => ({ track, idx }))
-                .filter(({ track }) => !q || (track.name || '').toLowerCase().includes(q) || (track.artist || album.artist || '').toLowerCase().includes(q));
+            const q = this.normalizeSearchText(filterQuery || '');
+            this._modalFilteredTracks = null;
+            let activePosition = this.currentTrackIndex;
+            if (q) {
+                this._modalFilteredTracks = [];
+                tracks.forEach((track, idx) => {
+                    if (this.normalizeSearchText(track.name || track.title).includes(q)
+                        || this.normalizeSearchText(track.artist || album.artist).includes(q)) {
+                        this._modalFilteredTracks.push({ track, idx });
+                    }
+                });
+                activePosition = this._modalFilteredTracks.findIndex(item => item.idx === this.currentTrackIndex);
+            }
 
-            this._modalTracklistRenderedCount = 0;
-
-            if (this._modalFilteredTracks.length === 0) {
+            if (q && this._modalFilteredTracks.length === 0) {
                 this.modalTracklistEl.innerHTML = `
                     <div style="text-align:center; padding: 24px; color: var(--text-muted); font-size: 0.85rem;">
                         Không tìm thấy bài hát nào khớp với "${this.escapeHtml(filterQuery)}"
                     </div>
                 `;
             } else {
-                this.appendModalTracklistBatch(50);
-            }
-
-            if (!this._modalTracklistScrollBound) {
-                this._modalTracklistScrollBound = true;
-                this.modalTracklistEl.addEventListener('scroll', () => {
-                    const el = this.modalTracklistEl;
-                    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) {
-                        if (this._modalTracklistRenderedCount < this._modalFilteredTracks.length) {
-                            this.appendModalTracklistBatch(50);
-                        }
-                    }
-                }, { passive: true });
+                this.renderModalTracklistWindow(Math.max(0, activePosition - 15));
             }
         }
     }
 
-    appendMainTracklistBatch(count = 50) {
-        const album = this.currentAlbum;
-        if (!album || !album.tracks || !this.tracklistEl) return;
-        const tracks = album.tracks;
-        const start = this._mainTracklistRenderedCount || 0;
-        const end = Math.min(tracks.length, start + count);
-        if (start >= end) return;
-
+    renderTracklistPage(container, total, start, pageSize, createRow, changePage) {
+        if (!container) return;
+        start = Math.max(0, Math.min(start, Math.max(0, total - pageSize)));
+        const end = Math.min(total, start + pageSize);
         const frag = document.createDocumentFragment();
-        for (let i = start; i < end; i++) {
-            const li = this.createTrackListItem(tracks[i], i, false);
-            frag.appendChild(li);
+        const addPageControl = (direction, label, target) => {
+            const item = document.createElement('li');
+            item.className = 'tracklist-page-control';
+            item.dataset.direction = direction;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tracklist-page-btn';
+            button.textContent = label;
+            button.addEventListener('click', () => changePage(target));
+            item.appendChild(button);
+            frag.appendChild(item);
+        };
+        if (total > pageSize) {
+            const summary = document.createElement('li');
+            summary.className = 'tracklist-page-summary';
+            summary.textContent = `Hiển thị ${start + 1}–${end} / ${total.toLocaleString('vi-VN')} bài`;
+            frag.appendChild(summary);
         }
-        this.tracklistEl.appendChild(frag);
-        this._mainTracklistRenderedCount = end;
+        if (start > 0) addPageControl('previous', `← ${Math.min(pageSize, start)} bài trước`, Math.max(0, start - pageSize));
+        for (let i = start; i < end; i++) frag.appendChild(createRow(i));
+        if (end < total) addPageControl('next', `${Math.min(pageSize, total - end)} bài tiếp theo →`, end);
+        // Replacing the page keeps the DOM bounded even after browsing thousands of tracks.
+        container.replaceChildren(frag);
+        const scroller = container.closest('.tracklist-modal-body') || container;
+        scroller.scrollTop = 0;
     }
 
-    appendModalTracklistBatch(count = 50) {
-        if (!this.modalTracklistEl || !this._modalFilteredTracks) return;
-        const start = this._modalTracklistRenderedCount || 0;
-        const end = Math.min(this._modalFilteredTracks.length, start + count);
-        if (start >= end) return;
+    renderMainTracklistWindow(start = 0) {
+        const tracks = (this.currentAlbum && this.currentAlbum.tracks) || [];
+        this.renderTracklistPage(this.tracklistEl, tracks.length, start, 60,
+            idx => this.createTrackListItem(tracks[idx], idx, false),
+            nextStart => this.renderMainTracklistWindow(nextStart));
+    }
 
-        const frag = document.createDocumentFragment();
-        for (let i = start; i < end; i++) {
-            const { track, idx } = this._modalFilteredTracks[i];
-            const li = this.createTrackListItem(track, idx, true);
-            frag.appendChild(li);
-        }
-        this.modalTracklistEl.appendChild(frag);
-        this._modalTracklistRenderedCount = end;
+    renderModalTracklistWindow(start = 0) {
+        const tracks = (this.currentAlbum && this.currentAlbum.tracks) || [];
+        const filtered = this._modalFilteredTracks;
+        this.renderTracklistPage(this.modalTracklistEl, filtered ? filtered.length : tracks.length, start, 50,
+            position => {
+                const { track, idx } = filtered ? filtered[position] : { track: tracks[position], idx: position };
+                return this.createTrackListItem(track, idx, true);
+            }, nextStart => this.renderModalTracklistWindow(nextStart));
     }
 
     createTrackListItem(track, idx, isModal = false) {
@@ -2689,8 +2689,8 @@ class XTAPOMusicApp {
         this.updateCovers(trackCover);
 
         if (this.tracklistEl) {
-            if (this.currentTrackIndex >= (this._mainTracklistRenderedCount || 0)) {
-                this.appendMainTracklistBatch(this.currentTrackIndex - (this._mainTracklistRenderedCount || 0) + 20);
+            if (!this.tracklistEl.querySelector(`.track-item[data-index="${this.currentTrackIndex}"]`)) {
+                this.renderMainTracklistWindow(Math.max(0, this.currentTrackIndex - 20));
             }
 
             const prevActive = this.tracklistEl.querySelector('.track-item.active');
@@ -3845,6 +3845,9 @@ class XTAPOMusicApp {
             if (this.tracklistModalSearchInput) this.tracklistModalSearchInput.value = '';
             this.renderTracklist();
             this.openModal(this.tracklistModal);
+            requestAnimationFrame(() => {
+                this.modalTracklistEl?.querySelector('.track-item.active')?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+            });
             if (this.tracklistModalSearchInput) {
                 setTimeout(() => this.tracklistModalSearchInput.focus(), 120);
             }
@@ -5532,16 +5535,30 @@ class XTAPOMusicApp {
                 this.albums = this.getBaseAlbums();
 
                 // 3. Find exact album index in clean albums
-                let realAlbumIdx = this.albums.findIndex(a => (a.id && a.id === item.album.id) || (a.title === item.album.title && a.artist === item.album.artist));
+                let realAlbumIdx = this.albums.indexOf(item.album);
+                if (realAlbumIdx === -1 && item.album.id) {
+                    realAlbumIdx = this.albums.findIndex(a => a.id === item.album.id);
+                }
+                if (realAlbumIdx === -1) {
+                    realAlbumIdx = this.albums.findIndex(a => a.title === item.album.title && a.artist === item.album.artist);
+                }
                 if (realAlbumIdx === -1) {
                     realAlbumIdx = item.albumIdx < this.albums.length ? item.albumIdx : 0;
                 }
 
-                // 4. Find exact track index in that album
+                // 4. Reuse the indexed position; matching a duplicate title can select the wrong song.
                 const targetAlbum = this.albums[realAlbumIdx];
                 let targetTrackIdx = -1;
                 if (targetAlbum && targetAlbum.tracks) {
-                    targetTrackIdx = targetAlbum.tracks.findIndex(t => (item.track.msgId && t.msgId === item.track.msgId) || (item.track.chatId && t.chatId === item.track.chatId && t.msgId === item.track.msgId) || t.name === item.track.name);
+                    targetTrackIdx = targetAlbum.tracks[item.trackIdx] === item.track
+                        ? item.trackIdx : targetAlbum.tracks.indexOf(item.track);
+                    if (targetTrackIdx === -1) {
+                        const { chatId, msgId } = this.getTrackIdentifiers(item.track);
+                        targetTrackIdx = targetAlbum.tracks.findIndex(t => {
+                            const candidate = this.getTrackIdentifiers(t);
+                            return candidate.chatId === chatId && candidate.msgId === msgId;
+                        });
+                    }
                 }
                 if (targetTrackIdx === -1) {
                     targetTrackIdx = item.trackIdx || 0;
