@@ -172,6 +172,14 @@ const _GENRE_TAXONOMY_MAP = {
 };
 
 // --- App State ---
+const MUSIC_SEARCH_FIELDS = [
+    { key: 'track', label: 'Tên bài', weight: 6 },
+    { key: 'artist', label: 'Nghệ sĩ', weight: 5 },
+    { key: 'albumArtist', label: 'Nghệ sĩ', weight: 4 },
+    { key: 'album', label: 'Album', weight: 4 },
+    { key: 'extra', label: 'Thông tin', weight: 1 }
+];
+
 class XTAPOMusicApp {
     constructor() {
         this.currentAlbumIndex = 0;
@@ -747,10 +755,7 @@ class XTAPOMusicApp {
         this.setupKeyboardShortcuts();
         
         // Xác thực trước. Guest không được tải thư viện nhạc.
-        await this.fetchUserProfile();
-        if (this.currentUser) {
-            await this.fetchTelegramAlbums(false);
-        }
+        await this.fetchUserProfile(true);
 
         // 2. Khôi phục bài hát & vị trí đang phát dở (Player State) hoặc mở mặc định
         const restored = this.restorePlayerState();
@@ -892,7 +897,7 @@ class XTAPOMusicApp {
         }
     }
 
-    async fetchUserProfile() {
+    async fetchUserProfile(loadLibrary = false) {
         try {
             const res = await fetch('/api/music/auth/profile');
             const data = await res.json();
@@ -903,10 +908,11 @@ class XTAPOMusicApp {
                 this.updateAuthUI(true);
                 this.startHeartbeat();
 
-                // Tải song song Favorites & Playlists thay vì chờ tuần tự waterfall
+                // Chỉ bắt đầu sau khi xác thực; thư viện không cần chờ danh sách cá nhân.
                 await Promise.all([
                     this.fetchUserFavorites(),
-                    this.loadPlaylists()
+                    this.loadPlaylists(),
+                    ...(loadLibrary ? [this.fetchTelegramAlbums(false)] : [])
                 ]);
 
                 // Kiểm tra và hiển thị cảnh báo nếu chưa tham gia Channel
@@ -1808,6 +1814,7 @@ class XTAPOMusicApp {
     }
 
     getAllLibraryTracks() {
+        if (this._libraryTracks) return this._libraryTracks;
         const trackMap = new Map();
         (this.getBaseAlbums()).forEach(album => {
             (album.tracks || []).forEach(track => {
@@ -1818,6 +1825,7 @@ class XTAPOMusicApp {
                 }
             });
         });
+        this._libraryTracks = trackMap;
         return trackMap;
     }
 
@@ -2029,11 +2037,24 @@ class XTAPOMusicApp {
     }
 
     invalidateLibraryIndex() {
-        this._libraryIndexDirty = true;
         this._searchIndex = null;
+        this._albumSearchText = new WeakMap();
+        this._libraryTracks = null;
+        this.invalidateClassificationIndex();
+    }
+
+    invalidateClassificationIndex() {
+        this._cachedGenreGroups = null;
         this._cachedArtistMap = null;
         this._cachedCountryMap = null;
         this._cachedCountryArtistCounts = null;
+        // Quốc gia/thể loại suy luận còn phụ thuộc vào metadata nghệ sĩ tải nền.
+        for (const album of this.getBaseAlbums()) {
+            for (const track of album.tracks || []) {
+                delete track._normCountry;
+                delete track._normGenre;
+            }
+        }
     }
 
     // --- Base Albums & Virtual Queues Helper ---
@@ -2183,6 +2204,7 @@ class XTAPOMusicApp {
                             this.artistCacheMap.set(a.name.toLowerCase().trim(), a);
                         }
                     });
+                    this.invalidateClassificationIndex();
                 }
             }
         } catch (e) {
@@ -5158,14 +5180,15 @@ class XTAPOMusicApp {
                 ? `Album Mới Thêm (${allAlbums.length})`
                 : (this.albumViewMode === 'hires' ? `Album Hi-Res Lossless (${allAlbums.length})` : 'Chọn Album Nghe Nhạc');
         }
+        this._albumSearchText ||= new WeakMap();
         const matchesAlbumSearch = (album) => {
-            if (!query) return true;
-            const albumFields = [album.title, album.artist, album.publisher];
-            if (albumFields.some(value => this.normalizeSearchText(value).includes(query))) return true;
-            return (album.tracks || []).some(track => {
-                const trackFields = [track.name, track.title, track.artist];
-                return trackFields.some(value => this.normalizeSearchText(value).includes(query));
-            });
+            if (!this._albumSearchText.has(album)) {
+                const fields = [album.title, album.artist, album.publisher];
+                for (const track of album.tracks || []) fields.push(track.name, track.title, track.artist);
+                // Giữ ranh giới các trường: một cụm từ phải nằm trong cùng một trường.
+                this._albumSearchText.set(album, fields.map(value => this.normalizeSearchText(value)).join('\0'));
+            }
+            return this._albumSearchText.get(album).includes(query);
         };
         const displayAlbums = query ? allAlbums.filter(matchesAlbumSearch) : allAlbums;
 
@@ -5186,6 +5209,7 @@ class XTAPOMusicApp {
 
         // Tối ưu render theo từng Batch (BATCH_SIZE = 48) với DocumentFragment để chống đứng đơ UI
         const BATCH_SIZE = 48;
+        const albumIndices = new Map(this.albums.map((album, index) => [album, index]));
         const total = displayAlbums.length;
         let renderedCount = 0;
 
@@ -5196,7 +5220,7 @@ class XTAPOMusicApp {
 
             for (let idx = renderedCount; idx < limit; idx++) {
                 const album = displayAlbums[idx];
-                const realIdx = this.albums.findIndex(a => a.id === album.id || a.title === album.title);
+                const realIdx = albumIndices.get(album);
                 const card = document.createElement('div');
                 card.className = `album-card ${realIdx === this.currentAlbumIndex ? 'active' : ''}`;
                 card.innerHTML = `
@@ -5209,7 +5233,7 @@ class XTAPOMusicApp {
                 `;
 
                 card.addEventListener('click', () => {
-                    this.loadAlbum(realIdx !== -1 ? realIdx : idx, 0, true);
+                    this.loadAlbum(realIdx !== undefined ? realIdx : idx, 0, true);
                     this.closeModal(this.albumModal);
                     this.showToast(`Đã chuyển sang album: ${album.title}`);
                     if (this.albumGrid) {
@@ -5349,18 +5373,29 @@ class XTAPOMusicApp {
         if (this._searchIndex) return this._searchIndex;
 
         const index = [];
+        const normalizedFields = new Map();
+        const fieldWords = new Map();
+        const normalize = value => {
+            const text = String(value || '');
+            if (!normalizedFields.has(text)) normalizedFields.set(text, this.normalizeSearchText(text));
+            return normalizedFields.get(text);
+        };
+        const wordsFor = value => {
+            if (!fieldWords.has(value)) fieldWords.set(value, value.split(' '));
+            return fieldWords.get(value);
+        };
         const baseAlbums = this.getBaseAlbums();
         baseAlbums.forEach((album, albumIdx) => {
-            const albumTitle = this.normalizeSearchText(album.title);
-            const albumArtist = this.normalizeSearchText(album.artist);
+            const albumTitle = normalize(album.title);
+            const albumArtist = normalize(album.artist);
             (album.tracks || []).forEach((track, trackIdx) => {
                 const trackName = track.name || track.title || 'Bài hát chưa đặt tên';
                 const fields = {
-                    track: this.normalizeSearchText(trackName),
-                    artist: this.normalizeSearchText(track.artist || album.artist),
+                    track: normalize(trackName),
+                    artist: normalize(track.artist || album.artist),
                     albumArtist,
                     album: albumTitle,
-                    extra: this.normalizeSearchText([
+                    extra: normalize([
                         track.genre || album.genre,
                         track.country || album.country,
                         album.year,
@@ -5374,6 +5409,7 @@ class XTAPOMusicApp {
                     trackIdx,
                     trackName,
                     fields,
+                    words: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, wordsFor(value)])),
                     searchText: Object.values(fields).join(' ')
                 });
             });
@@ -5388,28 +5424,22 @@ class XTAPOMusicApp {
             return { score: 0, label: '' };
         }
 
-        const weightedFields = [
-            { value: entry.fields.track, label: 'Tên bài', weight: 6 },
-            { value: entry.fields.artist, label: 'Nghệ sĩ', weight: 5 },
-            { value: entry.fields.albumArtist, label: 'Nghệ sĩ', weight: 4 },
-            { value: entry.fields.album, label: 'Album', weight: 4 },
-            { value: entry.fields.extra, label: 'Thông tin', weight: 1 }
-        ];
         let score = 10;
         let bestField = { coverage: 0, weight: 0, label: 'Nhiều trường' };
 
-        weightedFields.forEach(field => {
-            if (!field.value) return;
-            if (field.value === query) score += 180 * field.weight;
-            else if (field.value.startsWith(query)) score += 110 * field.weight;
-            else if (field.value.includes(query)) score += 70 * field.weight;
+        MUSIC_SEARCH_FIELDS.forEach(field => {
+            const value = entry.fields[field.key];
+            if (!value) return;
+            if (value === query) score += 180 * field.weight;
+            else if (value.startsWith(query)) score += 110 * field.weight;
+            else if (value.includes(query)) score += 70 * field.weight;
 
-            const words = field.value.split(' ');
-            const coverage = tokens.filter(token => field.value.includes(token)).length;
+            const words = entry.words[field.key];
+            const coverage = tokens.filter(token => value.includes(token)).length;
             tokens.forEach(token => {
                 if (words.includes(token)) score += 12 * field.weight;
                 else if (words.some(word => word.startsWith(token))) score += 8 * field.weight;
-                else if (field.value.includes(token)) score += 4 * field.weight;
+                else if (value.includes(token)) score += 4 * field.weight;
             });
             if (coverage > bestField.coverage || (coverage === bestField.coverage && field.weight > bestField.weight)) {
                 bestField = { coverage, weight: field.weight, label: field.label };
@@ -5422,6 +5452,33 @@ class XTAPOMusicApp {
         };
     }
 
+    findMusicSearchMatches(query, limit = 100) {
+        const q = this.normalizeSearchText(query);
+        const tokens = [...new Set(q.split(' ').filter(Boolean))];
+        const matches = [];
+        let totalMatches = 0;
+        if (!q) return { matches, totalMatches };
+        this._searchCollator ||= new Intl.Collator('vi');
+
+        for (const entry of this.getMusicSearchIndex()) {
+            if (!tokens.every(token => entry.searchText.includes(token))) continue;
+            const rank = this.scoreMusicSearchEntry(entry, q, tokens);
+            totalMatches++;
+            // Chỉ giữ 100 kết quả tốt nhất, không copy và sort toàn bộ thư viện.
+            const compare = other => other.rank.score - rank.score || this._searchCollator.compare(entry.trackName, other.trackName);
+            if (matches.length === limit && compare(matches[limit - 1]) >= 0) continue;
+            let low = 0, high = matches.length;
+            while (low < high) {
+                const mid = (low + high) >>> 1;
+                if (compare(matches[mid]) < 0) high = mid;
+                else low = mid + 1;
+            }
+            matches.splice(low, 0, { ...entry, rank });
+            if (matches.length > limit) matches.pop();
+        }
+        return { matches, totalMatches };
+    }
+
     handleSearch(query) {
         if (!query.trim()) {
             this._searchActiveIndex = -1;
@@ -5429,14 +5486,7 @@ class XTAPOMusicApp {
             return;
         }
 
-        const q = this.normalizeSearchText(query);
-        const queryTokens = [...new Set(q.split(' ').filter(Boolean))];
-        const rankedMatches = this.getMusicSearchIndex()
-            .map(entry => ({ ...entry, rank: this.scoreMusicSearchEntry(entry, q, queryTokens) }))
-            .filter(entry => entry.rank.score > 0)
-            .sort((a, b) => b.rank.score - a.rank.score || a.trackName.localeCompare(b.trackName, 'vi'));
-        const totalMatches = rankedMatches.length;
-        const matches = rankedMatches.slice(0, 100);
+        const { matches, totalMatches } = this.findMusicSearchMatches(query);
 
         if (matches.length === 0) {
             this._searchActiveIndex = -1;
@@ -6428,25 +6478,9 @@ class XTAPOMusicApp {
 
     removeVietnameseTones(str) {
         if (!str) return '';
-        str = String(str);
-        str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, 'a');
-        str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, 'e');
-        str = str.replace(/ì|í|ị|ỉ|ĩ/g, 'i');
-        str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, 'o');
-        str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, 'u');
-        str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, 'y');
-        str = str.replace(/đ/g, 'd');
-        str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, 'A');
-        str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, 'E');
-        str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, 'I');
-        str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, 'O');
-        str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, 'U');
-        str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, 'Y');
-        str = str.replace(/Đ/g, 'D');
-        try {
-            str = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        } catch (e) {}
-        return str;
+        return String(str).normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd').replace(/Đ/g, 'D');
     }
 
     matchVietnamese(text, query) {
@@ -6543,7 +6577,7 @@ class XTAPOMusicApp {
     }
 
     getArtistMap() {
-        if (this._cachedArtistMap && !this._libraryIndexDirty) {
+        if (this._cachedArtistMap) {
             return this._cachedArtistMap;
         }
 
@@ -6624,7 +6658,6 @@ class XTAPOMusicApp {
 
         this._cachedArtistMap = artistMap;
         this._cachedCountryArtistCounts = countryArtistCounts;
-        this._libraryIndexDirty = false;
         this.artistMap = artistMap;
 
         return artistMap;
@@ -6989,6 +7022,39 @@ class XTAPOMusicApp {
         return result;
     }
 
+    getGenreGroups() {
+        if (this._cachedGenreGroups) return this._cachedGenreGroups;
+        const countryGenreSets = {
+            'all': new Set(), 'Việt Nam': new Set(), 'Âu Mỹ': new Set(),
+            'Hàn Quốc': new Set(), 'Hoa Ngữ': new Set(), 'Nhật Bản': new Set(),
+            'Thái Lan': new Set(), 'Latin / Tây Ban Nha': new Set(), 'Pháp / Châu Âu': new Set(),
+            'Quốc Tế': new Set()
+        };
+        const genreMaps = new Map(Object.keys(countryGenreSets).map(country => [country, new Map()]));
+        for (const album of this.getBaseAlbums()) {
+            for (const track of album.tracks || []) {
+                const genre = this.normalizeGenre(track.genre, track);
+                const country = (track.country && track.country.trim()) || this.detectCountryFromTrack(track) || 'Quốc Tế';
+                const validCountry = countryGenreSets[country] ? country : 'Quốc Tế';
+                const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
+                for (const key of ['all', validCountry]) {
+                    countryGenreSets[key].add(genre);
+                    const groups = genreMaps.get(key);
+                    if (!groups.has(genre)) {
+                        groups.set(genre, { genre, tracks: [], trackKeys: new Set(), coverUrl: track.coverUrl || album.coverUrl });
+                    }
+                    const group = groups.get(genre);
+                    if (!group.trackKeys.has(trackKey)) {
+                        group.trackKeys.add(trackKey);
+                        group.tracks.push(track);
+                    }
+                }
+            }
+        }
+        this._cachedGenreGroups = { countryGenreSets, genreMaps };
+        return this._cachedGenreGroups;
+    }
+
     renderGenreGrid(selectedCountry = null, searchQuery = '') {
         if (!this.genreGrid) return;
         if (selectedCountry !== null) {
@@ -7025,56 +7091,11 @@ class XTAPOMusicApp {
             'Khác': 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.1))'
         };
 
-        const countryGenreSets = {
-            'all': new Set(), 'Việt Nam': new Set(), 'Âu Mỹ': new Set(),
-            'Hàn Quốc': new Set(), 'Hoa Ngữ': new Set(), 'Nhật Bản': new Set(),
-            'Thái Lan': new Set(), 'Latin / Tây Ban Nha': new Set(), 'Pháp / Châu Âu': new Set(),
-            'Quốc Tế': new Set()
-        };
-
-        const genreMap = new Map();
-        const searchLow = (searchQuery || '').toLowerCase().trim();
-        const baseAlbums = this.getBaseAlbums();
-
-        for (let i = 0; i < baseAlbums.length; i++) {
-            const album = baseAlbums[i];
-            const tracks = album.tracks || [];
-            for (let j = 0; j < tracks.length; j++) {
-                const track = tracks[j];
-                const g = this.normalizeGenre(track.genre, track);
-                const c = (track.country && track.country.trim()) || this.detectCountryFromTrack(track) || 'Quốc Tế';
-                const validCountry = countryGenreSets[c] ? c : 'Quốc Tế';
-
-                countryGenreSets['all'].add(g);
-                if (countryGenreSets[validCountry]) {
-                    countryGenreSets[validCountry].add(g);
-                }
-
-                if (this.selectedGenreCountryFilter && this.selectedGenreCountryFilter !== 'all' && validCountry !== this.selectedGenreCountryFilter) {
-                    continue;
-                }
-
-                if (searchLow && !g.toLowerCase().includes(searchLow)) {
-                    continue;
-                }
-
-                const trackKey = track.msgId ? `id:${track.msgId}` : `name:${(track.name || '').toLowerCase()}`;
-                if (!genreMap.has(g)) {
-                    genreMap.set(g, {
-                        genre: g,
-                        tracks: [track],
-                        trackKeys: new Set([trackKey]),
-                        coverUrl: track.coverUrl || album.coverUrl
-                    });
-                } else {
-                    const existing = genreMap.get(g);
-                    if (!existing.trackKeys.has(trackKey)) {
-                        existing.trackKeys.add(trackKey);
-                        existing.tracks.push(track);
-                    }
-                }
-            }
-        }
+        const { countryGenreSets, genreMaps } = this.getGenreGroups();
+        const country = this.selectedGenreCountryFilter || 'all';
+        const searchLow = this.normalizeSearchText(searchQuery);
+        const genreMap = new Map(Array.from(genreMaps.get(country) || [])
+            .filter(([name]) => !searchLow || this.normalizeSearchText(name).includes(searchLow)));
 
         // Render country filter tabs in Genre Modal
         if (this.genreCountryFilterTabs) {
@@ -7175,7 +7196,7 @@ class XTAPOMusicApp {
     }
 
     getCountryMap() {
-        if (this._cachedCountryMap && !this._libraryIndexDirty) {
+        if (this._cachedCountryMap) {
             return this._cachedCountryMap;
         }
 

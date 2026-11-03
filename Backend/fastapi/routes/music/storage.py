@@ -28,6 +28,7 @@ from Backend.helper.music_cache import (
     PLAYBACK_WINDOW_TTL,
     smart_audio_cache,
 )
+from Backend.helper.music_library_response import music_library_response_cache
 from Backend.helper.metadata.music_pipeline import (
     metadata_confidence,
     music_metadata_pipeline,
@@ -627,6 +628,7 @@ async def _db_save_library(
 ):
     global _IN_MEMORY_LIBRARY_CACHE
     _IN_MEMORY_LIBRARY_CACHE = albums
+    music_library_response_cache.invalidate()
     try:
         from Backend.fastapi.routes.music.catalog import invalidate_artists_cache
         invalidate_artists_cache()
@@ -676,11 +678,13 @@ async def _db_save_library(
                             artist = alb.get("artist", "unknown")
                             album_id = generate_album_id(title, artist)
                             alb["id"] = album_id
+                            music_library_response_cache.invalidate()
 
                         # Bảo đảm 100% _id không bị trùng lặp trong MongoDB để không bao giờ bị mất album
                         if album_id in seen_ids:
                             album_id = f"{album_id}-{hashlib.md5(f'{album_id}_{idx}'.encode('utf-8')).hexdigest()[:6]}"
                             alb["id"] = album_id
+                            music_library_response_cache.invalidate()
                         seen_ids.add(album_id)
 
                         batch.append({**alb, "_id": album_id})

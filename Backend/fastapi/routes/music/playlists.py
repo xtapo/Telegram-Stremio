@@ -28,6 +28,7 @@ from Backend.helper.music_cache import (
     PLAYBACK_WINDOW_TTL,
     smart_audio_cache,
 )
+from Backend.helper.music_library_response import music_library_response_cache
 from Backend.helper.metadata.music_pipeline import (
     metadata_confidence,
     music_metadata_pipeline,
@@ -74,9 +75,9 @@ def _save_playlists_file(playlists: list):
 
 # ── 2. Lấy danh sách Albums & Tracks từ MongoDB / Telegram Cache ───────────────
 @router.get("/api/music/albums")
-async def get_music_albums():
+async def get_music_albums(request: Request):
     data = await _db_load_library()
-    return JSONResponse(content={"status": "success", "source": "database", "albums": data or []})
+    return await music_library_response_cache.get_response(request, data)
 
 @router.post("/api/music/reclassify-genres")
 async def reclassify_library_genres():
