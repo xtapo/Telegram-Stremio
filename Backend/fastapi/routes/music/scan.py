@@ -53,11 +53,19 @@ from Backend.fastapi.routes.music.storage import (
 
 router = APIRouter(tags=["Music Player & Telegram Storage"])
 
+_CHANNELS_LOAD_TIMEOUT = 5.0
+
 # ── 3. Quản lý Danh Sách Kênh Nhạc (Channel Management) ───────────────────────
 @router.get("/api/music/channels")
 async def get_music_channels(_: bool = Depends(require_auth)):
-    saved = await _db_load_channels()
-    client = _get_active_client()
+    try:
+        saved = await asyncio.wait_for(_db_load_channels(), timeout=_CHANNELS_LOAD_TIMEOUT)
+    except asyncio.TimeoutError as exc:
+        LOGGER.warning("[MUSIC] Timed out loading the saved channel list")
+        raise HTTPException(
+            status_code=503,
+            detail="Cơ sở dữ liệu phản hồi quá chậm khi tải danh sách kênh. Vui lòng thử lại.",
+        ) from exc
     result = []
 
     # Gợi ý kênh từ SettingsManager auth_channels nếu chưa lưu kênh nào
@@ -65,6 +73,7 @@ async def get_music_channels(_: bool = Depends(require_auth)):
         try:
             from Backend.helper.settings_manager import SettingsManager
             auth_ch = SettingsManager.current().auth_channels or []
+            saved = []
             for ch in auth_ch:
                 saved.append({
                     "id": str(ch),
@@ -87,15 +96,8 @@ async def get_music_channels(_: bool = Depends(require_auth)):
         total_tracks = int(item.get("total_tracks", 0) or 0)
         auto_sync = bool(item.get("auto_sync", False))
 
-        if client:
-            try:
-                target = int(ch_id) if str(ch_id).lstrip("-").isdigit() else ch_id
-                chat = await client.get_chat(target)
-                ch_name = getattr(chat, "title", None) or getattr(chat, "first_name", None) or ch_name
-                ch_user = getattr(chat, "username", "") or ch_user
-            except Exception:
-                pass
-
+        # Names/usernames are resolved when adding a channel. Listing saved
+        # channels must not wait for Telegram RPC retries or FloodWait sleeps.
         result.append({
             "id": str(ch_id),
             "name": ch_name,

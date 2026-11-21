@@ -160,7 +160,7 @@ def _build_stream_headers(mime_type, file_name, req_length, range_header, start,
         "Content-Disposition": _content_disposition(file_name),
         "Accept-Ranges": "bytes",
         "Content-Length": str(req_length),
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=3600, no-transform",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
     }

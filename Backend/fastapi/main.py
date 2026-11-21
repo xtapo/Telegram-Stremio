@@ -3,13 +3,15 @@ import time
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from Backend import __version__
 from Backend.logger import LOGGER
+from Backend.helper.gzip_middleware import SelectiveGZipMiddleware
 from Backend.helper.observability import correlation_context, new_id, observe_latency
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
@@ -159,20 +161,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+class CorrelationMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        req_id = Headers(scope=scope).get("x-request-id") or new_id("req")
+        started = time.perf_counter()
+
+        async def send_with_request_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(raw=message.setdefault("headers", []))
+                headers["X-Request-ID"] = req_id
+            await send(message)
+
+        with correlation_context(request=req_id):
+            try:
+                await self.app(scope, receive, send_with_request_id)
+            finally:
+                observe_latency("http.request", (time.perf_counter() - started) * 1000)
 
 
-@app.middleware("http")
-async def correlation_middleware(request: Request, call_next):
-    req_id = request.headers.get("x-request-id") or new_id("req")
-    started = time.perf_counter()
-    with correlation_context(request=req_id):
-        try:
-            response = await call_next(request)
-        finally:
-            observe_latency("http.request", (time.perf_counter() - started) * 1000)
-    response.headers["X-Request-ID"] = req_id
-    return response
+app.add_middleware(SelectiveGZipMiddleware, minimum_size=1000)
+app.add_middleware(CorrelationMiddleware)
 
 try:
     app.mount("/static", StaticFiles(directory="Backend/fastapi/static"), name="static")
